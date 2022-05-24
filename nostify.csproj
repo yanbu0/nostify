@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <PackageId>nostify</PackageId>
+    <Version>1.7.11</Version>
+    <Authors>Travis Boyle</Authors>
+    <Company>
+    </Company>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Tests\**</DefaultItemExcludes>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="microsoft.azure.cosmos" Version="3.26.1" />
+    <None Include="LICENSE.txt" Pack="true" PackagePath="$(PackageLicenseFile)" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="template\**\*" Exclude="template\**\bin\**;template\**\obj\**" />
+    <Compile Remove="template\**\*" />
+  </ItemGroup>
+</Project>
