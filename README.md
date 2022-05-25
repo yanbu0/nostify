@@ -99,7 +99,7 @@ If you used the `dotnet new nostify -ag <AggregateName>` template setup (which y
         {
         }
 
-        new public static string aggregateType => "test";
+        new public string aggregateType => "test";
 
         public override void Apply(PersistedEvent pe)
         {
