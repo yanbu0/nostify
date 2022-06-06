@@ -11,17 +11,14 @@ The framework makes numerous assumptions to cut down on complexity.  It has depe
 When should I use this?<br/>
 You should consider using this if you are using .Net and Azure and want to follow a strong set of guidelines to quickly and easily spin up services that can massively scale without spending tons of time architechting it yourself.<br/>
 <br/>
-<br/>
 <strong>Current Status</strong>
 - Inital release
 - Documentation still in process below!
-<br/>
-<br/>
+
 <strong>Future Releases</strong>
-- Unit testing framework
+- Testing framework
 - gRPC integration
 <br/>
-
 <strong>Getting Started</strong><br/>
 Example repo: https://github.com/yanbu0/nostify-example <br/>
 
