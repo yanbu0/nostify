@@ -16,6 +16,11 @@ You should consider using this if you are using .Net and Azure and want to follo
 - Inital release
 - Documentation still in process below!
 <br/>
+<br/>
+<strong>Future Releases</strong>
+- Unit testing framework
+- gRPC integration
+<br/>
 
 <strong>Getting Started</strong><br/>
 Example repo: https://github.com/yanbu0/nostify-example <br/>
