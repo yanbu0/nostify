@@ -170,8 +170,6 @@ First we will go in and add some basic properties to BankAccount and add a Trans
 
 
 ```
-    
-    
 Now we can take a look at adding custom commands. Create, Update, and Delete are already registered inside the base class so we don't need to add them. However, a bank account might need to process a Transaction for example, so we add the definition in the BankAccountCommand class.  This registers the command with nostify to allow you to handle it in `Apply()`:<br/>
 
 ```
@@ -243,8 +241,6 @@ Commands now become easy to compose.  Using the nostify cli results in Create, U
         }
     }
 ```
-    
-<br/>
 The standard Update command is also very simple.  You shouldn't have to modify much if at all.  It accepts a `dynamic` object so you can pass an object from the front end that contains only the properties that are being updated.  This is handy when you may have multiple users updating the same aggregate at the same time and don't want to overwrite changes by passing the entire object.  Nostify will match the property to on that exists on the Aggregate Root and update that in the `Apply()` method.  The default implementation will then update the `currentState` container.
 <br/>
     
