@@ -236,7 +236,7 @@ Commands now become easy to compose.  Using the nostify cli results in Create, U
             Guid aggId = Guid.NewGuid();
             account.id = aggId;
 
-            PersistedEvent pe = new PersistedEvent(AggregateCommand.Create, $"{BankAccount.aggregateType}||{account.id.ToString()}", account);
+            PersistedEvent pe = new PersistedEvent(NostifyCommand.Create, account.id, account);
             await _nostify.PersistAsync(pe);
 
             return new OkObjectResult(new{ message = $"Account {account.id} for {account.customerName} was created"});
