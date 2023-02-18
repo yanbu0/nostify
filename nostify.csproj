@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>1.7.11</Version>
+    <Version>1.8.0</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
