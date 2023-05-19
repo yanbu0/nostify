@@ -1,6 +1,6 @@
 {
     "powershell.codeFormatting.addWhitespaceAroundPipe": true,
-    "azureFunctions.deploySubpath": "template/bin/Release/net6.0/publish",
+    "azureFunctions.deploySubpath": "template/bin/Release/net7.0/publish",
     "azureFunctions.projectLanguage": "C#",
     "azureFunctions.projectRuntime": "~3",
     "debug.internalConsoleOptions": "neverOpen",
