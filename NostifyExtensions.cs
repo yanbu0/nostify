@@ -42,7 +42,7 @@ namespace nostify
             {
                 var eventContainer = await nostify.GetPersistedEventsContainerAsync();
 
-                await eventContainer.CreateItemAsync(persistedEvent, new PartitionKey(persistedEvent.partitionKey));
+                await eventContainer.CreateItemAsync(persistedEvent, new PartitionKey(persistedEvent.aggregateRootId));
             }
             catch (Exception e)
             {
@@ -65,7 +65,7 @@ namespace nostify
 
                 List<Task> taskList = new List<Task>();
                 persistedEvents.ForEach(pe => {
-                    taskList.Add(eventContainer.CreateItemAsync(pe, new PartitionKey(pe.partitionKey))
+                    taskList.Add(eventContainer.CreateItemAsync(pe, new PartitionKey(pe.aggregateRootId))
                             .ContinueWith(itemResponse =>
                             {
                                 if (!itemResponse.IsCompletedSuccessfully)
@@ -91,7 +91,7 @@ namespace nostify
         {
             var undeliverableContainer = await nostify.GetUndeliverableEventsContainerAsync();
 
-            await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, persistedEvent), new PartitionKey(persistedEvent.partitionKey));
+            await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, persistedEvent), new PartitionKey(persistedEvent.aggregateRootId));
         }
 
         ///<summary>
@@ -110,7 +110,7 @@ namespace nostify
             
             T aggregate = new T();
             List<PersistedEvent> peList = await eventContainer.GetItemLinqQueryable<PersistedEvent>()
-                .Where(pe => pe.partitionKey == eventStorePartitionKey)
+                .Where(pe => pe.aggregateRootId == eventStorePartitionKey)
                 .ReadAllAsync();
 
             //TODO: use cosmos datestamp to handle this
@@ -129,7 +129,7 @@ namespace nostify
         public static async Task<Container> GetPersistedEventsContainerAsync(this Nostify nostify, bool allowBulk = false)
         {
             var db = await nostify.Repository.GetDatabaseAsync(allowBulk);
-            return await db.CreateContainerIfNotExistsAsync(nostify.Repository.PersistedEventsContainer, "/partitionKey");
+            return await db.CreateContainerIfNotExistsAsync(nostify.Repository.PersistedEventsContainer, "/aggregateRootId");
         }
 
         ///<summary>
@@ -185,7 +185,7 @@ namespace nostify
             //Get list of distinct aggregate root ids
             Container eventStore = await nostify.GetPersistedEventsContainerAsync();
             List<Guid> uniqueAggregateRootIds = (await eventStore.GetItemLinqQueryable<PersistedEvent>()
-                .Select(pe => pe.partitionKey)
+                .Select(pe => pe.aggregateRootId)
                 .Distinct()
                 .ReadAllAsync())
                 .Select(g => Guid.Parse(g))

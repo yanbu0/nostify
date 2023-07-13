@@ -39,9 +39,9 @@ namespace nostify
             SetUp(command,aggregateRootId.ToString(),payload);
         }
         
-        private void SetUp(NostifyCommand command, string partitionKey, object payload)
+        private void SetUp(NostifyCommand command, string aggregateRootId, object payload)
         {
-            this.partitionKey = partitionKey;
+            this.aggregateRootId = aggregateRootId;
             this.payload = payload;
             this.id = Guid.NewGuid();
             this.command = command;
@@ -68,7 +68,7 @@ namespace nostify
         ///<para>
         ///<strong>The series of events for an Aggregate should have the same key.</strong>
         ///</para>
-        public string partitionKey { get; set; }
+        public string aggregateRootId { get; set; }
         
         ///<summary>
         ///Internal use only

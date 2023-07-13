@@ -24,14 +24,15 @@ namespace nostify_example
 
         [FunctionName("Delete_ReplaceMe_")]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] dynamic delete_ReplaceMe_, HttpRequest httpRequest,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "_ReplaceMe_/{aggregateId:string}")] HttpRequest httpRequest,
+            string aggregateId,
             ILogger log)
         {
-            Guid aggRootId = Guid.Parse(delete_ReplaceMe_.id.ToString());
-            PersistedEvent pe = new PersistedEvent(NostifyCommand.Delete, aggRootId, delete_ReplaceMe_);
+            Guid aggRootId = Guid.Parse(aggregateId);
+            PersistedEvent pe = new PersistedEvent(NostifyCommand.Delete, aggRootId, null);
             await _nostify.PersistAsync(pe);
 
-            return new OkObjectResult(new{ message = $"_ReplaceMe_ {delete_ReplaceMe_.id} was deleted"});
+            return new OkObjectResult(new{ message = $"_ReplaceMe_ {aggregateId} was deleted"});
         }
     }
 }
