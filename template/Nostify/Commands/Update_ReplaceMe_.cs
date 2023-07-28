@@ -24,7 +24,7 @@ namespace nostify_example
 
         [FunctionName("Update_ReplaceMe_")]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] dynamic update_ReplaceMe_, HttpRequest httpRequest,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = null)] dynamic update_ReplaceMe_, HttpRequest httpRequest,
             ILogger log)
         {
             Guid aggRootId = Guid.Parse(update_ReplaceMe_.id.ToString());
