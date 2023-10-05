@@ -26,6 +26,11 @@ namespace nostify
         ///Hide using "new" keyword, ex: new public string containerName = "BankAccountDetails"
         ///</para>
         public static string containerName;
+
+        ///<summary>
+        ///Construct projection to current state, use when adding new Projection or rebuilding existing one
+        ///</summary>
+        public abstract void Seed();
        
 
     }

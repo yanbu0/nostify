@@ -41,10 +41,10 @@ namespace nostify
         
         private void SetUp(NostifyCommand command, string aggregateRootId, object payload)
         {
-            this.aggregateRootId = aggregateRootId;
+            this._aggregateRootId = aggregateRootId;
             this.payload = payload;
-            this.id = Guid.NewGuid();
-            this.command = command;
+            this._id = Guid.NewGuid();
+            this._command = command;
         }
 
         ///<summary>
@@ -52,28 +52,31 @@ namespace nostify
         ///</summary>
         public PersistedEvent() { }
 
+        private Guid _id { get; set; }
         ///<summary>
         ///Id of event
         ///</summary>
-        public Guid id { get; set; }
+        public Guid id { get { return this._id; }}
 
+        private NostifyCommand _command { get; set; }
         ///<summary>
         ///Command to perform, defined in Aggregate implementation
         ///</summary>
-        public NostifyCommand command { get; set; }  //This is an object because otherwise newtonsoft.json pukes creating an NostifyCommand
+        public NostifyCommand command { get { return this._command; }}  //This is an object because otherwise newtonsoft.json pukes creating an NostifyCommand
 
+        private string _aggregateRootId { get; set; }
         ///<summary>
         ///Key of the Aggregate to perform the event on
         ///</summary>
         ///<para>
         ///<strong>The series of events for an Aggregate should have the same key.</strong>
         ///</para>
-        public string aggregateRootId { get; set; }
+        public string aggregateRootId { get { return this._aggregateRootId;} }
         
         ///<summary>
         ///Internal use only
         ///</summary>
-        public int schemaVersion = 1; //Update to reflect schema changes in Persisted Event
+        protected int schemaVersion = 1; //Update to reflect schema changes in Persisted Event
 
         ///<summary>
         ///Object containing properties of Aggregate to perform the command on
