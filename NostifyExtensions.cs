@@ -108,18 +108,25 @@ namespace nostify
             string eventStorePartitionKey = $"{id}";
             var eventContainer = await nostify.GetPersistedEventsContainerAsync();
             
-            T aggregate = new T();
+            T rehyd = new T();
             List<PersistedEvent> peList = await eventContainer.GetItemLinqQueryable<PersistedEvent>()
-                .Where(pe => pe.aggregateRootId == eventStorePartitionKey)
+                .Where(pe => pe.aggregateRootId == eventStorePartitionKey
+                    && (!untilDate.HasValue || pe.timestamp <= untilDate)
+                )
                 .ReadAllAsync();
 
-            //TODO: use cosmos datestamp to handle this
             foreach (var pe in peList) //.OrderBy(pe => pe.sequenceNumber))  //Apply in order
             {
-                aggregate.Apply(pe);
+                rehyd.Apply(pe);
             }
 
-            return aggregate;
+            //Go get any neccessary values from external aggregates
+            if (rehyd is Projection)
+            {
+                (rehyd as Projection).Seed(untilDate);
+            }
+
+            return rehyd;
         }
 
 

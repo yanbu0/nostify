@@ -28,9 +28,13 @@ namespace nostify
         public static string containerName;
 
         ///<summary>
-        ///Construct projection to current state, use when adding new Projection or rebuilding existing one
+        ///Construct projection to current state, use when adding new Projection or rebuilding existing one.
         ///</summary>
-        public abstract void Seed();
+        ///<para>
+        ///Should contain all queries to get any necessary values from Aggregates external to base Projection Aggreegate.
+        ///</para>
+        ///<param name="untilDate">Optional. Will build the Projection state up to and including this time, if no value provided returns projection of current state</param>
+        public abstract void Seed(DateTime? untilDate = null);
        
 
     }

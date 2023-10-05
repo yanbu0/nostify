@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Azure.Cosmos;
+using System.ComponentModel.DataAnnotations;
 
 namespace nostify
 {
@@ -42,15 +43,22 @@ namespace nostify
         private void SetUp(NostifyCommand command, string aggregateRootId, object payload)
         {
             this._aggregateRootId = aggregateRootId;
-            this.payload = payload;
             this._id = Guid.NewGuid();
             this._command = command;
+            this._timestamp = DateTime.UtcNow;
+            this.payload = payload;
         }
 
         ///<summary>
         ///Empty constructor for PeristedEvent, used when querying from db
         ///</summary>
         public PersistedEvent() { }
+
+        private DateTime _timestamp { get; set; }
+        ///<summary>
+        ///Timestamp of event
+        ///</summary>
+        public DateTime timestamp { get { return this._timestamp; }}
 
         private Guid _id { get; set; }
         ///<summary>
