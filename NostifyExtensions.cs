@@ -311,18 +311,5 @@ namespace nostify
         {
             return new PartitionKey(value);
         }
-
-        ///<summary>
-        ///Helper method to get tenantId out of user claims
-        ///</summary>
-        // public static int GetTenantId(this Nostify nostify, HttpContext context)
-        // {
-        //     //Returning 0 will result in no data being pulled due to global query filter
-        //     string tenantId = (context != null && context.Request.HttpContext.User.Claims.Count() > 0) ?
-        //       context.Request.HttpContext.User.Claims.ToList().Where(c => c.Type == "tenantId").Single().Value
-        //       : "0";
-
-        //     return int.Parse(tenantId);
-        // }
     }
 }
