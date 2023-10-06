@@ -52,7 +52,7 @@ namespace _ReplaceMe__Service
                     }
                     catch (Exception e)
                     {
-                        await _nostify.HandleUndeliverableAsync("On_ReplaceMe_Deleted", e.Message, pe);
+                        await _nostify.HandleUndeliverableAsync("On_ReplaceMe_Created", e.Message, pe);
                     }
 
                 }
