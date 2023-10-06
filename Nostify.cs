@@ -7,6 +7,9 @@ using Microsoft.Azure.Cosmos.Linq;
 
 namespace nostify
 {
+    ///<summary>
+    ///Defines Nostify interface
+    ///</summary>
     public interface INostify
     {
         NostifyCosmosClient Repository { get; }

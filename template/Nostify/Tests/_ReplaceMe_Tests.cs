@@ -16,7 +16,7 @@ namespace _ReplaceMe__Service.Tests
 {
     public class Create__ReplaceMe__Command_Should
     {
-        private Mock<INostify> _nostifyMock;
+        private Mock<Nostify> _nostifyMock;
         private Create_ReplaceMe_ _func;
         private Mock<HttpClient> _httpClientMock;
         private Mock<ILogger> _loggerMock;
