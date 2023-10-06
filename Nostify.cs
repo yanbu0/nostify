@@ -9,7 +9,9 @@ namespace nostify
 {
     public interface INostify
     {
-
+        NostifyCosmosClient Repository { get; }
+        string DefaultPartitionKeyPath { get; }
+        int DefaultTenantId { get; }
     }
 
     ///<summary>
