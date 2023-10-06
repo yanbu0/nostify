@@ -12,24 +12,24 @@ using System.Linq;
 
 namespace _ReplaceMe__Service
 {
-    public class OnAggregateRootUpdated
+    public class On_ReplaceMe_Updated
     {
 
         private readonly HttpClient _client;
         private readonly Nostify _nostify;
-        public OnAggregateRootUpdated(HttpClient httpClient, Nostify nostify)
+        public On_ReplaceMe_Updated(HttpClient httpClient, Nostify nostify)
         {
             this._client = httpClient;
             this._nostify = nostify;;
         }
 
-        [FunctionName("OnAggregateRootUpdated")]
+        [FunctionName("On_ReplaceMe_Updated")]
         public async Task Run([CosmosDBTrigger(
             databaseName: "_ReplaceMe__DB",
             collectionName: "persistedEvents",
             ConnectionStringSetting = "<YourConnectionStringHere>",
             CreateLeaseCollectionIfNotExists = true,
-            LeaseCollectionPrefix = "OnAggregateRootUpdated_",
+            LeaseCollectionPrefix = "On_ReplaceMe_Updated_",
             LeaseCollectionName = "leases")]IReadOnlyList<Document> input,
             ILogger log)
         {
@@ -40,7 +40,7 @@ namespace _ReplaceMe__Service
                     PersistedEvent pe = null;
                     try
                     {
-                        Guid aggId = Guid.Parse(pe.partitionKey);
+                        Guid aggId = pe.id;
                         
                         //Update aggregate current state projection
                         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
@@ -48,14 +48,20 @@ namespace _ReplaceMe__Service
                             .GetItemLinqQueryable<_ReplaceMe_>()
                             .Where(agg => agg.id == aggId)
                             .ReadAllAsync<_ReplaceMe_>())
-                            .FirstOrDefault() ?? new _ReplaceMe_();
-                        aggregate.Apply(pe);
-                        await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(aggregate);
+                            .FirstOrDefault();
+
+                        //Null means it has been deleted
+                        if (aggregate != null)
+                        {
+                            aggregate.Apply(pe);
+                            await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(aggregate);
+                        }
+                            
 
                     }
                     catch (Exception e)
                     {
-                        await _nostify.HandleUndeliverableAsync("OnAggregateRootUpdated", e.Message, pe);
+                        await _nostify.HandleUndeliverableAsync("On_ReplaceMe_Updated", e.Message, pe);
                     }
 
                 }
