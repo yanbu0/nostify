@@ -7,10 +7,15 @@ using Microsoft.Azure.Cosmos.Linq;
 
 namespace nostify
 {
+    public interface INostify
+    {
+
+    }
+
     ///<summary>
     ///Base class to utilize nostify
     ///</summary>
-    public class Nostify
+    public class Nostify : INostify
     {
 
         ///<summary>

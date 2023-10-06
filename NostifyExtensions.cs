@@ -32,8 +32,7 @@ namespace nostify
 
         ///<summary>
         ///Writes event to event store
-        ///</summary>
-        
+        ///</summary>        
         ///<param name="nostify">Instance of Nostify class</param>
         ///<param name="persistedEvent">Event to apply and persist in event store</param>
         public static async Task PersistAsync(this Nostify nostify, PersistedEvent persistedEvent)
@@ -52,8 +51,7 @@ namespace nostify
 
         ///<summary>
         ///Writes event to event store
-        ///</summary>
-        
+        ///</summary>        
         ///<param name="nostify">Instance of Nostify class</param>
         ///<param name="persistedEvents">Events to apply and persist in event store</param>
         public static async Task BulkPersistAsync(this Nostify nostify, List<PersistedEvent> persistedEvents)

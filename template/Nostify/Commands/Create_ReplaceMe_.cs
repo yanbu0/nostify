@@ -27,18 +27,16 @@ namespace _ReplaceMe__Service
 
         [FunctionName("Create_ReplaceMe_")]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ReplaceMe_")] _ReplaceMe_ create_ReplaceMe_, HttpRequest httpRequest,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ReplaceMe_")] _ReplaceMe_ create_ReplaceMe_,
             ILogger log)
         {
-            var peContainer = await _nostify.GetPersistedEventsContainerAsync();
-
             //Need new id for aggregate root since its new
             create_ReplaceMe_.id = Guid.NewGuid();
 
             PersistedEvent pe = new PersistedEvent(NostifyCommand.Create, create_ReplaceMe_.id, create_ReplaceMe_);
             await _nostify.PersistAsync(pe);
 
-            return new OkObjectResult(new{ message = $"_ReplaceMe_ {create_ReplaceMe_.id} was created"});
+            return new OkObjectResult(create_ReplaceMe_.id);
         }
     }
 }
