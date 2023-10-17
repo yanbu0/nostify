@@ -9,6 +9,8 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Net.Http;
 using nostify;
+using Microsoft.Azure.Cosmos;
+using System.Linq;
 
 namespace _ReplaceMe__Service
 {
@@ -16,8 +18,8 @@ namespace _ReplaceMe__Service
     {
 
         private readonly HttpClient _client;
-        private readonly Nostify _nostify;
-        public GetAccount(HttpClient httpClient, Nostify nostify)
+        private readonly INostify _nostify;
+        public GetAccount(HttpClient httpClient, INostify nostify)
         {
             this._client = httpClient;
             this._nostify = nostify;
@@ -29,8 +31,13 @@ namespace _ReplaceMe__Service
             string aggregateId,
             ILogger log)
         {
-            _ReplaceMe_ currentState = await _nostify.RehydrateAsync<_ReplaceMe_>(Guid.Parse(aggregateId));
-            return new OkObjectResult(JsonConvert.SerializeObject(currentState));
+            Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
+            _ReplaceMe_ retObj = await currentStateContainer
+                                .GetItemLinqQueryable<_ReplaceMe_>()
+                                .Where(x => x.id == Guid.Parse(aggregateId))
+                                .FirstOrDefaultAsync();
+                                
+            return new OkObjectResult(retObj);
         }
     }
 }

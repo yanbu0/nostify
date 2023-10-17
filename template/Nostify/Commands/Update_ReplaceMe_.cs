@@ -15,8 +15,8 @@ namespace nostify_example
     {
 
         private readonly HttpClient _client;
-        private readonly Nostify _nostify;
-        public Update_ReplaceMe_(HttpClient httpClient, Nostify nostify)
+        private readonly INostify _nostify;
+        public Update_ReplaceMe_(HttpClient httpClient, INostify nostify)
         {
             this._client = httpClient;
             this._nostify = nostify;
@@ -31,7 +31,7 @@ namespace nostify_example
             PersistedEvent pe = new PersistedEvent(NostifyCommand.Update, aggRootId, update_ReplaceMe_);
             await _nostify.PersistAsync(pe);
 
-            return new OkObjectResult(new{ message = $"_ReplaceMe_ {update_ReplaceMe_.id} was updated"});
+            return new OkObjectResult(update_ReplaceMe_.id);
         }
     }
 }

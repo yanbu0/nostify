@@ -15,8 +15,8 @@ namespace nostify_example
     {
 
         private readonly HttpClient _client;
-        private readonly Nostify _nostify;
-        public Delete_ReplaceMe_(HttpClient httpClient, Nostify nostify)
+        private readonly INostify _nostify;
+        public Delete_ReplaceMe_(HttpClient httpClient, INostify nostify)
         {
             this._client = httpClient;
             this._nostify = nostify;
@@ -32,7 +32,7 @@ namespace nostify_example
             PersistedEvent pe = new PersistedEvent(NostifyCommand.Delete, aggRootId, null);
             await _nostify.PersistAsync(pe);
 
-            return new OkObjectResult(new{ message = $"_ReplaceMe_ {aggregateId} was deleted"});
+            return new OkObjectResult(aggregateId);
         }
     }
 }

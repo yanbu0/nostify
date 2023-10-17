@@ -16,8 +16,8 @@ namespace _ReplaceMe__Service
     {
 
         private readonly HttpClient _client;
-        private readonly Nostify _nostify;
-        public On_ReplaceMe_Deleted(HttpClient httpClient, Nostify nostify)
+        private readonly INostify _nostify;
+        public On_ReplaceMe_Deleted(HttpClient httpClient, INostify nostify)
         {
             this._client = httpClient;
             this._nostify = nostify;;

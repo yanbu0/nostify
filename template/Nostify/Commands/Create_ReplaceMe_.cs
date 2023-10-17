@@ -18,8 +18,8 @@ namespace _ReplaceMe__Service
     {
 
         private readonly HttpClient _client;
-        private readonly Nostify _nostify;
-        public Create_ReplaceMe_(HttpClient httpClient, Nostify nostify)
+        private readonly INostify _nostify;
+        public Create_ReplaceMe_(HttpClient httpClient, INostify nostify)
         {
             this._client = httpClient;
             this._nostify = nostify;

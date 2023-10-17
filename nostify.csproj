@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>1.8.5.1</Version>
+    <Version>1.8.6.0</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -15,7 +15,8 @@
   <ItemGroup>
     <PackageReference Include="microsoft.azure.cosmos" Version="3.26.1" />
     <None Include="LICENSE.txt" Pack="true" PackagePath="$(PackageLicenseFile)" />
-     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="template\**\*" Exclude="template\**\bin\**;template\**\obj\**" />

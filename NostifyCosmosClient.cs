@@ -9,9 +9,20 @@ using System.Linq;
 namespace nostify
 {
     ///<summary>
+    ///Defines NostifyCosmosClient interface
+    ///</summary>
+    public interface INostifyCosmosClient
+    {
+        CosmosClient GetClient(bool allowBulk = false);
+        Task<Database> GetDatabaseAsync(bool allowBulk = false);
+        Task<Container> GetEventStoreAsync();
+
+    }
+
+    ///<summary>
     ///Class to use Cosmos as the repository for persisted events
     ///</summary>
-    public class NostifyCosmosClient
+    public class NostifyCosmosClient : INostifyCosmosClient
     {
         ///<summary>
         ///Optional. Endpoint url for cosmos db, will have format "https://{DbName}.documents.azure.us:443"
@@ -47,6 +58,13 @@ namespace nostify
         ///Optional. Will default to "AccountEndpoint={this.EndpointUri}/;AccountKey={this.Primarykey};"
         ///</summary>
         public readonly string ConnectionString;
+
+        ///<summary>
+        ///Parameterless constructor for mock testing
+        ///</summary>
+        public NostifyCosmosClient()
+        {
+        }
 
         ///<summary>
         ///Constructor for cosmos client
