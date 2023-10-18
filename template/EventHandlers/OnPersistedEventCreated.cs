@@ -14,13 +14,11 @@ namespace _ReplaceMe__Service
 {
     public class OnPersistedEventCreated
     {
-
-        private readonly HttpClient _client;
         private readonly INostify _nostify;
-        public OnPersistedEventCreated(HttpClient httpClient, INostify nostify)
+
+        public OnPersistedEventCreated(INostify nostify)
         {
-            this._client = httpClient;
-            this._nostify = nostify;;
+            this._nostify = nostify;
         }
 
         [FunctionName(nameof(OnPersistedEventCreated))]
@@ -52,7 +50,7 @@ namespace _ReplaceMe__Service
                     }
                     catch (Exception e)
                     {
-                        await _nostify.HandleUndeliverableAsync("On_ReplaceMe_Created", e.Message, pe);
+                        await _nostify.HandleUndeliverableAsync(nameof(OnPersistedEventCreated), e.Message, pe);
                     }
 
                 }

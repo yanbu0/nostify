@@ -14,13 +14,11 @@ namespace _ReplaceMe__Service
 {
     public class On_ReplaceMe_Created
     {
-
-        private readonly HttpClient _client;
         private readonly INostify _nostify;
-        public On_ReplaceMe_Created(HttpClient httpClient, INostify nostify)
+        
+        public On_ReplaceMe_Created(INostify nostify)
         {
-            this._client = httpClient;
-            this._nostify = nostify;;
+            this._nostify = nostify;
         }
 
         [FunctionName(nameof(On_ReplaceMe_Created))]
@@ -52,7 +50,7 @@ namespace _ReplaceMe__Service
                     }
                     catch (Exception e)
                     {
-                        await _nostify.HandleUndeliverableAsync("On_ReplaceMe_Created", e.Message, pe);
+                        await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Created), e.Message, pe);
                     }
 
                 }
