@@ -22,7 +22,7 @@ namespace nostify_example
             this._nostify = nostify;
         }
 
-        [FunctionName("Update_ReplaceMe_")]
+        [FunctionName(nameof(Update_ReplaceMe_))]
         public async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "_ReplaceMe_")] dynamic update_ReplaceMe_, HttpRequest httpRequest,
             ILogger log)

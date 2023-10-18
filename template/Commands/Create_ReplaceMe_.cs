@@ -25,7 +25,7 @@ namespace _ReplaceMe__Service
             this._nostify = nostify;
         }
 
-        [FunctionName("Create_ReplaceMe_")]
+        [FunctionName(nameof(Create_ReplaceMe_))]
         public async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ReplaceMe_")] _ReplaceMe_ create_ReplaceMe_,
             ILogger log)

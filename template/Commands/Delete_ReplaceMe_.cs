@@ -22,7 +22,7 @@ namespace nostify_example
             this._nostify = nostify;
         }
 
-        [FunctionName("Delete_ReplaceMe_")]
+        [FunctionName(nameof(Delete_ReplaceMe_))]
         public async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "_ReplaceMe_/{aggregateId:string}")] HttpRequest httpRequest,
             string aggregateId,

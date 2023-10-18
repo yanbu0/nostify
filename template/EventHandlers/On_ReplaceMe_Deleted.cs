@@ -23,7 +23,7 @@ namespace _ReplaceMe__Service
             this._nostify = nostify;;
         }
 
-        [FunctionName("On_ReplaceMe_Deleted")]
+        [FunctionName(nameof(On_ReplaceMe_Deleted))]
         public async Task Run([CosmosDBTrigger(
             databaseName: "_ReplaceMe__DB",
             collectionName: "persistedEvents",
