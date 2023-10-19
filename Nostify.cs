@@ -16,7 +16,6 @@ namespace nostify
         string DefaultPartitionKeyPath { get; }
         int DefaultTenantId { get; }
 
-        public Task ApplyAndPersistAsync(Aggregate aggregate, PersistedEvent persistedEvent);
         public Task PersistAsync(PersistedEvent persistedEvent);
         public Task BulkPersistAsync(List<PersistedEvent> persistedEvents);
         public Task HandleUndeliverableAsync(string functionName, string errorMessage, PersistedEvent persistedEvent);
@@ -64,18 +63,6 @@ namespace nostify
                 this.DefaultPartitionKeyPath = DefaultPartitionKeyPath;
             }
             this.DefaultTenantId = DefaultTenantId;
-        }
-        
-
-        ///<summary>
-        ///Applys event to Aggregate and persists event 
-        ///</summary>
-        ///<param name="aggregate">Aggregate to apply event to</param>
-        ///<param name="persistedEvent">Event to apply and persist in event store</param>
-        public async Task ApplyAndPersistAsync(Aggregate aggregate, PersistedEvent persistedEvent)
-        {
-            aggregate.Apply(persistedEvent);
-            await PersistAsync(persistedEvent);
         }
 
 
