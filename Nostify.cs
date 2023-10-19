@@ -20,6 +20,7 @@ namespace nostify
         public Task PersistAsync(PersistedEvent persistedEvent);
         public Task BulkPersistAsync(List<PersistedEvent> persistedEvents);
         public Task HandleUndeliverableAsync(string functionName, string errorMessage, PersistedEvent persistedEvent);
+        public Task PublishEvent(PersistedEvent persistedEvent);
         public Task<Container> GetPersistedEventsContainerAsync(bool allowBulk = false);
         public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
 
@@ -93,6 +94,22 @@ namespace nostify
             catch (Exception e)
             {
                 await HandleUndeliverableAsync("PersistEvent", e.Message, persistedEvent);
+            }
+        }
+
+        ///<summary>
+        ///Published event to messaging bus
+        ///</summary>        
+        ///<param name="persistedEvent">Event to apply and persist in event store</param>
+        public async Task PublishEvent(PersistedEvent persistedEvent)
+        {
+            try
+            {
+                throw new NotImplementedException();
+            }
+            catch (Exception e)
+            {
+                await HandleUndeliverableAsync("PublishEvent", e.Message, persistedEvent);
             }
         }
 
