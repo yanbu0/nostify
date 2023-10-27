@@ -9,6 +9,8 @@ using nostify;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using System.Linq;
+using Microsoft.Azure.WebJobs.Extensions.Kafka;
+using Confluent.Kafka;
 
 namespace _ReplaceMe__Service
 {
@@ -23,12 +25,12 @@ namespace _ReplaceMe__Service
 
         [FunctionName(nameof(OnPersistedEventCreated))]
         public async Task Run([CosmosDBTrigger(
-            databaseName: "_ReplaceMe__DB",
-            collectionName: "persistedEvents",
-            ConnectionStringSetting = "<YourConnectionStringHere>",
-            CreateLeaseCollectionIfNotExists = true,
-            LeaseCollectionPrefix = "OnPersistedEventCreated_",
-            LeaseCollectionName = "leases")] IReadOnlyList<Document> input,
+                databaseName: "_ReplaceMe__DB",
+                collectionName: "persistedEvents",
+                ConnectionStringSetting = "<YourConnectionStringHere>",
+                CreateLeaseCollectionIfNotExists = true,
+                LeaseCollectionPrefix = "OnPersistedEventCreated_",
+                LeaseCollectionName = "leases")] IReadOnlyList<Document> input,
             ILogger log)
         {
             if (input != null)
@@ -38,14 +40,16 @@ namespace _ReplaceMe__Service
                     PersistedEvent pe = null;
                     try
                     {
-                        pe = JsonConvert.DeserializeObject<PersistedEvent>(doc.ToString());
+                        var config = new List<KeyValuePair<string, string>>
+                        {
+                            new KeyValuePair<string, string>("bootstrap.servers", "localhost:64546")
+                        };
 
-                        var agg = new _ReplaceMe_();
-                        agg.Apply(pe);
 
-                        //Update aggregate current state projection
-                        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
-                        await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(agg);                            
+                        using (var p = new ProducerBuilder<string,string>(config).Build())
+                        {
+                            var result = p.ProduceAsync("test", new Message<string, string>{  Value = doc.ToString() });
+                        }                    
 
                     }
                     catch (Exception e)

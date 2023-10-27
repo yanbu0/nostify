@@ -3,6 +3,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 using nostify;
+using Microsoft.Azure.WebJobs.Extensions.Kafka;
+using Microsoft.Azure.WebJobs;
 
 [assembly: FunctionsStartup(typeof(_ReplaceMe__Service.Startup))]
 
