@@ -42,10 +42,10 @@ namespace nostify
         
         private void SetUp(NostifyCommand command, string aggregateRootId, object payload)
         {
-            this._aggregateRootId = aggregateRootId;
-            this._id = Guid.NewGuid();
-            this._command = command;
-            this._timestamp = DateTime.UtcNow;
+            this.aggregateRootId = aggregateRootId;
+            this.id = Guid.NewGuid();
+            this.command = command;
+            this.timestamp = DateTime.UtcNow;
             this.payload = payload;
         }
 
@@ -54,32 +54,29 @@ namespace nostify
         ///</summary>
         public PersistedEvent() { }
 
-        private DateTime _timestamp { get; set; }
         ///<summary>
         ///Timestamp of event
         ///</summary>
-        public DateTime timestamp { get { return this._timestamp; }}
+        public DateTime timestamp { get; set; }
 
-        private Guid _id { get; set; }
+
         ///<summary>
         ///Id of event
         ///</summary>
-        public Guid id { get { return this._id; }}
+        public Guid id { get; set; }
 
-        private NostifyCommand _command { get; set; }
         ///<summary>
         ///Command to perform, defined in Aggregate implementation
         ///</summary>
-        public NostifyCommand command { get { return this._command; }}  //This is an object because otherwise newtonsoft.json pukes creating an NostifyCommand
+        public NostifyCommand command { get; set; }  //This is an object because otherwise newtonsoft.json pukes creating an NostifyCommand
 
-        private string _aggregateRootId { get; set; }
         ///<summary>
         ///Key of the Aggregate to perform the event on
         ///</summary>
         ///<para>
         ///<strong>The series of events for an Aggregate should have the same key.</strong>
         ///</para>
-        public string aggregateRootId { get { return this._aggregateRootId;} }
+        public string aggregateRootId { get; set; }
         
         ///<summary>
         ///Internal use only
