@@ -42,7 +42,12 @@ namespace nostify
         ///<summary>
         ///Optional. Name of event store, defaults to "persistedEvents"
         ///</summary>
-        public readonly string PersistedEventsContainer;
+        public readonly string EventStoreContainer;
+
+        ///<summary>
+        ///Optional. Will default to "/aggregateRootId"
+        ///</summary>
+        public readonly string EventStorePartitionKey;
 
         ///<summary>
         ///Optional. Name of undelivered events container, defaults to "undeliverableEvents"
@@ -73,7 +78,8 @@ namespace nostify
             string DbName, 
             string EndpointUri = "", 
             string ConnectionString = "", 
-            string PersistedEventsContainer = "persistedEvents", 
+            string EventStoreContainer = "eventStore", 
+            string EventStorePartitionKey = "/aggregateRootId",
             string CurrentStateContainer = "currentState",
             string UndeliverableEvents = "undeliverableEvents")
         {
@@ -81,7 +87,7 @@ namespace nostify
             this.Primarykey = ApiKey;
             this.DbName = DbName;
             this.ConnectionString = (ConnectionString == "") ? $"AccountEndpoint={this.EndpointUri}/;AccountKey={this.Primarykey};" : ConnectionString;
-            this.PersistedEventsContainer = PersistedEventsContainer;
+            this.EventStoreContainer = EventStoreContainer;
             this.UndeliverableEvents = UndeliverableEvents;
             this.CurrentStateContainer = CurrentStateContainer;
         }
@@ -104,7 +110,7 @@ namespace nostify
         ///</summary>
         public async Task<Container> GetEventStoreAsync()
         {
-            return (await GetClient().CreateDatabaseIfNotExistsAsync(DbName)).Database.GetContainer(this.PersistedEventsContainer);
+            return await (await GetDatabaseAsync()).CreateContainerIfNotExistsAsync(this.EventStoreContainer, EventStorePartitionKey);
         }
 
     }

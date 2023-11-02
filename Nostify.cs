@@ -23,7 +23,7 @@ namespace nostify
         public Task BulkPersistAsync(List<PersistedEvent> persistedEvents);
         public Task HandleUndeliverableAsync(string functionName, string errorMessage, PersistedEvent persistedEvent);
         public Task PublishEventAsync(string cosmosTriggerOutput);
-        public Task<Container> GetPersistedEventsContainerAsync(bool allowBulk = false);
+        public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
         public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
 
     }
@@ -84,7 +84,7 @@ namespace nostify
         {
             try
             {
-                var eventContainer = await GetPersistedEventsContainerAsync();
+                var eventContainer = await GetEventStoreContainerAsync();
 
                 await eventContainer.CreateItemAsync(persistedEvent, new PartitionKey(persistedEvent.aggregateRootId));
             }
@@ -130,7 +130,7 @@ namespace nostify
             PersistedEvent errorPe = null;
             try
             {
-                var eventContainer = await GetPersistedEventsContainerAsync(true);
+                var eventContainer = await GetEventStoreContainerAsync(true);
 
                 List<Task> taskList = new List<Task>();
                 persistedEvents.ForEach(pe => {
@@ -174,7 +174,7 @@ namespace nostify
         public async Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new()
         {
             string eventStorePartitionKey = $"{id}";
-            var eventContainer = await GetPersistedEventsContainerAsync();
+            var eventContainer = await GetEventStoreContainerAsync();
             
             T rehyd = new T();
             List<PersistedEvent> peList = await eventContainer.GetItemLinqQueryable<PersistedEvent>()
@@ -201,10 +201,9 @@ namespace nostify
         ///<summary>
         ///Retrieves the event store container
         ///</summary>
-        public async Task<Container> GetPersistedEventsContainerAsync(bool allowBulk = false)
+        public async Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
         {
-            var db = await Repository.GetDatabaseAsync(allowBulk);
-            return await db.CreateContainerIfNotExistsAsync(Repository.PersistedEventsContainer, "/aggregateRootId");
+            return await Repository.GetEventStoreAsync();
         }
 
         ///<summary>
@@ -254,7 +253,7 @@ namespace nostify
             ContainerResponse resp = await containerToRebuild.DeleteContainerAsync();
 
             //Get list of distinct aggregate root ids
-            Container eventStore = await GetPersistedEventsContainerAsync();
+            Container eventStore = await GetEventStoreContainerAsync();
             List<Guid> uniqueAggregateRootIds = (await eventStore.GetItemLinqQueryable<PersistedEvent>()
                 .Select(pe => pe.aggregateRootId)
                 .Distinct()
