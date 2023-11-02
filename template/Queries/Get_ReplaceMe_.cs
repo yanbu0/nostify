@@ -1,16 +1,9 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using System.Net.Http;
 using nostify;
 using Microsoft.Azure.Cosmos;
-using System.Linq;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
 
 namespace _ReplaceMe__Service
 {
@@ -25,9 +18,9 @@ namespace _ReplaceMe__Service
             this._nostify = nostify;
         }
 
-        [FunctionName("Get_ReplaceMe_")]
+        [Function("Get_ReplaceMe_")]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId:string}")] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId:string}")] HttpRequestData req,
             string aggregateId,
             ILogger log)
         {

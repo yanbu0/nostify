@@ -2,15 +2,12 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Net.Http;
 using nostify;
-using System.Linq;
-using Microsoft.Azure.Cosmos.Linq;
+using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.Functions.Worker;
 
 namespace _ReplaceMe__Service
 {
@@ -25,18 +22,21 @@ namespace _ReplaceMe__Service
             this._nostify = nostify;
         }
 
-        [FunctionName(nameof(Create_ReplaceMe_))]
+        [Function(nameof(Create_ReplaceMe_))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ReplaceMe_")] _ReplaceMe_ create_ReplaceMe_,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ReplaceMe_")] HttpRequestData req,
             ILogger log)
         {
-            //Need new id for aggregate root since its new
-            create_ReplaceMe_.id = Guid.NewGuid();
+            var new_ReplaceMe_ = JsonConvert.DeserializeObject<dynamic>(await new StreamReader(req.Body).ReadToEndAsync());
 
-            PersistedEvent pe = new PersistedEvent(NostifyCommand.Create, create_ReplaceMe_.id, create_ReplaceMe_);
+            //Need new id for aggregate root since its new
+            string newId = Guid.NewGuid().ToString();
+            new_ReplaceMe_.id = newId;
+            
+            PersistedEvent pe = new PersistedEvent(_ReplaceMe_Command.Create, newId, new_ReplaceMe_);
             await _nostify.PersistAsync(pe);
 
-            return new OkObjectResult(create_ReplaceMe_.id);
+            return new OkObjectResult(newId);
         }
     }
 }

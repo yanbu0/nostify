@@ -1,14 +1,8 @@
-using System;
-using System.Collections.Generic;
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
 using nostify;
-using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json;
-using System.Linq;
 
 namespace _ReplaceMe__Service
 {
@@ -16,33 +10,31 @@ namespace _ReplaceMe__Service
     {
         private readonly INostify _nostify;
         
+        
         public On_ReplaceMe_Deleted(INostify nostify)
         {
             this._nostify = nostify;
         }
 
-        [FunctionName(nameof(On_ReplaceMe_Deleted))]
-        public async Task Run([CosmosDBTrigger(
-            databaseName: "_ReplaceMe__DB",
-            collectionName: "persistedEvents",
-            ConnectionStringSetting = "<YourConnectionStringHere>",
-            CreateLeaseCollectionIfNotExists = true,
-            LeaseCollectionPrefix = "On_ReplaceMe_Deleted_",
-            LeaseCollectionName = "leases")]IReadOnlyList<Document> input,
+        [Function(nameof(On_ReplaceMe_Deleted))]
+        public async Task Run([KafkaTrigger("BrokerList",
+                  "Delete__ReplaceMe_",
+                  ConsumerGroup = "$Default")] string eventData,
             ILogger log)
         {
-            if (input != null)
+            if (eventData != null)
             {
-                foreach (Document doc in input)
+                PersistedEvent? pe = JsonConvert.DeserializeObject<PersistedEvent>(eventData);
+                try
                 {
-                    PersistedEvent pe = null;
-                    try
+                    if (pe != null)
                     {
                         Guid aggId = pe.id;
+                        log.LogInformation($"Deleting _ReplaceMe_ {aggId}");
                         
                         //Update aggregate current state projection
                         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
-                        _ReplaceMe_ aggregate = (await currentStateContainer
+                        _ReplaceMe_? aggregate = (await currentStateContainer
                             .GetItemLinqQueryable<_ReplaceMe_>()
                             .Where(agg => agg.id == aggId)
                             .ReadAllAsync<_ReplaceMe_>())
@@ -53,15 +45,14 @@ namespace _ReplaceMe__Service
                         {
                             await currentStateContainer.DeleteItemAsync<_ReplaceMe_>(aggregate.id.ToString(), aggregate.tenantId.ToString().ToPartitionKey());
                         }
-                            
-
                     }
-                    catch (Exception e)
-                    {
-                        await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Deleted), e.Message, pe);
-                    }
-
                 }
+                catch (Exception e)
+                {
+                    await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Deleted), e.Message, pe);
+                }
+
+            
             }
         }
     }

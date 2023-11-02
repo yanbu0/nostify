@@ -1,25 +1,19 @@
-using Microsoft.Azure.Documents;  
-using Microsoft.Extensions.Logging;  
-using Moq;  
-using Moq.Protected;
-using Newtonsoft.Json;  
-using System.Collections.Generic;  
-using System.IO;  
-using System.Threading.Tasks;  
-using Xunit;  
+using Microsoft.Extensions.Logging;
+using Moq;
+using System.Threading.Tasks;
+using Xunit;
 using nostify;
-using Microsoft.AspNetCore.Http;
 using System.Net.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
-using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Functions.Worker.Http;
 
 namespace _ReplaceMe__Service.Tests
 {
     public class Update__ReplaceMe__Command_Should
     {
         private Mock<INostify> _nostifyMock;
-        private Create_ReplaceMe_ _func;
+        private Update_ReplaceMe_ _func;
         private Mock<HttpClient> _httpClientMock;
         private Mock<ILogger> _loggerMock;
 
@@ -27,7 +21,7 @@ namespace _ReplaceMe__Service.Tests
         {
             _nostifyMock = new Mock<INostify>();
             _httpClientMock = new Mock<HttpClient>();
-            _func = new Create_ReplaceMe_(_httpClientMock.Object, _nostifyMock.Object);
+            _func = new Update_ReplaceMe_(_httpClientMock.Object, _nostifyMock.Object);
             _loggerMock = new Mock<ILogger>();
         }
 
@@ -35,10 +29,14 @@ namespace _ReplaceMe__Service.Tests
         public async Task Insert_Update_PersistedEvent()
         {
             //Arrange
+            object update_ReplaceMe_ = new {
+                id = Guid.NewGuid()
+            };
             _ReplaceMe_ test = new _ReplaceMe_();
+            HttpRequestData testReq = MockHttpRequestData.Create(update_ReplaceMe_);
             
             // //Act
-            var resp = await _func.Run(test, _loggerMock.Object) as OkObjectResult;
+            var resp = await _func.Run(testReq, _loggerMock.Object) as OkObjectResult;
 
             // //Assert
             Assert.NotNull(resp);

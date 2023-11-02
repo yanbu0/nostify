@@ -1,14 +1,11 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
 using nostify;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using Newtonsoft.Json;
 
-namespace nostify_example
+namespace _ReplaceMe__Service
 {
 
     public class Update_ReplaceMe_
@@ -22,13 +19,14 @@ namespace nostify_example
             this._nostify = nostify;
         }
 
-        [FunctionName(nameof(Update_ReplaceMe_))]
+        [Function(nameof(Update_ReplaceMe_))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "_ReplaceMe_")] dynamic update_ReplaceMe_, HttpRequest httpRequest,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "_ReplaceMe_")] HttpRequestData req,
             ILogger log)
         {
+            dynamic? update_ReplaceMe_ = JsonConvert.DeserializeObject<dynamic>(await new StreamReader(req.Body).ReadToEndAsync());
             Guid aggRootId = Guid.Parse(update_ReplaceMe_.id.ToString());
-            PersistedEvent pe = new PersistedEvent(NostifyCommand.Update, aggRootId, update_ReplaceMe_);
+            PersistedEvent pe = new PersistedEvent(_ReplaceMe_Command.Update, aggRootId, update_ReplaceMe_);
             await _nostify.PersistAsync(pe);
 
             return new OkObjectResult(update_ReplaceMe_.id);

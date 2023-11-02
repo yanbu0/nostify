@@ -29,7 +29,7 @@ namespace nostify
     }
 
     ///<summary>
-    ///Base class to utilize nostify
+    ///Base class to utilize nostify.  Should inject as a singleton in HostBuilder().ConfigureServices() 
     ///</summary>
     public class Nostify : INostify
     {
@@ -113,7 +113,7 @@ namespace nostify
 
                     using (var p = new ProducerBuilder<string,string>(config).Build())
                     {
-                        string topic = "Location" + pe.command.name;
+                        string topic = pe.command.name;
                         var result = await p.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
                     }         
 

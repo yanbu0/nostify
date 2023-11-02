@@ -1,14 +1,10 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
 using nostify;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
 
-namespace nostify_example
+namespace _ReplaceMe__Service
 {
 
     public class Delete_ReplaceMe_
@@ -22,14 +18,14 @@ namespace nostify_example
             this._nostify = nostify;
         }
 
-        [FunctionName(nameof(Delete_ReplaceMe_))]
+        [Function(nameof(Delete_ReplaceMe_))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "_ReplaceMe_/{aggregateId:string}")] HttpRequest httpRequest,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "_ReplaceMe_/{aggregateId:string}")] HttpRequestData req,
             string aggregateId,
             ILogger log)
         {
             Guid aggRootId = Guid.Parse(aggregateId);
-            PersistedEvent pe = new PersistedEvent(NostifyCommand.Delete, aggRootId, null);
+            PersistedEvent pe = new PersistedEvent(_ReplaceMe_Command.Delete, aggRootId, null);
             await _nostify.PersistAsync(pe);
 
             return new OkObjectResult(aggregateId);

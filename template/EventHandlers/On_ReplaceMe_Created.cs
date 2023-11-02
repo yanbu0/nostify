@@ -1,14 +1,9 @@
-using System;
-using System.Collections.Generic;
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
 using nostify;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
-using System.Linq;
+using Microsoft.Azure.Functions.Worker;
+using Newtonsoft.Json.Linq;
 
 namespace _ReplaceMe__Service
 {
@@ -21,39 +16,33 @@ namespace _ReplaceMe__Service
             this._nostify = nostify;
         }
 
-        [FunctionName(nameof(On_ReplaceMe_Created))]
-        public async Task Run([CosmosDBTrigger(
-            databaseName: "_ReplaceMe__DB",
-            collectionName: "persistedEvents",
-            ConnectionStringSetting = "<YourConnectionStringHere>",
-            CreateLeaseCollectionIfNotExists = true,
-            LeaseCollectionPrefix = "On_ReplaceMe_Created_",
-            LeaseCollectionName = "leases")] IReadOnlyList<Document> input,
+        [Function(nameof(On_ReplaceMe_Created))]
+        public async Task Run([KafkaTrigger("BrokerList",
+                  "Create__ReplaceMe_",
+                  ConsumerGroup = "$Default")] string eventData,
             ILogger log)
         {
-            if (input != null)
+            if (eventData != null)
             {
-                foreach (Document doc in input)
+                PersistedEvent? pe = JsonConvert.DeserializeObject<PersistedEvent>(JObject.Parse(eventData).Value<string>("Value"));
+                try
                 {
-                    PersistedEvent pe = null;
-                    try
+                    if (pe != null)
                     {
-                        pe = JsonConvert.DeserializeObject<PersistedEvent>(doc.ToString());
-
                         var agg = new _ReplaceMe_();
                         agg.Apply(pe);
 
                         //Update aggregate current state projection
                         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
-                        await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(agg);                            
-
-                    }
-                    catch (Exception e)
-                    {
-                        await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Created), e.Message, pe);
-                    }
-
+                        await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(agg); 
+                    }                           
                 }
+                catch (Exception e)
+                {
+                    await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Created), e.Message, pe);
+                }
+
+                
             }
         }
     }

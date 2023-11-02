@@ -13,7 +13,7 @@ namespace nostify
     {
 
         ///<summary>
-        ///Name of command, MUST BE UNIQUE - should follow convention "{Action} {Entity Name}", ie - "Create User"
+        ///Name of command, MUST BE UNIQUE - should follow convention "{Action}_{Entity Name}", ie - "Create_User".  This will also become the name of the related Kafka topic.
         ///</summary>
         public string name { get; }
 
@@ -25,19 +25,6 @@ namespace nostify
         {
             this.name = name;
         }
-
-        ///<summary>
-        ///Base Create Command
-        ///</summary>
-        public static readonly NostifyCommand Create = new NostifyCommand("Create");
-        ///<summary>
-        ///Base Update Command
-        ///</summary>
-        public static readonly NostifyCommand Update = new NostifyCommand("Update");
-        ///<summary>
-        ///Base Delete Command
-        ///</summary>
-        public static readonly NostifyCommand Delete = new NostifyCommand("Delete");
 
 
         ///<summary>
