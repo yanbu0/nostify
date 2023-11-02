@@ -20,7 +20,7 @@ namespace _ReplaceMe__Service
 
         [Function("Get_ReplaceMe_")]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId:string}")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId}")] HttpRequestData req,
             string aggregateId,
             ILogger log)
         {
