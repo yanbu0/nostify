@@ -19,31 +19,29 @@ namespace _ReplaceMe__Service
         [Function(nameof(On_ReplaceMe_Created))]
         public async Task Run([KafkaTrigger("BrokerList",
                   "Create__ReplaceMe_",
-                  ConsumerGroup = "$Default")] string eventData,
+                  ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
             ILogger log)
         {
-            if (eventData != null)
+            PersistedEvent? pe = triggerEvent.GetPersistedEvent();
+            try
             {
-                PersistedEvent? pe = JsonConvert.DeserializeObject<PersistedEvent>(JObject.Parse(eventData).Value<string>("Value"));
-                try
+                if (pe != null)
                 {
-                    if (pe != null)
-                    {
-                        var agg = new _ReplaceMe_();
-                        agg.Apply(pe);
+                    var agg = new _ReplaceMe_();
+                    agg.Apply(pe);
 
-                        //Update aggregate current state projection
-                        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
-                        await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(agg); 
-                    }                           
-                }
-                catch (Exception e)
-                {
-                    await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Created), e.Message, pe);
-                }
-
-                
+                    //Update aggregate current state projection
+                    Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
+                    await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(agg); 
+                }                           
             }
+            catch (Exception e)
+            {
+                await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Created), e.Message, pe);
+            }
+
+            
         }
+        
     }
 }

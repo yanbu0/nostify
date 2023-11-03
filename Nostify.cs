@@ -63,7 +63,7 @@ namespace nostify
         ///<param name="CosmosEndpointUri">Uri of cosmos endpoint, format: https://[instance-name].documents.azure.us:443/</param>
         ///<param name="KafkaUrl">Url of Kafka instance, format: localhost:54165</param>
         ///<param name="DefaultPartitionKeyPath">Path to partition key for default created current state container, set null to not create, leave default to partition by tenantId </param>
-        ///<param name="DefaultTenantId">Default tenannt id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container</param>
+        ///<param name="DefaultTenantId">Default tenant id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container per tenant</param>
         public Nostify(string Primarykey, string DbName, string CosmosEndpointUri, string KafkaUrl, string DefaultPartitionKeyPath = "/tenantId", int DefaultTenantId = 0)
         {
             Repository = new NostifyCosmosClient(Primarykey, DbName, CosmosEndpointUri);

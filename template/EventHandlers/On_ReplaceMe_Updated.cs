@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using nostify;
 using Newtonsoft.Json;
 using Microsoft.Azure.Functions.Worker;
+using Newtonsoft.Json.Linq;
 
 namespace _ReplaceMe__Service
 {
@@ -18,42 +19,40 @@ namespace _ReplaceMe__Service
         [Function(nameof(On_ReplaceMe_Updated))]
         public async Task Run([KafkaTrigger("BrokerList",
                   "Update__ReplaceMe_",
-                  ConsumerGroup = "$Default")] string eventData,
+                  ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
             ILogger log)
         {
-            if (eventData != null)
+            PersistedEvent? pe = triggerEvent.GetPersistedEvent();
+            try
             {
-                PersistedEvent? pe = JsonConvert.DeserializeObject<PersistedEvent>(eventData);
-                try
+                if (pe != null)
                 {
-                    if (pe != null)
+                    Guid aggId = Guid.Parse(pe.aggregateRootId);
+                    
+                    //Update aggregate current state projection
+                    Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
+                    _ReplaceMe_? aggregate = (await currentStateContainer
+                        .GetItemLinqQueryable<_ReplaceMe_>()
+                        .Where(agg => agg.id == aggId)
+                        .ReadAllAsync())
+                        .FirstOrDefault();
+
+                    //Null means it has been deleted
+                    if (aggregate != null)
                     {
-                        Guid aggId = pe.id;
-                        
-                        //Update aggregate current state projection
-                        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
-                        _ReplaceMe_? aggregate = (await currentStateContainer
-                            .GetItemLinqQueryable<_ReplaceMe_>()
-                            .Where(agg => agg.id == aggId)
-                            .ReadAllAsync())
-                            .FirstOrDefault();
+                        aggregate.Apply(pe);
+                        await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(aggregate);
+                    }
+                }                       
 
-                        //Null means it has been deleted
-                        if (aggregate != null)
-                        {
-                            aggregate.Apply(pe);
-                            await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(aggregate);
-                        }
-                    }                       
-
-                }
-                catch (Exception e)
-                {
-                    await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Updated), e.Message, pe);
-                }
-
-                
             }
+            catch (Exception e)
+            {
+                await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Updated), e.Message, pe);
+            }
+
+            
         }
+        
     }
 }

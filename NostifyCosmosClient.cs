@@ -40,7 +40,7 @@ namespace nostify
         public readonly string DbName;
 
         ///<summary>
-        ///Optional. Name of event store, defaults to "persistedEvents"
+        ///Optional. Name of event store, defaults to "eventStore"
         ///</summary>
         public readonly string EventStoreContainer;
 
@@ -78,15 +78,16 @@ namespace nostify
             string DbName, 
             string EndpointUri = "", 
             string ConnectionString = "", 
-            string EventStoreContainer = "eventStore", 
-            string EventStorePartitionKey = "/aggregateRootId",
             string CurrentStateContainer = "currentState",
+            string EventStorePartitionKey = "/aggregateRootId",
+            string EventStoreContainer = "eventStore", 
             string UndeliverableEvents = "undeliverableEvents")
         {
             this.EndpointUri = EndpointUri;
             this.Primarykey = ApiKey;
             this.DbName = DbName;
             this.ConnectionString = (ConnectionString == "") ? $"AccountEndpoint={this.EndpointUri}/;AccountKey={this.Primarykey};" : ConnectionString;
+            this.EventStorePartitionKey = EventStorePartitionKey;
             this.EventStoreContainer = EventStoreContainer;
             this.UndeliverableEvents = UndeliverableEvents;
             this.CurrentStateContainer = CurrentStateContainer;

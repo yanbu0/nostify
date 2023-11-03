@@ -2,31 +2,92 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using nostify;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Azure.Functions.Worker;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Azure.Core.Serialization;
+using Newtonsoft.Json.Serialization;
+using Newtonsoft.Json;
 
-var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
-    .ConfigureServices((context, services) =>{
-        services.AddHttpClient();
-
-        var config = context.Configuration;
-
-        //Note: This is the api key for the cosmos emulator by default
-        string apiKey = config.GetValue<string>("apiKey");
-        string dbName = config.GetValue<string>("dbName");
-        string endPoint = config.GetValue<string>("endPoint");
-        string kafka = config.GetValue<string>("BrokerList");
-
-        var nostify = new Nostify(apiKey,dbName,kafka,endPoint);
-
-        if (context.HostingEnvironment.IsDevelopment())
+namespace _ReplaceMe__Service
+{
+    public class Program
+    {
+        private static void Main(string[] args)
         {
-            //Creates persistedEvents container so Event Handlers can attach without throwing errors during testing, may be removed once persistedEvents container exists
-            var _ = nostify.GetPersistedEventsContainerAsync().GetAwaiter().GetResult();
+            var host = new HostBuilder()
+            .ConfigureFunctionsWorkerDefaults()
+            .ConfigureServices(async (context, services) =>
+            {
+                services.AddHttpClient();
+
+                var config = context.Configuration;
+
+                //Note: This is the api key for the cosmos emulator by default
+                string apiKey = config.GetValue<string>("apiKey");
+                string dbName = config.GetValue<string>("dbName");
+                string endPoint = config.GetValue<string>("endPoint");
+                string kafka = config.GetValue<string>("BrokerList");
+
+                var nostify = new Nostify(apiKey, dbName, kafka, endPoint);
+
+                if (context.HostingEnvironment.IsDevelopment())
+                {
+                    //Creates eventStore container so Event Handlers can attach without throwing errors during debugging locally
+                    var _ = await nostify.GetEventStoreContainerAsync();
+                }
+
+                services.AddSingleton<INostify>(nostify);
+                services.AddLogging();
+            })
+            .Build();
+
+            host.Run();
         }
 
-        services.AddSingleton<INostify>(nostify);
-        services.AddLogging();
-    })
-    .Build();
+        
+    }
 
-host.Run();
+    internal static class WorkerConfigurationExtensions
+    {
+        /// <summary>
+        /// Calling ConfigureFunctionsWorkerDefaults() configures the Functions Worker to use System.Text.Json for all JSON
+        /// serialization and sets JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        /// This method uses DI to modify the JsonSerializerOptions. Call /api/HttpFunction to see the changes.
+        /// </summary>
+        public static IFunctionsWorkerApplicationBuilder ConfigureSystemTextJson(this IFunctionsWorkerApplicationBuilder builder)
+        {
+            builder.Services.Configure<JsonSerializerOptions>(jsonSerializerOptions =>
+            {
+                jsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                jsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+                jsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
+
+                // override the default value
+                jsonSerializerOptions.PropertyNameCaseInsensitive = false;
+            });
+
+            return builder;
+        }
+
+        /// <summary>
+        /// The functions worker uses the Azure SDK's ObjectSerializer to abstract away all JSON serialization. This allows you to
+        /// swap out the default System.Text.Json implementation for the Newtonsoft.Json implementation.
+        /// To do so, add the Microsoft.Azure.Core.NewtonsoftJson nuget package and then update the WorkerOptions.Serializer property.
+        /// This method updates the Serializer to use Newtonsoft.Json. Call /api/HttpFunction to see the changes.
+        /// </summary>
+        public static IFunctionsWorkerApplicationBuilder UseNewtonsoftJson(this IFunctionsWorkerApplicationBuilder builder)
+        {
+            builder.Services.Configure<WorkerOptions>(workerOptions =>
+            {
+                var settings = NewtonsoftJsonObjectSerializer.CreateJsonSerializerSettings();
+                settings.ContractResolver = new CamelCasePropertyNamesContractResolver();
+                settings.NullValueHandling = NullValueHandling.Ignore;
+
+                workerOptions.Serializer = new NewtonsoftJsonObjectSerializer(settings);
+            });
+
+            return builder;
+        }
+    }
+}
