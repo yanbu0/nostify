@@ -29,7 +29,7 @@ namespace _ReplaceMe__Service
                 string endPoint = config.GetValue<string>("endPoint");
                 string kafka = config.GetValue<string>("BrokerList");
 
-                var nostify = new Nostify(apiKey, dbName, kafka, endPoint);
+                var nostify = new Nostify(apiKey, dbName, endPoint, kafka);
 
                 if (context.HostingEnvironment.IsDevelopment())
                 {
