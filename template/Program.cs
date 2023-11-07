@@ -31,12 +31,6 @@ namespace _ReplaceMe__Service
 
                 var nostify = new Nostify(apiKey, dbName, endPoint, kafka);
 
-                if (context.HostingEnvironment.IsDevelopment())
-                {
-                    //Creates eventStore container so Event Handlers can attach without throwing errors during debugging locally
-                    var _ = await nostify.GetEventStoreContainerAsync();
-                }
-
                 services.AddSingleton<INostify>(nostify);
                 services.AddLogging();
             })

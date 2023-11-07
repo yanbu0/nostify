@@ -25,6 +25,7 @@ namespace nostify
         public Task PublishEventAsync(string cosmosTriggerOutput);
         public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
         public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
+        public Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId");
 
     }
 

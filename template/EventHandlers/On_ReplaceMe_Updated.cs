@@ -27,7 +27,7 @@ namespace _ReplaceMe__Service
             {
                 if (pe != null)
                 {
-                    Guid aggId = Guid.Parse(pe.aggregateRootId);
+                    Guid aggId = pe.aggregateRootId.ToGuid();
                     
                     //Update aggregate current state projection
                     Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();

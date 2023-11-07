@@ -24,7 +24,7 @@ namespace _ReplaceMe__Service
             string aggregateId,
             ILogger log)
         {
-            Guid aggRootId = Guid.Parse(aggregateId);
+            Guid aggRootId = aggregateId.ToGuid();
             PersistedEvent pe = new PersistedEvent(_ReplaceMe_Command.Delete, aggRootId, null);
             await _nostify.PersistAsync(pe);
 

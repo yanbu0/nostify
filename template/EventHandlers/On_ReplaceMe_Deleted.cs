@@ -28,8 +28,7 @@ namespace _ReplaceMe__Service
             {
                 if (pe != null)
                 {
-                    Guid aggId = pe.id;
-                    log.LogInformation($"Deleting _ReplaceMe_ {aggId}");
+                    Guid aggId = pe.aggregateRootId.ToGuid();
                     
                     //Update aggregate current state projection
                     Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
@@ -42,7 +41,7 @@ namespace _ReplaceMe__Service
                     //Null means it has already been deleted
                     if (aggregate != null)
                     {
-                        await currentStateContainer.DeleteItemAsync<_ReplaceMe_>(aggregate.id.ToString(), aggregate.tenantId.ToString().ToPartitionKey());
+                        await currentStateContainer.DeleteItemAsync<_ReplaceMe_>(aggregate.id, aggregate.tenantId);
                     }
                 }
             }

@@ -98,5 +98,21 @@ namespace nostify
         {
             return new PartitionKey(value);
         }
+
+        ///<summary>
+        ///Converts string to Guid if it can
+        ///</summary>
+        public static Guid ToGuid(this string value)
+        {
+            return Guid.TryParse(value, out Guid guid) ? guid : throw new FormatException("String is not a Guid");
+        }
+
+        ///<summary>
+        ///Deletes item from Container
+        ///</summary>
+        public static async Task<ItemResponse<T>> DeleteItemAsync<T>(this Container c, Guid aggregateRootId, int tenantId)
+        {
+            return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId));;
+        }
     }
 }

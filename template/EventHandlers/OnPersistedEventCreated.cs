@@ -15,7 +15,7 @@ namespace _ReplaceMe__Service
 
         [Function(nameof(OnPersistedEventCreated))]
         public async Task Run([CosmosDBTrigger(
-                databaseName: "Location_DB",
+                databaseName: "_ReplaceMe__DB",
                 containerName: "eventStore",
                 Connection = "CosmosEmulatorConnectionString",
                 CreateLeaseContainerIfNotExists = true,
