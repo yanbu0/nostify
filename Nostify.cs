@@ -26,6 +26,7 @@ namespace nostify
         public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
         public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
         public Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId");
+        public Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new();
 
     }
 
@@ -174,12 +175,11 @@ namespace nostify
         ///<param name="untilDate">Optional. Will build the aggregate state up to and including this time, if no value provided returns projection of current state</param>
         public async Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new()
         {
-            string eventStorePartitionKey = $"{id}";
             var eventContainer = await GetEventStoreContainerAsync();
             
             T rehyd = new T();
             List<PersistedEvent> peList = await eventContainer.GetItemLinqQueryable<PersistedEvent>()
-                .Where(pe => pe.aggregateRootId == eventStorePartitionKey
+                .Where(pe => pe.aggregateRootId == id.ToString()
                     && (!untilDate.HasValue || pe.timestamp <= untilDate)
                 )
                 .ReadAllAsync();
