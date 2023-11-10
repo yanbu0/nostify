@@ -20,7 +20,7 @@ namespace nostify
         }
 
         ///<summary>
-        ///Name of container the projection is stored in.  Each Projection must have its own unique container name
+        ///Name of container the projection is stored in.  Each Projection must have its own unique container name per microservice.
         ///</summary>
         ///<para>
         ///Hide using "new" keyword, ex: new public string containerName = "BankAccountDetails"
@@ -34,8 +34,7 @@ namespace nostify
         ///Should contain all queries to get any necessary values from Aggregates external to base Projection Aggreegate.
         ///</para>
         ///<param name="untilDate">Optional. Will build the Projection state up to and including this time, if no value provided returns projection of current state</param>
-        public abstract Task Seed(DateTime? untilDate = null);
-       
+        public abstract Task Seed(DateTime? untilDate = null);     
 
     }
 

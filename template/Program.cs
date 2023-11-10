@@ -17,7 +17,7 @@ namespace _ReplaceMe__Service
         {
             var host = new HostBuilder()
             .ConfigureFunctionsWorkerDefaults()
-            .ConfigureServices(async (context, services) =>
+            .ConfigureServices((context, services) =>
             {
                 services.AddHttpClient();
 
