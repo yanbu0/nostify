@@ -28,7 +28,7 @@ namespace nostify
         public static string containerName;
 
         ///<summary>
-        ///Construct projection to current state, use when adding new Projection or rebuilding existing one.
+        ///Add data from external locations to Projection, use when adding new Projection or rebuilding existing one.
         ///</summary>
         ///<para>
         ///Should contain all queries to get any necessary values from Aggregates external to base Projection Aggreegate.
