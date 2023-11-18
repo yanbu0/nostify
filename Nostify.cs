@@ -192,7 +192,7 @@ namespace nostify
             //Go get any neccessary values from external aggregates
             if (rehyd is Projection)
             {
-                (rehyd as Projection).Seed(untilDate);
+                await (rehyd as Projection).Seed(untilDate);
             }
 
             return rehyd;
@@ -244,34 +244,41 @@ namespace nostify
         ///Rebuilds the entire container from event stream
         ///</summary>
         ///<param name="containerToRebuild">The Cosmos Container that will be rebuilt from the event stream</param>
-        public async Task RebuildContainerAsync<T>(Container containerToRebuild) where T : NostifyObject
+        public async Task RebuildContainerAsync<T>(Container containerToRebuild) where T : NostifyObject, new()
         {
             //Store data needed for re-creating container
             string containerName = containerToRebuild.Id;
-            Database database = containerToRebuild.Database;
 
             //Remove container to delete all bad data and start from scratch
             ContainerResponse resp = await containerToRebuild.DeleteContainerAsync();
 
-            //Get list of distinct aggregate root ids
-            Container eventStore = await GetEventStoreContainerAsync();
-            List<Guid> uniqueAggregateRootIds = (await eventStore.GetItemLinqQueryable<PersistedEvent>()
-                .Select(pe => pe.aggregateRootId)
-                .Distinct()
-                .ReadAllAsync())
-                .Select(g => Guid.Parse(g))
-                .ToList();
-
             List<T> rehydratedAggregates = new List<T>();
 
-            var rehydrate = typeof(NostifyExtensions).GetMethod("RehydrateAsync");
-            var aggRef = rehydrate.MakeGenericMethod(typeof(T));
+            Container eventStore = await GetEventStoreContainerAsync();
+            //Get list of distinct aggregate root ids
+            List<string> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<PersistedEvent>()
+                .Select(pe => pe.aggregateRootId)
+                .Distinct()
+                .ReadAllAsync();
+            
+            //Loop through a query the events for 1,000 at a time, then rehydrate 
+            const int getThisMany = 1000;
+            int endOfRange = uniqueAggregateRootIds.Count();
+            int i = 0;
+            while (i < endOfRange)
+            {
+                int rangeNum = (i + getThisMany >= endOfRange) ? endOfRange - 1 : i + getThisMany;
+                var aggRange = uniqueAggregateRootIds.GetRange(i,rangeNum);
 
-            //Invoke the Rehydrate method to recreate the current state of the projection from the event stream
-            uniqueAggregateRootIds.ForEach(async id => {
-                var x = await (Task<T>)aggRef.Invoke(null, new object[] {id, null });
-                rehydratedAggregates.Add(x);
-            });
+                var peList = await eventStore.GetItemLinqQueryable<PersistedEvent>()
+                    .Where(pe => aggRange.Contains(pe.aggregateRootId))
+                    .ReadAllAsync();
+                
+                aggRange.ForEach(id => {
+                    rehydratedAggregates.Add(Rehydrate<T>(peList.Where(pe => pe.aggregateRootId == id).ToList()));
+                });
+                i = i + getThisMany;
+            }
             
             //Recreate container
             Container rebuiltContainer = await GetProjectionContainerAsync(containerName);
@@ -282,6 +289,24 @@ namespace nostify
             });    
             
 
+        }
+
+        ///<summary>
+        ///Rehydrates data directly from stream of events passed from calling method.
+        ///</summary>
+        ///<returns>
+        ///The projection state rehydrated to the extend of the events fed into it.
+        ///</returns>
+        ///<param name="peList">The event stream for the aggregate to be rehydrated</param>
+        private T Rehydrate<T>(List<PersistedEvent> peList) where T : NostifyObject, new()
+        {            
+            T rehyd = new T();
+            foreach (var pe in peList) 
+            {
+                rehyd.Apply(pe);
+            }
+
+            return rehyd;
         }
         
 
