@@ -114,5 +114,6 @@ namespace nostify
         {
             return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId));;
         }
+        
     }
 }
