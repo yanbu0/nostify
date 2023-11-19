@@ -94,6 +94,15 @@ namespace nostify
         ///</para>
         public object payload { get; set; }
 
+        ///<summary>
+        ///Checks if the payload of this event has a property
+        ///</summary>
+        ///<param name="propertyName">Property to check for</param>
+        public bool PayloadHasProperty(string propertyName)
+        {
+            return payload.GetType().GetProperty(propertyName) != null;
+        }
+
         
     }
 }
