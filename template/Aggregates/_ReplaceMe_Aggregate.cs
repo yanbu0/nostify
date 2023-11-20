@@ -9,7 +9,7 @@ public class _ReplaceMe_ : Aggregate
     {
     }
 
-    new public string aggregateType => "_ReplaceMe_";
+    new public static string aggregateType => "_ReplaceMe_";
 
     public override void Apply(PersistedEvent pe)
     {
