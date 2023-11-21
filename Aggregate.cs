@@ -27,9 +27,9 @@ namespace nostify
         ///String value for aggregate name
         ///</summary>
         ///<para>
-        ///Hide using "new" keyword if desired in derived class, ex: new public string aggregateType = "BankAccount"
+        ///Hide using "new" keyword if desired in derived class, ex: new public static string aggregateType = "BankAccount"
         ///</para>
-        public string aggregateType = "AggregateRoot";
+        public static string aggregateType;
 
 
     }

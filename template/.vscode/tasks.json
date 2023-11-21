@@ -61,7 +61,7 @@
             "options": {
                 "cwd": "${workspaceFolder}/bin/Debug/net7.0"
             },
-            "command": "host start",
+            "command": "host start --port <ThePortNumber>",
             "isBackground": true,
             "problemMatcher": "$func-dotnet-watch"
         }

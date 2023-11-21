@@ -60,21 +60,22 @@ namespace nostify
         ///<summary>
         ///Nostify constructor
         ///</summary>
-        ///<param name="Primarykey">API Key value</param>
-        ///<param name="DbName">Name of event store DB</param>
-        ///<param name="CosmosEndpointUri">Uri of cosmos endpoint, format: https://[instance-name].documents.azure.us:443/</param>
-        ///<param name="KafkaUrl">Url of Kafka instance, format: localhost:54165</param>
-        ///<param name="DefaultPartitionKeyPath">Path to partition key for default created current state container, set null to not create, leave default to partition by tenantId </param>
-        ///<param name="DefaultTenantId">Default tenant id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container per tenant</param>
-        public Nostify(string Primarykey, string DbName, string CosmosEndpointUri, string KafkaUrl, string DefaultPartitionKeyPath = "/tenantId", int DefaultTenantId = 0)
+        ///<param name="primaryKey">API Key value</param>
+        ///<param name="dbName">Name of event store DB</param>
+        ///<param name="cosmosEndpointUri">Uri of cosmos endpoint, format: https://[instance-name].documents.azure.us:443/</param>
+        ///<param name="kafkaUrl">Url of Kafka instance, format: localhost:54165</param>
+        ///<param name="aggregateRootCurrentStateContainer">Name of aggregate root current state container.  Should be of format [Aggregate Root Name]CurrentState</param>
+        ///<param name="defaultPartitionKeyPath">Path to partition key for default created current state container, set null to not create, leave default to partition by tenantId </param>
+        ///<param name="defaultTenantId">Default tenant id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container per tenant</param>
+        public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string aggregateRootCurrentStateContainer, string defaultPartitionKeyPath = "/tenantId", int defaultTenantId = 0)
         {
-            Repository = new NostifyCosmosClient(Primarykey, DbName, CosmosEndpointUri);
-            if (DefaultPartitionKeyPath != null)
+            Repository = new NostifyCosmosClient(primaryKey, dbName, cosmosEndpointUri, aggregateRootCurrentStateContainer);
+            if (defaultPartitionKeyPath != null)
             {
-                this.DefaultPartitionKeyPath = DefaultPartitionKeyPath;
+                this.DefaultPartitionKeyPath = defaultPartitionKeyPath;
             }
-            this.DefaultTenantId = DefaultTenantId;
-            this.KafkaUrl = KafkaUrl;
+            this.DefaultTenantId = defaultTenantId;
+            this.KafkaUrl = kafkaUrl;
         }
 
 

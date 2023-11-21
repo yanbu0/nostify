@@ -77,8 +77,8 @@ namespace nostify
         public NostifyCosmosClient(string ApiKey, 
             string DbName, 
             string EndpointUri = "", 
-            string ConnectionString = "", 
             string CurrentStateContainer = "currentState",
+            string ConnectionString = "", 
             string EventStorePartitionKey = "/aggregateRootId",
             string EventStoreContainer = "eventStore", 
             string UndeliverableEvents = "undeliverableEvents")

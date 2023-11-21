@@ -14,9 +14,16 @@
             "replaces":"_ReplaceMe_",
             "description": "Name of the Aggregate"
         },
+        "port":{
+            "type": "parameter",
+            "isRequired": true,
+            "replaces":"<ThePortNumber>",
+            "description": "The port number the project will run on locally",
+            "defaultValue": "CosmosEmulatorConnectionString"
+        },
         "connectionString":{
             "type": "parameter",
-            "isRequired": false ,
+            "isRequired": false,
             "replaces":"<YourConnectionStringHere>",
             "description": "The connection string or setting variable",
             "defaultValue": "CosmosEmulatorConnectionString"
