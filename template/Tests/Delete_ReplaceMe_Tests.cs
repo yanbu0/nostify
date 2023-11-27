@@ -26,7 +26,7 @@ public class Delete__ReplaceMe__Command_Should
     }
 
     [Fact]
-    public async Task Insert_Delete_PersistedEvent()
+    public async Task Insert_Delete_Event()
     {
         //Arrange
         _ReplaceMe_ test = new _ReplaceMe_();

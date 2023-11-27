@@ -9,7 +9,7 @@ public class _ReplaceMe_Command : NostifyCommand
     ///<summary>
     ///Base Create Command
     ///</summary>
-    public static readonly _ReplaceMe_Command Create = new _ReplaceMe_Command("Create__ReplaceMe_");
+    public static readonly _ReplaceMe_Command Create = new _ReplaceMe_Command("Create__ReplaceMe_", true);
     ///<summary>
     ///Base Update Command
     ///</summary>
@@ -20,8 +20,8 @@ public class _ReplaceMe_Command : NostifyCommand
     public static readonly _ReplaceMe_Command Delete = new _ReplaceMe_Command("Delete__ReplaceMe_");
 
 
-    public _ReplaceMe_Command(string name)
-    : base(name)
+    public _ReplaceMe_Command(string name, bool isNew = false)
+    : base(name, isNew)
     {
 
     }

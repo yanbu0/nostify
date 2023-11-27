@@ -16,11 +16,11 @@ namespace nostify
         ///</summary>
         ///<param name="functionName">Name of function that failed, should be able to trace failure back to Azure function</param>
         ///<param name="errorMessage">Error message to capture</param>
-        ///<param name="persistedEvent">The event that failed to process</param>
-        public UndeliverableEvent(string functionName, string errorMessage, PersistedEvent persistedEvent){
+        ///<param name="undeliverableEvent">The event that failed to process</param>
+        public UndeliverableEvent(string functionName, string errorMessage, Event undeliverableEvent){
             this.functionName = functionName;
             this.errorMessage = errorMessage;
-            this.persistedEvent = persistedEvent;
+            this.undeliverableEvent = undeliverableEvent;
         }
 
         ///<summary>
@@ -36,7 +36,7 @@ namespace nostify
         ///<summary>
         ///The event the failure occurred on.  If null then deserializing the document failed.
         ///</summary>
-        public PersistedEvent persistedEvent { get; set; }
+        public Event undeliverableEvent { get; set; }
 
        
 

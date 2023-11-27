@@ -80,7 +80,7 @@ namespace nostify_example
 ```
 <br/>
 
-If you used the `dotnet new nostify -ag <AggregateName>` template setup (which you should), in the Nostify/Aggregates folder you will find a class file already stubbed out.  The AggregateCommand base class contains default implementations for Create, Update, and Delete.  The UpdateProperties<T>() method will update any properties of the Aggregate with the value of the PersistedEvent payload with the same property name.
+If you used the `dotnet new nostify -ag <AggregateName>` template setup (which you should), in the Nostify/Aggregates folder you will find a class file already stubbed out.  The AggregateCommand base class contains default implementations for Create, Update, and Delete.  The UpdateProperties<T>() method will update any properties of the Aggregate with the value of the Event payload with the same property name.
     
 ```
     
@@ -103,7 +103,7 @@ If you used the `dotnet new nostify -ag <AggregateName>` template setup (which y
 
         new public string aggregateType => "test";
 
-        public override void Apply(PersistedEvent pe)
+        public override void Apply(Event pe)
         {
             if (pe.command == AggregateCommand.Create || pe.command == AggregateCommand.Update)
             {
@@ -150,7 +150,7 @@ First we will go in and add some basic properties to BankAccount and add a Trans
         public List<Transaction> transactions { get; set; }
         new public static string aggregateType => "BankAccount";
 
-        public override void Apply(PersistedEvent pe)
+        public override void Apply(Event pe)
         {
             if (pe.command == AggregateCommand.Create || pe.command == AggregateCommand.Update)
             {
@@ -189,7 +189,7 @@ Now we can take a look at adding custom commands. Create, Update, and Delete are
 ```
 Then we add a handler for it in the `Apply()` method:
 ```
-    public override void Apply(PersistedEvent pe)
+    public override void Apply(Event pe)
     {
         if (pe.command == BankAccountCommand.Create || pe.command == BankAccountCommand.Update)
         {
@@ -210,7 +210,7 @@ Then we add a handler for it in the `Apply()` method:
 If you have numerous custom commands and the if-else tree gets complex, it can be refactored into a switch statement or a `Dictionary<AggregateCommand, Action>()` for easier maintinance.
 <br/>
 <strong>Command Functions</strong><br/>
-Commands now become easy to compose.  Using the nostify cli results in Create, Update, and Delete commands being stubbed in.  In this simplified code we don't do any checking to see if the account already exists or any other validation you would do in a real app.  All that is required is to instantiate an instance of the `PersistedEvent` class and call `PersistAsync()` to write the event to the event store.
+Commands now become easy to compose.  Using the nostify cli results in Create, Update, and Delete commands being stubbed in.  In this simplified code we don't do any checking to see if the account already exists or any other validation you would do in a real app.  All that is required is to instantiate an instance of the `Event` class and call `PersistAsync()` to write the event to the event store.
 <br/>
 
 ``` 
@@ -230,11 +230,11 @@ Commands now become easy to compose.  Using the nostify cli results in Create, U
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] BankAccount account, HttpRequest httpRequest,
             ILogger log)
         {
-            var peContainer = await _nostify.GetPersistedEventsContainerAsync();
+            var peContainer = await _nostify.GetEventsContainerAsync();
             Guid aggId = Guid.NewGuid();
             account.id = aggId;
 
-            PersistedEvent pe = new PersistedEvent(NostifyCommand.Create, account.id, account);
+            Event pe = new Event(NostifyCommand.Create, account.id, account);
             await _nostify.PersistAsync(pe);
 
             return new OkObjectResult(new{ message = $"Account {account.id} for {account.customerName} was created"});
@@ -262,7 +262,7 @@ The standard Update command is also very simple.  You shouldn't have to modify m
             ILogger log)
         {
             Guid aggRootId = Guid.Parse(upd.id.ToString());
-            PersistedEvent pe = new PersistedEvent(NostifyCommand.Update, aggRootId, upd);
+            Event pe = new Event(NostifyCommand.Update, aggRootId, upd);
             await _nostify.PersistAsync(pe);
 
             return new OkObjectResult(new{ message = $"Account {upd.id} was updated"});
@@ -299,7 +299,7 @@ Custom AggregateCommands are composed the same way.  In the Commands folder, add
 
             AggregateCommand command = BankAccountCommand.AddTransaction;
 
-            PersistedEvent pe = new PersistedEvent(command, accountId, trans);
+            Event pe = new Event(command, accountId, trans);
             await _nostify.PersistAsync(pe);
         }
     }

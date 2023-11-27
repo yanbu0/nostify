@@ -29,13 +29,14 @@ namespace nostify
         public static string containerName;
 
         ///<summary>
-        ///Add data from external locations to this Projection, use when creating a single Projection or rehydrating it.
+        ///Returns an Event to Apply() to the Projection when the root Aggregate is initially created.
         ///</summary>
         ///<para>
         ///Should contain all queries to get any necessary values from Aggregates external to base Projection.
         ///</para>
-        ///<param name="untilDate">Optional. Will build the Projection state up to and including this time, if no value provided returns projection of current state</param>
-        public abstract Task Seed(DateTime? untilDate = null);     
+        ///<param name="nostify">Reference to the Nostify singleton.</param>
+        ///<param name="httpClient">Reference to an HttpClient instance.</param>
+        public abstract Task<Event> Seed(Nostify nostify, HttpClient? httpClient = null);     
 
 
         ///<summary>
@@ -46,7 +47,7 @@ namespace nostify
         ///</para>
         ///<param name="nostify">Reference to the Nostify singleton.</param>
         ///<param name="httpClient">Reference to an HttpClient instance.</param>
-        public abstract Task InitContainer(Nostify nostify, HttpClient httpClient = null);     
+        public abstract Task InitContainer(Nostify nostify, HttpClient? httpClient = null);     
 
 
     }

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos.Linq;
 using Newtonsoft.Json;
 using Confluent.Kafka;
+using System.Net.Http;
 
 namespace nostify
 {
@@ -19,9 +20,9 @@ namespace nostify
         int DefaultTenantId { get; }
         string KafkaUrl { get; }
 
-        public Task PersistAsync(PersistedEvent persistedEvent);
-        public Task BulkPersistAsync(List<PersistedEvent> persistedEvents);
-        public Task HandleUndeliverableAsync(string functionName, string errorMessage, PersistedEvent persistedEvent);
+        public Task PersistAsync(Event eventToPersist);
+        public Task BulkPersistAsync(List<Event> events);
+        public Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle);
         public Task PublishEventAsync(string cosmosTriggerOutput);
         public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
         public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
@@ -82,31 +83,31 @@ namespace nostify
         ///<summary>
         ///Writes event to event store
         ///</summary>        
-        ///<param name="persistedEvent">Event to apply and persist in event store</param>
-        public async Task PersistAsync(PersistedEvent persistedEvent)
+        ///<param name="eventToPersist">Event to apply and persist in event store</param>
+        public async Task PersistAsync(Event eventToPersist)
         {
             try
             {
                 var eventContainer = await GetEventStoreContainerAsync();
 
-                await eventContainer.CreateItemAsync(persistedEvent, new PartitionKey(persistedEvent.aggregateRootId));
+                await eventContainer.CreateItemAsync(eventToPersist, new PartitionKey(eventToPersist.aggregateRootId));
             }
             catch (Exception e)
             {
-                await HandleUndeliverableAsync(nameof(PersistAsync), e.Message, persistedEvent);
+                await HandleUndeliverableAsync(nameof(PersistAsync), e.Message, eventToPersist);
             }
         }
 
         ///<summary>
         ///Published event to messaging bus
         ///</summary>        
-        ///<param name="cosmosTriggerOutput">String output from CosmosDBTrigger, will be processed into a List of PersistedEvents and published to Kafka</param>
+        ///<param name="cosmosTriggerOutput">String output from CosmosDBTrigger, will be processed into a List of Events and published to Kafka</param>
         public async Task PublishEventAsync(string cosmosTriggerOutput)
         {
-            var peList = JsonConvert.DeserializeObject<List<PersistedEvent>>(cosmosTriggerOutput);
+            var peList = JsonConvert.DeserializeObject<List<Event>>(cosmosTriggerOutput);
             if (peList != null)
             {
-                foreach (PersistedEvent pe in peList)
+                foreach (Event pe in peList)
                 {
                     var config = new List<KeyValuePair<string, string>>
                     {
@@ -127,16 +128,16 @@ namespace nostify
         ///<summary>
         ///Writes event to event store
         ///</summary>        
-        ///<param name="persistedEvents">Events to apply and persist in event store</param>
-        public async Task BulkPersistAsync(List<PersistedEvent> persistedEvents)
+        ///<param name="events">Events to apply and persist in event store</param>
+        public async Task BulkPersistAsync(List<Event> events)
         {
-            PersistedEvent errorPe = null;
+            Event errorPe = null;
             try
             {
                 var eventContainer = await GetEventStoreContainerAsync(true);
 
                 List<Task> taskList = new List<Task>();
-                persistedEvents.ForEach(pe => {
+                events.ForEach(pe => {
                     taskList.Add(eventContainer.CreateItemAsync(pe, new PartitionKey(pe.aggregateRootId))
                             .ContinueWith(itemResponse =>
                             {
@@ -157,20 +158,20 @@ namespace nostify
         }
 
         ///<summary>
-        ///Writes PersistedEvent to the undeliverable events container. Use for handling errors to prevent constant retry.
+        ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
         ///</summary>
-        public async Task HandleUndeliverableAsync(string functionName, string errorMessage, PersistedEvent persistedEvent)
+        public async Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle)
         {
             var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
 
-            await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, persistedEvent), new PartitionKey(persistedEvent.aggregateRootId));
+            await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), new PartitionKey(eventToHandle.aggregateRootId));
         }
 
         ///<summary>
         ///Rehydrates data directly from stream of events when querying a Projection isn't feasible
         ///</summary>
         ///<returns>
-        ///The projection state rehydrated from create to the specified DateTime.  If no DateTime provided, returns current state.
+        ///The aggregate state rehydrated from create to the specified DateTime.  If no DateTime provided, returns current state.
         ///</returns>
         ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
         ///<param name="untilDate">Optional. Will build the aggregate state up to and including this time, if no value provided returns projection of current state</param>
@@ -179,24 +180,48 @@ namespace nostify
             var eventContainer = await GetEventStoreContainerAsync();
             
             T rehyd = new T();
-            List<PersistedEvent> peList = await eventContainer.GetItemLinqQueryable<PersistedEvent>()
+            List<Event> peList = await eventContainer.GetItemLinqQueryable<Event>()
                 .Where(pe => pe.aggregateRootId == id.ToString()
                     && (!untilDate.HasValue || pe.timestamp <= untilDate)
                 )
                 .ReadAllAsync();
 
-            foreach (var pe in peList) //.OrderBy(pe => pe.sequenceNumber))  //Apply in order
+            foreach (var pe in peList.OrderBy(pe => pe.timestamp))  //Apply in order
             {
                 rehyd.Apply(pe);
             }
 
-            //Go get any neccessary values from external aggregates
-            if (rehyd is Projection)
+            return rehyd;
+        }
+
+        ///<summary>
+        ///Rehydrates data directly from stream of events when querying a Projection isn't feasible
+        ///</summary>
+        ///<returns>
+        ///The projection state rehydrated.  Projections may only be rehydrated to the current state.
+        ///</returns>
+        ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
+        ///<param name="httpClient">Instance of HttpClient to query external data for Projection</param>
+        public async Task<T> RehydrateAsync<T>(Guid id, HttpClient httpClient) where T : Projection, new()
+        {
+            var eventContainer = await GetEventStoreContainerAsync();
+            
+            T rehydratedProjection = new T();
+            List<Event> eventList = await eventContainer.GetItemLinqQueryable<Event>()
+                .Where(e => e.aggregateRootId == id.ToString())
+                .ReadAllAsync();
+
+            //Seed returns an update event and queries all external data
+            eventList.Add(await rehydratedProjection.Seed(this, httpClient));
+
+            foreach (var pe in eventList.OrderBy(pe => pe.timestamp))  //Apply in order
             {
-                await (rehyd as Projection).Seed(untilDate);
+                rehydratedProjection.Apply(pe);
             }
 
-            return rehyd;
+
+
+            return rehydratedProjection;
         }
 
 
@@ -257,7 +282,7 @@ namespace nostify
 
             Container eventStore = await GetEventStoreContainerAsync();
             //Get list of distinct aggregate root ids
-            List<string> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<PersistedEvent>()
+            List<string> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<Event>()
                 .Select(pe => pe.aggregateRootId)
                 .Distinct()
                 .ReadAllAsync();
@@ -271,7 +296,7 @@ namespace nostify
                 int rangeNum = (i + getThisMany >= endOfRange) ? endOfRange - 1 : i + getThisMany;
                 var aggRange = uniqueAggregateRootIds.GetRange(i,rangeNum);
 
-                var peList = await eventStore.GetItemLinqQueryable<PersistedEvent>()
+                var peList = await eventStore.GetItemLinqQueryable<Event>()
                     .Where(pe => aggRange.Contains(pe.aggregateRootId))
                     .ReadAllAsync();
                 
@@ -296,10 +321,10 @@ namespace nostify
         ///Rehydrates data directly from stream of events passed from calling method.
         ///</summary>
         ///<returns>
-        ///The projection state rehydrated to the extend of the events fed into it.
+        ///The projection state rehydrated to the extent of the events fed into it.
         ///</returns>
         ///<param name="peList">The event stream for the aggregate to be rehydrated</param>
-        private T Rehydrate<T>(List<PersistedEvent> peList) where T : NostifyObject, new()
+        private T Rehydrate<T>(List<Event> peList) where T : NostifyObject, new()
         {            
             T rehyd = new T();
             foreach (var pe in peList) 

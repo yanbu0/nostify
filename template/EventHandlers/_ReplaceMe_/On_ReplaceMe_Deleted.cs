@@ -23,31 +23,19 @@ public class On_ReplaceMe_Deleted
                 ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
-        PersistedEvent? pe = triggerEvent.GetPersistedEvent();
+        Event? newEvent = triggerEvent.GetEvent();
         try
         {
-            if (pe != null)
+            if (newEvent != null)
             {
-                Guid aggId = pe.aggregateRootId.ToGuid();
-                
                 //Update aggregate current state projection
                 Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
-                _ReplaceMe_? aggregate = (await currentStateContainer
-                    .GetItemLinqQueryable<_ReplaceMe_>()
-                    .Where(agg => agg.id == aggId)
-                    .ReadAllAsync<_ReplaceMe_>())
-                    .FirstOrDefault();
-
-                //Null means it has already been deleted
-                if (aggregate != null)
-                {
-                    await currentStateContainer.DeleteItemAsync<_ReplaceMe_>(aggregate.id, aggregate.tenantId);
-                }
+                await currentStateContainer.ApplyAndPersistAsync<_ReplaceMe_>(newEvent);
             }
         }
         catch (Exception e)
         {
-            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Deleted), e.Message, pe);
+            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Deleted), e.Message, newEvent);
         }
 
         

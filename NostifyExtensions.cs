@@ -7,6 +7,9 @@ using Newtonsoft.Json.Linq;
 using Microsoft.Azure.Cosmos.Linq;
 using System.Net;
 using System.Collections.Concurrent;
+using System.IO;
+using Newtonsoft.Json;
+using System.Data;
 
 namespace nostify
 {
@@ -112,7 +115,63 @@ namespace nostify
         ///</summary>
         public static async Task<ItemResponse<T>> DeleteItemAsync<T>(this Container c, Guid aggregateRootId, int tenantId)
         {
-            return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId));;
+            return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId));
+        }
+
+        ///<summary>
+        ///Reads from Stream into <c>dynamic</c>
+        ///<para>
+        /// Use to read the results from <c>HttpRequestData.Body</c> into an object that can update a Projection or Aggregate by calling <c>Apply()</c>.  Will throw error if no data.
+        /// </para>
+        ///</summary>
+        ///<param name="body">HttpRequestData.Body Stream to read from</param>
+        ///<param name="isCreate">Set to true if this should be a Create command.  Will throw error if no "id" property is found or id = null in resulting object.</param>
+        ///<returns>dynamic object representing the payload of an <c>Event</c></returns>
+        public static async Task<dynamic> ReadFromRequestBodyAsync(this Stream body, bool isCreate = false)
+        {
+            //Read body, throw error if null
+            dynamic updateObj = JsonConvert.DeserializeObject<dynamic>(await new StreamReader(body).ReadToEndAsync()) ?? throw new NostifyException("Body contains no data");
+            
+            //Check for "id" property, throw error if not exists.  Ignore if isCreate is true since create objects don't have ids yet.
+            if (!isCreate && updateObj.id == null)
+            {
+                throw new NostifyException("No id value found.");
+            }
+
+            return updateObj;
+        }
+
+        ///<summary>
+        ///Applies Event and updates this container. Uses existence of an "id" property to key off if is create or not. Primarily used in Event Handlers.
+        ///</summary>
+        ///<param name="container">Container where the projection to update lives</param>
+        ///<param name="newEvent">The Event object to apply and persist.</param>
+        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
+        {
+            T? aggregate;
+
+            if (newEvent.command.isNew)
+            {
+                aggregate = new T();
+            }
+            else 
+            {
+                Guid aggId = newEvent.aggregateRootId.ToGuid();
+                
+                //Update container based off aggregate root id
+                aggregate = (await container
+                    .GetItemLinqQueryable<T>()
+                    .Where(agg => agg.id == aggId)
+                    .ReadAllAsync())
+                    .FirstOrDefault();
+            }
+
+            //Null means it has been deleted
+            if (aggregate != null)
+            {
+                aggregate.Apply(newEvent);
+                await container.UpsertItemAsync<T>(aggregate);
+            }
         }
         
     }

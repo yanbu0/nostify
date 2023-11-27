@@ -22,22 +22,19 @@ public class On_ReplaceMe_Created
                 ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
-        PersistedEvent? pe = triggerEvent.GetPersistedEvent();
+        Event? newEvent = triggerEvent.GetEvent();
         try
         {
-            if (pe != null)
+            if (newEvent != null)
             {
-                var agg = new _ReplaceMe_();
-                agg.Apply(pe);
-
                 //Update aggregate current state projection
                 Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
-                await currentStateContainer.UpsertItemAsync<_ReplaceMe_>(agg); 
+                await currentStateContainer.ApplyAndPersistAsync<_ReplaceMe_>(newEvent);
             }                           
         }
         catch (Exception e)
         {
-            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Created), e.Message, pe);
+            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Created), e.Message, newEvent);
         }
 
         

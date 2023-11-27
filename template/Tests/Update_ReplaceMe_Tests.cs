@@ -26,7 +26,7 @@ public class Update__ReplaceMe__Command_Should
     }
 
     [Fact]
-    public async Task Insert_Update_PersistedEvent()
+    public async Task Insert_Update_Event()
     {
         //Arrange
         object update_ReplaceMe_ = new {

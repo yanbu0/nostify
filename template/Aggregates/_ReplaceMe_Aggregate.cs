@@ -11,13 +11,13 @@ public class _ReplaceMe_ : Aggregate
 
     new public static string aggregateType => "_ReplaceMe_";
 
-    public override void Apply(PersistedEvent pe)
+    public override void Apply(Event eventToApply)
     {
-        if (pe.command == _ReplaceMe_Command.Create || pe.command == _ReplaceMe_Command.Update)
+        if (eventToApply.command == _ReplaceMe_Command.Create || eventToApply.command == _ReplaceMe_Command.Update)
         {
-            this.UpdateProperties<_ReplaceMe_>(pe.payload);
+            this.UpdateProperties<_ReplaceMe_>(eventToApply.payload);
         }
-        else if (pe.command == _ReplaceMe_Command.Delete)
+        else if (eventToApply.command == _ReplaceMe_Command.Delete)
         {
             this.isDeleted = true;
         }

@@ -12,14 +12,14 @@
             "isRequired": true,
             "FileRename": "_ReplaceMe_",
             "replaces":"_ReplaceMe_",
-            "description": "Name of the Aggregate"
+            "description": "Name of the Aggregate Root"
         },
         "port":{
             "type": "parameter",
             "isRequired": true,
             "replaces":"<ThePortNumber>",
             "description": "The port number the project will run on locally",
-            "defaultValue": "CosmosEmulatorConnectionString"
+            "defaultValue": "7071"
         },
         "connectionString":{
             "type": "parameter",

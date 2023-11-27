@@ -9,11 +9,11 @@ namespace _ReplaceMe__Service;
 public class Delete_ReplaceMe_
 {
 
-    private readonly HttpClient _client;
+    private readonly HttpClient _httpClient;
     private readonly INostify _nostify;
     public Delete_ReplaceMe_(HttpClient httpClient, INostify nostify)
     {
-        this._client = httpClient;
+        this._httpClient = httpClient;
         this._nostify = nostify;
     }
 
@@ -24,7 +24,7 @@ public class Delete_ReplaceMe_
         ILogger log)
     {
         Guid aggRootId = aggregateId.ToGuid();
-        PersistedEvent pe = new PersistedEvent(_ReplaceMe_Command.Delete, aggRootId, null);
+        Event pe = new Event(_ReplaceMe_Command.Delete, aggRootId, null);
         await _nostify.PersistAsync(pe);
 
         return new OkObjectResult(aggregateId);

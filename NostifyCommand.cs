@@ -17,13 +17,19 @@ namespace nostify
         ///</summary>
         public string name { get; }
 
+        /// <summary>
+        /// Signifies if this command results in the creation of a new aggregate.  Used to key multiple downstream processes with Projections.
+        /// </summary>
+        public bool isNew { get; }
+
         ///<summary>
         ///Base Constructor
         ///</summary>
          ///<param name="name">Human readable friendly name of command</param>
-        public NostifyCommand(string name)
+        public NostifyCommand(string name, bool isNew = false)
         {
             this.name = name;
+            this.isNew = isNew;
         }
 
 

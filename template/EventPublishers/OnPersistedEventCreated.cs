@@ -4,22 +4,22 @@ using Microsoft.Azure.Functions.Worker;
 
 namespace _ReplaceMe__Service;
 
-public class OnPersistedEventCreated
+public class OnEventCreated
 {
     private readonly INostify _nostify;
 
-    public OnPersistedEventCreated(INostify nostify)
+    public OnEventCreated(INostify nostify)
     {
         this._nostify = nostify;
     }
 
-    [Function(nameof(OnPersistedEventCreated))]
+    [Function(nameof(OnEventCreated))]
     public async Task Run([CosmosDBTrigger(
             databaseName: "_ReplaceMe__DB",
             containerName: "eventStore",
             Connection = "CosmosEmulatorConnectionString",
             CreateLeaseContainerIfNotExists = true,
-            LeaseContainerPrefix = "OnPersistedEventCreated_",
+            LeaseContainerPrefix = "OnEventCreated_",
             LeaseContainerName = "leases")] string peListString,
         ILogger log)
     {

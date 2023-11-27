@@ -33,12 +33,12 @@ namespace nostify
         ///<summary>
         ///Applies event to this Aggregate or Projection
         ///</summary>
-        public abstract void Apply(PersistedEvent persistedEvent);
+        public abstract void Apply(Event eventToApply);
 
         ///<summary>
         ///Updates properties of Aggregate or Projection
         ///</summary>
-        ///<param name="payload">Must be payload from PersistedEvent, name of property in payload must match property name in T</param>
+        ///<param name="payload">Must be payload from Event, name of property in payload must match property name in T</param>
         public void UpdateProperties<T>(object payload) where T : NostifyObject
         {
             var nosObjProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();

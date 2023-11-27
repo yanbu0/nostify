@@ -28,7 +28,7 @@ public class Create__ReplaceMe__Command_Should
     }
 
     [Fact]
-    public async Task Insert_Create_PersistedEvent()
+    public async Task Insert_Create_Event()
     {
         //Arrange
         _ReplaceMe_ test = new _ReplaceMe_();

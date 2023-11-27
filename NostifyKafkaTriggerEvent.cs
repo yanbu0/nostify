@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 using nostify;
 
 ///<summary>
-///Type for helping to convert KafkaTrigger input values to PersistedEvent
+///Type for helping to convert KafkaTrigger input values to Event
 ///</summary>
 public class NostifyKafkaTriggerEvent
 {
@@ -24,10 +24,10 @@ public class NostifyKafkaTriggerEvent
     public string[] Headers { get; set; }
 
     ///<summary>
-    ///Converts string value of the Value to a PersistedEvent
+    ///Converts string value of the Value to a Event
     ///</summary>
-    public PersistedEvent? GetPersistedEvent()
+    public Event? GetEvent()
     {
-        return JsonConvert.DeserializeObject<PersistedEvent>(Value);
+        return JsonConvert.DeserializeObject<Event>(Value);
     }
 }
