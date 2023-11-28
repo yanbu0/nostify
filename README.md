@@ -12,15 +12,17 @@ When should I use this?<br/>
 You should consider using this if you are using .Net and Azure and want to follow a strong set of guidelines to quickly and easily spin up services that can massively scale without spending tons of time architechting it yourself.<br/>
 <br/>
 <strong>Current Status</strong>
-- Inital release
+- Brought Kafka into the mix
 - Documentation still in process below!
-
-<strong>Future Releases</strong>
-- Testing framework
-- gRPC integration
 <br/>
+
 <strong>Getting Started</strong><br/>
-Example repo: https://github.com/yanbu0/nostify-example <br/>
+To run locally you will need to install some dependencies:<br/>
+- Azurite: npm install azurite<br/>
+- Azurite VS Code Extension: https://marketplace.visualstudio.com/items?itemName=Azurite.azurite<br/>
+- Docker Desktop: https://www.docker.com/products/docker-desktop/<br/>
+- Confluent CLI: https://docs.confluent.io/confluent-cli/current/install.html<br/>
+- Cosmos Emulator: https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-develop-emulator?tabs=windows%2Ccsharp&pivots=api-nosql<br/><br/>
 
 To spin up a nostify project:
 ```
@@ -28,7 +30,7 @@ dotnet new -i nostify
 dotnet new nostify -ag <Your_Aggregate_Name>
 dotnet restore
 ```
-This will install the template, create the default project based off your Aggregate, and install all the necessary libraries.
+This will install the templates, create the default project based off your Aggregate, and install all the necessary libraries.
 <br/>
 <br/>
 <strong>Architecture</strong><br/>
