@@ -25,7 +25,7 @@ public class Delete_ReplaceMe_
     {
         Guid aggRootId = aggregateId.ToGuid();
         Event pe = new Event(_ReplaceMe_Command.Delete, aggRootId, null);
-        await _nostify.PersistAsync(pe);
+        await _nostify.PersistEventAsync(pe);
 
         return new OkObjectResult(aggregateId);
     }

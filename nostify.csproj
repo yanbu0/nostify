@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>1.9.0.1</Version>
+    <Version>1.9.0.4</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -22,7 +22,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="template\**\*" Exclude="template\**\bin\**;template\**\obj\**" />
-    <Compile Remove="template\**\*" />
+    <Content Include="templates\**\*" Exclude="templates\**\bin\**;template\**\obj\**" />
+    <Compile Remove="templates\**\*" />
   </ItemGroup>
 </Project>

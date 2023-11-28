@@ -34,7 +34,7 @@ public class Create_ReplaceMe_
         new_ReplaceMe_.id = newId;
         
         Event pe = new Event(_ReplaceMe_Command.Create, newId, new_ReplaceMe_);
-        await _nostify.PersistAsync(pe);
+        await _nostify.PersistEventAsync(pe);
 
         return new OkObjectResult(newId);
     }

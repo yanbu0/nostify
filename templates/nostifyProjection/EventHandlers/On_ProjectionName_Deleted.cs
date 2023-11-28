@@ -7,17 +7,17 @@ using Newtonsoft.Json.Linq;
 
 namespace _ReplaceMe__Service;
 
-public class On_ReplaceMe_Deleted
+public class On_ProjectionName_Deleted
 {
     private readonly INostify _nostify;
     
     
-    public On_ReplaceMe_Deleted(INostify nostify)
+    public On_ProjectionName_Deleted(INostify nostify)
     {
         this._nostify = nostify;
     }
 
-    [Function(nameof(On_ReplaceMe_Deleted))]
+    [Function(nameof(On_ProjectionName_Deleted))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Delete__ReplaceMe_",
                 ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
@@ -28,14 +28,14 @@ public class On_ReplaceMe_Deleted
         {
             if (newEvent != null)
             {
-                //Update aggregate current state projection
-                Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
-                await currentStateContainer.ApplyAndPersistAsync<_ReplaceMe_>(newEvent);
+                //Update projection container
+                Container projectionContainer = await _nostify.GetProjectionContainerAsync(_ProjectionName_.containerName);
+                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
             }
         }
         catch (Exception e)
         {
-            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Deleted), e.Message, newEvent);
+            await _nostify.HandleUndeliverableAsync(nameof(On_ProjectionName_Deleted), e.Message, newEvent);
         }
 
         

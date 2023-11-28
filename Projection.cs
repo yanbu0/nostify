@@ -47,7 +47,7 @@ namespace nostify
         ///</summary>
         ///<param name="nostify">Reference to the Nostify singleton.</param>
         ///<param name="httpClient">Reference to an HttpClient instance.</param>
-        public abstract Task InitContainerAsync(Nostify nostify, HttpClient? httpClient = null);     
+        public abstract Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null);     
 
 
     }

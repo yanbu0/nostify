@@ -26,7 +26,7 @@ public class Update_ReplaceMe_
         dynamic update_ReplaceMe_ = await req.Body.ReadFromRequestBodyAsync();
         Guid aggRootId = Guid.Parse(update_ReplaceMe_.id.ToString());
         Event pe = new Event(_ReplaceMe_Command.Update, aggRootId, update_ReplaceMe_);
-        await _nostify.PersistAsync(pe);
+        await _nostify.PersistEventAsync(pe);
 
         return new OkObjectResult(update_ReplaceMe_.id);
     }

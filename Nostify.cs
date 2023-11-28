@@ -20,13 +20,14 @@ namespace nostify
         int DefaultTenantId { get; }
         string KafkaUrl { get; }
 
-        public Task PersistAsync(Event eventToPersist);
-        public Task BulkPersistAsync(List<Event> events);
+        public Task PersistEventAsync(Event eventToPersist);
+        public Task BulkPersistEventAsync(List<Event> events);
         public Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle);
         public Task PublishEventAsync(string cosmosTriggerOutput);
         public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
         public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
         public Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId");
+        public Task RebuildContainerAsync<T>(Container? containerToRebuild = null) where T : Aggregate, new();
         public Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new();
 
     }
@@ -84,18 +85,10 @@ namespace nostify
         ///Writes event to event store
         ///</summary>        
         ///<param name="eventToPersist">Event to apply and persist in event store</param>
-        public async Task PersistAsync(Event eventToPersist)
+        public async Task PersistEventAsync(Event eventToPersist)
         {
-            try
-            {
-                var eventContainer = await GetEventStoreContainerAsync();
-
-                await eventContainer.CreateItemAsync(eventToPersist, new PartitionKey(eventToPersist.aggregateRootId));
-            }
-            catch (Exception e)
-            {
-                await HandleUndeliverableAsync(nameof(PersistAsync), e.Message, eventToPersist);
-            }
+            var eventContainer = await GetEventStoreContainerAsync();
+            await eventContainer.CreateItemAsync(eventToPersist, new PartitionKey(eventToPersist.aggregateRootId));
         }
 
         ///<summary>
@@ -129,7 +122,7 @@ namespace nostify
         ///Writes event to event store
         ///</summary>        
         ///<param name="events">Events to apply and persist in event store</param>
-        public async Task BulkPersistAsync(List<Event> events)
+        public async Task BulkPersistEventAsync(List<Event> events)
         {
             Event errorPe = null;
             try
@@ -212,7 +205,7 @@ namespace nostify
                 .ReadAllAsync();
 
             //Seed returns an update event and queries all external data
-            eventList.Add(await rehydratedProjection.Seed(this, httpClient));
+            eventList.Add(await rehydratedProjection.SeedExternalDataAsync(this, httpClient));
 
             foreach (var pe in eventList.OrderBy(pe => pe.timestamp))  //Apply in order
             {
@@ -270,8 +263,11 @@ namespace nostify
         ///Rebuilds the entire container from event stream
         ///</summary>
         ///<param name="containerToRebuild">The Cosmos Container that will be rebuilt from the event stream</param>
-        public async Task RebuildContainerAsync<T>(Container containerToRebuild) where T : NostifyObject, new()
+        public async Task RebuildContainerAsync<T>(Container? containerToRebuild = null) where T : Aggregate, new()
         {
+            if (containerToRebuild == null)
+                containerToRebuild = await GetCurrentStateContainerAsync();
+
             //Store data needed for re-creating container
             string containerName = containerToRebuild.Id;
 
@@ -301,7 +297,7 @@ namespace nostify
                     .ReadAllAsync();
                 
                 aggRange.ForEach(id => {
-                    rehydratedAggregates.Add(Rehydrate<T>(peList.Where(pe => pe.aggregateRootId == id).ToList()));
+                    rehydratedAggregates.Add(Rehydrate<T>(peList.Where(e => e.aggregateRootId == id).OrderBy(e => e.timestamp).ToList()));
                 });
                 i = i + getThisMany;
             }
