@@ -2,9 +2,9 @@
     "$schema": "http://json.schemastore.org/template",
     "author": "Travis Boyle",
     "classifications": [ "Azure", "Microservice" ],
-    "identity": "Nostify.Csharp.Projection",
-    "name": "Nostify Projection",
-    "shortName": "nostifyProjection",
+    "identity": "Nostify.Csharp.Aggregate",
+    "name": "Nostify Aggregate",
+    "shortName": "nostifyAggregate",
     "placeholderFilename": ".placeholder",
     "symbols": {
         "aggregateName": {
@@ -13,21 +13,13 @@
             "FileRename": "_ReplaceMe_",
             "replaces":"_ReplaceMe_",
             "description": "Name of the Aggregate Root"
-        },
-        "projectionName":{
-            "type": "parameter",
-            "isRequired": true,
-            "replaces":"_ProjectionName_",
-            "FileRename":"_ProjectionName_",
-            "description": "The name of the projection to create",
-            "shortName": "p"
         }
     },
     "sources": [
         {
           "modifiers": [
             {
-              "exclude": [ "*.csproj", ".vscode/**/*" ]
+              "exclude": [ "*.csproj","_ReplaceMe_Command.cs", ".vscode/**/*" ]
             }
           ]
         }
