@@ -18,15 +18,16 @@
             "type": "parameter",
             "isRequired": true,
             "replaces":"_ProjectionName_",
+            "FileRename":"_ProjectionName_",
             "description": "The name of the projection to create",
-            "shortName": "pn"
+            "shortName": "p"
         }
     },
     "sources": [
         {
           "modifiers": [
             {
-              "exclude": [ "*.csproj","_ReplaceMe_Command.cs" ]
+              "exclude": [ "*.csproj","_ReplaceMe_Command.cs", ".vscode" ]
             }
           ]
         }
