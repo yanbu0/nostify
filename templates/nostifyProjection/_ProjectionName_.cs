@@ -3,14 +3,14 @@ using nostify;
 
 namespace _ReplaceMe__Service;
 
-public class _ProjectionName_ : Projection
+public class _ProjectionName_ : NostifyObject, IProjection
 {
     public _ProjectionName_()
     {
 
     }
 
-    new public static string containerName => "_ProjectionName_";
+    public static string containerName => "_ProjectionName_";
 
     public bool isDeleted { get; set; }
 
@@ -26,12 +26,12 @@ public class _ProjectionName_ : Projection
         }
     }
 
-    public override Task<Event> Seed(Nostify nostify, HttpClient? httpClient = null)
+    public async Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null)
     {
         throw new NotImplementedException();
     }
 
-    public override Task InitContainer(Nostify nostify, HttpClient? httpClient = null)
+    public static async Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null)
     {
         throw new NotImplementedException();
     }

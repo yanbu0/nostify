@@ -25,7 +25,7 @@ public class _ProjectionName_Init
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ProjectionName_Init")] HttpRequestData req,
         ILogger log)
     {
-        await _ProjectionName_.InitContainer(_nostify, _httpClient);
+        await _ProjectionName_.InitContainerAsync(_nostify, _httpClient);
         return new OkResult();
     }
 }

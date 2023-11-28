@@ -3,13 +3,15 @@ using nostify;
 
 namespace _ReplaceMe__Service;
 
-public class _ReplaceMe_ : Aggregate
+public class _ReplaceMe_ : NostifyObject, IAggregate
 {
     public _ReplaceMe_()
     {
     }
 
-    new public static string aggregateType => "_ReplaceMe_";
+    public bool isDeleted { get; set; } = false;
+
+    public static string aggregateType => "_ReplaceMe_";
 
     public override void Apply(Event eventToApply)
     {

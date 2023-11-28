@@ -27,7 +27,7 @@ namespace nostify
         public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
         public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
         public Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId");
-        public Task RebuildContainerAsync<T>(Container? containerToRebuild = null) where T : Aggregate, new();
+        public Task RebuildCurrentStateContainerAsync<T>() where T : NostifyObject, IAggregate, new();
         public Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new();
 
     }
@@ -195,7 +195,7 @@ namespace nostify
         ///</returns>
         ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
         ///<param name="httpClient">Instance of HttpClient to query external data for Projection</param>
-        public async Task<T> RehydrateAsync<T>(Guid id, HttpClient httpClient) where T : Projection, new()
+        public async Task<T> RehydrateAsync<T>(Guid id, HttpClient httpClient) where T : NostifyObject, IProjection, new()
         {
             var eventContainer = await GetEventStoreContainerAsync();
             
@@ -262,11 +262,9 @@ namespace nostify
         ///<summary>
         ///Rebuilds the entire container from event stream
         ///</summary>
-        ///<param name="containerToRebuild">The Cosmos Container that will be rebuilt from the event stream</param>
-        public async Task RebuildContainerAsync<T>(Container? containerToRebuild = null) where T : Aggregate, new()
+        public async Task RebuildCurrentStateContainerAsync<T>() where T : NostifyObject, IAggregate, new()
         {
-            if (containerToRebuild == null)
-                containerToRebuild = await GetCurrentStateContainerAsync();
+            Container containerToRebuild = await GetCurrentStateContainerAsync();
 
             //Store data needed for re-creating container
             string containerName = containerToRebuild.Id;

@@ -25,7 +25,7 @@ public class _ReplaceMe_Init
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ReplaceMe_CurrentStateInit")] HttpRequestData req,
         ILogger log)
     {
-        await _nostify.RebuildContainerAsync<_ReplaceMe_>();
+        await _nostify.RebuildCurrentStateContainerAsync<_ReplaceMe_>();
         return new OkResult();
     }
 }
