@@ -42,7 +42,7 @@ namespace nostify
         public void UpdateProperties<T>(object payload) where T : NostifyObject
         {
             var nosObjProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
-            var jPayload = (JObject)payload;
+            var jPayload = JObject.FromObject(payload);
             var payloadProps = jPayload.Children<JProperty>();
 
             foreach (JProperty prop in payloadProps)
