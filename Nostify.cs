@@ -29,6 +29,7 @@ namespace nostify
         public Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId");
         public Task RebuildCurrentStateContainerAsync<T>() where T : NostifyObject, IAggregate, new();
         public Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new();
+        public Task DoBulkUpsert<T>(Container container, List<T> itemList);
 
     }
 
