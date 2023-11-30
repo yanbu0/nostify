@@ -10,6 +10,9 @@ using System.Collections.Concurrent;
 using System.IO;
 using Newtonsoft.Json;
 using System.Data;
+using System.Net.Http;
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc;
 
 namespace nostify
 {
@@ -172,6 +175,18 @@ namespace nostify
                 aggregate.Apply(newEvent);
                 await container.UpsertItemAsync<T>(aggregate);
             }
+        }
+
+        ///<summary>
+        ///Queries an endpoint that returns an OkObjectResult and gets the Value
+        ///</summary>
+        ///<param name="httpClient">Client performing the query</param>
+        ///<param name="url">The url to GET from.</param>
+        public static async Task<T> GetFromOkObjectResultAsync<T>(this HttpClient httpClient, string url)
+        {
+            OkObjectResult result = await httpClient.GetFromJsonAsync<OkObjectResult>(url);
+            T value = (T)result.Value;
+            return value;
         }
         
     }
