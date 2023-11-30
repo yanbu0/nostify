@@ -7,18 +7,18 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace _ReplaceMe__Service;
 
-public class GetAccount
+public class Get_ReplaceMe_
 {
 
     private readonly HttpClient _client;
     private readonly INostify _nostify;
-    public GetAccount(HttpClient httpClient, INostify nostify)
+    public Get_ReplaceMe_(HttpClient httpClient, INostify nostify)
     {
         this._client = httpClient;
         this._nostify = nostify;
     }
 
-    [Function("Get_ReplaceMe_")]
+    [Function(nameof(Get_ReplaceMe_))]
     public async Task<IActionResult> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId}")] HttpRequestData req,
         string aggregateId,

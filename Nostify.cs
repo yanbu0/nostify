@@ -339,5 +339,18 @@ namespace nostify
             return await db.CreateContainerIfNotExistsAsync(Repository.UndeliverableEvents, partitionKeyPath);
         }
 
+        ///<summary>
+        ///Performs upsert of list
+        ///</summary>
+        public async Task DoBulkUpsert<T>(Container container, List<T> itemList)
+        {
+            var db = await this.Repository.GetDatabaseAsync(true);
+            var bulkContainer = db.GetContainer(container.Id);
+
+            List<Task> taskList = new List<Task>();
+            itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
+            await Task.WhenAll(taskList);
+        }
+
     }
 }
