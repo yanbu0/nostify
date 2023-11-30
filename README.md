@@ -26,8 +26,8 @@ To run locally you will need to install some dependencies:<br/>
 
 To spin up a nostify project:
 ```
-dotnet new -i nostify
-dotnet new nostify -ag <Your_Aggregate_Name>
+dotnet new install nostify
+dotnet new nostify -ag <Your_Aggregate_Name> -p <Port Number To Run on Locally>
 dotnet restore
 ```
 This will install the templates, create the default project based off your Aggregate, and install all the necessary libraries.
@@ -35,88 +35,115 @@ This will install the templates, create the default project based off your Aggre
 <br/>
 <strong>Architecture</strong><br/>
 <br/>
-The library is designed to be used in a microservice pattern (although not necessarily required) using an Azure Function App api and Cosmos as the data store.<br/><br/>
+The library is designed to be used in a microservice pattern (although not necessarily required) using an Azure Function App api and Cosmos as the event store. Kafka serves as the messaging backpane, and projections can be stored in Cosmos or Redis depending on query needs.<br/><br/>
 You should set up a Function App and Cosmos per Aggregate Microservice.<br/><br/>
-![image](https://user-images.githubusercontent.com/26099646/122621129-19d87580-d041-11eb-8a3c-bee2f582fbe4.png)
+![image](https://github.com/yanbu0/nostify/assets/26099646/be657901-89c0-4310-9502-61b2125368ab)
+
 
 <br/>
-Read models that contain data from multiple Aggregates can be updated by Event Handlers from other microservices.  Why would this happen?  Well say you have a Bank Account record.  If we were using a relational database for a data store we'd have to either run two queries or do a join to get the Bank Account and the name of the Account Manager.  Using the CQRS model, we can "pre-render" a projection that contains both the account info and the account manager info without having to join tables together.  This example is obviously very simple, but in a complex environment where you're joining together dozens of tables to create a DTO to send to the user interface and returning 100's of thousands or millions of records, this type of archtecture can dramatically improve BOTH system performance and throughput.
+Projections that contain data from multiple Aggregates can be updated by Event Handlers from other microservices.  Why would this happen?  Well say you have a Bank Account record.  If we were using a relational database for a data store we'd have to either run two queries or do a join to get the Bank Account and the name of the Account Manager.  Using the CQRS model, we can "pre-render" a projection that contains both the account info and the account manager info without having to join tables together.  This example is obviously very simple, but in a complex environment where you're joining together dozens of tables to create a DTO to send to the user interface and returning 100's of thousands or millions of records, this type of archtecture can dramatically improve BOTH system performance and throughput.
 
-![image](https://user-images.githubusercontent.com/26099646/170121000-98b0065f-a34c-40f7-8f25-8770d73e5a68.png)
+![image](https://github.com/yanbu0/nostify/assets/26099646/fe8741c4-6547-482e-a03b-2b2635925602)
+
 <br/>
 <strong>Why????</strong><br/>
 When is comes to scaling there are two things to consider: speed and throughput.  "Speed" meaning the quickness of the individual action, and "throughput" meaning the number of concurrent actions that can be performed at the same time.  Using nostify addresses both of those concerns.<br/><br/>
 
 Speed really comes into play only on the query side for most applications.  Thats a large part of the concept behind the CQRS pattern.  By seperating the command side from the query side you essentially deconstruct the datastore that would traditionally be utilizing a RDBMS in order to create materialized views of various projections of the aggregate.  Think of these views as "pre-rendered" views in a traditional relational database.  In a traditional database a view simplifies queries but still runs the joins in real time when data is requested.  By materializing the view, we denormalize the data and accept the increased complexity associated with keeping the data accurate in order to massively decrease the performance cost of querying that data.  In addition, we gain flexibility by being able to appropriately resource each container to give containers being queried the hardest more resources.<br/><br/>
 
-Throughput is the other half of the equation. If you were using physical architechture, you'd have an app server talking to a seperate database server serving up your application.  The app server say has 4 processors with 8 cores each, so there is a limitation on the number of concurrent tasks that can be performed.  We can enhance throughput through proper coding, using parallel processing, and non-blocking code, but there is at a certain point a physical limit to the number of things that can be happening at once.  With nostify and the use of Azure Functions, this limitation is removed other than by cost.  If 1000 queries hit at the same moment in time, 1000 instances of an Azure Function spin up to handle it.
+Throughput is the other half of the equation. If you were using physical architechture, you'd have an app server talking to a seperate database server serving up your application.  The app server say has 4 processors with 8 cores each, so there is a limitation on the number of concurrent tasks that can be performed.  We can enhance throughput through proper coding, using parallel processing, and non-blocking code, but there is at a certain point a physical limit to the number of things that can be happening at once.  With nostify and the use of Azure Functions, this limitation is removed other than by cost.  If 1000 queries hit at the same moment in time, 1000 instances of an Azure Function spin up to handle it.  You're limited more by cost than physical hardware.
 <br/>
 <br/>
 <strong>Setup</strong><br/>
 <br/>
-Use dependency injection to add a singleton instance of the Nostify class:<br/>
+The template will use dependency injection to add a singleton instance of the Nostify class and adds HttpClient by default.  You may need to edit these to match your configuration:<br/>
 
 ```
-[assembly: FunctionsStartup(typeof(nostify_example.Startup))]
-
-namespace nostify_example
+public class Program
 {
-    public class Startup : FunctionsStartup
+    private static void Main(string[] args)
     {
-        public override void Configure(IFunctionsHostBuilder builder)
+        var host = new HostBuilder()
+        .ConfigureFunctionsWorkerDefaults()
+        .ConfigureServices((context, services) =>
         {
-            //Adding HttpClient isn't needed for nostify, but you will almost certianly use it
-            builder.Services.AddHttpClient();
+            services.AddHttpClient();
 
-            builder.Services.AddSingleton<Nostify>((s) => {
-                string apiKey = "<your cosmos api key here";
-                string dbName = "<name of the cosmos db here>";
-                string endPoint = "<url of the cosmos endpoint here>";
-                var nostify = new Nostify(apiKey,dbName,endPoint);
-                return nostify;
-            });
-        }
+            var config = context.Configuration;
+
+            //Note: This is the api key for the cosmos emulator by default
+            string apiKey = config.GetValue<string>("apiKey");
+            string dbName = config.GetValue<string>("dbName");
+            string endPoint = config.GetValue<string>("endPoint");
+            string kafka = config.GetValue<string>("BrokerList");
+            string aggregateRootCurrentStateContainer = "SiteCurrentState";
+
+            var nostify = new Nostify(apiKey, dbName, endPoint, kafka, aggregateRootCurrentStateContainer);
+
+            services.AddSingleton<INostify>(nostify);
+            services.AddLogging();
+        })
+        .Build();
+
+        host.Run();
     }
+
+    
 }
 
 ```
 <br/>
 
-If you used the `dotnet new nostify -ag <AggregateName>` template setup (which you should), in the Nostify/Aggregates folder you will find a class file already stubbed out.  The AggregateCommand base class contains default implementations for Create, Update, and Delete.  The UpdateProperties<T>() method will update any properties of the Aggregate with the value of the Event payload with the same property name.
+In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out.  The AggregateCommand base class contains default implementations for Create, Update, and Delete.  The UpdateProperties<T>() method will update any properties of the Aggregate with the value of the Event payload with the same property name.
     
 ```
-    
-     public class testCommand : AggregateCommand
+public class TestCommand : NostifyCommand
+{
+    ///<summary>
+    ///Base Create Command
+    ///</summary>
+    public static readonly TestCommand Create = new TestCommand("Create_Test", true);
+    ///<summary>
+    ///Base Update Command
+    ///</summary>
+    public static readonly TestCommand Update = new TestCommand("Update_Test");
+    ///<summary>
+    ///Base Delete Command
+    ///</summary>
+    public static readonly TestCommand Delete = new TestCommand("Delete_Test");
+
+
+    public TestCommand(string name, bool isNew = false)
+    : base(name, isNew)
     {
 
-
-        public testCommand(string name)
-        : base(name)
-        {
-
-        }
     }
-
-    public class test : Aggregate
+}
+```
+```
+public class Test : NostifyObject, IAggregate
+{
+    public Test()
     {
-        public test()
+    }
+
+    public bool isDeleted { get; set; } = false;
+
+    public static string aggregateType => "Test";
+
+    public override void Apply(Event eventToApply)
+    {
+        if (eventToApply.command == TestCommand.Create || eventToApply.command == TestCommand.Update)
         {
+            this.UpdateProperties<Test>(eventToApply.payload);
         }
-
-        new public string aggregateType => "test";
-
-        public override void Apply(Event pe)
+        else if (eventToApply.command == TestCommand.Delete)
         {
-            if (pe.command == AggregateCommand.Create || pe.command == AggregateCommand.Update)
-            {
-                this.UpdateProperties<test>(pe.payload);
-            }
-            else if (pe.command == AggregateCommand.Delete)
-            {
-                this.isDeleted = true;
-            }
+            this.isDeleted = true;
         }
     }
+}
+
 ```
     
 <strong>Example Repo Walkthrough</strong>
