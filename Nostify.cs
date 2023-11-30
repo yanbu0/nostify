@@ -333,10 +333,10 @@ namespace nostify
         ///<summary>
         ///Retrieves the undeliverable events container
         ///</summary>
-        public async Task<Container> GetUndeliverableEventsContainerAsync()
+        public async Task<Container> GetUndeliverableEventsContainerAsync(string partitionKeyPath = "/tenantId")
         {
             var db = await Repository.GetDatabaseAsync();
-            return await db.CreateContainerIfNotExistsAsync(Repository.UndeliverableEvents, "/partitionKey");
+            return await db.CreateContainerIfNotExistsAsync(Repository.UndeliverableEvents, partitionKeyPath);
         }
 
     }

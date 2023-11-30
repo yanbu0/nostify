@@ -21,7 +21,13 @@ namespace nostify
             this.functionName = functionName;
             this.errorMessage = errorMessage;
             this.undeliverableEvent = undeliverableEvent;
+            this.id = Guid.NewGuid();
         }
+
+        ///<summary>
+        ///Id of undeliverable event
+        ///</summary>
+        public Guid id { get; set; }
 
         ///<summary>
         ///The name of the function that failed
