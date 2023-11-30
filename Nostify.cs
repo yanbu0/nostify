@@ -15,21 +15,81 @@ namespace nostify
     ///</summary>
     public interface INostify
     {
+        ///<summary>
+        ///Event store repository
+        ///</summary>
         NostifyCosmosClient Repository { get; }
+
+        ///<summary>
+        ///Default partition key
+        ///</summary>
         string DefaultPartitionKeyPath { get; }
+        
+        ///<summary>
+        ///Default tenannt id value for use if NOT implementing multi-tenant
+        ///</summary>
         int DefaultTenantId { get; }
+
+        ///<summary>
+        ///Url for Kafka cluster
+        ///</summary>
         string KafkaUrl { get; }
 
+        ///<summary>
+        ///Writes event to event store
+        ///</summary>        
+        ///<param name="eventToPersist">Event to apply and persist in event store</param>
         public Task PersistEventAsync(Event eventToPersist);
+        ///<summary>
+        ///Writes event to event store
+        ///</summary>        
+        ///<param name="events">Events to apply and persist in event store</param>
         public Task BulkPersistEventAsync(List<Event> events);
+        ///<summary>
+        ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
+        ///</summary>
         public Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle);
+        ///<summary>
+        ///Published event to messaging bus
+        ///</summary>        
+        ///<param name="cosmosTriggerOutput">String output from CosmosDBTrigger, will be processed into a List of Events and published to Kafka</param>
         public Task PublishEventAsync(string cosmosTriggerOutput);
+        ///<summary>
+        ///Retrieves the event store container
+        ///</summary>
         public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
+        ///<summary>    
+        ///Retrieves the current state container for Aggregate Root
+        ///</summary>
+        ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
         public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
+        ///<summary>
+        ///Retrieves the container for specified Projection
+        ///</summary>
+        ///<param name="containerName">Name of the container the Projection lives in</param>
+        ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
         public Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId");
+        ///<summary>
+        ///Rebuilds the entire container from event stream
+        ///</summary>
         public Task RebuildCurrentStateContainerAsync<T>() where T : NostifyObject, IAggregate, new();
+        ///<summary>
+        ///Rehydrates data directly from stream of events when querying a Projection isn't feasible
+        ///</summary>
+        ///<returns>
+        ///The aggregate state rehydrated from create to the specified DateTime.  If no DateTime provided, returns current state.
+        ///</returns>
+        ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
+        ///<param name="untilDate">Optional. Will build the aggregate state up to and including this time, if no value provided returns projection of current state</param>
         public Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new();
-        public Task DoBulkUpsert<T>(Container container, List<T> itemList);
+        ///<summary>
+        ///Performs upsert of list
+        ///</summary>
+        public Task DoBulkUpsertAsync<T>(Container container, List<T> itemList);
+        ///<summary>
+        ///Performs upsert of list
+        ///</summary>
+        public Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList);
 
     }
 
@@ -39,24 +99,13 @@ namespace nostify
     public class Nostify : INostify
     {
 
-        ///<summary>
-        ///Event store repository
-        ///</summary>
+        /// <inheritdoc />
         public NostifyCosmosClient Repository { get; }
-
-        ///<summary>
-        ///Default partition key
-        ///</summary>
+        /// <inheritdoc />
         public string DefaultPartitionKeyPath { get; }
-
-        ///<summary>
-        ///Default tenannt id value for use if NOT implementing multi-tenant
-        ///</summary>
+        /// <inheritdoc />
         public int DefaultTenantId { get; }
-
-        ///<summary>
-        ///Url for Kafka cluster
-        ///</summary>
+        /// <inheritdoc />
         public string KafkaUrl { get; }
         
 
@@ -82,20 +131,14 @@ namespace nostify
         }
 
 
-        ///<summary>
-        ///Writes event to event store
-        ///</summary>        
-        ///<param name="eventToPersist">Event to apply and persist in event store</param>
+        /// <inheritdoc />
         public async Task PersistEventAsync(Event eventToPersist)
         {
             var eventContainer = await GetEventStoreContainerAsync();
             await eventContainer.CreateItemAsync(eventToPersist, new PartitionKey(eventToPersist.aggregateRootId));
         }
 
-        ///<summary>
-        ///Published event to messaging bus
-        ///</summary>        
-        ///<param name="cosmosTriggerOutput">String output from CosmosDBTrigger, will be processed into a List of Events and published to Kafka</param>
+        ///<inheritdoc />
         public async Task PublishEventAsync(string cosmosTriggerOutput)
         {
             var peList = JsonConvert.DeserializeObject<List<Event>>(cosmosTriggerOutput);
@@ -119,10 +162,7 @@ namespace nostify
             }
         }
 
-        ///<summary>
-        ///Writes event to event store
-        ///</summary>        
-        ///<param name="events">Events to apply and persist in event store</param>
+        ///<inheritdoc />
         public async Task BulkPersistEventAsync(List<Event> events)
         {
             Event errorPe = null;
@@ -151,9 +191,7 @@ namespace nostify
             }
         }
 
-        ///<summary>
-        ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
-        ///</summary>
+        ///<inheritdoc />
         public async Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle)
         {
             var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
@@ -161,14 +199,7 @@ namespace nostify
             await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), new PartitionKey(eventToHandle.aggregateRootId));
         }
 
-        ///<summary>
-        ///Rehydrates data directly from stream of events when querying a Projection isn't feasible
-        ///</summary>
-        ///<returns>
-        ///The aggregate state rehydrated from create to the specified DateTime.  If no DateTime provided, returns current state.
-        ///</returns>
-        ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
-        ///<param name="untilDate">Optional. Will build the aggregate state up to and including this time, if no value provided returns projection of current state</param>
+        ///<inheritdoc />
         public async Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new()
         {
             var eventContainer = await GetEventStoreContainerAsync();
@@ -219,29 +250,20 @@ namespace nostify
         }
 
 
-        ///<summary>
-        ///Retrieves the event store container
-        ///</summary>
+        ///<inheritdoc />
         public async Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
         {
             return await Repository.GetEventStoreAsync();
         }
 
-        ///<summary>
-        ///Retrieves the current state container for Aggregate Root
-        ///</summary>
-        ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
+        ///<inheritdoc />
         public async Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId")
         {
             var db = await Repository.GetDatabaseAsync();
             return await db.CreateContainerIfNotExistsAsync(Repository.CurrentStateContainer, partitionKeyPath);
         }
 
-        ///<summary>
-        ///Retrieves the container for specified Projection
-        ///</summary>
-        ///<param name="containerName">Name of the container the Projection lives in</param>
-        ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
+        ///<inheritdoc />
         public async Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId")
         {
             var db = await Repository.GetDatabaseAsync();
@@ -260,9 +282,7 @@ namespace nostify
         }
 
         
-        ///<summary>
-        ///Rebuilds the entire container from event stream
-        ///</summary>
+        ///<inheritdoc />
         public async Task RebuildCurrentStateContainerAsync<T>() where T : NostifyObject, IAggregate, new()
         {
             Container containerToRebuild = await GetCurrentStateContainerAsync();
@@ -340,13 +360,17 @@ namespace nostify
             return await db.CreateContainerIfNotExistsAsync(Repository.UndeliverableEvents, partitionKeyPath);
         }
 
-        ///<summary>
-        ///Performs upsert of list
-        ///</summary>
-        public async Task DoBulkUpsert<T>(Container container, List<T> itemList)
+        ///<inheritdoc />
+        public async Task DoBulkUpsertAsync<T>(Container container, List<T> itemList)
+        {
+            await DoBulkUpsertAsync<T>(container.Id, itemList);
+        }
+
+        ///<inheritdoc />
+        public async Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList)
         {
             var db = await this.Repository.GetDatabaseAsync(true);
-            var bulkContainer = db.GetContainer(container.Id);
+            var bulkContainer = db.GetContainer(containerName);
 
             List<Task> taskList = new List<Task>();
             itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
