@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>1.9.1.2</Version>
+    <Version>1.9.1.3</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
