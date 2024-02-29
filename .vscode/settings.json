@@ -1,9 +1,10 @@
 {
     "powershell.codeFormatting.addWhitespaceAroundPipe": true,
-    "azureFunctions.deploySubpath": "template/bin/Release/net7.0/publish",
+    "azureFunctions.deploySubpath": "template/bin/Release/net8.0/publish",
     "azureFunctions.projectLanguage": "C#",
-    "azureFunctions.projectRuntime": "~3",
+    "azureFunctions.projectRuntime": "~4",
     "debug.internalConsoleOptions": "neverOpen",
     "azureFunctions.preDeployTask": "publish",
-    "dotnet.automaticallyCreateSolutionInWorkspace": false
+    "dotnet.automaticallyCreateSolutionInWorkspace": false,
+    "azureFunctions.projectSubpath": "templates\\nostify"
 }
