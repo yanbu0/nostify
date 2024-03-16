@@ -13,12 +13,14 @@ When should I use this?
 You should consider using this if you are using .Net and Azure and want to follow a strong set of guidelines to quickly and easily spin up services that can massively scale without spending tons of time architechting it yourself.
 
 ### Current Status
+
 - Brought Kafka into the mix
 - Documentation still in process below!
 
-
 ## Getting Started
+
 To run locally you will need to install some dependencies:
+
 - Azurite: npm install azurite
 - Azurite VS Code Extension: https://marketplace.visualstudio.com/items?itemName=Azurite.azurite
 - Docker Desktop: https://www.docker.com/products/docker-desktop/
@@ -27,6 +29,7 @@ To run locally you will need to install some dependencies:
   
 
 To spin up a nostify project:
+
 ```powershell
 dotnet new install nostify
 dotnet new nostify -ag <Your_Aggregate_Name> -p <Port Number To Run on Locally>
@@ -36,8 +39,9 @@ dotnet restore
 This will install the templates, create the default project based off your Aggregate, and install all the necessary libraries.
 
 ## Architecture
-The library is designed to be used in a microservice pattern (although not necessarily required) using an Azure Function App api and Cosmos as the event store. Kafka serves as the messaging backpane, and projections can be stored in Cosmos or Redis depending on query needs.<br/><br/>
-You should set up a Function App and Cosmos per Aggregate Microservice.<br/><br/>
+
+The library is designed to be used in a microservice pattern (although not necessarily required) using an Azure Function App api and Cosmos as the event store. Kafka serves as the messaging backpane, and projections can be stored in Cosmos or Redis depending on query needs.
+You should set up a Function App and Cosmos per Aggregate Microservice.
 ![image](https://github.com/yanbu0/nostify/assets/26099646/be657901-89c0-4310-9502-61b2125368ab)
 
 
@@ -46,14 +50,15 @@ Projections that contain data from multiple Aggregates can be updated by Event H
 ![image](https://github.com/yanbu0/nostify/assets/26099646/fe8741c4-6547-482e-a03b-2b2635925602)
 
 ## Why????
+
 When is comes to scaling there are two things to consider: speed and throughput.  "Speed" meaning the quickness of the individual action, and "throughput" meaning the number of concurrent actions that can be performed at the same time.  Using nostify addresses both of those concerns.
 
 Speed really comes into play only on the query side for most applications.  Thats a large part of the concept behind the CQRS pattern.  By seperating the command side from the query side you essentially deconstruct the datastore that would traditionally be utilizing a RDBMS in order to create materialized views of various projections of the aggregate.  Think of these views as "pre-rendered" views in a traditional relational database.  In a traditional database a view simplifies queries but still runs the joins in real time when data is requested.  By materializing the view, we denormalize the data and accept the increased complexity associated with keeping the data accurate in order to massively decrease the performance cost of querying that data.  In addition, we gain flexibility by being able to appropriately resource each container to give containers being queried the hardest more resources.
 
 Throughput is the other half of the equation. If you were using physical architechture, you'd have an app server talking to a seperate database server serving up your application.  The app server say has 4 processors with 8 cores each, so there is a limitation on the number of concurrent tasks that can be performed.  We can enhance throughput through proper coding, using parallel processing, and non-blocking code, but there is at a certain point a physical limit to the number of things that can be happening at once.  With nostify and the use of Azure Functions, this limitation is removed other than by cost.  If 1000 queries hit at the same moment in time, 1000 instances of an Azure Function spin up to handle it.  You're limited more by cost than physical hardware.
 
-
 ## Setup
+
 The template will use dependency injection to add a singleton instance of the Nostify class and adds HttpClient by default.  You may need to edit these to match your configuration:<br/>
 
 ```C#
