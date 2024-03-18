@@ -62,7 +62,7 @@ namespace nostify
         ///Retrieves the current state container for Aggregate Root
         ///</summary>
         ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
-        public Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId");
+        public Task<Container> GetCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate;
         ///<summary>
         ///Retrieves the container for specified Projection
         ///</summary>
@@ -116,12 +116,11 @@ namespace nostify
         ///<param name="dbName">Name of event store DB</param>
         ///<param name="cosmosEndpointUri">Uri of cosmos endpoint, format: https://[instance-name].documents.azure.us:443/</param>
         ///<param name="kafkaUrl">Url of Kafka instance, format: localhost:54165</param>
-        ///<param name="aggregateRootCurrentStateContainer">Name of aggregate root current state container.  Should be of format [Aggregate Root Name]CurrentState</param>
         ///<param name="defaultPartitionKeyPath">Path to partition key for default created current state container, set null to not create, leave default to partition by tenantId </param>
         ///<param name="defaultTenantId">Default tenant id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container per tenant</param>
-        public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string aggregateRootCurrentStateContainer, string defaultPartitionKeyPath = "/tenantId", int defaultTenantId = 0)
+        public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string defaultPartitionKeyPath = "/tenantId", int defaultTenantId = 0)
         {
-            Repository = new NostifyCosmosClient(primaryKey, dbName, cosmosEndpointUri, aggregateRootCurrentStateContainer);
+            Repository = new NostifyCosmosClient(primaryKey, dbName, cosmosEndpointUri);
             if (defaultPartitionKeyPath != null)
             {
                 this.DefaultPartitionKeyPath = defaultPartitionKeyPath;
@@ -257,17 +256,15 @@ namespace nostify
         }
 
         ///<inheritdoc />
-        public async Task<Container> GetCurrentStateContainerAsync(string partitionKeyPath = "/tenantId")
+        public async Task<Container> GetCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate
         {
-            var db = await Repository.GetDatabaseAsync();
-            return await db.CreateContainerIfNotExistsAsync(Repository.CurrentStateContainer, partitionKeyPath);
+            return await GetProjectionContainerAsync(IAggregate.currentStateContainerName, partitionKeyPath);
         }
 
         ///<inheritdoc />
         public async Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId")
         {
-            var db = await Repository.GetDatabaseAsync();
-            return await db.CreateContainerIfNotExistsAsync(containerName, partitionKeyPath);
+            return await GetContainerAsync(containerName, false, partitionKeyPath);
         }
 
         ///<summary>
@@ -277,7 +274,12 @@ namespace nostify
         ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
         public async Task<Container> GetBulkProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId")
         {
-            var db = await Repository.GetDatabaseAsync(true);
+            return await GetContainerAsync(containerName, true, partitionKeyPath);
+        }
+
+        private async Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
+        {
+            var db = await Repository.GetDatabaseAsync(bulkEnabled);
             return await db.CreateContainerIfNotExistsAsync(containerName, partitionKeyPath);
         }
 
@@ -285,7 +287,7 @@ namespace nostify
         ///<inheritdoc />
         public async Task RebuildCurrentStateContainerAsync<T>() where T : NostifyObject, IAggregate, new()
         {
-            Container containerToRebuild = await GetCurrentStateContainerAsync();
+            Container containerToRebuild = await GetCurrentStateContainerAsync<T>();
 
             //Store data needed for re-creating container
             string containerName = containerToRebuild.Id;

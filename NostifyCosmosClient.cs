@@ -13,8 +13,18 @@ namespace nostify
     ///</summary>
     public interface INostifyCosmosClient
     {
+
+        ///<summary>
+        ///Gets an instance of CosmosClient
+        ///</summary>        
         CosmosClient GetClient(bool allowBulk = false);
+        ///<summary>
+        ///Returns database
+        ///</summary>
         Task<Database> GetDatabaseAsync(bool allowBulk = false);
+        ///<summary>
+        ///Returns event store container
+        ///</summary>
         Task<Container> GetEventStoreAsync();
 
     }
@@ -55,11 +65,6 @@ namespace nostify
         public readonly string UndeliverableEvents;
 
         ///<summary>
-        ///Optional. Name of container holding current state, defaults to "currentState"
-        ///</summary>
-        public readonly string CurrentStateContainer;
-
-        ///<summary>
         ///Optional. Will default to "AccountEndpoint={this.EndpointUri}/;AccountKey={this.Primarykey};"
         ///</summary>
         public readonly string ConnectionString;
@@ -77,7 +82,6 @@ namespace nostify
         public NostifyCosmosClient(string ApiKey, 
             string DbName, 
             string EndpointUri = "", 
-            string CurrentStateContainer = "currentState",
             string ConnectionString = "", 
             string EventStorePartitionKey = "/aggregateRootId",
             string EventStoreContainer = "eventStore", 
@@ -90,25 +94,18 @@ namespace nostify
             this.EventStorePartitionKey = EventStorePartitionKey;
             this.EventStoreContainer = EventStoreContainer;
             this.UndeliverableEvents = UndeliverableEvents;
-            this.CurrentStateContainer = CurrentStateContainer;
         }
 
-        ///<summary>
-        ///Gets an instance of CosmosClient
-        ///</summary>
+        /// <inheritdoc />
         public CosmosClient GetClient(bool allowBulk = false) => new CosmosClient(EndpointUri, Primarykey, new CosmosClientOptions() { AllowBulkExecution = allowBulk });
 
-        ///<summary>
-        ///Returns database
-        ///</summary>
+        /// <inheritdoc />
         public async Task<Database> GetDatabaseAsync(bool allowBulk = false)
         {
             return (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName)).Database;
         }
 
-        ///<summary>
-        ///Returns event store container
-        ///</summary>
+        /// <inheritdoc />
         public async Task<Container> GetEventStoreAsync()
         {
             return await (await GetDatabaseAsync()).CreateContainerIfNotExistsAsync(this.EventStoreContainer, EventStorePartitionKey);

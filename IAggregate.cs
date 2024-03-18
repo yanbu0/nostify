@@ -20,6 +20,11 @@ public interface IAggregate
     ///</summary>
     public static string aggregateType;
 
+    ///<summary>
+    ///Current State container name
+    ///</summary>
+    public static string currentStateContainerName => $"{aggregateType}CurrentState";
+
 
 }
 

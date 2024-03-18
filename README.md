@@ -96,9 +96,8 @@ public class Program
 
 ```
 
-
 In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out.  The AggregateCommand base class contains default implementations for Create, Update, and Delete.  The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name.
-    
+
 ```C#
 public class TestCommand : NostifyCommand
 {
@@ -123,6 +122,7 @@ public class TestCommand : NostifyCommand
     }
 }
 ```
+
 ```C#
 public class Test : NostifyObject, IAggregate
 {
@@ -148,6 +148,13 @@ public class Test : NostifyObject, IAggregate
 }
 
 ```
+
+
+
+## Basic Tasks
+
+### 
+
 
 <strong>Example Repo Walkthrough</strong>
 
