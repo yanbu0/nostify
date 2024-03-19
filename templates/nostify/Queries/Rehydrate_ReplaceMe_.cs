@@ -20,7 +20,7 @@ public class Rehydrate_ReplaceMe_
 
     [Function(nameof(Rehydrate_ReplaceMe_))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Rehydrate_ReplaceMe_/{aggregateId}/{datetime?}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Rehydrate_ReplaceMe_/{aggregateId:guid}/{datetime:datetime?}")] HttpRequestData req,
         Guid aggregateId,
         DateTime? dateTime,
         ILogger log)

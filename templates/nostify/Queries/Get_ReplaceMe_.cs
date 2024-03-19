@@ -20,14 +20,14 @@ public class Get_ReplaceMe_
 
     [Function(nameof(Get_ReplaceMe_))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId}")] HttpRequestData req,
-        string aggregateId,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
+        Guid aggregateId,
         ILogger log)
     {
         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
         _ReplaceMe_ retObj = await currentStateContainer
                             .GetItemLinqQueryable<_ReplaceMe_>()
-                            .Where(x => x.id == Guid.Parse(aggregateId))
+                            .Where(x => x.id == aggregateId)
                             .FirstOrDefaultAsync();
                             
         return new OkObjectResult(retObj);

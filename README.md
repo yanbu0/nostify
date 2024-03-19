@@ -96,7 +96,7 @@ public class Program
 
 ```
 
-In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out.  The AggregateCommand base class contains default implementations for Create, Update, and Delete.  The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name.
+By default, the template will contain the single Aggregate specified.  In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out.  The AggregateCommand base class contains default implementations for Create, Update, and Delete.  The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name.
 
 ```C#
 public class TestCommand : NostifyCommand
@@ -149,11 +149,46 @@ public class Test : NostifyObject, IAggregate
 
 ```
 
-
-
 ## Basic Tasks
 
-### 
+### Initializing Current State Container
+
+The template will include a basic method to create, or recreate the current state container.  It might become necesseary to recreate a container if a bug was introduced that corrupted the data, for instance.  For the current state of an Aggreate, it is simple to recreate the container from the event stream.  You will find the function to do so under Admin.
+
+### Querying
+
+There is a Queries folder to contain the queries for the Aggregate.  Three basic queries are created when you spin up the template: Get Single `GET <AggreateType>/{aggregateId}`, Get All `GET <AggregateType>` (note: if this will return large amounts of data you may want to refactor the default query), and Rehydrate `GET Rehydrate<AggregateType>/{aggregateId}/{datetime?}` which returns the current state of the Aggregate directly from the event stream to the specified datetime.  
+
+To do your own query, simply add a new Azure Function per query, inject `HttpClient` and `INostify`, grab the container you want to query, and run a query with `GetItemLinqQueryable<T>()` using Linq syntax.
+
+```C#
+public class GetTest
+{
+
+    private readonly HttpClient _client;
+    private readonly INostify _nostify;
+    public GetTest(HttpClient httpClient, INostify nostify)
+    {
+        this._client = httpClient;
+        this._nostify = nostify;
+    }
+
+    [Function(nameof(GetTest))]
+    public async Task<IActionResult> Run(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Test/{aggregateId}")] HttpRequestData req,
+        Guid aggregateId,
+        ILogger log)
+    {
+        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
+        Test retObj = await currentStateContainer
+                            .GetItemLinqQueryable<Test>()
+                            .Where(x => x.id == aggregateId)
+                            .FirstOrDefaultAsync();
+                            
+        return new OkObjectResult(retObj);
+    }
+}
+```
 
 
 <strong>Example Repo Walkthrough</strong>

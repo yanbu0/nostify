@@ -19,12 +19,11 @@ public class Delete_ReplaceMe_
 
     [Function(nameof(Delete_ReplaceMe_))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "_ReplaceMe_/{aggregateId}")] HttpRequestData req,
-        string aggregateId,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
+        Guid aggregateId,
         ILogger log)
     {
-        Guid aggRootId = aggregateId.ToGuid();
-        Event pe = new Event(_ReplaceMe_Command.Delete, aggRootId, null);
+        Event pe = new Event(_ReplaceMe_Command.Delete, aggregateId, null);
         await _nostify.PersistEventAsync(pe);
 
         return new OkObjectResult(aggregateId);
