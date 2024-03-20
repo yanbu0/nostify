@@ -23,7 +23,7 @@ public class GetAll_ProjectionName_s
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ProjectionName_")] HttpRequestData req,
         ILogger log)
     {
-        Container projectionContainer = await _nostify.GetProjectionContainerAsync(_ProjectionName_.containerName);
+        Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
         List<_ProjectionName_> allList = await projectionContainer
                             .GetItemLinqQueryable<_ProjectionName_>()
                             .ReadAllAsync();

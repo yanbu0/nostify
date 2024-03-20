@@ -28,7 +28,7 @@ public class On_ProjectionName_Updated
             if (newEvent != null)
             {
                 //Update projection container
-                Container projectionContainer = await _nostify.GetProjectionContainerAsync(_ProjectionName_.containerName);
+                Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
                 await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
             }                       
 
