@@ -63,16 +63,25 @@ namespace nostify
         ///</summary>
         ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
         public Task<Container> GetCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate;
+        ///<summary>    
+        ///Retrieves the current state container for Aggregate Root with bulk function turned on.
+        ///</summary>
+        ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
+        public Task<Container> GetBulkCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate;
         ///<summary>
         ///Retrieves the container for specified Projection
         ///</summary>
-        ///<param name="containerName">Name of the container the Projection lives in</param>
         ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
-        public Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId");
+        public Task<Container> GetProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection;
+        ///<summary>
+        ///Retrieves the container for specified Projection with bulk function turned on
+        ///</summary>
+        ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
+        public Task<Container> GetBulkProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection;
         ///<summary>
         ///Rebuilds the entire container from event stream
         ///</summary>
-        public Task RebuildCurrentStateContainerAsync<T>() where T : NostifyObject, IAggregate, new();
+        public Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new();
         ///<summary>
         ///Rehydrates data directly from stream of events when querying a Projection isn't feasible
         ///</summary>
@@ -258,23 +267,25 @@ namespace nostify
         ///<inheritdoc />
         public async Task<Container> GetCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate
         {
-            return await GetProjectionContainerAsync(IAggregate.currentStateContainerName, partitionKeyPath);
+            return await GetContainerAsync(IAggregate.currentStateContainerName, false, partitionKeyPath);
         }
 
         ///<inheritdoc />
-        public async Task<Container> GetProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId")
+        public async Task<Container> GetBulkCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate
         {
-            return await GetContainerAsync(containerName, false, partitionKeyPath);
+            return await GetContainerAsync(IAggregate.currentStateContainerName, true, partitionKeyPath);
         }
 
-        ///<summary>
-        ///Retrieves the container for specified Projection, bulk update enabled
-        ///</summary>
-        ///<param name="containerName">Name of the container the Projection lives in</param>
-        ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
-        public async Task<Container> GetBulkProjectionContainerAsync(string containerName, string partitionKeyPath = "/tenantId")
+        ///<inheritdoc />
+        public async Task<Container> GetProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection
         {
-            return await GetContainerAsync(containerName, true, partitionKeyPath);
+            return await GetContainerAsync(IProjection.containerName, false, partitionKeyPath);
+        }
+
+        ///<inheritdoc />
+        public async Task<Container> GetBulkProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection
+        {
+            return await GetContainerAsync(IProjection.containerName, true, partitionKeyPath);
         }
 
         private async Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
@@ -285,7 +296,7 @@ namespace nostify
 
         
         ///<inheritdoc />
-        public async Task RebuildCurrentStateContainerAsync<T>() where T : NostifyObject, IAggregate, new()
+        public async Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new()
         {
             Container containerToRebuild = await GetCurrentStateContainerAsync<T>();
 
@@ -324,7 +335,7 @@ namespace nostify
             }
             
             //Recreate container
-            Container rebuiltContainer = await GetProjectionContainerAsync(containerName);
+            Container rebuiltContainer = await GetContainerAsync(containerName, false, partitionKeyPath);
 
             //Save
             rehydratedAggregates.ForEach(agg => {
