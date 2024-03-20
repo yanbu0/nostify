@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>1.10.0.0</Version>
+    <Version>1.11.0.0</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -15,7 +15,7 @@
   <ItemGroup>
     <PackageReference Include="Confluent.Kafka" Version="2.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" />
-    <PackageReference Include="microsoft.azure.cosmos" Version="3.38.1" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.38.1" />
     <None Include="LICENSE.txt" Pack="true" PackagePath="$(PackageLicenseFile)" />
     <None Include="README.md" Pack="true" PackagePath="\" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.21.0" />

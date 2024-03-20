@@ -16,11 +16,12 @@ public class _ProjectionName_ : NostifyObject, IProjection
 
     public override void Apply(Event eventToApply)
     {
-        if (eventToApply.command == _ReplaceMe_Command.Create || eventToApply.command == _ReplaceMe_Command.Update)
+        //Should update the command tree below to not use string matching
+        if (eventToApply.command.name.Equals("Create__ReplaceMe_") || eventToApply.command.name.Equals("Update__ReplaceMe_"))
         {
             this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
         }
-        else if (eventToApply.command == _ReplaceMe_Command.Delete)
+        else if (eventToApply.command.name.Equals("Delete__ReplaceMe_"))
         {
             this.isDeleted = true;
         }

@@ -20,13 +20,14 @@ public class Event
     ///<param name="command">Command to persist</param>
     ///<param name="aggregateRootId">Id of the root aggregate to perform the command on.  Must be a Guid string</param>
     ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
-    public Event(NostifyCommand command, string aggregateRootId, object payload)
+    ///<param name="partitionKey">Partition key to apply Event to.</param>
+    public Event(NostifyCommand command, string aggregateRootId, object payload, string partitionKey)
     {
-        if (!Guid.TryParse(aggregateRootId, out var guidTest)){
+        if (!Guid.TryParse(aggregateRootId, out _)){
             throw new ArgumentException("String is not parsable to a Guid");
         }
 
-        SetUp(command,aggregateRootId,payload);
+        SetUp(command,aggregateRootId,payload, partitionKey);
     }
 
     ///<summary>
@@ -35,18 +36,20 @@ public class Event
     ///<param name="command">Command to persist</param>
     ///<param name="aggregateRootId">Id of the root aggregate to perform the command on.</param>
     ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
-    public Event(NostifyCommand command, Guid aggregateRootId, object payload)
+    ///<param name="tenantId">Tenant ID to apply Event to.</param>
+    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid tenantId = default)
     {
-        SetUp(command,aggregateRootId.ToString(),payload);
+        SetUp(command,aggregateRootId.ToString(),payload, tenantId.ToString());
     }
     
-    private void SetUp(NostifyCommand command, string aggregateRootId, object payload)
+    private void SetUp(NostifyCommand command, string aggregateRootId, object payload, string partitionKey)
     {
         this.aggregateRootId = aggregateRootId;
         this.id = Guid.NewGuid();
         this.command = command;
         this.timestamp = DateTime.UtcNow;
         this.payload = payload;
+        this.partitionKey = partitionKey;
     }
 
     ///<summary>
@@ -58,6 +61,11 @@ public class Event
     ///Timestamp of event
     ///</summary>
     public DateTime timestamp { get; set; }
+
+    ///<summary>
+    ///Partition key to apply event to
+    ///</summary>
+    public string partitionKey { get; set; }
 
 
     ///<summary>

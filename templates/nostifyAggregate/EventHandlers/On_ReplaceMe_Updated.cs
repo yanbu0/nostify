@@ -28,7 +28,7 @@ public class On_ReplaceMe_Updated
             if (newEvent != null)
             {
                 //Update aggregate current state projection
-                Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
+                Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
                 await currentStateContainer.ApplyAndPersistAsync<_ReplaceMe_>(newEvent);
             }                       
 

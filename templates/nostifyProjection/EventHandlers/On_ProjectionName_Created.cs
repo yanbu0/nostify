@@ -10,10 +10,12 @@ namespace _ReplaceMe__Service;
 public class On_ProjectionName_Created
 {
     private readonly INostify _nostify;
+    private readonly HttpClient _httpClient;
     
-    public On_ProjectionName_Created(INostify nostify)
+    public On_ProjectionName_Created(INostify nostify, HttpClient httpClient)
     {
         this._nostify = nostify;
+        _httpClient = httpClient;
     }
 
     [Function(nameof(On_ProjectionName_Created))]
@@ -27,9 +29,15 @@ public class On_ProjectionName_Created
         {
             if (newEvent != null)
             {
-                //Update projection container
+                //Get projection container
                 Container projectionContainer = await _nostify.GetProjectionContainerAsync(_ProjectionName_.containerName);
-                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
+
+                //Create projection
+                _ProjectionName_ proj = new _ProjectionName_();
+                //Get external data
+                Event externalData = await proj.SeedExternalDataAsync(_nostify, _httpClient);
+                //Update projection container
+                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(new List<Event>(){newEvent,externalData});
             }                           
         }
         catch (Exception e)
