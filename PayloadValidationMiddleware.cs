@@ -41,6 +41,6 @@ public class PayloadValidationMiddleware
 
         }  
         // When finished, call the next delegate/middleware in the pipeline.
-        // await _next(context);
+        await _next(context);
     }
 }

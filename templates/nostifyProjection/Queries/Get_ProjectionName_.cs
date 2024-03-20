@@ -7,26 +7,26 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace _ReplaceMe__Service;
 
-public class Get_ReplaceMe_
+public class Get_ProjectionName_
 {
 
     private readonly HttpClient _client;
     private readonly INostify _nostify;
-    public Get_ReplaceMe_(HttpClient httpClient, INostify nostify)
+    public Get_ProjectionName_(HttpClient httpClient, INostify nostify)
     {
         this._client = httpClient;
         this._nostify = nostify;
     }
 
-    [Function(nameof(Get_ReplaceMe_))]
+    [Function(nameof(Get_ProjectionName_))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ProjectionName_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
         ILogger log)
     {
-        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
-        _ReplaceMe_ retObj = await currentStateContainer
-                            .GetItemLinqQueryable<_ReplaceMe_>()
+        Container projectionContainer = await _nostify.GetProjectionContainerAsync(_ProjectionName_.containerName);
+        _ProjectionName_ retObj = await projectionContainer
+                            .GetItemLinqQueryable<_ProjectionName_>()
                             .Where(x => x.id == aggregateId)
                             .FirstOrDefaultAsync();
                             

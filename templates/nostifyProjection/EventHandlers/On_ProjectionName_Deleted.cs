@@ -30,7 +30,8 @@ public class On_ProjectionName_Deleted
             {
                 //Update projection container
                 Container projectionContainer = await _nostify.GetProjectionContainerAsync(_ProjectionName_.containerName);
-                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
+                //Remove from the container.  If you wish to set isDeleted instead, remove the code below and ApplyAndPersist the Event
+                await projectionContainer.DeleteItemAsync<_ProjectionName_>(newEvent.id);
             }
         }
         catch (Exception e)

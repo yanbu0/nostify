@@ -116,9 +116,9 @@ namespace nostify
         ///<summary>
         ///Deletes item from Container
         ///</summary>
-        public static async Task<ItemResponse<T>> DeleteItemAsync<T>(this Container c, Guid aggregateRootId, int tenantId)
+        public static async Task<ItemResponse<T>> DeleteItemAsync<T>(this Container c, Guid aggregateRootId, Guid tenantId = default)
         {
-            return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId));
+            return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId.ToString()));
         }
 
         ///<summary>
@@ -145,21 +145,23 @@ namespace nostify
         }
 
         ///<summary>
-        ///Applies Event and updates this container. Uses existence of an "id" property to key off if is create or not. Primarily used in Event Handlers.
+        ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
         ///</summary>
         ///<param name="container">Container where the projection to update lives</param>
-        ///<param name="newEvent">The Event object to apply and persist.</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
+        ///<param name="newEvents">The Event list to apply and persist.</param>
+        ///<param name="partitionKey">The partition to update, by default is tenantId</param>
+        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey = default) where T : NostifyObject, new()
         {
             T? aggregate;
+            Event firstEvent = newEvents.First();
 
-            if (newEvent.command.isNew)
+            if (firstEvent.command.isNew)
             {
                 aggregate = new T();
             }
             else 
             {
-                Guid aggId = newEvent.aggregateRootId.ToGuid();
+                Guid aggId = firstEvent.aggregateRootId.ToGuid();
                 
                 //Update container based off aggregate root id
                 aggregate = (await container
@@ -169,12 +171,23 @@ namespace nostify
                     .FirstOrDefault();
             }
 
-            //Null means it has been deleted
+            //Null means it has been previously deleted
             if (aggregate != null)
             {
-                aggregate.Apply(newEvent);
-                await container.UpsertItemAsync<T>(aggregate);
+                newEvents.ForEach(newEvent => aggregate.Apply(newEvent));
+                await container.UpsertItemAsync<T>(aggregate, partitionKey);
             }
+        }
+
+        ///<summary>
+        ///Applies Event and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
+        ///</summary>
+        ///<param name="container">Container where the projection to update lives</param>
+        ///<param name="newEvent">The Event object to apply and persist.</param>
+        ///<param name="partitionKey">The partition to update, by default is tenantId</param>
+        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey = default) where T : NostifyObject, new()
+        {
+            await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, partitionKey);
         }
 
         ///<summary>

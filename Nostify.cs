@@ -26,9 +26,9 @@ namespace nostify
         string DefaultPartitionKeyPath { get; }
         
         ///<summary>
-        ///Default tenannt id value for use if NOT implementing multi-tenant
+        ///Default tenant id value for use if NOT implementing multi-tenant
         ///</summary>
-        int DefaultTenantId { get; }
+        Guid DefaultTenantId { get; }
 
         ///<summary>
         ///Url for Kafka cluster
@@ -81,7 +81,16 @@ namespace nostify
         ///</returns>
         ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
         ///<param name="untilDate">Optional. Will build the aggregate state up to and including this time, if no value provided returns projection of current state</param>
-        public Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new();
+        public Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, IAggregate, new();
+        ///<summary>
+        ///Rehydrates data directly from stream of events and then calls the Projection SeedExternalDataAsync() function to pull any needed data from external services.
+        ///</summary>
+        ///<returns>
+        ///The projection state rehydrated.  Projections may only be rehydrated to the current state.
+        ///</returns>
+        ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
+        ///<param name="httpClient">Instance of HttpClient to query external data for Projection</param>
+        public Task<T> RehydrateAsync<T>(Guid id, HttpClient httpClient) where T : NostifyObject, IProjection, new();
         ///<summary>
         ///Performs upsert of list
         ///</summary>
@@ -104,7 +113,7 @@ namespace nostify
         /// <inheritdoc />
         public string DefaultPartitionKeyPath { get; }
         /// <inheritdoc />
-        public int DefaultTenantId { get; }
+        public Guid DefaultTenantId { get; }
         /// <inheritdoc />
         public string KafkaUrl { get; }
         
@@ -118,7 +127,7 @@ namespace nostify
         ///<param name="kafkaUrl">Url of Kafka instance, format: localhost:54165</param>
         ///<param name="defaultPartitionKeyPath">Path to partition key for default created current state container, set null to not create, leave default to partition by tenantId </param>
         ///<param name="defaultTenantId">Default tenant id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container per tenant</param>
-        public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string defaultPartitionKeyPath = "/tenantId", int defaultTenantId = 0)
+        public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string defaultPartitionKeyPath = "/tenantId", Guid defaultTenantId = default)
         {
             Repository = new NostifyCosmosClient(primaryKey, dbName, cosmosEndpointUri);
             if (defaultPartitionKeyPath != null)
@@ -199,7 +208,7 @@ namespace nostify
         }
 
         ///<inheritdoc />
-        public async Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, new()
+        public async Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, IAggregate, new()
         {
             var eventContainer = await GetEventStoreContainerAsync();
             
@@ -218,14 +227,7 @@ namespace nostify
             return rehyd;
         }
 
-        ///<summary>
-        ///Rehydrates data directly from stream of events when querying a Projection isn't feasible
-        ///</summary>
-        ///<returns>
-        ///The projection state rehydrated.  Projections may only be rehydrated to the current state.
-        ///</returns>
-        ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
-        ///<param name="httpClient">Instance of HttpClient to query external data for Projection</param>
+        ///<inheritdoc />
         public async Task<T> RehydrateAsync<T>(Guid id, HttpClient httpClient) where T : NostifyObject, IProjection, new()
         {
             var eventContainer = await GetEventStoreContainerAsync();
@@ -242,8 +244,6 @@ namespace nostify
             {
                 rehydratedProjection.Apply(pe);
             }
-
-
 
             return rehydratedProjection;
         }
