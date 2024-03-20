@@ -21,7 +21,7 @@ namespace nostify
         ///<summary>
         ///Id of tenant of logged in user
         ///</summary>
-        public int tenantId { get; set; }
+        public Guid tenantId { get; set; }
 
         
         ///<summary>

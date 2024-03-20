@@ -30,7 +30,7 @@ public class On_ProjectionName_Created
             if (newEvent != null)
             {
                 //Get projection container
-                Container projectionContainer = await _nostify.GetProjectionContainerAsync(_ProjectionName_.containerName);
+                Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
 
                 //Create projection
                 _ProjectionName_ proj = new _ProjectionName_();

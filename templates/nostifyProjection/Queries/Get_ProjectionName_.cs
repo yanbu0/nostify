@@ -24,7 +24,7 @@ public class Get_ProjectionName_
         Guid aggregateId,
         ILogger log)
     {
-        Container projectionContainer = await _nostify.GetProjectionContainerAsync(_ProjectionName_.containerName);
+        Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
         _ProjectionName_ retObj = await projectionContainer
                             .GetItemLinqQueryable<_ProjectionName_>()
                             .Where(x => x.id == aggregateId)
