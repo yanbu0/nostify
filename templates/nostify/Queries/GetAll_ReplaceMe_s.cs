@@ -23,7 +23,7 @@ public class GetAll_ReplaceMe_s
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_")] HttpRequestData req,
         ILogger log)
     {
-        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
+        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
         List<_ReplaceMe_> allList = await currentStateContainer
                             .GetItemLinqQueryable<_ReplaceMe_>()
                             .ReadAllAsync();

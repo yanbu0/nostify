@@ -33,7 +33,7 @@ public class Delete__ReplaceMe__Command_Should
         HttpRequestData testReq = MockHttpRequestData.Create();
         
         // //Act
-        var resp = await _func.Run(testReq, Guid.NewGuid().ToString(), _loggerMock.Object) as OkObjectResult;
+        var resp = await _func.Run(testReq, Guid.NewGuid(), _loggerMock.Object) as OkObjectResult;
 
         // //Assert
         Assert.NotNull(resp);
