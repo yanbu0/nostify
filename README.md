@@ -159,7 +159,7 @@ The template will include a basic method to create, or recreate the current stat
 
 There is a Queries folder to contain the queries for the Aggregate.  Three basic queries are created when you spin up the template: Get Single `GET <AggreateType>/{aggregateId}`, Get All `GET <AggregateType>` (note: if this will return large amounts of data you may want to refactor the default query), and Rehydrate `GET Rehydrate<AggregateType>/{aggregateId}/{datetime?}` which returns the current state of the Aggregate directly from the event stream to the specified datetime.  
 
-To do your own query, simply add a new Azure Function per query, inject `HttpClient` and `INostify`, grab the container you want to query, and run a query with `GetItemLinqQueryable<T>()` using Linq syntax.
+To do your own query, simply add a new Azure Function per query, inject `HttpClient` and `INostify`, grab the container you want to query, and run a query with `GetItemLinqQueryable<T>()` using Linq syntax.  Below is an example of the basic get single instance query included in the template generation.
 
 ```C#
 public class GetTest
@@ -175,11 +175,11 @@ public class GetTest
 
     [Function(nameof(GetTest))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Test/{aggregateId}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Test/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
         ILogger log)
     {
-        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync();
+        Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<Test>();
         Test retObj = await currentStateContainer
                             .GetItemLinqQueryable<Test>()
                             .Where(x => x.id == aggregateId)
@@ -189,6 +189,8 @@ public class GetTest
     }
 }
 ```
+
+### Add 
 
 
 <strong>Example Repo Walkthrough</strong>
