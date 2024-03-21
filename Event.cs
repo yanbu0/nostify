@@ -36,10 +36,10 @@ public class Event
     ///<param name="command">Command to persist</param>
     ///<param name="aggregateRootId">Id of the root aggregate to perform the command on.</param>
     ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
-    ///<param name="tenantId">Tenant ID to apply Event to.</param>
-    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid tenantId = default)
+    ///<param name="partitionKey">Tenant ID to apply Event to.</param>
+    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid partitionKey = default)
     {
-        SetUp(command,aggregateRootId.ToString(),payload, tenantId.ToString());
+        SetUp(command,aggregateRootId.ToString(),payload, partitionKey.ToString());
     }
     
     private void SetUp(NostifyCommand command, string aggregateRootId, object payload, string partitionKey)
