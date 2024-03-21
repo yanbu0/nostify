@@ -18,12 +18,12 @@ public interface IAggregate
     ///<summary>
     ///String value for aggregate name
     ///</summary>
-    public static string aggregateType;
+    public static abstract string aggregateType { get; }
 
     ///<summary>
     ///Current State container name
     ///</summary>
-    public static string currentStateContainerName => $"{aggregateType}CurrentState";
+    public static abstract string currentStateContainerName { get; }
 
 
 }

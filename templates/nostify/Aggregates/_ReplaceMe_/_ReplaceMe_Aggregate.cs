@@ -12,6 +12,7 @@ public class _ReplaceMe_ : NostifyObject, IAggregate
     public bool isDeleted { get; set; } = false;
 
     public static string aggregateType => "_ReplaceMe_";
+    public static string currentStateContainerName => $"{aggregateType}CurrentState";
 
     public override void Apply(Event eventToApply)
     {

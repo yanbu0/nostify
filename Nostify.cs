@@ -267,13 +267,13 @@ namespace nostify
         ///<inheritdoc />
         public async Task<Container> GetCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate
         {
-            return await GetContainerAsync(IAggregate.currentStateContainerName, false, partitionKeyPath);
+            return await GetContainerAsync(T.currentStateContainerName, false, partitionKeyPath);
         }
 
         ///<inheritdoc />
         public async Task<Container> GetBulkCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate
         {
-            return await GetContainerAsync(IAggregate.currentStateContainerName, true, partitionKeyPath);
+            return await GetContainerAsync(T.currentStateContainerName, true, partitionKeyPath);
         }
 
         ///<inheritdoc />
