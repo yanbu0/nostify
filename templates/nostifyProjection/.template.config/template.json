@@ -27,7 +27,7 @@
         {
           "modifiers": [
             {
-              "exclude": [ "*.csproj", ".vscode/**/*", "_ReplaceMe_Command.cs" ]
+              "exclude": [ "*.csproj", ".vscode/**/*"]
             }
           ]
         }
