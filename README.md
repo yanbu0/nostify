@@ -27,11 +27,15 @@ To run locally you will need to install some dependencies:
 - Confluent CLI: https://docs.confluent.io/confluent-cli/current/install.html
 - Cosmos Emulator: https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-develop-emulator?tabs=windows%2Ccsharp&pivots=api-nosql
   
+To install nostify and templates:
+
+```powershell
+dotnet new install nostify
+```
 
 To spin up a nostify project:
 
 ```powershell
-dotnet new install nostify
 dotnet new nostify -ag <Your_Aggregate_Name> -p <Port Number To Run on Locally>
 dotnet restore
 ```
@@ -43,7 +47,6 @@ This will install the templates, create the default project based off your Aggre
 The library is designed to be used in a microservice pattern (although not necessarily required) using an Azure Function App api and Cosmos as the event store. Kafka serves as the messaging backpane, and projections can be stored in Cosmos or Redis depending on query needs.
 You should set up a Function App and Cosmos per Aggregate Microservice.
 ![image](https://github.com/yanbu0/nostify/assets/26099646/be657901-89c0-4310-9502-61b2125368ab)
-
 
 Projections that contain data from multiple Aggregates can be updated by Event Handlers from other microservices.  Why would this happen?  Well say you have a Bank Account record.  If we were using a relational database for a data store we'd have to either run two queries or do a join to get the Bank Account and the name of the Account Manager.  Using the CQRS model, we can "pre-render" a projection that contains both the account info and the account manager info without having to join tables together.  This example is obviously very simple, but in a complex environment where you're joining together dozens of tables to create a DTO to send to the user interface and returning 100's of thousands or millions of records, this type of archtecture can dramatically improve BOTH system performance and throughput.
 

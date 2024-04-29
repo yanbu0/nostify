@@ -30,7 +30,7 @@ public class Create_ReplaceMe_
         dynamic new_ReplaceMe_ = await req.Body.ReadFromRequestBodyAsync(true);
 
         //Need new id for aggregate root since its new
-        string newId = Guid.NewGuid().ToString();
+        Guid newId = Guid.NewGuid();
         new_ReplaceMe_.id = newId;
         
         Event pe = new Event(_ReplaceMe_Command.Create, newId, new_ReplaceMe_);
