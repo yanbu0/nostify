@@ -19,7 +19,7 @@ public class On_ProjectionName_Updated
     [Function(nameof(On_ProjectionName_Updated))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Update__ReplaceMe_",
-                ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();

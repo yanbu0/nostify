@@ -21,7 +21,7 @@ public class On_ProjectionName_Created
     [Function(nameof(On_ProjectionName_Created))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Create__ReplaceMe_",
-                ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();
@@ -34,6 +34,8 @@ public class On_ProjectionName_Created
 
                 //Create projection
                 _ProjectionName_ proj = new _ProjectionName_();
+                //Apply create
+                proj.Apply(newEvent);
                 //Get external data
                 Event externalData = await proj.SeedExternalDataAsync(_nostify, _httpClient);
                 //Update projection container

@@ -20,7 +20,7 @@ public class On_ProjectionName_Deleted
     [Function(nameof(On_ProjectionName_Deleted))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Delete__ReplaceMe_",
-                ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();

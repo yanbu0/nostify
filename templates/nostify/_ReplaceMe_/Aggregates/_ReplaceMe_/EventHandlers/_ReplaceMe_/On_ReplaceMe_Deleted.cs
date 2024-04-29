@@ -20,7 +20,7 @@ public class On_ReplaceMe_Deleted
     [Function(nameof(On_ReplaceMe_Deleted))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Delete__ReplaceMe_",
-                ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();

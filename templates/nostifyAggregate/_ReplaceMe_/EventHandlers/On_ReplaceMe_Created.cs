@@ -19,7 +19,7 @@ public class On_ReplaceMe_Created
     [Function(nameof(On_ReplaceMe_Created))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Create__ReplaceMe_",
-                ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();
