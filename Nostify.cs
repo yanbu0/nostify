@@ -374,9 +374,11 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task DoBulkUpsertAsync<T>(Container container, List<T> itemList)
-    {
-        await DoBulkUpsertAsync<T>(container.Id, itemList);
+    public async Task DoBulkUpsertAsync<T>(Container bulkContainer, List<T> itemList)
+    {        
+        List<Task> taskList = new List<Task>();
+        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
+        await Task.WhenAll(taskList);
     }
 
     ///<inheritdoc />
@@ -384,10 +386,7 @@ public class Nostify : INostify
     {
         var db = await this.Repository.GetDatabaseAsync(true);
         var bulkContainer = db.GetContainer(containerName);
-
-        List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
-        await Task.WhenAll(taskList);
+        await DoBulkUpsertAsync<T>(bulkContainer, itemList);
     }
 
 }
