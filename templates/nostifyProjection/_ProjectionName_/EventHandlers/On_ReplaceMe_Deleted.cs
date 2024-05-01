@@ -1,24 +1,25 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using nostify;
-using Newtonsoft.Json;
 using Microsoft.Azure.Functions.Worker;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace _ReplaceMe__Service;
 
-public class On_ProjectionName_Updated
+public class On_ReplaceMe_Deleted
 {
     private readonly INostify _nostify;
-
-    public On_ProjectionName_Updated(INostify nostify)
+    
+    
+    public On_ReplaceMe_Deleted(INostify nostify)
     {
         this._nostify = nostify;
     }
 
-    [Function(nameof(On_ProjectionName_Updated))]
+    [Function(nameof(On_ReplaceMe_Deleted))]
     public async Task Run([KafkaTrigger("BrokerList",
-                "Update__ReplaceMe_",
+                "Delete__ReplaceMe_",
                 ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
@@ -29,17 +30,17 @@ public class On_ProjectionName_Updated
             {
                 //Update projection container
                 Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
-                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
-            }                       
-
+                //Remove from the container.  If you wish to set isDeleted instead, remove the code below and ApplyAndPersist the Event
+                await projectionContainer.DeleteItemAsync<_ProjectionName_>(newEvent.id);
+            }
         }
         catch (Exception e)
         {
-            await _nostify.HandleUndeliverableAsync(nameof(On_ProjectionName_Updated), e.Message, newEvent);
+            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Deleted), e.Message, newEvent);
         }
 
         
+        
     }
-    
 }
 
