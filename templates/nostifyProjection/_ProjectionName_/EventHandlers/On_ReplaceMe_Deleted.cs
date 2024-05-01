@@ -20,7 +20,7 @@ public class On_ReplaceMe_Deleted
     [Function(nameof(On_ReplaceMe_Deleted))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Delete__ReplaceMe_",
-                ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();
@@ -28,9 +28,10 @@ public class On_ReplaceMe_Deleted
         {
             if (newEvent != null)
             {
-                //Update aggregate current state projection
-                Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
-                await currentStateContainer.ApplyAndPersistAsync<_ReplaceMe_>(newEvent);
+                //Update projection container
+                Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
+                //Remove from the container.  If you wish to set isDeleted instead, remove the code below and ApplyAndPersist the Event
+                await projectionContainer.DeleteItemAsync<_ProjectionName_>(newEvent.id);
             }
         }
         catch (Exception e)

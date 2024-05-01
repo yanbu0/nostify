@@ -150,7 +150,7 @@ namespace nostify
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvents">The Event list to apply and persist.</param>
         ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey = default) where T : NostifyObject, new()
+        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
         {
             T? aggregate;
             Event firstEvent = newEvents.First();
@@ -180,14 +180,36 @@ namespace nostify
         }
 
         ///<summary>
+        ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers. Uses partitionKey from first Event in List.
+        ///</summary>
+        ///<param name="container">Container where the projection to update lives</param>
+        ///<param name="newEvents">The Event list to apply and persist.</param>
+        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents) where T : NostifyObject, new()
+        {
+            Event firstEvent = newEvents.First();
+
+            await container.ApplyAndPersistAsync<T>(newEvents, firstEvent.partitionKey.ToPartitionKey());
+        }
+
+        ///<summary>
         ///Applies Event and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
         ///</summary>
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvent">The Event object to apply and persist.</param>
         ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey = default) where T : NostifyObject, new()
+        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
         {
             await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, partitionKey);
+        }
+
+        ///<summary>
+        ///Applies Event and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
+        ///</summary>
+        ///<param name="container">Container where the projection to update lives</param>
+        ///<param name="newEvent">The Event object to apply and persist.</param>
+        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
+        {
+            await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, newEvent.partitionKey.ToPartitionKey());
         }
 
         ///<summary>

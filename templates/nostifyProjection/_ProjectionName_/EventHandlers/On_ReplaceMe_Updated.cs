@@ -7,19 +7,19 @@ using Newtonsoft.Json.Linq;
 
 namespace _ReplaceMe__Service;
 
-public class On_ProjectionName_Updated
+public class On_ReplaceMe_Updated
 {
     private readonly INostify _nostify;
 
-    public On_ProjectionName_Updated(INostify nostify)
+    public On_ReplaceMe_Updated(INostify nostify)
     {
         this._nostify = nostify;
     }
 
-    [Function(nameof(On_ProjectionName_Updated))]
+    [Function(nameof(On_ReplaceMe_Updated))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Update__ReplaceMe_",
-                ConsumerGroup = "$Default")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();
@@ -35,7 +35,7 @@ public class On_ProjectionName_Updated
         }
         catch (Exception e)
         {
-            await _nostify.HandleUndeliverableAsync(nameof(On_ProjectionName_Updated), e.Message, newEvent);
+            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Updated), e.Message, newEvent);
         }
 
         

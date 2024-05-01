@@ -9,10 +9,10 @@ namespace nostify;
 /// </summary>
 public interface IProjection
 {
-    //<summary>
+    ///<summary>
     ///Name of container the projection is stored in.  Each Projection must have its own unique container name per microservice.
     ///</summary>
-    public static string containerName;
+    public static abstract string containerName { get; }
 
     ///<summary>
     ///Returns an Event to Apply() to the Projection when the root Aggregate is initially created.
