@@ -19,7 +19,7 @@ public class Get_ReplaceMe_
     }
 
     [Function(nameof(Get_ReplaceMe_))]
-    public async Task<IActionResult> Run(
+    public async Task<_ReplaceMe_> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
         ILogger log)
@@ -30,7 +30,7 @@ public class Get_ReplaceMe_
                             .Where(x => x.id == aggregateId)
                             .FirstOrDefaultAsync();
                             
-        return new OkObjectResult(retObj);
+        return retObj;
     }
 }
 

@@ -19,7 +19,7 @@ public class GetAll_ReplaceMe_s
     }
 
     [Function(nameof(GetAll_ReplaceMe_s))]
-    public async Task<IActionResult> Run(
+    public async Task<List<_ReplaceMe_>> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_")] HttpRequestData req,
         ILogger log)
     {
@@ -29,7 +29,7 @@ public class GetAll_ReplaceMe_s
                             .ReadAllAsync();
 
 
-        return new OkObjectResult(allList);
+        return allList;
     }
 }
 
