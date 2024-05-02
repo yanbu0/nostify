@@ -19,7 +19,7 @@ public class Rehydrate_ReplaceMe_
     }
 
     [Function(nameof(Rehydrate_ReplaceMe_))]
-    public async Task<IActionResult> Run(
+    public async Task<_ReplaceMe_> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Rehydrate_ReplaceMe_/{aggregateId:guid}/{datetime:datetime?}")] HttpRequestData req,
         Guid aggregateId,
         DateTime? dateTime,
@@ -27,7 +27,7 @@ public class Rehydrate_ReplaceMe_
     {
         _ReplaceMe_ retObj = await _nostify.RehydrateAsync<_ReplaceMe_>(aggregateId, dateTime);
                             
-        return new OkObjectResult(retObj);
+        return retObj;
     }
 }
 

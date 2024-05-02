@@ -19,7 +19,7 @@ public class GetAll_ProjectionName_s
     }
 
     [Function(nameof(GetAll_ProjectionName_s))]
-    public async Task<IActionResult> Run(
+    public async Task<List<_ProjectionName_>> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ProjectionName_")] HttpRequestData req,
         ILogger log)
     {
@@ -29,7 +29,7 @@ public class GetAll_ProjectionName_s
                             .ReadAllAsync();
 
 
-        return new OkObjectResult(allList);
+        return allList;
     }
 
 }

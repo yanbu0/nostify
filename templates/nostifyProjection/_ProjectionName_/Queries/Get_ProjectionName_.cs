@@ -19,7 +19,7 @@ public class Get_ProjectionName_
     }
 
     [Function(nameof(Get_ProjectionName_))]
-    public async Task<IActionResult> Run(
+    public async Task<_ProjectionName_> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ProjectionName_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
         ILogger log)
@@ -30,7 +30,7 @@ public class Get_ProjectionName_
                             .Where(x => x.id == aggregateId)
                             .FirstOrDefaultAsync();
                             
-        return new OkObjectResult(retObj);
+        return retObj;
     }
 }
 
