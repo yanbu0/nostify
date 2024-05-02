@@ -20,14 +20,26 @@ public class Event
     ///<param name="command">Command to persist</param>
     ///<param name="aggregateRootId">Id of the root aggregate to perform the command on.  Must be a Guid string</param>
     ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
+    ///<param name="userId">ID of User responsible for Event.</param>
     ///<param name="partitionKey">Partition key to apply Event to.</param>
-    public Event(NostifyCommand command, string aggregateRootId, object payload, string partitionKey)
+    public Event(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey)
     {
-        if (!Guid.TryParse(aggregateRootId, out _)){
-            throw new ArgumentException("String is not parsable to a Guid");
+        Guid aggGuid;
+        if (!Guid.TryParse(aggregateRootId, out aggGuid)){
+            throw new ArgumentException("Aggregate Root ID is not parsable to a Guid");
         }
 
-        SetUp(command,aggregateRootId,payload, partitionKey);
+        Guid userGuid;
+        if (!Guid.TryParse(userId, out userGuid)){
+            throw new ArgumentException("User ID is not parsable to a Guid");
+        }
+
+        Guid pKey;
+        if (!Guid.TryParse(partitionKey, out pKey)){
+            throw new ArgumentException("Partition Key is not parsable to a Guid");
+        }
+
+        SetUp(command, aggGuid, payload, userGuid, pKey);
     }
 
     ///<summary>
@@ -36,13 +48,14 @@ public class Event
     ///<param name="command">Command to persist</param>
     ///<param name="aggregateRootId">Id of the root aggregate to perform the command on.</param>
     ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
+    ///<param name="userId">ID of User responsible for Event.</param>
     ///<param name="partitionKey">Tenant ID to apply Event to.</param>
-    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid partitionKey = default)
+    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
     {
-        SetUp(command,aggregateRootId.ToString(),payload, partitionKey.ToString());
+        SetUp(command, aggregateRootId, payload, userId, partitionKey);
     }
     
-    private void SetUp(NostifyCommand command, string aggregateRootId, object payload, string partitionKey)
+    private void SetUp(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId, Guid partitionKey)
     {
         this.aggregateRootId = aggregateRootId;
         this.id = Guid.NewGuid();
@@ -65,8 +78,12 @@ public class Event
     ///<summary>
     ///Partition key to apply event to
     ///</summary>
-    public string partitionKey { get; set; }
+    public Guid partitionKey { get; set; }
 
+    ///<summary>
+    ///Id of user
+    ///</summary>
+    public Guid userId { get; set; }
 
     ///<summary>
     ///Id of event
@@ -84,7 +101,7 @@ public class Event
     ///<para>
     ///<strong>The series of events for an Aggregate should have the same key.</strong>
     ///</para>
-    public string aggregateRootId { get; set; }
+    public Guid aggregateRootId { get; set; }
     
     ///<summary>
     ///Internal use only
