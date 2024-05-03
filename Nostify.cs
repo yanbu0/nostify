@@ -152,7 +152,7 @@ public class Nostify : INostify
     public async Task PersistEventAsync(Event eventToPersist)
     {
         var eventContainer = await GetEventStoreContainerAsync();
-        await eventContainer.CreateItemAsync(eventToPersist, new PartitionKey(eventToPersist.aggregateRootId));
+        await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
     }
 
     ///<inheritdoc />
@@ -189,7 +189,7 @@ public class Nostify : INostify
 
             List<Task> taskList = new List<Task>();
             events.ForEach(pe => {
-                taskList.Add(eventContainer.CreateItemAsync(pe, new PartitionKey(pe.aggregateRootId))
+                taskList.Add(eventContainer.CreateItemAsync(pe,pe.aggregateRootId.ToPartitionKey())
                         .ContinueWith(itemResponse =>
                         {
                             if (!itemResponse.IsCompletedSuccessfully)
@@ -213,7 +213,7 @@ public class Nostify : INostify
     {
         var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
 
-        await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), new PartitionKey(eventToHandle.aggregateRootId));
+        await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), eventToHandle.aggregateRootId.ToPartitionKey());
     }
 
     ///<inheritdoc />
@@ -223,7 +223,7 @@ public class Nostify : INostify
         
         T rehyd = new T();
         List<Event> peList = await eventContainer.GetItemLinqQueryable<Event>()
-            .Where(pe => pe.aggregateRootId == id.ToString()
+            .Where(pe => pe.aggregateRootId == id
                 && (!untilDate.HasValue || pe.timestamp <= untilDate)
             )
             .ReadAllAsync();
@@ -243,7 +243,7 @@ public class Nostify : INostify
         
         T rehydratedProjection = new T();
         List<Event> eventList = await eventContainer.GetItemLinqQueryable<Event>()
-            .Where(e => e.aggregateRootId == id.ToString())
+            .Where(e => e.aggregateRootId == id)
             .ReadAllAsync();
 
         //Seed returns an update event and queries all external data
@@ -310,7 +310,7 @@ public class Nostify : INostify
 
         Container eventStore = await GetEventStoreContainerAsync();
         //Get list of distinct aggregate root ids
-        List<string> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<Event>()
+        List<Guid> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<Event>()
             .Select(pe => pe.aggregateRootId)
             .Distinct()
             .ReadAllAsync();
