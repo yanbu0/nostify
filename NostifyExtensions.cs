@@ -106,6 +106,14 @@ namespace nostify
         }
 
         ///<summary>
+        ///Helps with creating a partition key from string when there are conflicting class names
+        ///</summary>
+        public static PartitionKey ToPartitionKey(this Guid value)
+        {
+            return new PartitionKey(value.ToString());
+        }
+
+        ///<summary>
         ///Converts string to Guid if it can
         ///</summary>
         public static Guid ToGuid(this string value)
@@ -161,12 +169,10 @@ namespace nostify
             }
             else 
             {
-                Guid aggId = firstEvent.aggregateRootId.ToGuid();
-                
                 //Update container based off aggregate root id
                 aggregate = (await container
                     .GetItemLinqQueryable<T>()
-                    .Where(agg => agg.id == aggId)
+                    .Where(agg => agg.id == firstEvent.aggregateRootId)
                     .ReadAllAsync())
                     .FirstOrDefault();
             }
