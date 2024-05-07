@@ -21,7 +21,7 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 To run locally you will need to install some dependencies:
 
-- Azurite: npm install azurite
+- Azurite: `npm install -g azurite`
 - Azurite VS Code Extension: https://marketplace.visualstudio.com/items?itemName=Azurite.azurite
 - Docker Desktop: https://www.docker.com/products/docker-desktop/
 - Confluent CLI: https://docs.confluent.io/confluent-cli/current/install.html
