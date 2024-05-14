@@ -150,7 +150,61 @@ dotnet new nostifyProjection -ag <Base_Aggregate_Name> --projectionName <Project
 
 ### Event
 
-An `Event` captures a state change to the application.  Generally, this is caused by the user issuing a command such as "save".  When a command comes in from the front end to the endpoint, the http triggers a command handler function which validates the command, composes an `Event` and persists it to the event store.
+An `Event` captures a state change to the application.  Generally, this is caused by the user issuing a command such as "save".  When a command comes in from the front end to the endpoint, the http triggers a command handler function which validates the command, composes an `Event` and persists it to the event store.  Note that while a `Command` is always an `Event`, an `Event` is not necessarily always a `Command`.  It is possible for an `Event` to originate elsewhere, say from an IoT device for example.
+
+In a typical scenario, the `Event` is created in the command handler, and then saved to the event store:
+
+```C#
+Event pe = new Event(TestCommand.Create, newId, newTest);
+await _nostify.PersistEventAsync(pe);
+```
+
+When a command becomes an `Event` the text name of the command becomes the topic name published to Kafka, so for this example the event handler, `OnTestCreated` would subscribe to the `Create_Test` topic.
+
+### Command
+
+A `Command` is an `Event` that comes from the user interface.  All `Aggregate` classes should have a matching `Command` class where you must register all commands that the user may issue.  This class must extend the `NostifyCommand` class.  It will look like this by default:
+
+```C#
+public class TestCommand : NostifyCommand
+{
+  ///<summary>
+  ///Base Create Command
+  ///</summary>
+  public static readonly TestCommand Create = new TestCommand("Create_Test", true);
+  ///<summary>
+  ///Base Update Command
+  ///</summary>
+  public static readonly TestCommand Update = new TestCommand("Update_Test");
+  ///<summary>
+  ///Base Delete Command
+  ///</summary>
+  public static readonly TestCommand Delete = new TestCommand("Delete_Test");
+
+
+  public TestCommand(string name, bool isNew = false)
+  : base(name, isNew)
+  {
+
+  }
+}
+```
+
+The commands may then be handled in the `Apply()` method:
+
+```C#
+public override void Apply(Event eventToApply)
+{
+    if (eventToApply.command == _ReplaceMe_Command.Create || eventToApply.command == _ReplaceMe_Command.Update)
+    {
+        this.UpdateProperties<_ReplaceMe_>(eventToApply.payload);
+    }
+    else if (eventToApply.command == _ReplaceMe_Command.Delete)
+    {
+        this.isDeleted = true;
+    }
+}
+```
 
 ## Setup
 
@@ -261,58 +315,59 @@ There is a Queries folder to contain the queries for the Aggregate. Three basic 
 
 To do your own query, simply add a new Azure Function per query, inject `HttpClient` and `INostify`, grab the container you want to query, and run a query with `GetItemLinqQueryable<T>()` using Linq syntax. Below is an example of the basic get single instance query included in the template generation.
 
-  ```C#
-
+```C#
 public  class  GetTest
-
 {
+  private  readonly  HttpClient  _client;
+  private  readonly  INostify  _nostify;
 
-  
+  public  GetTest(HttpClient  httpClient, INostify  nostify)
+  {
+    this._client = httpClient;
+    this._nostify = nostify;
+  }    
 
-private  readonly  HttpClient  _client;
+  [Function(nameof(GetTest))]
+  public  async  Task<IActionResult> Run(
+  [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Test/{aggregateId:guid}")] HttpRequestData  req,
+  Guid  aggregateId,
+  ILogger  log)
+  {
+    Container  currentStateContainer = await  _nostify.GetCurrentStateContainerAsync<Test>();
 
-private  readonly  INostify  _nostify;
+    Test  retObj = await  currentStateContainer
+                          .GetItemLinqQueryable<Test>()
+                          .Where(x => x.id == aggregateId)
+                          .FirstOrDefaultAsync();
 
-public  GetTest(HttpClient  httpClient, INostify  nostify)
-
-{
-
-this._client = httpClient;
-
-this._nostify = nostify;
-
+    return  new  OkObjectResult(retObj);
+  }
 }
-
-  
-
-[Function(nameof(GetTest))]
-
-public  async  Task<IActionResult> Run(
-
-[HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Test/{aggregateId:guid}")] HttpRequestData  req,
-
-Guid  aggregateId,
-
-ILogger  log)
-
-{
-
-Container  currentStateContainer = await  _nostify.GetCurrentStateContainerAsync<Test>();
-
-Test  retObj = await  currentStateContainer
-
-.GetItemLinqQueryable<Test>()
-
-.Where(x => x.id == aggregateId)
-
-.FirstOrDefaultAsync();
-
-return  new  OkObjectResult(retObj);
-
-}
-
-}
-
 ```
 
-### Add
+### Create New Aggregate
+
+One of the "out of the box" commands handled by `nostify` is the `Create_Aggregate` command.  The template logic flow is:
+
+- Create command is inbound via http post from user interface.  Typically this would indicate the user saved a new record.
+- Body of post must contain JSON with all the properties to set on create. The `Apply()` method in the aggregate will call `UpdateProperties<T>()` which will match any properties in the JSON to the aggregate and set them automatically.  Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored.  As such it is only necessary to send the properties that you want to set over the wire.
+- In a typical application there would be validation of the command occuring, validating say that all required properties are set.  `nostify` does not dictate a validation pattern, use the one that makes the most sense for your application.  There would probably be some kind of auth here as well for most apps.
+- The command handler creates an `Event` and persists it to the event store.  Note that the command registered must indicate a new record is being created by setting the `isNew` parameter to true:
+`public static readonly TestCommand Create = new TestCommand("Create_Test", true);`
+- The event publisher function is triggered by an event being written to the event store and publishes the event to Kafka.
+- The create handler that is subscribed to the event will be triggered and update the projection containing the current state for the aggregate.
+
+Other projections added will need to contain their own logic for handling the create event.
+
+
+### Update Aggregate
+
+Updating the aggregate and its base current state projection is also handled by the templates. The template logic flow is:
+
+- Update command comes in via http put from user interface.  Typically this would indicate a user saved an existing record. (Yes you can use patch if you want, it's technically more correct in most cases, this might be the case in future releases.)
+- Body of the request must contain a JSON object with a property `id`
+
+
+
+
+
