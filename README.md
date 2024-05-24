@@ -137,7 +137,7 @@ The solution to this in `nostify` is the projection pattern.  A projection defin
 - No command is ever performed on a projection, they are updated by subscribing to and handling events on their component aggregates.
 - A projection will have a "base" aggregate and the `id` property of the projection will match the `id` property of the base aggregate.
 - A projection must implement the `NostifyObject` abstract class and the `IProjection` interface.
-- The `IProjection.SeedExternalDataAsync()` method must be implemented to handle getting data from aggregates other than the base aggregate on create.  It is called in the even handler for create of the base aggregate.
+- The `IProjection.SeedExternalDataAsync()` method must be implemented to handle getting data from aggregates other than the base aggregate on create.  It is called in the event handler for create of the base aggregate.
 - The `IProjection.InitContainerAsync()` method must contain logic to query all the data necessary to populate the entire projection container, from base aggregate and external aggregates.  It is called manually when first creating the container, or when having to recreate the container to remedy data corruption.
 
 #### Create
@@ -357,17 +357,109 @@ One of the "out of the box" commands handled by `nostify` is the `Create_Aggrega
 - The event publisher function is triggered by an event being written to the event store and publishes the event to Kafka.
 - The create handler that is subscribed to the event will be triggered and update the projection containing the current state for the aggregate.
 
-Other projections added will need to contain their own logic for handling the create event.
+Other projections added will need to contain their own logic for handling the create event.  The event handler for update naming convention is: `On<AggregateName>Created`.  For example: "OnLocationCreated".
 
 
 ### Update Aggregate
 
 Updating the aggregate and its base current state projection is also handled by the templates. The template logic flow is:
 
-- Update command comes in via http put from user interface.  Typically this would indicate a user saved an existing record. (Yes you can use patch if you want, it's technically more correct in most cases, this might be the case in future releases.)
-- Body of the request must contain a JSON object with a property `id`
+- Update command comes in via http patch from user interface.  Typically this would indicate a user saved an existing record.
+- Body of the request must contain a JSON object with a property `id` in the default template.
+- The default event handler for the current state container will query the container for the aggregate id, get the current state, apply the update, then save the update to the container.  This is contained in the `ApplyAndPersistAsync<T>()` method.
+- Body of patch must contain JSON with all the properties to update. The `Apply()` method in the aggregate will call `UpdateProperties<T>()` which will match any properties in the JSON to the aggregate and set them automatically.  Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored.  As such it is only necessary to send the properties that you want to set over the wire.
 
+The function handling the update event naming convention is: `On<AggregateName>Updated`, for example: "OnLocationUpdated".
 
+### Delete Aggregate
+
+Deleting an aggregate by default does not actually remove it from the current state container, it simple sets the `isDeleted` property to true.  Template logic flow is:
+
+- Delete command comes in via http delete from user interface.  This indicates the user chose to delete an existing record.
+- Url must contain a guid that matches the `id` property of the aggregate instance to mark as deleted.
+- The command handler creates an `Event` and persists it to the event store.
+- The `Event` is published to Kafka and then the event handler function applies the `Event` to the current state, which sets the `isDeleted` property to true.
+- Queries to the current state container should take into account that it may contain deleted aggregates.
+
+### Create New Projection Container
+
+When adding a new `Projection` you must take into account the `Aggregate` records that may already exist and account for them in the `InitContainerAsync()` method.  When the projection is first added, it implements `NosifyObject` and `IProjection` in the template.  `IProjection` requires the `InitContainerAsync()` method, but, since we don't know the details of the projection at the time of create, the template simply contains a `throw new NotImplementedException()`.  
+
+You must implement the method such that calling it gets all of the data necessary to either create or re-create the projection container.  An example for a projection called `LocationWithSite` with the "base" aggregate of `Location` that also references an aggregate `Site` that is contained in a seperate service:
+
+```C#
+public static async Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null)
+{
+    var lwsContainer = await nostify.GetBulkProjectionContainerAsync<LocationWithSite>();
+
+    List<SiteName> allSitesWithName = await httpClient.GetFromJsonAsync<List<SiteName>>("http://localhost:7071/api/Site") ?? new List<SiteName>();
+    List<Location> locations = await (await nostify.GetCurrentStateContainerAsync<Location>()).GetItemLinqQueryable<Location>().ReadAllAsync();
+
+    var lwsList = new List<LocationWithSite>();
+    locations.ForEach(l =>{
+        var lws = new LocationWithSite(){
+            id = l.id,
+            siteId = l.siteId,
+            isDeleted = l.isDeleted,
+            locationName = l.locationName,
+            siteName = allSitesWithName.FirstOrDefault(s => s.id == l.siteId)?.siteName
+        };
+        
+        lwsList.Add(lws);
+    });
+
+    await nostify.DoBulkUpsertAsync(lwsContainer, lwsList);
+}
+```
+
+Note that the code gets the projection container with "bulk" mode enabled to be able to handle large amounts of data writes.  It then queries the `Site` service and gets all.  If you have substaintial amounts of data, you may need to loop through multiple queries. (If there are more than one aggregate other than the base aggregate in your implementation, you will need additional queries.) After that, it grabs all instances of the base aggregate and then composes a `List<LocationWithSite>` with the appriopriate values.  It then saves them to the container, and is able to use the `DoBulkUpsert()` which will write to the container across many threads.
+
+Now that the method is implemented, the container can be initialized and populated with data by calling `LocationWithSite.InitContainerAsync()`.  The template creates an http triggered function to do this for you with a simple http post.
+
+### Create New Projection
+
+A `Projection` will have a "base" aggregate when it is defined. Projection create event handlers should subscribe to the create event of the base aggregate.
+
+Adding a new instance of a projection requires implementing a method in the `IProjection` interface: `SeedExternalDataAsync()`. This method grabs all data from aggregates external to the base aggregate for this particular instance. This is different from the Init function which grabs for all since we're only creating a single record in the projection container.
+
+This method must query any external data needed and return an `Event` to update the projection.  For our example of `LocationWithSite`:
+
+```C#
+public async Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null)
+{
+    string? siteName = null;
+    if (siteId != null)
+    {
+        //Site Name
+        var siteWithName = await httpClient.GetFromJsonAsync<SiteName>($"http://localhost:7071/api/Site/{siteId}");
+        siteName = siteWithName?.siteName;
+    }
+    Event e = new Event(LocationCommand.Update, id, new { id, siteName });
+    return e;
+}
+```
+
+This method is called in the event handler function to update the projection with any exsiting external data and then applied and saved to the projection container along with the `Event` signifying the creation of the `Location`
+
+```C#
+ //Get projection container
+  Container projectionContainer = await _nostify.GetProjectionContainerAsync<LocationWithSite>();
+
+  //Create projection
+  LocationWithSite proj = new LocationWithSite();
+  //Apply
+  proj.Apply(newEvent);
+  //Get external data
+  Event externalData = await proj.SeedExternalDataAsync(_nostify, _httpClient);
+  //Update projection container
+  await projectionContainer.ApplyAndPersistAsync<LocationWithSite>(new List<Event>(){locationCreated,externalData});
+  ```
+
+  The naming convention of the event handler is: `On<Base Aggregate Name>Created_For_<Projection Name>`.  For example: "OnLocationCreated_For_LocationWithSite".
+
+### Update Projection
+
+### Delete Projection
 
 
 
