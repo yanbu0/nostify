@@ -357,7 +357,7 @@ One of the "out of the box" commands handled by `nostify` is the `Create_Aggrega
 - The event publisher function is triggered by an event being written to the event store and publishes the event to Kafka.
 - The create handler that is subscribed to the event will be triggered and update the projection containing the current state for the aggregate.
 
-Other projections added will need to contain their own logic for handling the create event.  The event handler for update naming convention is: `On<AggregateName>Created`.  For example: "OnLocationCreated".
+Other projections added will need to contain their own logic for handling the create event.  The event handler for update naming convention is: `On<AggregateName>Created`.  For example: "OnTestCreated".
 
 
 ### Update Aggregate
@@ -368,8 +368,9 @@ Updating the aggregate and its base current state projection is also handled by 
 - Body of the request must contain a JSON object with a property `id` in the default template.
 - The default event handler for the current state container will query the container for the aggregate id, get the current state, apply the update, then save the update to the container.  This is contained in the `ApplyAndPersistAsync<T>()` method.
 - Body of patch must contain JSON with all the properties to update. The `Apply()` method in the aggregate will call `UpdateProperties<T>()` which will match any properties in the JSON to the aggregate and set them automatically.  Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored.  As such it is only necessary to send the properties that you want to set over the wire.
+- There may be more than one event to subscribe to to update an aggregate if you implement a more complex object. For instance, if you have a property of `List<T>` you may have another command that is issued from the UI that does an http PUT to replace objects in the list.
 
-The function handling the update event naming convention is: `On<AggregateName>Updated`, for example: "OnLocationUpdated".
+The function handling the update event naming convention is: `On<AggregateName>Updated`, for example: "OnTestUpdated".
 
 ### Delete Aggregate
 
@@ -383,38 +384,115 @@ Deleting an aggregate by default does not actually remove it from the current st
 
 ### Create New Projection Container
 
+Note: for the following `Projection` examples we will be using the following projection `TestWithStatus` as an example:
+
+```C#
+public class TestWithStatus : NostifyObject, IProjection
+{
+    public TestWithStatus()
+    {
+
+    }
+
+    public static string containerName => "TestWithStatus";
+
+    public bool isDeleted { get; set; }
+
+    //Test properites
+    public string testnName { get; set; }
+    public Guid? statusId { get; set; }
+
+    //Status properties
+    public string? statusName { get; set; }
+
+    public override void Apply(Event eventToApply)
+    {
+        //Should update the command tree below to not use string matching
+        if (eventToApply.command.name.Equals("Create_Test") || eventToApply.command.name.Equals("Update_Test") || eventToApply.command.name.Equals("Update_Status"))
+        {
+            this.UpdateProperties<TestWithStatus>(eventToApply.payload);
+        }
+        else if (eventToApply.command.name.Equals("Delete_Test"))
+        {
+            this.isDeleted = true;
+        }
+    }
+
+    public class SiteName
+    {
+        public Guid id { get; set; }
+        public string siteName { get; set; }
+    }
+
+    public async Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null)
+    {
+        string? statusName = null;
+        if (statusId != null)
+        {
+            //Site Name
+            var status = await httpClient.GetFromJsonAsync<SiteName>($"http://localhost:7071/api/Status/{statusId}");
+            statusName = status?.statusName;
+        }
+        Event e = new Event(TestCommand.Update, id, new { id, statusName });
+        return e;
+    }
+
+    public static async Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null)
+    {
+        var testWithStatusContainer = await nostify.GetBulkProjectionContainerAsync<TestWithStatus>();
+
+        List<StatusName> allStatuses = await httpClient.GetFromJsonAsync<List<StatusName>>("http://localhost:7071/api/Status") ?? new List<StatusName>();
+        List<Test> tests = await (await nostify.GetCurrentStateContainerAsync<Test>()).GetItemLinqQueryable<Test>().ReadAllAsync();
+
+        var twsList = new List<TestWithStatus>();
+        test.ForEach(t =>{
+            var tws = new TestWithStatus(){
+                id = t.id,
+                statusId = t.statusId,
+                testName = t.testName,
+                statusName = allStatuses.FirstOrDefault(s => s.id == l.statusId)?.statusName
+            };
+            
+            twsList.Add(tws);
+        });
+
+        await nostify.DoBulkUpsertAsync(testWithStatusContainer, twsList);
+    }
+
+}
+```
+
 When adding a new `Projection` you must take into account the `Aggregate` records that may already exist and account for them in the `InitContainerAsync()` method.  When the projection is first added, it implements `NosifyObject` and `IProjection` in the template.  `IProjection` requires the `InitContainerAsync()` method, but, since we don't know the details of the projection at the time of create, the template simply contains a `throw new NotImplementedException()`.  
 
-You must implement the method such that calling it gets all of the data necessary to either create or re-create the projection container.  An example for a projection called `LocationWithSite` with the "base" aggregate of `Location` that also references an aggregate `Site` that is contained in a seperate service:
+You must implement the method such that calling it gets all of the data necessary to either create or re-create the projection container.  An example for a projection called `TestWithStatus` with the "base" aggregate of `Test` that also references an aggregate `Status` that is contained in a seperate service:
 
 ```C#
 public static async Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null)
 {
-    var lwsContainer = await nostify.GetBulkProjectionContainerAsync<LocationWithSite>();
+    var testWithStatusContainer = await nostify.GetBulkProjectionContainerAsync<TestWithStatus>();
 
-    List<SiteName> allSitesWithName = await httpClient.GetFromJsonAsync<List<SiteName>>("http://localhost:7071/api/Site") ?? new List<SiteName>();
-    List<Location> locations = await (await nostify.GetCurrentStateContainerAsync<Location>()).GetItemLinqQueryable<Location>().ReadAllAsync();
+    List<StatusName> allStatuses = await httpClient.GetFromJsonAsync<List<StatusName>>("http://localhost:7071/api/Status") ?? new List<StatusName>();
+    List<Test> tests = await (await nostify.GetCurrentStateContainerAsync<Test>()).GetItemLinqQueryable<Test>().ReadAllAsync();
 
-    var lwsList = new List<LocationWithSite>();
-    locations.ForEach(l =>{
-        var lws = new LocationWithSite(){
-            id = l.id,
-            siteId = l.siteId,
-            isDeleted = l.isDeleted,
-            locationName = l.locationName,
-            siteName = allSitesWithName.FirstOrDefault(s => s.id == l.siteId)?.siteName
+    var twsList = new List<TestWithStatus>();
+    test.ForEach(t =>{
+        var tws = new TestWithStatus(){
+            id = t.id,
+            statusId = t.statusId,
+            testName = t.testName,
+            statusName = allStatuses.FirstOrDefault(s => s.id == l.statusId)?.statusName
         };
         
-        lwsList.Add(lws);
+        twsList.Add(tws);
     });
 
-    await nostify.DoBulkUpsertAsync(lwsContainer, lwsList);
+    await nostify.DoBulkUpsertAsync(testWithStatusContainer, twsList);
 }
 ```
 
-Note that the code gets the projection container with "bulk" mode enabled to be able to handle large amounts of data writes.  It then queries the `Site` service and gets all.  If you have substaintial amounts of data, you may need to loop through multiple queries. (If there are more than one aggregate other than the base aggregate in your implementation, you will need additional queries.) After that, it grabs all instances of the base aggregate and then composes a `List<LocationWithSite>` with the appriopriate values.  It then saves them to the container, and is able to use the `DoBulkUpsert()` which will write to the container across many threads.
+Note that the code gets the projection container with "bulk" mode enabled to be able to handle large amounts of data writes.  It then queries the `Status` service and gets all.  If you have substaintial amounts of data, you may need to loop through multiple queries. (If there are more than one aggregate other than the base aggregate in your implementation, you will need additional queries.) After that, it grabs all instances of the base aggregate and then composes a `List<TestWithStatus>` with the appriopriate values.  It then saves them to the container, and is able to use the `DoBulkUpsert()` which will write to the container across many threads.  This method automatically creates a `List<Task>` for you by iterating over the list and calling `UpsertItemAsync()` and then calls `Task.WhenAll()`.
 
-Now that the method is implemented, the container can be initialized and populated with data by calling `LocationWithSite.InitContainerAsync()`.  The template creates an http triggered function to do this for you with a simple http post.
+Now that the method is implemented, the container can be initialized and populated with data by calling `TestWithStatus.InitContainerAsync()`.  The template creates an http triggered function to do this for you with a simple http post enabling creating an admin dashbaord.
 
 ### Create New Projection
 
@@ -422,44 +500,55 @@ A `Projection` will have a "base" aggregate when it is defined. Projection creat
 
 Adding a new instance of a projection requires implementing a method in the `IProjection` interface: `SeedExternalDataAsync()`. This method grabs all data from aggregates external to the base aggregate for this particular instance. This is different from the Init function which grabs for all since we're only creating a single record in the projection container.
 
-This method must query any external data needed and return an `Event` to update the projection.  For our example of `LocationWithSite`:
+This method must query any external data needed and return an `Event` to update the projection.  For our example of `TestWithStatus`:
 
 ```C#
 public async Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null)
 {
-    string? siteName = null;
-    if (siteId != null)
+    string? statusName = null;
+    if (statusId != null)
     {
         //Site Name
-        var siteWithName = await httpClient.GetFromJsonAsync<SiteName>($"http://localhost:7071/api/Site/{siteId}");
-        siteName = siteWithName?.siteName;
+        var status = await httpClient.GetFromJsonAsync<SiteName>($"http://localhost:7071/api/Status/{statusId}");
+        statusName = status?.statusName;
     }
-    Event e = new Event(LocationCommand.Update, id, new { id, siteName });
+    Event e = new Event(TestCommand.Update, id, new { id, statusName });
     return e;
 }
 ```
 
-This method is called in the event handler function to update the projection with any exsiting external data and then applied and saved to the projection container along with the `Event` signifying the creation of the `Location`
+This method is called in the event handler function to update the projection with any exsiting external data and then applied and saved to the projection container along with the `Event` signifying the creation of the `Test`
 
 ```C#
  //Get projection container
-  Container projectionContainer = await _nostify.GetProjectionContainerAsync<LocationWithSite>();
+  Container projectionContainer = await _nostify.GetProjectionContainerAsync<TestWithStatus>();
 
   //Create projection
-  LocationWithSite proj = new LocationWithSite();
-  //Apply
-  proj.Apply(newEvent);
+  TestWithStatus proj = new TestWithStatus();
+  //Apply create event of base aggregate
+  proj.Apply(testCreated);
   //Get external data
   Event externalData = await proj.SeedExternalDataAsync(_nostify, _httpClient);
   //Update projection container
-  await projectionContainer.ApplyAndPersistAsync<LocationWithSite>(new List<Event>(){locationCreated,externalData});
+  await projectionContainer.ApplyAndPersistAsync<TestWithStatus>(new List<Event>(){testCreated,externalData});
   ```
 
-  The naming convention of the event handler is: `On<Base Aggregate Name>Created_For_<Projection Name>`.  For example: "OnLocationCreated_For_LocationWithSite".
+  The naming convention of the event handler is: `On<Base Aggregate Name>Created_For_<Projection Name>`.  For example: "OnTestCreated_For_TestWithStatus".  The create event of the base aggregate is the only event to subscribe to in this case for most implementations.
 
 ### Update Projection
 
+Updating a `Projection` works the same as updating the current state projection of an aggregate, except you're more likely to be subscribing to multiple events and you may be subscribing to various events from multiple services.
+
+For instance, with our `TestWithStatus` projection, we will need to subscribe to the update event for both `Test` and `Status` aggregates to capture and handle them in the `Apply()` method, see example above.
+
+This means we will need two event handler functions, `OnTestUpdated_For_TestWithStatus` and `OnStatusUpdated_For_TestWithStatus`.  Note the naming convention.
+
+They will both take in their respective events and update the projection container.  Using the `ApplyAndPersistAsync()` method for updates to the base aggregate will automatically query the projection for the 
+
 ### Delete Projection
 
+For most projections is it appriopriate to delete the item out of the container when the base aggregate is deleted (the `isDeleted` property is set to `true`). 
+
+The naming convention of the event handler is: `On<Base Aggregate Name>Deleted_For_<Projection Name>`.  For example: "OnTestDeleted_For_TestWithStatus". The delete event of the base aggregate is the only event to subscribe to in this case for most implementations.
 
 
