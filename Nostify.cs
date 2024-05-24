@@ -101,11 +101,11 @@ public interface INostify
     ///<param name="httpClient">Instance of HttpClient to query external data for Projection</param>
     public Task<T> RehydrateAsync<T>(Guid id, HttpClient httpClient) where T : NostifyObject, IProjection, new();
     ///<summary>
-    ///Performs upsert of list
+    ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
     ///</summary>
     public Task DoBulkUpsertAsync<T>(Container container, List<T> itemList);
     ///<summary>
-    ///Performs upsert of list
+    ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
     ///</summary>
     public Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList);
 
