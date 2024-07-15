@@ -28,9 +28,8 @@ public class Program
             string dbName = config.GetValue<string>("dbName");
             string endPoint = config.GetValue<string>("endPoint");
             string kafka = config.GetValue<string>("BrokerList");
-            string aggregateRootCurrentStateContainer = "_ReplaceMe_CurrentState";
 
-            var nostify = new Nostify(apiKey, dbName, endPoint, kafka, aggregateRootCurrentStateContainer);
+            var nostify = new Nostify(apiKey, dbName, endPoint, kafka);
 
             services.AddSingleton<INostify>(nostify);
             services.AddLogging();

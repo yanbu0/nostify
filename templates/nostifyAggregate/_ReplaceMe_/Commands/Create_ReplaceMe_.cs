@@ -24,7 +24,7 @@ public class Create_ReplaceMe_
 
     [Function(nameof(Create_ReplaceMe_))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ReplaceMe_")] HttpRequestData req,
+        [HttpTrigger("post", Route = "_ReplaceMe_")] HttpRequestData req,
         ILogger log)
     {
         dynamic new_ReplaceMe_ = await req.Body.ReadFromRequestBodyAsync(true);

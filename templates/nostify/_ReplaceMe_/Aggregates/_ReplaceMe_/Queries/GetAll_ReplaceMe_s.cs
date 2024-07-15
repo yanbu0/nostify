@@ -20,7 +20,7 @@ public class GetAll_ReplaceMe_s
 
     [Function(nameof(GetAll_ReplaceMe_s))]
     public async Task<List<_ReplaceMe_>> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_")] HttpRequestData req,
+        [HttpTrigger("get", Route = "_ReplaceMe_")] HttpRequestData req,
         ILogger log)
     {
         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();

@@ -22,7 +22,7 @@ public class _ReplaceMe_CurrentStateInit
 
     [Function(nameof(_ReplaceMe_CurrentStateInit))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ReplaceMe_CurrentStateInit")] HttpRequestData req,
+        [HttpTrigger("post", Route = "_ReplaceMe_CurrentStateInit")] HttpRequestData req,
         ILogger log)
     {
         await _nostify.RebuildCurrentStateContainerAsync<_ReplaceMe_>();

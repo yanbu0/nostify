@@ -20,7 +20,7 @@ public class Get_ReplaceMe_
 
     [Function(nameof(Get_ReplaceMe_))]
     public async Task<_ReplaceMe_> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
+        [HttpTrigger("get", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
         ILogger log)
     {

@@ -17,9 +17,8 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
-- Brought Kafka into the mix
-
 - Documentation still in process below!
+- Example repo coming soon
 
 ## Getting Started
 
@@ -230,9 +229,8 @@ public  class  Program
       string  dbName = config.GetValue<string>("dbName");
       string  endPoint = config.GetValue<string>("endPoint");
       string  kafka = config.GetValue<string>("BrokerList");
-      string  aggregateRootCurrentStateContainer = "SiteCurrentState";
 
-      var  nostify = new  Nostify(apiKey, dbName, endPoint, kafka, aggregateRootCurrentStateContainer);
+      var  nostify = new  Nostify(apiKey, dbName, endPoint, kafka);
 
       services.AddSingleton<INostify>(nostify);
 
@@ -418,10 +416,10 @@ public class TestWithStatus : NostifyObject, IProjection
         }
     }
 
-    public class SiteName
+    public class StatusName
     {
         public Guid id { get; set; }
-        public string siteName { get; set; }
+        public string statusName { get; set; }
     }
 
     public async Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null)
@@ -430,7 +428,7 @@ public class TestWithStatus : NostifyObject, IProjection
         if (statusId != null)
         {
             //Site Name
-            var status = await httpClient.GetFromJsonAsync<SiteName>($"http://localhost:7071/api/Status/{statusId}");
+            var status = await httpClient.GetFromJsonAsync<StatusName>($"http://localhost:7071/api/Status/{statusId}");
             statusName = status?.statusName;
         }
         Event e = new Event(TestCommand.Update, id, new { id, statusName });
