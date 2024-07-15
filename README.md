@@ -418,10 +418,10 @@ public class TestWithStatus : NostifyObject, IProjection
         }
     }
 
-    public class SiteName
+    public class StatusName
     {
         public Guid id { get; set; }
-        public string siteName { get; set; }
+        public string statusName { get; set; }
     }
 
     public async Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null)
@@ -430,7 +430,7 @@ public class TestWithStatus : NostifyObject, IProjection
         if (statusId != null)
         {
             //Site Name
-            var status = await httpClient.GetFromJsonAsync<SiteName>($"http://localhost:7071/api/Status/{statusId}");
+            var status = await httpClient.GetFromJsonAsync<StatusName>($"http://localhost:7071/api/Status/{statusId}");
             statusName = status?.statusName;
         }
         Event e = new Event(TestCommand.Update, id, new { id, statusName });
