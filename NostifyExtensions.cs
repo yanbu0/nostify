@@ -158,10 +158,12 @@ namespace nostify
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvents">The Event list to apply and persist.</param>
         ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
+        ///<param name="projectionBaseAggregateId">Will apply to this id, unless null then will take first in newEvents List</param>
+        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
         {
             T? aggregate;
             Event firstEvent = newEvents.First();
+            Guid idToMatch = projectionBaseAggregateId ?? firstEvent.aggregateRootId;
 
             if (firstEvent.command.isNew)
             {
@@ -172,7 +174,7 @@ namespace nostify
                 //Update container based off aggregate root id
                 aggregate = (await container
                     .GetItemLinqQueryable<T>()
-                    .Where(agg => agg.id == firstEvent.aggregateRootId)
+                    .Where(agg => agg.id == idToMatch)
                     .ReadAllAsync())
                     .FirstOrDefault();
             }
@@ -186,11 +188,23 @@ namespace nostify
         }
 
         ///<summary>
+        ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
+        ///</summary>
+        ///<param name="container">Container where the projection to update lives</param>
+        ///<param name="newEvents">The Event list to apply and persist.</param>
+        ///<param name="partitionKey">The partition to update, by default is tenantId</param>
+        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
+        {
+            await container.ApplyAndPersistAsync<T>(newEvents, partitionKey, null);
+        }
+        
+
+        ///<summary>
         ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers. Uses partitionKey from first Event in List.
         ///</summary>
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvents">The Event list to apply and persist.</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents) where T : NostifyObject, new()
+        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents) where T : NostifyObject, IAggregate, new()
         {
             Event firstEvent = newEvents.First();
 
@@ -203,7 +217,7 @@ namespace nostify
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvent">The Event object to apply and persist.</param>
         ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
+        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, IAggregate, new()
         {
             await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, partitionKey);
         }
@@ -213,7 +227,7 @@ namespace nostify
         ///</summary>
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvent">The Event object to apply and persist.</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
+        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, IAggregate, new()
         {
             await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, newEvent.partitionKey.ToPartitionKey());
         }
