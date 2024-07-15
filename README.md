@@ -17,9 +17,8 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
-- Brought Kafka into the mix
-
 - Documentation still in process below!
+- Example repo coming soon
 
 ## Getting Started
 
@@ -230,9 +229,8 @@ public  class  Program
       string  dbName = config.GetValue<string>("dbName");
       string  endPoint = config.GetValue<string>("endPoint");
       string  kafka = config.GetValue<string>("BrokerList");
-      string  aggregateRootCurrentStateContainer = "SiteCurrentState";
 
-      var  nostify = new  Nostify(apiKey, dbName, endPoint, kafka, aggregateRootCurrentStateContainer);
+      var  nostify = new  Nostify(apiKey, dbName, endPoint, kafka);
 
       services.AddSingleton<INostify>(nostify);
 
