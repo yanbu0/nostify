@@ -20,7 +20,7 @@ public class Update_ReplaceMe_
 
     [Function(nameof(Update_ReplaceMe_))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "_ReplaceMe_")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "_ReplaceMe_")] HttpRequestData req,
         ILogger log)
     {
         dynamic update_ReplaceMe_ = await req.Body.ReadFromRequestBodyAsync();
