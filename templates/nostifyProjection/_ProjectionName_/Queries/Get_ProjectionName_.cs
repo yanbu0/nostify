@@ -20,7 +20,7 @@ public class Get_ProjectionName_
 
     [Function(nameof(Get_ProjectionName_))]
     public async Task<_ProjectionName_> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "_ProjectionName_/{aggregateId:guid}")] HttpRequestData req,
+        [HttpTrigger("get", Route = "_ProjectionName_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
         ILogger log)
     {

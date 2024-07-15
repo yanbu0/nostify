@@ -19,7 +19,7 @@ public class Delete_ReplaceMe_
 
     [Function(nameof(Delete_ReplaceMe_))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "_ReplaceMe_/{aggregateId}")] HttpRequestData req,
+        [HttpTrigger("delete", Route = "_ReplaceMe_/{aggregateId}")] HttpRequestData req,
         string aggregateId,
         ILogger log)
     {
