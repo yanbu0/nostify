@@ -161,20 +161,15 @@ public class Nostify : INostify
         var peList = JsonConvert.DeserializeObject<List<Event>>(cosmosTriggerOutput);
         if (peList != null)
         {
+            var config = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("bootstrap.servers", KafkaUrl)
+            };
+            using (var p = new ProducerBuilder<string,string>(config).Build())
             foreach (Event pe in peList)
             {
-                var config = new List<KeyValuePair<string, string>>
-                {
-                    new KeyValuePair<string, string>("bootstrap.servers", KafkaUrl)
-                };
-
-
-                using (var p = new ProducerBuilder<string,string>(config).Build())
-                {
-                    string topic = pe.command.name;
-                    var result = await p.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
-                }         
-
+                string topic = pe.command.name;
+                var result = await p.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
             }
         }
     }
