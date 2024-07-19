@@ -22,7 +22,7 @@ public class _ProjectionName_Init
 
     [Function(nameof(_ProjectionName_Init))]
     public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "_ProjectionName_Init")] HttpRequestData req,
+        [HttpTrigger("post", Route = "_ProjectionName_Init")] HttpRequestData req,
         ILogger log)
     {
         await _ProjectionName_.InitContainerAsync(_nostify, _httpClient);
