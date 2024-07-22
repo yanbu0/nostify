@@ -13,6 +13,18 @@ namespace nostify;
 ///</summary>
 public class Event
 {
+    ///<summary>
+    ///Constructor for PeristedEvent, use when creating object to save to event store
+    ///</summary>
+    ///<param name="command">Command to persist</param>
+    ///<param name="aggregateRootId">Id of the root aggregate to perform the command on.</param>
+    ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
+    ///<param name="userId">ID of User responsible for Event.</param>
+    ///<param name="partitionKey">Tenant ID to apply Event to.</param>
+    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
+    {
+        SetUp(command, aggregateRootId, payload, userId, partitionKey);
+    }
 
     ///<summary>
     ///Constructor for PeristedEvent, use when creating object to save to event store
@@ -40,20 +52,7 @@ public class Event
         }
 
         SetUp(command, aggGuid, payload, userGuid, pKey);
-    }
-
-    ///<summary>
-    ///Constructor for PeristedEvent, use when creating object to save to event store
-    ///</summary>
-    ///<param name="command">Command to persist</param>
-    ///<param name="aggregateRootId">Id of the root aggregate to perform the command on.</param>
-    ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
-    ///<param name="userId">ID of User responsible for Event.</param>
-    ///<param name="partitionKey">Tenant ID to apply Event to.</param>
-    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
-    {
-        SetUp(command, aggregateRootId, payload, userId, partitionKey);
-    }
+    }    
     
     private void SetUp(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId, Guid partitionKey)
     {

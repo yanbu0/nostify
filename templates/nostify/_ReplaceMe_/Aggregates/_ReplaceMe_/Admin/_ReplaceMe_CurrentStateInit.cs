@@ -1,13 +1,10 @@
-
-using _ReplaceMe__Service;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using nostify;
 
-namespace _ReplaceMe_Service;
+namespace _ReplaceMe__Service;
 
 public class _ReplaceMe_CurrentStateInit
 {
