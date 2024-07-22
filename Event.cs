@@ -27,7 +27,24 @@ public class Event
     }
 
     ///<summary>
-    ///Constructor for PeristedEvent, use when creating object to save to event store
+    ///Constructor for PeristedEvent, use when creating object to save to event store, will parse aggregateRootId from payload
+    ///</summary>
+    ///<param name="command">Command to persist</param>
+    ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
+    ///<param name="userId">ID of User responsible for Event.</param>
+    ///<param name="partitionKey">Tenant ID to apply Event to.</param>
+    public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
+    {
+        Guid aggregateRootId;
+        if (!Guid.TryParse(((dynamic)payload).id.ToString(), out aggregateRootId))
+        {
+            throw new ArgumentException("Aggregate Root ID is not parsable to a Guid");
+        }
+        SetUp(command, aggregateRootId, payload, userId, partitionKey);
+    }
+
+    ///<summary>
+    ///Constructor for PeristedEvent, use when creating object to save to event store, parses Id values to Guids, recommend using Guids instead of strings instead of this constructor
     ///</summary>
     ///<param name="command">Command to persist</param>
     ///<param name="aggregateRootId">Id of the root aggregate to perform the command on.  Must be a Guid string</param>
