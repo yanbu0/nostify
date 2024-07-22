@@ -327,7 +327,7 @@ public  class  GetTest
 
   [Function(nameof(GetTest))]
   public  async  Task<IActionResult> Run(
-  [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "Test/{aggregateId:guid}")] HttpRequestData  req,
+  [HttpTrigger("get", Route = "Test/{aggregateId:guid}")] HttpRequestData  req,
   Guid  aggregateId,
   ILogger  log)
   {
