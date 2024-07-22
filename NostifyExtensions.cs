@@ -204,7 +204,7 @@ namespace nostify
         ///</summary>
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvents">The Event list to apply and persist.</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents) where T : NostifyObject, IAggregate, new()
+        public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents) where T : NostifyObject, new()
         {
             Event firstEvent = newEvents.First();
 
@@ -217,7 +217,7 @@ namespace nostify
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvent">The Event object to apply and persist.</param>
         ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, IAggregate, new()
+        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
         {
             await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, partitionKey);
         }
@@ -227,7 +227,7 @@ namespace nostify
         ///</summary>
         ///<param name="container">Container where the projection to update lives</param>
         ///<param name="newEvent">The Event object to apply and persist.</param>
-        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, IAggregate, new()
+        public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
         {
             await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, newEvent.partitionKey.ToPartitionKey());
         }
