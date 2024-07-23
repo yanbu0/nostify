@@ -246,7 +246,7 @@ namespace nostify
             events.ToList().ForEach(eventStr =>
             {
                 NostifyKafkaTriggerEvent triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr);
-                if (triggerEvent.IsNull())
+                if (triggerEvent == null)
                 {
                     throw new NostifyException("Event is null");
                 }
