@@ -240,7 +240,7 @@ namespace nostify
         /// <param name="events">Array of strings from KafkaTrigger</param>
         /// <returns></returns>
         /// <exception cref="NostifyException"></exception>
-        public static async Task BulkCreateFromKafkaTriggerEvents<T>(this Container bulkContainer, string[] events) where T : NostifyObject, new()
+        public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events) where T : NostifyObject, new()
         {
             List<T> objToUpsertList = new List<T>();
             events.ToList().ForEach(eventStr =>
