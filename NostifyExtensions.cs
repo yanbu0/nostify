@@ -231,6 +231,52 @@ namespace nostify
         {
             await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, newEvent.partitionKey.ToPartitionKey());
         }
+
+        /// <summary>
+        /// Bulk creates objects in Projection container from raw string array of KafkaTriggerEvents.  Use in Event Handler.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="bulkContainer">Must have bulk operations set to true</param>
+        /// <param name="events">Array of strings from KafkaTrigger</param>
+        /// <returns></returns>
+        /// <exception cref="NostifyException"></exception>
+        public static async Task BulkCreateFromKafkaTriggerEvents<T>(this Container bulkContainer, string[] events) where T : NostifyObject, new()
+        {
+            List<T> objToUpsertList = new List<T>();
+            events.ToList().ForEach(eventStr =>
+            {
+                NostifyKafkaTriggerEvent triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr);
+                if (triggerEvent.IsNull())
+                {
+                    throw new NostifyException("Event is null");
+                }
+                Event newEvent = triggerEvent.GetEvent();
+                if (!newEvent.command.isNew)
+                {
+                    throw new NostifyException("Event is not a create event");
+                }
+                T objToUpsert = new T();
+                objToUpsert.Apply(newEvent);
+                objToUpsertList.Add(objToUpsert);
+            });
+
+            await bulkContainer.DoBulkUpsertAsync<T>(objToUpsertList);
+
+        }
+
+        /// <summary>
+        /// Bulk upserts a list of items
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="bulkContainer"></param>
+        /// <param name="itemList"></param>
+        /// <returns></returns>
+        public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList) where T : NostifyObject
+        {        
+            List<Task> taskList = new List<Task>();
+            itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
+            await Task.WhenAll(taskList);
+        }
         
     }
 }
