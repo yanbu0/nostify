@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.ComponentModel.DataAnnotations;
+using Newtonsoft.Json.Linq;
 
 namespace nostify;
 
@@ -142,6 +143,14 @@ public class Event
     public bool PayloadHasProperty(string propertyName)
     {
         return payload.GetType().GetProperty(propertyName) != null;
+    }
+
+    ///<summary>
+    ///Returns typed value of payload
+    ///</summary>
+    public T GetPayload<T>() where T : new()
+    {
+        return JObject.FromObject(payload).ToObject<T>() ?? new T();
     }
 
     

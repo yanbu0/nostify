@@ -13,6 +13,7 @@ using System.Data;
 using System.Net.Http;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.Functions.Worker;
 
 namespace nostify
 {
@@ -240,7 +241,7 @@ namespace nostify
         /// <param name="events">Array of strings from KafkaTrigger</param>
         /// <returns></returns>
         /// <exception cref="NostifyException"></exception>
-        public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events) where T : NostifyObject, new()
+        public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events) where T : NostifyObject, IAggregate, new()
         {
             List<T> objToUpsertList = new List<T>();
             events.ToList().ForEach(eventStr =>
@@ -277,6 +278,5 @@ namespace nostify
             itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
             await Task.WhenAll(taskList);
         }
-        
     }
 }

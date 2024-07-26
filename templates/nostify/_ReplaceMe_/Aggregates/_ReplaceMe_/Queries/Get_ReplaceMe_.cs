@@ -21,6 +21,7 @@ public class Get_ReplaceMe_
     [Function(nameof(Get_ReplaceMe_))]
     public async Task<_ReplaceMe_> Run(
         [HttpTrigger("get", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
+        FunctionContext context,
         Guid aggregateId,
         ILogger log)
     {

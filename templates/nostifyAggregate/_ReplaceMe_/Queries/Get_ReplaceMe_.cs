@@ -22,6 +22,7 @@ public class Get_ReplaceMe_
     public async Task<_ReplaceMe_> Run(
         [HttpTrigger("get", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
+        FunctionContext context,
         ILogger log)
     {
         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();

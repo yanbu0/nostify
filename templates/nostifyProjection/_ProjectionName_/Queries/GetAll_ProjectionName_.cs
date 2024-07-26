@@ -21,6 +21,7 @@ public class GetAll_ProjectionName_s
     [Function(nameof(GetAll_ProjectionName_s))]
     public async Task<List<_ProjectionName_>> Run(
         [HttpTrigger("get", Route = "_ProjectionName_")] HttpRequestData req,
+        FunctionContext context,
         ILogger log)
     {
         Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();

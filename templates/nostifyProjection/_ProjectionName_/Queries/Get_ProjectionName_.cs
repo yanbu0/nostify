@@ -22,6 +22,7 @@ public class Get_ProjectionName_
     public async Task<_ProjectionName_> Run(
         [HttpTrigger("get", Route = "_ProjectionName_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
+        FunctionContext context,
         ILogger log)
     {
         Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
