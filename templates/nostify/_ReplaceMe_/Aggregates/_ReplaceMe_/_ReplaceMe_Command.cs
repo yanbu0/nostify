@@ -21,11 +21,11 @@ public class _ReplaceMe_Command : NostifyCommand
     ///<summary>
     ///Bulk Create Command
     ///</summary>
-    public static readonly _ReplaceMe_Command BulkCreate = new _ReplaceMe_Command("BulkCreate__ReplaceMe_", true, true);
+    public static readonly _ReplaceMe_Command BulkCreate = new _ReplaceMe_Command("BulkCreate__ReplaceMe_", true);
 
 
-    public _ReplaceMe_Command(string name, bool isNew = false, bool isBulk = false)
-    : base(name, isNew, isBulk)
+    public _ReplaceMe_Command(string name, bool isNew = false)
+    : base(name, isNew)
     {
 
     }

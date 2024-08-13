@@ -21,22 +21,16 @@ public class NostifyCommand
     /// </summary>
     public bool isNew { get; }
 
-    /// <summary>
-    /// Signifies if this command is a bulk operation. Used to help route to the correct handler.
-    /// </summary>
-    public bool isBulk { get; }
-
     ///<summary>
     ///Base Constructor
     ///</summary>
     ///<param name="name">Human readable friendly name of command</param>
     ///<param name="isNew">Signifies if this command results in the creation of a new aggregate</param>
     ///<param name="isBulk">Signifies if this command is a bulk operation</param>
-    public NostifyCommand(string name, bool isNew = false, bool isBulk = false)
+    public NostifyCommand(string name, bool isNew = false)
     {
         this.name = name;
         this.isNew = isNew;
-        this.isBulk = isBulk;
     }
 
     ///<summary>
