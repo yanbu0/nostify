@@ -293,7 +293,7 @@ public class Nostify : INostify
     ///<inheritdoc />
     public async Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new()
     {
-        Container containerToRebuild = await GetBulkCurrentStateContainerAsync<T>();
+        Container containerToRebuild = await GetCurrentStateContainerAsync<T>();
 
         //Store data needed for re-creating container
         string containerName = containerToRebuild.Id;
@@ -310,13 +310,14 @@ public class Nostify : INostify
             .Distinct()
             .ReadAllAsync();
         
+        //TODO: probably can just use the feed iterator here?
         //Loop through a query the events for 1,000 at a time, then rehydrate 
-        const int getThisMany = 1000;
+        const int GET_THIS_MANY = 1000;
         int endOfRange = uniqueAggregateRootIds.Count();
         int i = 0;
         while (i < endOfRange)
         {
-            int rangeNum = (i + getThisMany >= endOfRange) ? endOfRange - 1 : i + getThisMany;
+            int rangeNum = (i + GET_THIS_MANY >= endOfRange) ? endOfRange - 1 : i + GET_THIS_MANY;
             var aggRange = uniqueAggregateRootIds.GetRange(i,rangeNum);
 
             var peList = await eventStore.GetItemLinqQueryable<Event>()
@@ -326,7 +327,7 @@ public class Nostify : INostify
             aggRange.ForEach(id => {
                 rehydratedAggregates.Add(Rehydrate<T>(peList.Where(e => e.aggregateRootId == id).OrderBy(e => e.timestamp).ToList()));
             });
-            i = i + getThisMany;
+            i = i + GET_THIS_MANY;
         }
         
         //Recreate container

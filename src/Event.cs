@@ -37,9 +37,10 @@ public class Event
     public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
     {
         Guid aggregateRootId;
-        if (!Guid.TryParse(((dynamic)payload).id.ToString(), out aggregateRootId))
+        var jPayload = JObject.FromObject(payload);
+        if (jPayload["id"] == null || !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId))
         {
-            throw new ArgumentException("Aggregate Root ID is not parsable to a Guid");
+            throw new ArgumentException("Aggregate Root ID does not exist or is not parsable to a Guid");
         }
         SetUp(command, aggregateRootId, payload, userId, partitionKey);
     }
@@ -80,6 +81,7 @@ public class Event
         this.timestamp = DateTime.UtcNow;
         this.payload = payload;
         this.partitionKey = partitionKey;
+        this.userId = userId;
     }
 
     ///<summary>
