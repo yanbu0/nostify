@@ -12,7 +12,7 @@ namespace nostify;
 ///<summary>
 ///Internal class inherited by Aggregate and Projection
 ///</summary>
-public abstract class NostifyObject
+public abstract class NostifyObject : ITenantFilterable
 {
     ///<summary>
     ///This type should never be directly instantiated

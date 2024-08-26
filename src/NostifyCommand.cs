@@ -25,6 +25,8 @@ public class NostifyCommand
     ///Base Constructor
     ///</summary>
     ///<param name="name">Human readable friendly name of command</param>
+    ///<param name="isNew">Signifies if this command results in the creation of a new aggregate</param>
+    ///<param name="isBulk">Signifies if this command is a bulk operation</param>
     public NostifyCommand(string name, bool isNew = false)
     {
         this.name = name;

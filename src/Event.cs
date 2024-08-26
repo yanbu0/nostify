@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.ComponentModel.DataAnnotations;
+using Newtonsoft.Json.Linq;
 
 namespace nostify;
 
@@ -36,9 +37,10 @@ public class Event
     public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
     {
         Guid aggregateRootId;
-        if (!Guid.TryParse(((dynamic)payload).id.ToString(), out aggregateRootId))
+        var jPayload = JObject.FromObject(payload);
+        if (jPayload["id"] == null || !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId))
         {
-            throw new ArgumentException("Aggregate Root ID is not parsable to a Guid");
+            throw new ArgumentException("Aggregate Root ID does not exist or is not parsable to a Guid");
         }
         SetUp(command, aggregateRootId, payload, userId, partitionKey);
     }
@@ -79,6 +81,7 @@ public class Event
         this.timestamp = DateTime.UtcNow;
         this.payload = payload;
         this.partitionKey = partitionKey;
+        this.userId = userId;
     }
 
     ///<summary>
@@ -142,6 +145,14 @@ public class Event
     public bool PayloadHasProperty(string propertyName)
     {
         return payload.GetType().GetProperty(propertyName) != null;
+    }
+
+    ///<summary>
+    ///Returns typed value of payload
+    ///</summary>
+    public T GetPayload<T>() where T : new()
+    {
+        return JObject.FromObject(payload).ToObject<T>() ?? new T();
     }
 
     
