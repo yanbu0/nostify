@@ -49,11 +49,10 @@ public static class ContainerExtensions
             else 
             {
                 //Update container based off aggregate root id
-                aggregate = (await container
+                aggregate = await container
                     .GetItemLinqQueryable<T>()
                     .Where(agg => agg.id == idToMatch)
-                    .ReadAllAsync())
-                    .FirstOrDefault();
+                    .FirstOrDefaultAsync();
             }
 
             //Null means it has been previously deleted
