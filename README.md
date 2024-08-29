@@ -1,7 +1,7 @@
 
 # nostify
 
-Dirtball simple, easy to use, HIGHLY opinionated event driven microservices framework for .Net.
+Dirtball simple, easy to use, scalable event driven microservices framework for .Net.
 
 This framework is intended to simplify the implementation of the ES/CQRS, microservice, and materialized view patterns in a specific tech stack. It also assumes some basic familiarity with domain driven design.
 
