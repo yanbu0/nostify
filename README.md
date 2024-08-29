@@ -1,9 +1,7 @@
 
 # nostify
 
-Dirtball simple, easy to use, HIGHLY opinionated .Net framework for Azure to spin up microservices that can scale to global levels.
-
-"Whole ass one thing, don't half ass two things" - Ron Swanson
+Dirtball simple, easy to use, HIGHLY opinionated event driven microservices framework for .Net.
 
 This framework is intended to simplify the implementation of the ES/CQRS, microservice, and materialized view patterns in a specific tech stack. It also assumes some basic familiarity with domain driven design.
 
