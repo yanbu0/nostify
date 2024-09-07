@@ -18,7 +18,7 @@ public class On_ReplaceMe_BulkCreated
 
     [Function(nameof(On_ReplaceMe_BulkCreated))]
     public async Task Run([KafkaTrigger("BrokerList",
-                "Create__ReplaceMe_",
+                "BulkCreate__ReplaceMe_",
                 ConsumerGroup = "_ReplaceMe_",
                 IsBatched = true)] string[] events,
         ILogger log)
@@ -32,7 +32,7 @@ public class On_ReplaceMe_BulkCreated
         {
             events.ToList().ForEach(async eventStr =>
             {
-                Event @event = (JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr) ?? throw new NostifyException("Event is null")).GetEvent();
+                Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent() ?? throw new NostifyException("Event is null");
                 await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_BulkCreated), e.Message, @event);
             });            
         }        
