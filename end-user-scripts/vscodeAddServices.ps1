@@ -45,6 +45,24 @@ function Format-Json {
     return $result -Join [Environment]::NewLine
 }
 
+function Update-WorkspaceFile-InsertFolder {
+    param (
+        [string]$workspaceFilePath,
+        [string]$folderPath
+    )
+    $workspaceContent = Get-Content $workspaceFilePath -Raw | ConvertFrom-Json
+
+    $folderExists = $workspaceContent.folders | Where-Object { $_.path -eq $folderPath }
+    if (-not $folderExists) {
+        # insert folder at the beginning of the list
+        $workspaceContent.folders = @(@{"path" = $folderPath }) + $workspaceContent.folders
+        
+        # save as formatted json
+        $formattedJson = Format-Json -InputObject $workspaceContent
+        Set-Content -Path $workspaceFilePath -Value $formattedJson -Force
+    }
+}
+
 function Update-WorkspaceFile {
     param (
         [string]$workspaceFilePath,
@@ -106,7 +124,43 @@ function New-WorkspaceFile {
     Write-Output "New workspace file created."
 }
 
+function New-SolutionFile {
+    param (
+        [string]$solutionFile
+    )
+    $solutionDirectory = [System.IO.Path]::GetDirectoryName($solutionFile)
+    $solutionName = [System.IO.Path]::GetFileNameWithoutExtension($solutionFile)
+
+    $currentLocation = Get-Location
+
+    Set-Location $solutionDirectory
+    dotnet new sln --name "$solutionName"
+    Set-Location $currentLocation
+}
+
+function Add-ProjectToSolution {
+    param (
+        [string]$solutionFile,
+        [string]$projectFile,
+        [string]$projectName
+    )
+    # check solution file exists, create if it doesn't
+    if (-Not (Test-Path $solutionFile)) {
+        Write-Output "Creating new solution file: $solutionFile"
+        New-SolutionFile -solutionFile $solutionFile
+    }
+
+    dotnet sln $solutionFile add $projectFile
+}
+
 $rootFolder = Get-Location
+
+# set the visual studio solution folder to $rootFolder + ".vssolution"
+$vsSolutionFolder = Join-Path $rootFolder ".vssolution"
+#create the visual studio solution folder if it doesn't exist
+if (-not (Test-Path $vsSolutionFolder)) {
+    New-Item -Path $vsSolutionFolder -ItemType Directory
+}
 
 # get all service folders containing a %ServiceName%_Service.csproj file
 $serviceProjects = Get-ChildItem -Path $rootFolder -Recurse -Filter "*_Service.csproj" | ForEach-Object {
@@ -129,7 +183,28 @@ else {
     $workspaceFilePath = $workspaceFile.FullName
 }
 
+# get the .sln file in the root folder
+$solutionFile = Get-ChildItem -Path $vsSolutionFolder -Filter "*.sln" -Force | Select-Object -First 1
+
+if (-not $solutionFile) {
+    # create a default solution file
+    $solutionFilePath = Join-Path $vsSolutionFolder "Microservices.sln"
+    New-SolutionFile -solutionFile $solutionFilePath
+}
+else {
+    $solutionFilePath = $solutionFile.FullName
+}
+
 # update the workspace file with found services
 foreach ($serviceProject in $serviceProjects) {
     Update-WorkspaceFile -workspaceFilePath $workspaceFilePath -serviceName $serviceProject.Name
+}
+
+# ensure the visual studio solution older is at the beginning of the workspace
+Update-WorkspaceFile-InsertFolder -workspaceFilePath $workspaceFilePath -folderPath ".vssolution"
+
+# update the solution file with found services
+foreach ($serviceProject in $serviceProjects) {
+    $projectFile = Join-Path $serviceProject.Path "$($serviceProject.Name)_Service.csproj"
+    Add-ProjectToSolution -solutionFile $solutionFilePath -projectFile $projectFile -projectName $serviceProject.Name
 }
