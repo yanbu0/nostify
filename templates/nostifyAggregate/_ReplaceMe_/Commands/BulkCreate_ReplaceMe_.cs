@@ -36,7 +36,7 @@ public class BulkCreate_ReplaceMe_
             Guid newId = Guid.NewGuid();
             e.id = newId;
             
-            Event pe = new Event(_ReplaceMe_Command.Create, newId, e);
+            Event pe = new Event(_ReplaceMe_Command.BulkCreate, newId, e);
             peList.Add(pe);
         });
 
