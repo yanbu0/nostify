@@ -8,7 +8,7 @@ namespace nostify;
 /// <summary>
 /// Aggregates must implement this interface and inheirit <c>NostifyObject</c>
 /// </summary>
-public interface IAggregate
+public interface IAggregate : IUniquelyIdentifiable
 {
     ///<summary>
     ///Flag for deleted

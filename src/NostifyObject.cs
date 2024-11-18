@@ -9,10 +9,15 @@ using Microsoft.Azure.Cosmos.Serialization.HybridRow.Schemas;
 
 namespace nostify;
 
+public interface IApplyable
+{
+    public abstract void Apply(Event eventToApply);
+}
+
 ///<summary>
 ///Internal class inherited by Aggregate and Projection
 ///</summary>
-public abstract class NostifyObject : ITenantFilterable
+public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, IApplyable
 {
     ///<summary>
     ///This type should never be directly instantiated

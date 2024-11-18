@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Net;
 using Microsoft.Azure.Cosmos;
 using System.Linq;
+using System.Net.Http;
 
 namespace nostify
 {
@@ -19,13 +20,9 @@ namespace nostify
         ///</summary>        
         CosmosClient GetClient(bool allowBulk = false);
         ///<summary>
-        ///Returns database
+        ///Returns database reference. If allowBulk is true, will return bulk database reference. Single database reference is created for each type of database for the lifetime of the application.
         ///</summary>
         Task<Database> GetDatabaseAsync(bool allowBulk = false);
-        ///<summary>
-        ///Returns event store container
-        ///</summary>
-        Task<Container> GetEventStoreAsync();
 
     }
 
@@ -70,6 +67,31 @@ namespace nostify
         public readonly string ConnectionString;
 
         ///<summary>
+        ///Non-bulk database reference for lower latency
+        ///</summary>
+        private Database? _nonBulkDatabase { get; set; } = null;
+
+        ///<summary>
+        ///Bulk database reference for higher throughput
+        ///</summary>
+        private Database? _bulkDatabase { get; set; } = null;
+
+        ///<summary>
+        ///Cached CosmosClient instance
+        ///</summary>
+        private CosmosClient? _cosmosClient { get; set; } = null;
+
+        ///<summary>
+        ///Cached bulk enabled CosmosClient instance
+        ///</summary>
+        private CosmosClient? _bulkCosmosClient { get; set; } = null;
+
+        ///<summary>
+        ///List of containers already known to exist so we don't have to check again
+        ///</summary>
+        public List<string> knownContainers { get; set; } = new List<string>();
+
+        ///<summary>
         ///Parameterless constructor for mock testing
         ///</summary>
         public NostifyCosmosClient()
@@ -94,21 +116,53 @@ namespace nostify
             this.EventStorePartitionKey = EventStorePartitionKey;
             this.EventStoreContainer = EventStoreContainer;
             this.UndeliverableEvents = UndeliverableEvents;
+            InitAsync();
+        }
+
+        private async Task InitAsync()
+        {            
+            //Init bulk and normal database clients for use throughout lifetime of application
+            GetDatabaseAsync();
+            GetDatabaseAsync(true);
         }
 
         /// <inheritdoc />
-        public CosmosClient GetClient(bool allowBulk = false) => new CosmosClient(EndpointUri, Primarykey, new CosmosClientOptions() { AllowBulkExecution = allowBulk });
+        public CosmosClient GetClient(bool allowBulk = false)
+        {
+            if (_cosmosClient == null && !allowBulk)
+            {
+                SocketsHttpHandler handler = new SocketsHttpHandler();
+                handler.PooledConnectionLifetime = TimeSpan.FromMinutes(5);
+                var options = new CosmosClientOptions() { 
+                    AllowBulkExecution = allowBulk,
+                    HttpClientFactory = () => new HttpClient(handler, disposeHandler: false)
+                };
+                _cosmosClient = new CosmosClient(EndpointUri, Primarykey, options);
+            } else if (_bulkCosmosClient == null && allowBulk)
+            {
+                SocketsHttpHandler handler = new SocketsHttpHandler();
+                handler.PooledConnectionLifetime = TimeSpan.FromMinutes(5);
+                var options = new CosmosClientOptions() { 
+                    AllowBulkExecution = allowBulk,
+                    HttpClientFactory = () => new HttpClient(handler, disposeHandler: false)
+                };
+                _bulkCosmosClient = new CosmosClient(EndpointUri, Primarykey, options);
+            }
+            return allowBulk ? _bulkCosmosClient : _cosmosClient;
+        } 
 
         /// <inheritdoc />
         public async Task<Database> GetDatabaseAsync(bool allowBulk = false)
         {
-            return (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName)).Database;
-        }
-
-        /// <inheritdoc />
-        public async Task<Container> GetEventStoreAsync()
-        {
-            return await (await GetDatabaseAsync()).CreateContainerIfNotExistsAsync(this.EventStoreContainer, EventStorePartitionKey);
+            if (!allowBulk && _nonBulkDatabase == null)
+            {
+                _nonBulkDatabase = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName)).Database;
+            }
+            if (allowBulk && _bulkDatabase == null)
+            {
+                _bulkDatabase = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName)).Database;
+            }
+            return allowBulk ? _bulkDatabase : _nonBulkDatabase;
         }
 
     }

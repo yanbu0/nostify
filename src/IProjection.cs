@@ -1,8 +1,16 @@
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading.Tasks;
+using Microsoft.Azure.Cosmos;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Newtonsoft.Json;
 
 namespace nostify;
+
 
 /// <summary>
 /// Projections must implement this interface and inheirit <c>NostifyObject</c>
@@ -14,24 +22,18 @@ public interface IProjection
     ///</summary>
     public static abstract string containerName { get; }
 
-    ///<summary>
-    ///Returns an Event to Apply() to the Projection when the root Aggregate is initially created.
-    ///<para>
-    ///Should contain all queries to get any necessary values from Aggregates external to base Projection.
-    ///</para>
-    ///</summary>
-    ///<param name="nostify">Reference to the Nostify singleton.</param>
-    ///<param name="httpClient">Reference to an HttpClient instance.</param>
-    public Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null);     
+    // ///<summary>
+    // ///Queries any neccessary external data to create a list of Events to update all of the projections in the param. Gets called in InitAsync.
+    // ///Must return an Event for each Projection in the list which, when Apply is called, will update the Projection to the current state.
+    // ///Must set <c>initialized</c> to true after each projection is updated.
+    // ///</summary>
+    // ///<param name="projectionsToInit">List of projections to query external data for. If empty, will update </param>
+    // ///<param name="nostify">Nostify instance to use to get current state containers</param>
+    // ///<param name="httpClient">HttpClient to use to query external data. Can be null if no events external to this service are needed.</param>
+    // ///<param name="pointInTime">Point in time to query external data.  If null, will query current state. Use when pulling a previous point in time state of Projection.</param>
+    // public abstract static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<IProjection> projectionsToInit, 
+    //                                                         INostify nostify, 
+    //                                                         HttpClient? httpClient = null, 
+    //                                                         DateTime? pointInTime = null);
 
-
-    ///<summary>
-    ///Recreate container for this Projection.  Will requery all needed data from all services.
-    ///<para>
-    ///Must contain all queries to get any necessary values from Aggregates external to base Projection.  Should save using bulk update pattern.
-    ///</para>
-    ///</summary>
-    ///<param name="nostify">Reference to the Nostify singleton.</param>
-    ///<param name="httpClient">Reference to an HttpClient instance.</param>
-    public static abstract Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null);   
 }

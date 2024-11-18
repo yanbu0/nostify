@@ -40,48 +40,66 @@ public interface INostify
     ///</summary>        
     ///<param name="eventToPersist">Event to apply and persist in event store</param>
     public Task PersistEventAsync(Event eventToPersist);
+
     ///<summary>
     ///Writes event to event store
     ///</summary>        
     ///<param name="events">Events to apply and persist in event store</param>
     public Task BulkPersistEventAsync(List<Event> events);
+
     ///<summary>
     ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
     ///</summary>
     public Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle);
+
     ///<summary>
     ///Published event to messaging bus
     ///</summary>        
     ///<param name="cosmosTriggerOutput">String output from CosmosDBTrigger, will be processed into a List of Events and published to Kafka</param>
     public Task PublishEventAsync(string cosmosTriggerOutput);
+
     ///<summary>
     ///Retrieves the event store container
     ///</summary>
     public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
+
     ///<summary>    
     ///Retrieves the current state container for Aggregate Root
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
     public Task<Container> GetCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate;
+
     ///<summary>    
     ///Retrieves the current state container for Aggregate Root with bulk function turned on.
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
     public Task<Container> GetBulkCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate;
+
     ///<summary>
     ///Retrieves the container for specified Projection
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
     public Task<Container> GetProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection;
+
     ///<summary>
     ///Retrieves the container for specified Projection with bulk function turned on
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
     public Task<Container> GetBulkProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection;
+
+    ///<summary>
+    ///Retrieves the container.  Uses the knownContainers list to skip checks if container already exists. Will create if it doesn't exist and update knownContainers list.
+    ///</summary>
+    ///<param name="containerName">Name of container to retrieve</param>
+    ///<param name="bulkEnabled">If bulk operations are enabled</param>
+    ///<param name="partitionKeyPath">Path to partition key</param>
+    public Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath);
+
     ///<summary>
     ///Rebuilds the entire container from event stream
     ///</summary>
     public Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new();
+
     ///<summary>
     ///Rehydrates data directly from stream of events when querying a Projection isn't feasible
     ///</summary>
@@ -91,19 +109,25 @@ public interface INostify
     ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
     ///<param name="untilDate">Optional. Will build the aggregate state up to and including this time, if no value provided returns projection of current state</param>
     public Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, IAggregate, new();
+
     ///<summary>
-    ///Rehydrates data directly from stream of events and then calls the Projection SeedExternalDataAsync() function to pull any needed data from external services.
+    ///Rehydrates data directly from stream of events and then calls the Projection InitAsync() function to pull any needed data from external services.
     ///</summary>
     ///<returns>
     ///The projection state rehydrated.  Projections may only be rehydrated to the current state.
     ///</returns>
     ///<param name="id">The id (Guid) of the aggregate root to build a projection of</param>
     ///<param name="httpClient">Instance of HttpClient to query external data for Projection</param>
-    public Task<T> RehydrateAsync<T>(Guid id, HttpClient httpClient) where T : NostifyObject, IProjection, new();
+    //////<returns>
+    /// A task that represents the asynchronous operation. The task result contains the rehydrated projection state.
+    ///</returns>
+    public Task<P> RehydrateAsync<P,A>(Guid id, HttpClient httpClient) where P : NostifyObject, IProjection, IInitializable<P,A>, new() where A : NostifyObject, IAggregate, new();
+
     ///<summary>
     ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
     ///</summary>
     public Task DoBulkUpsertAsync<T>(Container container, List<T> itemList);
+
     ///<summary>
     ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
     ///</summary>
@@ -232,22 +256,21 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task<T> RehydrateAsync<T>(Guid id, HttpClient httpClient) where T : NostifyObject, IProjection, new()
+    public async Task<P> RehydrateAsync<P,A>(Guid id, HttpClient httpClient) where P : NostifyObject, IProjection, IInitializable<P,A>, new() where A : NostifyObject, IAggregate, new()
     {
         var eventContainer = await GetEventStoreContainerAsync();
         
-        T rehydratedProjection = new T();
+        P rehydratedProjection = new P();
         List<Event> eventList = await eventContainer.GetItemLinqQueryable<Event>()
             .Where(e => e.aggregateRootId == id)
             .ReadAllAsync();
-
-        //Seed returns an update event and queries all external data
-        eventList.Add(await rehydratedProjection.SeedExternalDataAsync(this, httpClient));
 
         foreach (var pe in eventList.OrderBy(pe => pe.timestamp))  //Apply in order
         {
             rehydratedProjection.Apply(pe);
         }
+
+        rehydratedProjection = await rehydratedProjection.InitAsync(this, httpClient);
 
         return rehydratedProjection;
     }
@@ -256,7 +279,7 @@ public class Nostify : INostify
     ///<inheritdoc />
     public async Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
     {
-        return await Repository.GetEventStoreAsync();
+        return await GetContainerAsync(Repository.EventStoreContainer, allowBulk, Repository.EventStorePartitionKey);
     }
 
     ///<inheritdoc />
@@ -283,10 +306,21 @@ public class Nostify : INostify
         return await GetContainerAsync(T.containerName, true, partitionKeyPath);
     }
 
-    private async Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
+    ///<inheritdoc />
+    public async Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
     {
         var db = await Repository.GetDatabaseAsync(bulkEnabled);
-        return await db.CreateContainerIfNotExistsAsync(containerName, partitionKeyPath);
+        //Check to see if container already exists in known containers list and skip check if it does but if not create it if needed and add to list
+        Container container;
+        if (Repository.knownContainers.Any(c => c == containerName))
+        { 
+            container = db.GetContainer(containerName);
+        }
+        else {
+            container = await db.CreateContainerIfNotExistsAsync(containerName, partitionKeyPath);
+            Repository.knownContainers.Add(containerName);
+        }
+        return container;
     }
 
     
