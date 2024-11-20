@@ -115,8 +115,7 @@ public interface IInitializable<P,A> : IUniquelyIdentifiable where P : class, IA
     {
         string containerName = P.containerName;
         //Delete container
-        Container deleteContainer = await nostify.GetContainerAsync(containerName, false, partitionKeyPath);
-        _ = await deleteContainer.DeleteContainerAsync();
+        Container deleteContainer = await nostify.DeleteAndReCreateContainerAsync(containerName, false, partitionKeyPath);
 
         //Recreate container
         Container createContainer = await nostify.GetContainerAsync(containerName, true, partitionKeyPath);

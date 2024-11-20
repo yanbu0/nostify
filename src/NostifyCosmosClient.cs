@@ -19,10 +19,23 @@ namespace nostify
         ///Gets an instance of CosmosClient
         ///</summary>        
         CosmosClient GetClient(bool allowBulk = false);
+
         ///<summary>
         ///Returns database reference. If allowBulk is true, will return bulk database reference. Single database reference is created for each type of database for the lifetime of the application.
+        ///Uses default throughput for database.
         ///</summary>
+        ///<returns>Database reference</returns>
+        ///<param name="allowBulk">If true, will return bulk database reference</param>
         Task<Database> GetDatabaseAsync(bool allowBulk = false);
+
+        ///<summary>
+        ///Returns database reference. If allowBulk is true, will return bulk database reference. Single database reference is created for each type of database for the lifetime of the application.
+        ///Uses default throughput for database.
+        ///</summary>
+        ///<returns>Database reference</returns>
+        ///<param name="allowBulk">If true, will return bulk database reference</param>
+        ///<param name="throughput">Throughput for database</param>
+        Task<Database> GetDatabaseAsync(bool allowBulk, int throughput);
 
     }
 
@@ -67,9 +80,19 @@ namespace nostify
         public readonly string ConnectionString;
 
         ///<summary>
+        ///Optional. Default throughput for cosmos db when creating new databases
+        ///</summary>
+        public readonly int DefaultDbThroughput = 4000;
+
+        ///<summary>
+        ///Optional. Default throughput for cosmos db when creating new containers
+        ///</summary>
+        public readonly int DefaultContainerThroughput = 4000;
+
+        ///<summary>
         ///Non-bulk database reference for lower latency
         ///</summary>
-        private Database? _nonBulkDatabase { get; set; } = null;
+        private Database? _database { get; set; } = null;
 
         ///<summary>
         ///Bulk database reference for higher throughput
@@ -107,7 +130,9 @@ namespace nostify
             string ConnectionString = "", 
             string EventStorePartitionKey = "/aggregateRootId",
             string EventStoreContainer = "eventStore", 
-            string UndeliverableEvents = "undeliverableEvents")
+            string UndeliverableEvents = "undeliverableEvents",
+            int DefaultContainerThroughput = 4000,
+            int DefaultDbThroughput = 4000)
         {
             this.EndpointUri = EndpointUri;
             this.Primarykey = ApiKey;
@@ -116,6 +141,8 @@ namespace nostify
             this.EventStorePartitionKey = EventStorePartitionKey;
             this.EventStoreContainer = EventStoreContainer;
             this.UndeliverableEvents = UndeliverableEvents;
+            this.DefaultContainerThroughput = DefaultContainerThroughput;
+            this.DefaultDbThroughput = DefaultDbThroughput;
             InitAsync();
         }
 
@@ -151,18 +178,23 @@ namespace nostify
             return allowBulk ? _bulkCosmosClient : _cosmosClient;
         } 
 
-        /// <inheritdoc />
         public async Task<Database> GetDatabaseAsync(bool allowBulk = false)
         {
-            if (!allowBulk && _nonBulkDatabase == null)
+            return await GetDatabaseAsync(allowBulk, this.DefaultDbThroughput);
+        }
+
+        /// <inheritdoc />
+        public async Task<Database> GetDatabaseAsync(bool allowBulk, int throughput)
+        {
+            if (!allowBulk && _database == null)
             {
-                _nonBulkDatabase = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName)).Database;
+                _database = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
             }
             if (allowBulk && _bulkDatabase == null)
             {
-                _bulkDatabase = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName)).Database;
+                _bulkDatabase = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
             }
-            return allowBulk ? _bulkDatabase : _nonBulkDatabase;
+            return allowBulk ? _bulkDatabase : _database;
         }
 
     }

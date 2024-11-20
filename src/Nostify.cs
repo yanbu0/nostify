@@ -96,6 +96,14 @@ public interface INostify
     public Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath);
 
     ///<summary>
+    ///Deletes the container and recreates it.  Will throw an exception if the container does not exist. Pauses all GetContainerAsync() calls until complete.
+    ///</summary>
+    ///<param name="containerName">Name of container to retrieve</param>
+    ///<param name="bulkEnabled">If bulk operations are enabled</param>
+    ///<param name="partitionKeyPath">Path to partition key</param>
+    public Task<Container> DeleteAndReCreateContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath);
+
+    ///<summary>
     ///Rebuilds the entire container from event stream
     ///</summary>
     public Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new();
@@ -306,20 +314,55 @@ public class Nostify : INostify
         return await GetContainerAsync(T.containerName, true, partitionKeyPath);
     }
 
+    private const int MAX_RETRIES = 10;
+    private const int INITITAL_RETRY_DELAY = 100;
+    private bool _pauseGetContainer { get; set; } = false;
     ///<inheritdoc />
     public async Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
     {
+        //Pause for a bit if another thread is currently deleting and recreating the container
+        int retries = 0;
+        int delay = INITITAL_RETRY_DELAY;
+        while (_pauseGetContainer && retries < MAX_RETRIES)
+        {
+            await Task.Delay(delay);
+            retries++;
+            delay = delay * 2;
+            if (retries >= MAX_RETRIES)
+            {
+                throw new NostifyException("Max retries reached while waiting for container retrieval.");
+            }
+        }
         var db = await Repository.GetDatabaseAsync(bulkEnabled);
         //Check to see if container already exists in known containers list and skip check if it does but if not create it if needed and add to list
         Container container;
         if (Repository.knownContainers.Any(c => c == containerName))
         { 
             container = db.GetContainer(containerName);
+            //Clean up duplicates
+            if (Repository.knownContainers.Count(c => c == containerName) > 1)
+            {
+                Repository.knownContainers.RemoveAll(c => c == containerName);
+                Repository.knownContainers.Add(containerName);
+            }
         }
         else {
             container = await db.CreateContainerIfNotExistsAsync(containerName, partitionKeyPath);
             Repository.knownContainers.Add(containerName);
         }
+        return container;
+    }
+
+    /// <inheritdoc/>
+    public async Task<Container> DeleteAndReCreateContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
+    {
+        _pauseGetContainer = true;
+        var db = await Repository.GetDatabaseAsync(bulkEnabled);
+        Container container = db.GetContainer(containerName);
+        await container.DeleteContainerAsync();
+        //This will recreate the container and add to known containers list if needed
+        await GetContainerAsync(containerName, bulkEnabled, partitionKeyPath);
+        _pauseGetContainer = false;
         return container;
     }
 
