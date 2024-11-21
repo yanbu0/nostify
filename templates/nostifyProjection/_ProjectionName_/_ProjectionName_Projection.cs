@@ -46,7 +46,7 @@ public class _ProjectionName_ : ProjectionBaseClass<_ProjectionName_,_ReplaceMe_
         }
     }
 
-    public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<_ProjectionName_> projectionsToInit, INostify nostify, HttpClient? httpClient = null, int loopSize = 1000, DateTime? pointInTime = null)
+    public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<_ProjectionName_> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
     {
         
 
