@@ -67,25 +67,25 @@ public interface INostify
     ///Retrieves the current state container for Aggregate Root
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
-    public Task<Container> GetCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate;
+    public Task<Container> GetCurrentStateContainerAsync<A>(string partitionKeyPath = "/tenantId") where A : IAggregate;
 
     ///<summary>    
     ///Retrieves the current state container for Aggregate Root with bulk function turned on.
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
-    public Task<Container> GetBulkCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate;
+    public Task<Container> GetBulkCurrentStateContainerAsync<A>(string partitionKeyPath = "/tenantId") where A : IAggregate;
 
     ///<summary>
     ///Retrieves the container for specified Projection
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
-    public Task<Container> GetProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection;
+    public Task<Container> GetProjectionContainerAsync<P>(string partitionKeyPath = "/tenantId") where P : IContainerName;
 
     ///<summary>
     ///Retrieves the container for specified Projection with bulk function turned on
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
-    public Task<Container> GetBulkProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection;
+    public Task<Container> GetBulkProjectionContainerAsync<P>(string partitionKeyPath = "/tenantId") where P : IContainerName;
 
     ///<summary>
     ///Retrieves the container.  Uses the knownContainers list to skip checks if container already exists. Will create if it doesn't exist and update knownContainers list.
@@ -94,14 +94,6 @@ public interface INostify
     ///<param name="bulkEnabled">If bulk operations are enabled</param>
     ///<param name="partitionKeyPath">Path to partition key</param>
     public Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath);
-
-    ///<summary>
-    ///Deletes the container and recreates it.  Will throw an exception if the container does not exist. Pauses all GetContainerAsync() calls until complete.
-    ///</summary>
-    ///<param name="containerName">Name of container to retrieve</param>
-    ///<param name="bulkEnabled">If bulk operations are enabled</param>
-    ///<param name="partitionKeyPath">Path to partition key</param>
-    public Task<Container> DeleteAndReCreateContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath);
 
     ///<summary>
     ///Rebuilds the entire container from event stream
@@ -129,7 +121,7 @@ public interface INostify
     //////<returns>
     /// A task that represents the asynchronous operation. The task result contains the rehydrated projection state.
     ///</returns>
-    public Task<P> RehydrateAsync<P,A>(Guid id, HttpClient httpClient) where P : NostifyObject, IProjection, IInitializable<P,A>, new() where A : NostifyObject, IAggregate, new();
+    public Task<P> RehydrateAsync<P,A>(Guid id, HttpClient httpClient) where P : ProjectionBaseClass<P,A>, IContainerName, IHasExternalData<P>, new() where A : NostifyObject, IAggregate, new();
 
     ///<summary>
     ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
@@ -139,7 +131,7 @@ public interface INostify
     ///<summary>
     ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
     ///</summary>
-    public Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList);
+    public Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList, string partitionKeyPath = "/tenantId");
 
 }
 
@@ -264,7 +256,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task<P> RehydrateAsync<P,A>(Guid id, HttpClient httpClient) where P : NostifyObject, IProjection, IInitializable<P,A>, new() where A : NostifyObject, IAggregate, new()
+    public async Task<P> RehydrateAsync<P,A>(Guid id, HttpClient httpClient) where P : ProjectionBaseClass<P,A>, IContainerName, IHasExternalData<P>, new() where A : NostifyObject, IAggregate, new()
     {
         var eventContainer = await GetEventStoreContainerAsync();
         
@@ -291,80 +283,34 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task<Container> GetCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate
+    public async Task<Container> GetCurrentStateContainerAsync<A>(string partitionKeyPath = "/tenantId") where A : IAggregate
     {
-        return await GetContainerAsync(T.currentStateContainerName, false, partitionKeyPath);
+        return await GetContainerAsync(A.currentStateContainerName, false, partitionKeyPath);
     }
 
     ///<inheritdoc />
-    public async Task<Container> GetBulkCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IAggregate
+    public async Task<Container> GetBulkCurrentStateContainerAsync<A>(string partitionKeyPath = "/tenantId") where A : IAggregate
     {
-        return await GetContainerAsync(T.currentStateContainerName, true, partitionKeyPath);
+        return await GetContainerAsync(A.currentStateContainerName, true, partitionKeyPath);
     }
 
     ///<inheritdoc />
-    public async Task<Container> GetProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection
+    public async Task<Container> GetProjectionContainerAsync<P>(string partitionKeyPath = "/tenantId") where P : IContainerName
     {
-        return await GetContainerAsync(T.containerName, false, partitionKeyPath);
+        return await GetContainerAsync(P.containerName, false, partitionKeyPath);
     }
 
     ///<inheritdoc />
-    public async Task<Container> GetBulkProjectionContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : IProjection
+    public async Task<Container> GetBulkProjectionContainerAsync<P>(string partitionKeyPath = "/tenantId") where P : IContainerName
     {
-        return await GetContainerAsync(T.containerName, true, partitionKeyPath);
+        return await GetContainerAsync(P.containerName, true, partitionKeyPath);
     }
 
-    private const int MAX_RETRIES = 10;
-    private const int INITITAL_RETRY_DELAY = 100;
-    private bool _pauseGetContainer { get; set; } = false;
     ///<inheritdoc />
     public async Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
     {
-        //Pause for a bit if another thread is currently deleting and recreating the container
-        int retries = 0;
-        int delay = INITITAL_RETRY_DELAY;
-        while (_pauseGetContainer && retries < MAX_RETRIES)
-        {
-            await Task.Delay(delay);
-            retries++;
-            delay = delay * 2;
-            if (retries >= MAX_RETRIES)
-            {
-                throw new NostifyException("Max retries reached while waiting for container retrieval.");
-            }
-        }
-        var db = await Repository.GetDatabaseAsync(bulkEnabled);
-        //Check to see if container already exists in known containers list and skip check if it does but if not create it if needed and add to list
-        Container container;
-        if (Repository.knownContainers.Any(c => c == containerName))
-        { 
-            container = db.GetContainer(containerName);
-            //Clean up duplicates
-            if (Repository.knownContainers.Count(c => c == containerName) > 1)
-            {
-                Repository.knownContainers.RemoveAll(c => c == containerName);
-                Repository.knownContainers.Add(containerName);
-            }
-        }
-        else {
-            container = await db.CreateContainerIfNotExistsAsync(containerName, partitionKeyPath);
-            Repository.knownContainers.Add(containerName);
-        }
-        return container;
-    }
-
-    /// <inheritdoc/>
-    public async Task<Container> DeleteAndReCreateContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
-    {
-        _pauseGetContainer = true;
-        var db = await Repository.GetDatabaseAsync(bulkEnabled);
-        Container container = db.GetContainer(containerName);
-        await container.DeleteContainerAsync();
-        //This will recreate the container and add to known containers list if needed
-        await GetContainerAsync(containerName, bulkEnabled, partitionKeyPath);
-        _pauseGetContainer = false;
-        return container;
-    }
+        return await Repository.GetContainerAsync(containerName, partitionKeyPath, bulkEnabled);
+    }  
 
     
     ///<inheritdoc />
@@ -443,7 +389,7 @@ public class Nostify : INostify
     public async Task<Container> GetUndeliverableEventsContainerAsync(string partitionKeyPath = "/tenantId")
     {
         var db = await Repository.GetDatabaseAsync();
-        return await db.CreateContainerIfNotExistsAsync(Repository.UndeliverableEvents, partitionKeyPath);
+        return await GetContainerAsync(Repository.UndeliverableEvents, false, partitionKeyPath);
     }
 
     ///<inheritdoc />
@@ -455,10 +401,9 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList)
+    public async Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList, string partitionKeyPath = "/tenantId")
     {
-        var db = await this.Repository.GetDatabaseAsync(true);
-        var bulkContainer = db.GetContainer(containerName);
+        var bulkContainer = await GetContainerAsync(containerName, true, partitionKeyPath);
         await DoBulkUpsertAsync<T>(bulkContainer, itemList);
     }
 

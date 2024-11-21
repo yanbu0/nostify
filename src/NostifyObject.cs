@@ -24,7 +24,6 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///</summary>
     protected internal NostifyObject(){
     }
-
     
     ///<summary>
     ///Id of tenant of logged in user

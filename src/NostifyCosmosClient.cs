@@ -26,7 +26,7 @@ namespace nostify
         ///</summary>
         ///<returns>Database reference</returns>
         ///<param name="allowBulk">If true, will return bulk database reference</param>
-        Task<Database> GetDatabaseAsync(bool allowBulk = false);
+        Task<DatabaseRef> GetDatabaseAsync(bool allowBulk = false);
 
         ///<summary>
         ///Returns database reference. If allowBulk is true, will return bulk database reference. Single database reference is created for each type of database for the lifetime of the application.
@@ -35,7 +35,18 @@ namespace nostify
         ///<returns>Database reference</returns>
         ///<param name="allowBulk">If true, will return bulk database reference</param>
         ///<param name="throughput">Throughput for database</param>
-        Task<Database> GetDatabaseAsync(bool allowBulk, int throughput);
+        Task<DatabaseRef> GetDatabaseAsync(bool allowBulk, int throughput);
+
+        ///<summary>
+        ///Returns container reference. If allowBulk is true, will return bulk container reference. Single container reference is created for each type of container for the lifetime of the application.
+        ///</summary>
+        ///<returns>Container reference</returns>
+        ///<param name="containerName">Name of container</param>
+        ///<param name="partitionKeyPath">Partition key path</param>
+        ///<param name="allowBulk">If true, will return bulk container reference</param>
+        ///<param name="throughput">Throughput for container</param>
+        Task<Container> GetContainerAsync(string containerName, string partitionKeyPath, bool allowBulk = false, int? throughput = null);
+        
 
     }
 
@@ -92,12 +103,12 @@ namespace nostify
         ///<summary>
         ///Non-bulk database reference for lower latency
         ///</summary>
-        private Database? _database { get; set; } = null;
+        private DatabaseRef? _database { get; set; } = null;
 
         ///<summary>
         ///Bulk database reference for higher throughput
         ///</summary>
-        private Database? _bulkDatabase { get; set; } = null;
+        private DatabaseRef? _bulkDatabase { get; set; } = null;
 
         ///<summary>
         ///Cached CosmosClient instance
@@ -108,11 +119,6 @@ namespace nostify
         ///Cached bulk enabled CosmosClient instance
         ///</summary>
         private CosmosClient? _bulkCosmosClient { get; set; } = null;
-
-        ///<summary>
-        ///List of containers already known to exist so we don't have to check again
-        ///</summary>
-        public List<string> knownContainers { get; set; } = new List<string>();
 
         ///<summary>
         ///Parameterless constructor for mock testing
@@ -178,24 +184,66 @@ namespace nostify
             return allowBulk ? _bulkCosmosClient : _cosmosClient;
         } 
 
-        public async Task<Database> GetDatabaseAsync(bool allowBulk = false)
+        /// <inheritdoc />
+        public async Task<DatabaseRef> GetDatabaseAsync(bool allowBulk = false)
         {
             return await GetDatabaseAsync(allowBulk, this.DefaultDbThroughput);
         }
 
         /// <inheritdoc />
-        public async Task<Database> GetDatabaseAsync(bool allowBulk, int throughput)
+        public async Task<DatabaseRef> GetDatabaseAsync(bool allowBulk, int throughput)
         {
             if (!allowBulk && _database == null)
             {
-                _database = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
+                var db = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
+                _database = new() { database = db, knownContainers = new() };
             }
             if (allowBulk && _bulkDatabase == null)
             {
-                _bulkDatabase = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
+                var bulkDb = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
+                _bulkDatabase = new() { database = bulkDb, knownContainers = new() };
             }
             return allowBulk ? _bulkDatabase : _database;
         }
 
+        public async Task<Container> GetContainerAsync(string containerName, string partitionKeyPath, bool allowBulk = false, int? throughput = null)
+        {
+            var db = await GetDatabaseAsync(allowBulk);
+            //Check to see if container already exists in known containers list and skip check if it does but if not create it if needed and add to list
+            Container container;
+            if (db.knownContainers.Any(c => c == containerName))
+            { 
+                container = db.database.GetContainer(containerName);
+                db.AddContainer(containerName);
+            }
+            else {
+                ContainerProperties containerProperties = new() {
+                    Id = containerName,
+                    PartitionKeyPath = partitionKeyPath,
+                    DefaultTimeToLive = -1
+                }; 
+                ThroughputProperties throughputProperties = throughput.HasValue ? 
+                    ThroughputProperties.CreateAutoscaleThroughput(throughput.Value) : 
+                    ThroughputProperties.CreateAutoscaleThroughput(DefaultContainerThroughput);
+                container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, throughputProperties);
+                db.AddContainer(containerName);
+            }
+            return container;
+        }
+
+    }
+}
+
+public class DatabaseRef
+{
+    public Database database { get; set; }
+    public List<string> knownContainers { get; set; } = new List<string>();
+
+    public void AddContainer(string containerName)
+    {
+        if (!knownContainers.Contains(containerName))
+        {
+            knownContainers.Add(containerName);
+        }
     }
 }

@@ -9,8 +9,38 @@ using Newtonsoft.Json;
 
 namespace nostify;
 
+///<summary>
+///Nostify Cosmos Container Extensions
+///</summary>
 public static class ContainerExtensions
 {
+    ///<summary>
+    ///Deletes all items in a Projection container by setting ttl = 1. Used to clear out when re-initializing. Should not be used in production when in use.
+    ///</summary>
+    ///<param name="containerToDeleteFrom">Container to delete all items from</param>
+    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<returns>Number of items deleted</returns>
+    public static async Task<int> DeleteAllBulkAsync<T>(this Container containerToDeleteFrom) where T : IProjection<T>
+    {
+        //Make sure bulk operations are enabled
+        if (!containerToDeleteFrom.Database.Client.ClientOptions.AllowBulkExecution)
+        {
+            throw new NostifyException("Bulk operations must be enabled for this container");
+        }
+
+        List<Task> updateTtlTasks = new List<Task>();
+        List<T> allProjections = await containerToDeleteFrom.GetItemLinqQueryable<T>().ReadAllAsync();
+        //Setting ttl to 1 marks everything that hasn't been updated in the last second to be deleted
+        allProjections.ForEach(p => {
+            p.ttl = 1;
+            updateTtlTasks.Add(containerToDeleteFrom.UpsertItemAsync(p));
+        });
+
+        await Task.WhenAll(updateTtlTasks);
+
+        return updateTtlTasks.Count;
+    }
+
     ///<summary>
     ///Runs query and loops through the FeedResponse to return List of all data
     ///</summary>

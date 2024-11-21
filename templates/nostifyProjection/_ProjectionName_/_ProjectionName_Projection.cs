@@ -7,11 +7,11 @@ using nostify;
 
 namespace _ReplaceMe__Service;
 
-public class _ProjectionName_ : NostifyObject, IInitializable<_ProjectionName_,_ReplaceMe_>, IProjection
+public class _ProjectionName_ : ProjectionBaseClass<_ProjectionName_,_ReplaceMe_>, IContainerName, IHasExternalData<_ProjectionName_>
 {
     public _ProjectionName_()
     {
-
+        
     }   
 
     public static string containerName => "_ProjectionName_";
@@ -26,6 +26,8 @@ public class _ProjectionName_ : NostifyObject, IInitializable<_ProjectionName_,_
     public string externalAggregateExample1Name { get; set; }
     public Guid externalAggregateExample2Id { get; set; }
     public string externalAggregateExample2Name { get; set; }
+
+
     //**********************************************************************************************
 
     public override void Apply(Event eventToApply)
@@ -40,10 +42,11 @@ public class _ProjectionName_ : NostifyObject, IInitializable<_ProjectionName_,_
         else if (eventToApply.command.name.Equals("Delete__ReplaceMe_"))
         {
             this.isDeleted = true;
+            this.ttl = 1;
         }
     }
 
-    public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<_ProjectionName_> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
+    public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<_ProjectionName_> projectionsToInit, INostify nostify, HttpClient? httpClient = null, int loopSize = 1000, DateTime? pointInTime = null)
     {
         
 
