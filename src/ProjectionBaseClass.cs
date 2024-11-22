@@ -90,9 +90,9 @@ public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> w
        
         //Loop through specified number at a time and get all events for each base Aggregate and apply them to a new projection instance
         //Doing this to avoid getting too much data
-        List<P> projectionList = new List<P>();
         for(int i = 0; i < baseAggregateIds.Count; i += loopSize)
         {
+            List<P> projectionList = new List<P>();
             List<Guid> ids = baseAggregateIds.Skip(i).Take(loopSize).ToList();
             List<Event> events = await eventStoreContainer.GetItemLinqQueryable<Event>().Where(x => ids.Contains(x.aggregateRootId)).ReadAllAsync();
             ids.ForEach(id =>

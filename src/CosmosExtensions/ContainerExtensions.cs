@@ -37,6 +37,7 @@ public static class ContainerExtensions
         });
 
         await Task.WhenAll(updateTtlTasks);
+        await Task.Delay(3000);
 
         return updateTtlTasks.Count;
     }
