@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>2.0.0.7-alpha</Version>
+    <Version>2.0.0.8-alpha</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
