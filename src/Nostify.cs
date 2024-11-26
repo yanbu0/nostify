@@ -126,12 +126,12 @@ public interface INostify
     ///<summary>
     ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
     ///</summary>
-    public Task DoBulkUpsertAsync<T>(Container container, List<T> itemList);
+    public Task DoBulkUpsertAsync<T>(Container container, List<T> itemList) where T : IApplyable;
 
     ///<summary>
     ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
     ///</summary>
-    public Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList, string partitionKeyPath = "/tenantId");
+    public Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList, string partitionKeyPath = "/tenantId") where T : IApplyable;
 
 }
 
@@ -393,15 +393,13 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task DoBulkUpsertAsync<T>(Container bulkContainer, List<T> itemList)
+    public async Task DoBulkUpsertAsync<T>(Container bulkContainer, List<T> itemList) where T : IApplyable
     {        
-        List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
-        await Task.WhenAll(taskList);
+        await bulkContainer.DoBulkUpsertAsync<T>(itemList);
     }
 
     ///<inheritdoc />
-    public async Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList, string partitionKeyPath = "/tenantId")
+    public async Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList, string partitionKeyPath = "/tenantId") where T : IApplyable
     {
         var bulkContainer = await GetContainerAsync(containerName, true, partitionKeyPath);
         await DoBulkUpsertAsync<T>(bulkContainer, itemList);

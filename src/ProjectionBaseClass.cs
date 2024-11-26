@@ -58,12 +58,14 @@ public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> w
 
         //Get all external data events
         List<ExternalDataEvent> externalDataEvents = await P.GetExternalDataEventsAsync(projectionsToInit, nostify, httpClient);
+        //Flatten all Events into a single ExternalDataEvent if id's match
+        externalDataEvents = externalDataEvents.GroupBy(x => x.aggregateRootId).Select(x => new ExternalDataEvent(x.Key, x.SelectMany(y => y.events).ToList() )).ToList();
         //Apply each event to it's respective projection matching on aggregateRootId == id
         List<P> initializedProjections = new List<P>();
         projectionsToInit.ForEach(p =>
         {
             P initInProcess = p;
-            List<Event> eventsToApplyToThisProjection = externalDataEvents.Where(e => e.aggregateRootId == p.id).SelectMany(e => e.events).ToList();
+            List<Event> eventsToApplyToThisProjection = externalDataEvents.Where(e => e.aggregateRootId == p.id).First().events;
             eventsToApplyToThisProjection.ForEach(e => initInProcess.Apply(e));
             initInProcess.initialized = true;
             initializedProjections.Add(initInProcess);
@@ -75,7 +77,7 @@ public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> w
     }
 
     ///<inheritdoc />
-    public async static Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000)
+    public async static Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 100)
     {
         string containerName = P.containerName;
         //Delete all items from container

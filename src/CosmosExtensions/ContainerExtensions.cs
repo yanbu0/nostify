@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Transactions;
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 
@@ -14,32 +15,70 @@ namespace nostify;
 ///</summary>
 public static class ContainerExtensions
 {
+    public static async Task<bool> ValidateBulkEnabled(this Container container, bool throwIfNotEnabled = false)
+    {
+        bool bulkEnabled = container.Database.Client.ClientOptions.AllowBulkExecution;
+        //Make sure bulk operations are enabled
+        if (!bulkEnabled && throwIfNotEnabled)
+        {
+            throw new NostifyException("Bulk operations must be enabled for this container");
+        }
+        return bulkEnabled;
+    }
+
     ///<summary>
     ///Deletes all items in a Projection container by setting ttl = 1. Used to clear out when re-initializing. Should not be used in production when in use.
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete all items from</param>
     ///<typeparam name="T">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> DeleteAllBulkAsync<T>(this Container containerToDeleteFrom) where T : IProjection<T>
+    public static async Task<int> DeleteAllBulkAsync<T>(this Container containerToDeleteFrom) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
     {
-        //Make sure bulk operations are enabled
-        if (!containerToDeleteFrom.Database.Client.ClientOptions.AllowBulkExecution)
+        containerToDeleteFrom.ValidateBulkEnabled(true);
+        
+        var response = await containerToDeleteFrom.ReadContainerAsync();
+        var containerProps = response.Resource;
+        //Make sure TTL is enabled
+        if (!containerProps.DefaultTimeToLive.HasValue)
         {
-            throw new NostifyException("Bulk operations must be enabled for this container");
+            //Replace with TTL enabled container set to -1
+            containerProps.DefaultTimeToLive = 1;
+            await containerToDeleteFrom.ReplaceContainerAsync(containerProps);
         }
 
-        List<Task> updateTtlTasks = new List<Task>();
         List<T> allProjections = await containerToDeleteFrom.GetItemLinqQueryable<T>().ReadAllAsync();
-        //Setting ttl to 1 marks everything that hasn't been updated in the last second to be deleted
-        allProjections.ForEach(p => {
-            p.ttl = 1;
-            updateTtlTasks.Add(containerToDeleteFrom.UpsertItemAsync(p));
-        });
+        int totalUpdated = 0;
+        const int batchSize = 100;
 
-        await Task.WhenAll(updateTtlTasks);
-        await Task.Delay(3000);
+        // Loop through batches of 1000
+        for (int i = 0; i < allProjections.Count; i += batchSize)
+        {
+            try
+            {
+            
+                var batchItems = allProjections.Skip(i).Take(batchSize).ToList();
+                List<Task> tasks = new List<Task>();
 
-        return updateTtlTasks.Count;
+                foreach (var item in batchItems)
+                {
+                    // Set TTL to 1
+                    item.ttl = 1;
+                    PartitionKey pk = new PartitionKey(item.tenantId.ToString());
+
+                    tasks.Add(containerToDeleteFrom.UpsertItemAsync(item, pk));
+                }
+
+                await Task.WhenAll(tasks);
+                totalUpdated += batchItems.Count;
+            }
+            catch (Exception ex)
+            {
+                // Handle exception (log it, rethrow it, etc.)
+                throw new NostifyException($"An error occurred while deleting items in bulk {i}" + ex.Message);
+            }
+        }
+
+        return totalUpdated;
     }
 
     ///<summary>
@@ -180,6 +219,9 @@ public static class ContainerExtensions
     /// <returns></returns>
     public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList) where T : IApplyable
     {        
+        //throw if bulk not enabled
+        bulkContainer.ValidateBulkEnabled(true);
+        
         List<Task> taskList = new List<Task>();
         itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
         await Task.WhenAll(taskList);
