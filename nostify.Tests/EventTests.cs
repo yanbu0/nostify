@@ -77,7 +77,7 @@ public class EventTests
 
         // Act & Assert
         var exception = Assert.Throws<ValidationException>(() => eventToTest.ValidatePayload<TestAggregate>());
-        Assert.Contains("Id", exception.Message);
+        Assert.Contains("id", exception.Message);
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public class EventTests
         var payload = new JObject();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => new Event(command, payload));
+        Assert.Throws<ArgumentNullException>(() => new Event(command, payload));
     }
 
     [Fact]

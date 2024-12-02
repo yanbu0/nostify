@@ -36,18 +36,16 @@ public class Event
     ///<param name="partitionKey">Tenant ID to apply Event to.</param>
     public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
     {
-        Guid aggregateRootId;
+        Guid aggregateRootId = default;
         //Check payload is not null
-        if (payload == null)
-        {
-            throw new ArgumentNullException("Payload cannot be null");
-        }
+        CheckPayload(payload);
         var jPayload = JObject.FromObject(payload);
         if (jPayload["id"] == null || (jPayload["id"].Type != JTokenType.Guid && !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId)))
         {
             throw new ArgumentException("Aggregate Root ID does not exist or is not parsable to a Guid");
         }
-        else
+        //Only do this if we didn't parse out the guid value above
+        else if (aggregateRootId == default)
         {
             aggregateRootId = jPayload["id"].Value<Guid>();
         }
@@ -88,6 +86,8 @@ public class Event
         {
             throw new ArgumentNullException("Command cannot be null");
         }
+        CheckPayload(payload);
+        
         this.aggregateRootId = aggregateRootId;
         this.id = Guid.NewGuid();
         this.command = command;
@@ -95,6 +95,14 @@ public class Event
         this.payload = payload;
         this.partitionKey = partitionKey;
         this.userId = userId;
+    }
+
+    private void CheckPayload(object payload)
+    {
+        if (payload == null || !JObject.FromObject(payload).HasValues)
+        {
+            throw new ArgumentNullException("Payload cannot be null");
+        }
     }
 
     ///<summary>
