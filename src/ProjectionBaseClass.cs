@@ -44,7 +44,7 @@ public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> w
     {
         //Get all base aggregates in id list
         Container baseAggregateContainer = nostify.GetCurrentStateContainerAsync<A>().Result;
-        List<A> baseAggregates = baseAggregateContainer.GetItemLinqQueryable<A>().Where(x => idsToInit.Contains(x.id)).ToList();
+        List<A> baseAggregates = await baseAggregateContainer.GetItemLinqQueryable<A>().Where(x => idsToInit.Contains(x.id)).ReadAllAsync();
         //Create list of all projections to init
         var projectionList = baseAggregates.Select(a => JsonConvert.DeserializeObject<P>(JsonConvert.SerializeObject(a))).ToList();
         //Call Init
@@ -54,7 +54,7 @@ public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> w
     ///<inheritdoc />
     public async static Task<List<P>> InitAsync(List<P> projectionsToInit, INostify nostify, HttpClient? httpClient = null) 
     {
-        Container projectionContainer = await nostify.GetProjectionContainerAsync<P>();
+        Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
 
         //Get all external data events
         List<ExternalDataEvent> externalDataEvents = await P.GetExternalDataEventsAsync(projectionsToInit, nostify, httpClient);
@@ -65,7 +65,7 @@ public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> w
         projectionsToInit.ForEach(p =>
         {
             P initInProcess = p;
-            List<Event> eventsToApplyToThisProjection = externalDataEvents.Where(e => e.aggregateRootId == p.id).First().events;
+            List<Event> eventsToApplyToThisProjection = externalDataEvents.Where(e => e.aggregateRootId == p.id).FirstOrDefault()?.events ?? new List<Event>();
             eventsToApplyToThisProjection.ForEach(e => initInProcess.Apply(e));
             initInProcess.initialized = true;
             initializedProjections.Add(initInProcess);
@@ -79,9 +79,8 @@ public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> w
     ///<inheritdoc />
     public async static Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 100)
     {
-        string containerName = P.containerName;
         //Delete all items from container
-        Container deleteAllFromThis = await nostify.GetContainerAsync(containerName, true, partitionKeyPath);
+        Container deleteAllFromThis = await nostify.GetBulkProjectionContainerAsync<P>(partitionKeyPath);
         int deleteResult = await deleteAllFromThis.DeleteAllBulkAsync<P>();
 
         //Get all Events from eventStore for base Aggregates
