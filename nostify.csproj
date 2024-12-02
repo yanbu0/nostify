@@ -13,6 +13,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>   
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Confluent.Kafka" Version="2.3.0" />
