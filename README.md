@@ -15,8 +15,12 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
-- Documentation still in process below!
-- Example repo coming soon
+- Changes in 2.0
+  - Projection initialization is vastly different/better (breaking change)
+  - Proper caching of references to CosmosClient and containers speeds up db actions significantly
+  - Basic validation for create commands
+  - Leveraging TTL to add delete all in a projection container rather than deleting and recreating container
+  - More unit tests
 
 ## Getting Started
 
@@ -132,10 +136,9 @@ The solution to this in `nostify` is the projection pattern.  A projection defin
 #### Rules
 
 - No command is ever performed on a projection, they are updated by subscribing to and handling events on their component aggregates.
-- A projection will have a "base" aggregate and the `id` property of the projection will match the `id` property of the base aggregate.
-- A projection must implement the `NostifyObject` abstract class and the `IProjection` interface.
-- The `IProjection.SeedExternalDataAsync()` method must be implemented to handle getting data from aggregates other than the base aggregate on create.  It is called in the event handler for create of the base aggregate.
-- The `IProjection.InitContainerAsync()` method must contain logic to query all the data necessary to populate the entire projection container, from base aggregate and external aggregates.  It is called manually when first creating the container, or when having to recreate the container to remedy data corruption.
+- A projection will have a "base" aggregate and the `id` property of the projection will match the `id` property of the base aggregate. The base aggregate will be the aggregate that the create event is handled, creating a new instance of the projection in the container.
+- A projection must implement the `ProjectionBaseClass<P,A>` abstract class, where `P` is the concrete class of the projection, and `A` is the "base" aggregate, and the `IContainerName` interface, most will also need to implement `IHasExternalData<P>`.
+- For projections with data coming from aggregates external to the "base" aggregate, `IHasExternalData.GetExternalDataEvents()` method must be implemented to handle getting events from external sources to apply to the projection. The results of this method are used by the `ProjectionBaseClass` to update either the external data of a new single projection instance, or many projections when the container is initialized or data is imported.
 
 #### Create
 
@@ -383,135 +386,76 @@ Deleting an aggregate by default does not actually remove it from the current st
 Note: for the following `Projection` examples we will be using the following projection `TestWithStatus` as an example:
 
 ```C#
-public class TestWithStatus : NostifyObject, IProjection
+public class TestWithStatus : ProjectionBaseClass<TestWithStatus,Test>, IContainerName, IHasExternalData<TestWithStatus>
 {
-    public TestWithStatus()
-    {
+  public TestWithStatus()
+  {
 
-    }
+  }
 
-    public static string containerName => "TestWithStatus";
+  public static string containerName => "TestWithStatus";
 
-    public bool isDeleted { get; set; }
+  public bool isDeleted { get; set; }
 
-    //Test properites
-    public string testnName { get; set; }
-    public Guid? statusId { get; set; }
+  //Test properites
+  public string testnName { get; set; }
+  public Guid? statusId { get; set; }
 
-    //Status properties
-    public string? statusName { get; set; }
+  //Status properties
+  public string? statusName { get; set; }
 
-    public override void Apply(Event eventToApply)
-    {
-        //Should update the command tree below to not use string matching
-        if (eventToApply.command.name.Equals("Create_Test") || eventToApply.command.name.Equals("Update_Test") || eventToApply.command.name.Equals("Update_Status"))
-        {
-            this.UpdateProperties<TestWithStatus>(eventToApply.payload);
-        }
-        else if (eventToApply.command.name.Equals("Delete_Test"))
-        {
-            this.isDeleted = true;
-        }
-    }
+  public override void Apply(Event eventToApply)
+  {
+      //Should update the command tree below to not use string matching
+      if (eventToApply.command.name.Equals("Create_Test") || eventToApply.command.name.Equals("Update_Test") || eventToApply.command.name.Equals("Update_Status"))
+      {
+          this.UpdateProperties<TestWithStatus>(eventToApply.payload);
+      }
+      else if (eventToApply.command.name.Equals("Delete_Test"))
+      {
+          this.isDeleted = true;
+      }
+  }
 
-    public class StatusName
-    {
-        public Guid id { get; set; }
-        public string statusName { get; set; }
-    }
+  public class StatusName
+  {
+      public Guid id { get; set; }
+      public string statusName { get; set; }
+  }
 
-    public async Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null)
-    {
-        string? statusName = null;
-        if (statusId != null)
-        {
-            //Site Name
-            var status = await httpClient.GetFromJsonAsync<StatusName>($"http://localhost:7071/api/Status/{statusId}");
-            statusName = status?.statusName;
-        }
-        Event e = new Event(TestCommand.Update, id, new { id, statusName });
-        return e;
-    }
+  public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<TestWithStatus> projectionsToInit, INostify nostify, HttpClient httpClient = null, DateTime? pointInTime = null)
+  {
+    //Aggregate root ids to get events
+    List<Guid> statiToGetEventsFor = projectionsToInit.Select(s => s.id).ToList();
 
-    public static async Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null)
-    {
-        var testWithStatusContainer = await nostify.GetBulkProjectionContainerAsync<TestWithStatus>();
+    var resposne = await httpClient.PostAsync("http://localhost:7071/api/Events",statiToGetEventsFor);
+    if (!response.IsSuccessStatusCode)
+      throw new Exception("Something went awry");
 
-        List<StatusName> allStatuses = await httpClient.GetFromJsonAsync<List<StatusName>>("http://localhost:7071/api/Status") ?? new List<StatusName>();
-        List<Test> tests = await (await nostify.GetCurrentStateContainerAsync<Test>()).GetItemLinqQueryable<Test>().ReadAllAsync();
+    List<Event> events = JsonConvert.DeserializeObject<List<Event>>(await response.Content.ReadAsStringAsync());
 
-        var twsList = new List<TestWithStatus>();
-        test.ForEach(t =>{
-            var tws = new TestWithStatus(){
-                id = t.id,
-                statusId = t.statusId,
-                testName = t.testName,
-                statusName = allStatuses.FirstOrDefault(s => s.id == l.statusId)?.statusName
-            };
-            
-            twsList.Add(tws);
-        });
-
-        await nostify.DoBulkUpsertAsync(testWithStatusContainer, twsList);
-    }
-
-}
-```
-
-When adding a new `Projection` you must take into account the `Aggregate` records that may already exist and account for them in the `InitContainerAsync()` method.  When the projection is first added, it implements `NosifyObject` and `IProjection` in the template.  `IProjection` requires the `InitContainerAsync()` method, but, since we don't know the details of the projection at the time of create, the template simply contains a `throw new NotImplementedException()`.  
-
-You must implement the method such that calling it gets all of the data necessary to either create or re-create the projection container.  An example for a projection called `TestWithStatus` with the "base" aggregate of `Test` that also references an aggregate `Status` that is contained in a seperate service:
-
-```C#
-public static async Task InitContainerAsync(INostify nostify, HttpClient? httpClient = null)
-{
-    var testWithStatusContainer = await nostify.GetBulkProjectionContainerAsync<TestWithStatus>();
-
-    List<StatusName> allStatuses = await httpClient.GetFromJsonAsync<List<StatusName>>("http://localhost:7071/api/Status") ?? new List<StatusName>();
-    List<Test> tests = await (await nostify.GetCurrentStateContainerAsync<Test>()).GetItemLinqQueryable<Test>().ReadAllAsync();
-
-    var twsList = new List<TestWithStatus>();
-    test.ForEach(t =>{
-        var tws = new TestWithStatus(){
-            id = t.id,
-            statusId = t.statusId,
-            testName = t.testName,
-            statusName = allStatuses.FirstOrDefault(s => s.id == l.statusId)?.statusName
-        };
-        
-        twsList.Add(tws);
+    List<ExternalDataEvent> externalDataEvents = new List<ExternalDataEvent>();
+    projectionsToInit.ForEach(p =>{
+        var events = events.Where(e => e.aggrgateRootId == p.id)
+          .Select(e => new Event(e.command, e.aggregateRootId, e.payload, e.userId))
+          .ToList<Event>();
+        ExternalDataEvent ede = new ExternalDataEvent(p.id, events);
+        externalDataEvents.Add(ede);
     });
 
-    await nostify.DoBulkUpsertAsync(testWithStatusContainer, twsList);
+    return externalDataEvents;
+  }
+
 }
 ```
 
-Note that the code gets the projection container with "bulk" mode enabled to be able to handle large amounts of data writes.  It then queries the `Status` service and gets all.  If you have substaintial amounts of data, you may need to loop through multiple queries. (If there are more than one aggregate other than the base aggregate in your implementation, you will need additional queries.) After that, it grabs all instances of the base aggregate and then composes a `List<TestWithStatus>` with the appriopriate values.  It then saves them to the container, and is able to use the `DoBulkUpsert()` which will write to the container across many threads.  This method automatically creates a `List<Task>` for you by iterating over the list and calling `UpsertItemAsync()` and then calls `Task.WhenAll()`.
-
-Now that the method is implemented, the container can be initialized and populated with data by calling `TestWithStatus.InitContainerAsync()`.  The template creates an http triggered function to do this for you with a simple http post enabling creating an admin dashbaord.
+Note the `GetExternalDataEventsAsync()` method. You must implement this such that it returns a `List<ExternalDataEvent>`. `ExternalDataEvent` contains a `Guid` proprty that points at the "base" aggregate `id` value, and a `List<Event>` property which are all of the events external to the base aggregate that need to be applied to get the projection to the current state (or point in time state if desired).
 
 ### Create New Projection
 
 A `Projection` will have a "base" aggregate when it is defined. Projection create event handlers should subscribe to the create event of the base aggregate.
 
-Adding a new instance of a projection requires implementing a method in the `IProjection` interface: `SeedExternalDataAsync()`. This method grabs all data from aggregates external to the base aggregate for this particular instance. This is different from the Init function which grabs for all since we're only creating a single record in the projection container.
-
-This method must query any external data needed and return an `Event` to update the projection.  For our example of `TestWithStatus`:
-
-```C#
-public async Task<Event> SeedExternalDataAsync(INostify nostify, HttpClient? httpClient = null)
-{
-    string? statusName = null;
-    if (statusId != null)
-    {
-        //Site Name
-        var status = await httpClient.GetFromJsonAsync<SiteName>($"http://localhost:7071/api/Status/{statusId}");
-        statusName = status?.statusName;
-    }
-    Event e = new Event(TestCommand.Update, id, new { id, statusName });
-    return e;
-}
-```
+Adding a new instance of a projection requires implementing the `Apply()` method to handle all necessary events, and the `GetExternalDataEventsAsync()` method to get events external to the base aggregate when initializing new instances of the projection.
 
 This method is called in the event handler function to update the projection with any exsiting external data and then applied and saved to the projection container along with the `Event` signifying the creation of the `Test`
 
