@@ -15,8 +15,12 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
-- Documentation still in process below!
-- Example repo coming soon
+- Changes in 2.0
+  - Projection initialization is vastly different/better (breaking change)
+  - Proper caching of references to CosmosClient and containers speeds up db actions significantly
+  - Basic validation for create commands
+  - Leveraging TTL to add delete all in a projection container rather than deleting and recreating container
+  - More unit tests
 
 ## Getting Started
 
