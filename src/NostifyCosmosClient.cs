@@ -14,6 +14,10 @@ namespace nostify
     ///</summary>
     public interface INostifyCosmosClient
     {
+        ///<summary>
+        ///Whether or not the client is using the local Cosmos DB emulator
+        ///</summary>
+        bool IsLocalEmulator { get; }
 
         ///<summary>
         ///Gets an instance of CosmosClient
@@ -151,6 +155,9 @@ namespace nostify
             this.DefaultDbThroughput = DefaultDbThroughput;
             InitAsync();
         }
+
+        /// <inheritdoc />
+        public bool IsLocalEmulator => ConnectionString != null && ConnectionString.Contains("localhost");
 
         private async Task InitAsync()
         {            
