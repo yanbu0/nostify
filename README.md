@@ -15,6 +15,9 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.1
+  - Way to programatically create containers automatically on start up if needed (for facilitating local development)
+  - Some documentation updates
 - Changes in 2.0
   - Projection initialization is vastly different/better (breaking change)
   - Proper caching of references to CosmosClient and containers speeds up db actions significantly
@@ -62,11 +65,11 @@ The library is designed to be used in a microservice pattern (although not neces
 
 You should set up a Function App and Cosmos DB per Aggregate Microservice.
 
-![image](https://github.com/yanbu0/nostify/assets/26099646/be657901-89c0-4310-9502-61b2125368ab)
+![image](https://user-images.githubusercontent.com/26099646/287051578-be657901-89c0-4310-9502-61b2125368ab.png)
 
 Projections that contain data from multiple Aggregates can be updated by Event Handlers from other microservices. Why would this happen? Well say you have a Bank Account record. If we were using a relational database for a data store we'd have to either run two queries or do a join to get the Bank Account and the name of the Account Manager. Using the CQRS model, we can "pre-render" a projection that contains both the account info and the account manager info without having to join tables together. This example is obviously very simple, but in a complex environment where you're joining together dozens of tables to create a DTO to send to the user interface and returning 100's of thousands or millions of records, this type of architecture can dramatically improve BOTH system performance and throughput.
 
-![image](https://github.com/yanbu0/nostify/assets/26099646/fe8741c4-6547-482e-a03b-2b2635925602)
+![image](https://user-images.githubusercontent.com/26099646/287053131-fe8741c4-6547-482e-a03b-2b2635925602.png)
 
 ## Why????
 
