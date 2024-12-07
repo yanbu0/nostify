@@ -1,7 +1,13 @@
 
 using System;
 
+/// <summary>
+/// Interface for tenant filterable aggregates/projections.
+/// </summary>
 public interface ITenantFilterable
 {
-    Guid tenantId { get; set; }
+    /// <summary>
+    /// Gets or sets the tenant identifier.
+    /// </summary>
+    public Guid tenantId { get; set; }
 }

@@ -36,11 +36,18 @@ public class Event
     ///<param name="partitionKey">Tenant ID to apply Event to.</param>
     public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
     {
-        Guid aggregateRootId;
+        Guid aggregateRootId = default;
+        //Check payload is not null
+        CheckPayload(payload);
         var jPayload = JObject.FromObject(payload);
-        if (jPayload["id"] == null || !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId))
+        if (jPayload["id"] == null || (jPayload["id"].Type != JTokenType.Guid && !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId)))
         {
             throw new ArgumentException("Aggregate Root ID does not exist or is not parsable to a Guid");
+        }
+        //Only do this if we didn't parse out the guid value above
+        else if (aggregateRootId == default)
+        {
+            aggregateRootId = jPayload["id"].Value<Guid>();
         }
         SetUp(command, aggregateRootId, payload, userId, partitionKey);
     }
@@ -75,6 +82,12 @@ public class Event
     
     private void SetUp(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId, Guid partitionKey)
     {
+        if (command is null)
+        {
+            throw new ArgumentNullException("Command cannot be null");
+        }
+        CheckPayload(payload);
+        
         this.aggregateRootId = aggregateRootId;
         this.id = Guid.NewGuid();
         this.command = command;
@@ -82,6 +95,14 @@ public class Event
         this.payload = payload;
         this.partitionKey = partitionKey;
         this.userId = userId;
+    }
+
+    private void CheckPayload(object payload)
+    {
+        if (payload == null || !JObject.FromObject(payload).HasValues)
+        {
+            throw new ArgumentNullException("Payload cannot be null");
+        }
     }
 
     ///<summary>
@@ -155,5 +176,74 @@ public class Event
         return JObject.FromObject(payload).ToObject<T>() ?? new T();
     }
 
+    ///<summary>
+    ///Validates if the payload contains all required properties for performing a command on an aggregate of type T. Will throw a ValidationException if any required properties are missing or null.
+    ///</summary>
+    ///<typeparam name="T">The type of the aggregate to validate against.</typeparam>
+    public Event ValidatePayload<T>() where T : NostifyObject, IAggregate
+    {
+        if (this.command.isNew)
+        {
+            ValidateForCreate<T>();
+        }
+        return this;
+    }
+
+    private void ValidateForCreate<T>()
+    {
+        //Get all properties with RequiredForCreate attribute on T
+        var requiredProps = typeof(T).GetProperties().Where(p => p.GetCustomAttributes(typeof(RequiredForCreate), false).Any()).ToList();
+        //Get all properties with RequiredForCreate attribute on T where NotEmptyGuid is true
+        var notEmptyGuidProps = requiredProps.Where(p => p.GetCustomAttributes(typeof(RequiredForCreate), false).Any(a => ((RequiredForCreate)a).NotEmptyGuid)).ToList();
+        //Get all properties in payload where the name and type match a property in requiredProps
+        var payloadProps = JObject.FromObject(payload).Properties()
+                            .Where(p => requiredProps.Any(rp => rp.Name == p.Name)).ToList();
+
+        //Add error for each missing property
+        string missingProps = string.Empty;
+        foreach (var prop in requiredProps)
+        {
+            if (!payloadProps.Any(p => p.Name == prop.Name))
+            {
+                missingProps += prop.Name + ", ";
+            }
+        }
+        //Add error for any null properties
+        string nullProps = string.Empty;
+        foreach (var prop in payloadProps)
+        {
+            if (prop.Value.Type == JTokenType.Null)
+            {
+                nullProps += prop.Name + ", ";
+            }
+        }
+        //Add error for any empty guid properties
+        string emptyGuidProps = string.Empty;
+        foreach (var prop in notEmptyGuidProps)
+        {
+            if (payloadProps.Any(p => p.Name == prop.Name && Guid.TryParse(p.Value.ToString(), out Guid guidValue) && guidValue == Guid.Empty))
+            {
+                emptyGuidProps += prop.Name + ", ";
+            }
+        }
+        //Throw exception if any missing or null properties
+        string message = string.Empty;
+        if (!string.IsNullOrEmpty(missingProps))
+        {
+            message += $"Missing properties: {missingProps} ";
+        }
+        if (!string.IsNullOrEmpty(nullProps))
+        {
+            message += $"Null properties: {nullProps} ";
+        }
+        if (!string.IsNullOrEmpty(emptyGuidProps))
+        {
+            message += $"Empty Guid properties: {emptyGuidProps}";
+        }
+        if (!string.IsNullOrEmpty(message))
+        {
+            throw new ValidationException(message);
+        }
+    }
     
 }

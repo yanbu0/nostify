@@ -31,15 +31,10 @@ public class On_ReplaceMe_Created_For__ProjectionName_
             {
                 //Get projection container
                 Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
-
-                //Create projection
-                _ProjectionName_ proj = new _ProjectionName_();
-                //Apply create
-                proj.Apply(newEvent);
-                //Get external data
-                Event externalData = await proj.SeedExternalDataAsync(_nostify, _httpClient);
                 //Update projection container
-                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(new List<Event>(){newEvent,externalData});
+                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
+                //Initialize projection with external data
+                
             }                           
         }
         catch (Exception e)
