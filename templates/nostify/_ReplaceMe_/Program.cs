@@ -24,9 +24,9 @@ public class Program
             var config = context.Configuration;
 
             //Note: This is the api key for the cosmos emulator by default
-            string apiKey = config.GetValue<string>("apiKey");
-            string dbName = config.GetValue<string>("dbName");
-            string endPoint = config.GetValue<string>("endPoint");
+            string apiKey = config.GetValue<string>("cosmosApiKey");
+            string dbName = config.GetValue<string>("cosmosDbName");
+            string endPoint = config.GetValue<string>("cosmosEndPoint");
             string kafka = config.GetValue<string>("BrokerList");
 
             var nostify = new Nostify(apiKey, dbName, endPoint, kafka);
