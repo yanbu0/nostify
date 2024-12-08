@@ -37,6 +37,11 @@ public interface INostify
     string KafkaUrl { get; }
 
     ///<summary>
+    ///Kafka producer
+    ///</summary>
+    IProducer<string, string> KafkaProducer { get; }
+
+    ///<summary>
     ///Writes event to event store
     ///</summary>        
     ///<param name="eventToPersist">Event to apply and persist in event store</param>
@@ -122,12 +127,12 @@ public interface INostify
     public Task<P> RehydrateAsync<P,A>(Guid id, HttpClient httpClient) where P : ProjectionBaseClass<P,A>, IContainerName, IHasExternalData<P>, new() where A : NostifyObject, IAggregate, new();
 
     ///<summary>
-    ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
+    ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;</c> and calling <c>UpsertItemAsync()</c> and then calls <c>Task.WhenAll()</c>.
     ///</summary>
     public Task DoBulkUpsertAsync<T>(Container container, List<T> itemList) where T : IApplyable;
 
     ///<summary>
-    ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;<c/> and calling <c>UpsertItemAsync()<c/> and then calls <c>Task.WhenAll()<c/>.
+    ///Performs bulk upsert of list. Internally, creates a <c>List&lt;Task&gt;</c> for you by iterating over the <c>List&lt;T&gt;</c> and calling <c>UpsertItemAsync()</c> and then calls <c>Task.WhenAll()</c>.
     ///</summary>
     public Task DoBulkUpsertAsync<T>(string containerName, List<T> itemList, string partitionKeyPath = "/tenantId") where T : IApplyable;
 
@@ -156,10 +161,12 @@ public class Nostify : INostify
     public Guid DefaultTenantId { get; }
     /// <inheritdoc />
     public string KafkaUrl { get; }
+    /// <inheritdoc />
+    public IProducer<string, string> KafkaProducer { get; }
     
 
     ///<summary>
-    ///Nostify constructor
+    ///Nostify constructor for development with no username and pwd for Kafka
     ///</summary>
     ///<param name="primaryKey">API Key value</param>
     ///<param name="dbName">Name of event store DB</param>
@@ -169,6 +176,22 @@ public class Nostify : INostify
     ///<param name="defaultTenantId">Default tenant id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container per tenant</param>
     public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string defaultPartitionKeyPath = "/tenantId", Guid defaultTenantId = default)
     {
+        new Nostify(primaryKey, dbName, cosmosEndpointUri, kafkaUrl, null, null, defaultPartitionKeyPath, defaultTenantId);
+    }
+
+    ///<summary>
+    ///Nostify constructor for production with username and pwd for Kafka
+    ///</summary>
+    ///<param name="primaryKey">API Key value</param>
+    ///<param name="dbName">Name of event store DB</param>
+    ///<param name="cosmosEndpointUri">Uri of cosmos endpoint, format: https://[instance-name].documents.azure.us:443/</param>
+    ///<param name="kafkaUrl">Url of Kafka instance, format: localhost:54165</param>
+    ///<param name="kafkaUserName">Username for Kafka</param>
+    ///<param name="kafkaPassword">Password for Kafka</param>
+    ///<param name="defaultPartitionKeyPath">Path to partition key for default created current state container, set null to not create, leave default to partition by tenantId </param>
+    ///<param name="defaultTenantId">Default tenant id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container per tenant</param>
+    public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null, string defaultPartitionKeyPath = "/tenantId", Guid defaultTenantId = default)
+    {
         Repository = new NostifyCosmosClient(primaryKey, dbName, cosmosEndpointUri);
         if (defaultPartitionKeyPath != null)
         {
@@ -176,6 +199,24 @@ public class Nostify : INostify
         }
         this.DefaultTenantId = defaultTenantId;
         this.KafkaUrl = kafkaUrl;
+
+        bool isDeployed = !string.IsNullOrWhiteSpace(kafkaUserName) && !string.IsNullOrWhiteSpace(kafkaPassword);
+
+        //Build producer instance
+        var config = new List<KeyValuePair<string, string>>
+        {
+            new KeyValuePair<string, string>("bootstrap.servers", KafkaUrl),
+            new KeyValuePair<string, string>("security.protocol", "SASL_SSL"),
+            new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"),
+            new KeyValuePair<string, string>("session.timeout.ms", "45000"),
+            new KeyValuePair<string, string>("client.id", $"Nostifyd-{dbName}-{Guid.NewGuid()}")
+        };
+        if (isDeployed)
+        {
+            config.Add(new KeyValuePair<string, string>("sasl.username", kafkaUserName));
+            config.Add(new KeyValuePair<string, string>("sasl.password", kafkaPassword));
+        }
+        KafkaProducer = new ProducerBuilder<string,string>(config).Build();
     }
 
 
@@ -192,15 +233,10 @@ public class Nostify : INostify
         var peList = JsonConvert.DeserializeObject<List<Event>>(cosmosTriggerOutput);
         if (peList != null)
         {
-            var config = new List<KeyValuePair<string, string>>
-            {
-                new KeyValuePair<string, string>("bootstrap.servers", KafkaUrl)
-            };
-            using (var p = new ProducerBuilder<string,string>(config).Build())
             foreach (Event pe in peList)
             {
                 string topic = pe.command.name;
-                var result = await p.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
+                var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
             }
         }
     }
