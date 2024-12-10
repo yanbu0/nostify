@@ -206,8 +206,6 @@ public class Nostify : INostify
         var config = new List<KeyValuePair<string, string>>
         {
             new KeyValuePair<string, string>("bootstrap.servers", KafkaUrl),
-            new KeyValuePair<string, string>("security.protocol", "SASL_SSL"),
-            new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"),
             new KeyValuePair<string, string>("session.timeout.ms", "45000"),
             new KeyValuePair<string, string>("client.id", $"Nostifyd-{dbName}-{Guid.NewGuid()}")
         };
@@ -215,6 +213,8 @@ public class Nostify : INostify
         {
             config.Add(new KeyValuePair<string, string>("sasl.username", kafkaUserName));
             config.Add(new KeyValuePair<string, string>("sasl.password", kafkaPassword));
+            config.Add(new KeyValuePair<string, string>("security.protocol", "SASL_SSL"));
+            config.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
         }
         KafkaProducer = new ProducerBuilder<string,string>(config).Build();
     }
