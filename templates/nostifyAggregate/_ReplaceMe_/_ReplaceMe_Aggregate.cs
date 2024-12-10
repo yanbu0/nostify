@@ -16,7 +16,7 @@ public class _ReplaceMe_ : NostifyObject, IAggregate
 
     public override void Apply(Event eventToApply)
     {
-        if (eventToApply.command == _ReplaceMe_Command.Create || eventToApply.command == _ReplaceMe_Command.Update)
+        if (eventToApply.command == _ReplaceMe_Command.BulkCreate || eventToApply.command == _ReplaceMe_Command.Create || eventToApply.command == _ReplaceMe_Command.Update)
         {
             this.UpdateProperties<_ReplaceMe_>(eventToApply.payload);
         }
