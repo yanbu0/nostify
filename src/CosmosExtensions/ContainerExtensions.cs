@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Transactions;
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace nostify;
 
@@ -208,6 +209,49 @@ public static class ContainerExtensions
 
         await bulkContainer.DoBulkUpsertAsync<T>(objToUpsertList);
 
+    }
+
+    /// <summary>
+    /// Bulk updates objects from raw string array of KafkaTriggerEvents. Use in Event Handler. NOTE: this only supports updating root-level properties and not nested objects or arrays.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="bulkContainer">Must have bulk operations set to true</param>
+    /// <param name="events">Array of strings from KafkaTrigger</param>
+    /// <param name="partitionKeyName">Name of partition key, default is tenantId</param>
+    /// <returns></returns>
+    public static async Task BulkUpdateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string partitionKeyName = "tenantId")
+    {
+        var triggerEvents = events
+            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
+            .Where(e => e != null)
+            .Select(e => e!);
+
+        var patchOperations = triggerEvents
+            .Where(evt => evt.payload is JObject)
+            .Select(evt => 
+            {
+                var jobj = (JObject)evt.payload;
+                var id = jobj["id"]?.ToString();
+                var partitionId = jobj[partitionKeyName]?.ToString();
+                var operations = jobj.Properties()
+                    .Where(prop => prop.Name != "id" && prop.Name != partitionKeyName)
+                    .Select(prop => PatchOperation.Set($"/{prop.Name}", prop.Value))
+                    .ToList();
+                return (id, partitionId, operations);
+            });
+
+        var validPatchOperations = patchOperations
+            .Where(patch => 
+                !string.IsNullOrWhiteSpace(patch.id) && 
+                !string.IsNullOrWhiteSpace(patch.partitionId) &&
+                patch.operations.Count > 0);
+
+        // TODO: should invalid patch operations be reported?
+
+        var tasks = validPatchOperations
+            .Select(patch => bulkContainer.PatchItemAsync<T>(patch.id, new PartitionKey(patch.partitionId), patch.operations));
+
+        await Task.WhenAll(tasks);
     }
 
     /// <summary>
