@@ -29,7 +29,9 @@ public class Program
             string endPoint = config.GetValue<string>("cosmosEndPoint");
             string kafka = config.GetValue<string>("BrokerList");
 
-            var nostify = new Nostify(apiKey, dbName, endPoint, kafka);
+            var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
+                            .WithKafka(kafka)
+                            .Build();
 
             services.AddSingleton<INostify>(nostify);
             services.AddLogging();
