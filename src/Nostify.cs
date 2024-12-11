@@ -148,6 +148,119 @@ public interface INostify
 }
 
 ///<summary>
+///Configuration settings for Nostify
+///</summary>
+public class NostifyConfig
+{
+    /// <summary>
+    /// The API key for accessing the Cosmos DB.
+    /// </summary>
+    public string cosmosApiKey { get; set; }
+
+    /// <summary>
+    /// The name of the Cosmos DB.
+    /// </summary>
+    public string cosmosDbName { get; set; }
+
+    /// <summary>
+    /// The endpoint URI for the Cosmos DB.
+    /// </summary>
+    public string cosmosEndpointUri { get; set; }
+
+    /// <summary>
+    /// The URL for the Kafka server.
+    /// </summary>
+    public string kafkaUrl { get; set; }
+
+    /// <summary>
+    /// The username for accessing Kafka.
+    /// </summary>
+    public string kafkaUserName { get; set; }
+
+    /// <summary>
+    /// The password for accessing Kafka.
+    /// </summary>
+    public string kafkaPassword { get; set; }
+
+    /// <summary>
+    /// The default partition key path for Cosmos DB.
+    /// </summary>
+    public string defaultPartitionKeyPath { get; set; }
+
+    /// <summary>
+    /// The default tenant ID.
+    /// </summary>
+    public Guid defaultTenantId { get; set; }
+
+    /// <summary>
+    /// The configuration settings for the Kafka producer.
+    /// </summary>
+    public List<KeyValuePair<string, string>> producerConfig = new List<KeyValuePair<string, string>>();
+}
+
+public static class NostifyFactory
+{
+    public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri)
+    {
+        NostifyConfig config = new NostifyConfig();
+        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri);
+    }
+
+    public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri)
+    {
+        config.cosmosApiKey = cosmosApiKey;
+        config.cosmosDbName = cosmosDbName;
+        config.cosmosEndpointUri = cosmosEndpointUri;
+        config.producerConfig.Add(new KeyValuePair<string, string>("client.id", $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}"));
+        return config;
+    }
+
+    public static NostifyConfig WithKafka(string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null)
+    {
+        NostifyConfig config = new NostifyConfig();
+        return config.WithKafka(kafkaUrl, kafkaUserName, kafkaPassword);
+    }
+
+    public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null)
+    {
+        config.kafkaUrl = kafkaUrl;
+        config.kafkaUserName = kafkaUserName;
+        config.kafkaPassword = kafkaPassword;
+        config.producerConfig.Add(new KeyValuePair<string, string>("bootstrap.servers", config.kafkaUrl));
+        config.producerConfig.Add(new KeyValuePair<string, string>("session.timeout.ms", "45000"));
+
+        bool isDeployed = !string.IsNullOrWhiteSpace(config.kafkaUserName) && !string.IsNullOrWhiteSpace(config.kafkaPassword);
+        if (isDeployed)
+        {
+            config.producerConfig.Add(new KeyValuePair<string, string>("sasl.username", kafkaUserName));
+            config.producerConfig.Add(new KeyValuePair<string, string>("sasl.password", kafkaPassword));
+            config.producerConfig.Add(new KeyValuePair<string, string>("security.protocol", "SASL_SSL"));
+            config.producerConfig.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
+        }
+
+        
+        return config;
+    }
+
+    public static INostify Build(this NostifyConfig config)
+    {
+        var Repository = new NostifyCosmosClient(config.cosmosApiKey, config.cosmosDbName, config.cosmosEndpointUri);
+        var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
+        var  DefaultTenantId = config.defaultTenantId;
+        var KafkaUrl = config.kafkaUrl;
+        var KafkaProducer = new ProducerBuilder<string,string>(config.producerConfig).Build();
+        return new Nostify(
+            Repository,
+            DefaultPartitionKeyPath,
+            DefaultTenantId,
+            KafkaUrl,
+            KafkaProducer
+        );
+        
+    }
+}
+
+///<summary>
 ///Base class to utilize nostify.  Should inject as a singleton in HostBuilder().ConfigureServices() 
 ///</summary>
 public class Nostify : INostify
@@ -163,7 +276,6 @@ public class Nostify : INostify
     public string KafkaUrl { get; }
     /// <inheritdoc />
     public IProducer<string, string> KafkaProducer { get; }
-    
 
     ///<summary>
     ///Nostify constructor for development with no username and pwd for Kafka
@@ -179,6 +291,15 @@ public class Nostify : INostify
         new Nostify(primaryKey, dbName, cosmosEndpointUri, kafkaUrl, null, null, defaultPartitionKeyPath, defaultTenantId);
     }
 
+    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer)
+    {
+        Repository = repository;
+        DefaultPartitionKeyPath = defaultPartitionKeyPath;
+        DefaultTenantId = defaultTenantId;
+        KafkaUrl = kafkaUrl;
+        KafkaProducer = kafkaProducer;
+    }
+
     ///<summary>
     ///Nostify constructor for production with username and pwd for Kafka
     ///</summary>
@@ -190,7 +311,7 @@ public class Nostify : INostify
     ///<param name="kafkaPassword">Password for Kafka</param>
     ///<param name="defaultPartitionKeyPath">Path to partition key for default created current state container, set null to not create, leave default to partition by tenantId </param>
     ///<param name="defaultTenantId">Default tenant id value for use if NOT implementing multi-tenant, if left to default will create one partition in current state container per tenant</param>
-    public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null, string defaultPartitionKeyPath = "/tenantId", Guid defaultTenantId = default)
+    private Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string kafkaUserName, string kafkaPassword, string defaultPartitionKeyPath, Guid defaultTenantId)
     {
         Repository = new NostifyCosmosClient(primaryKey, dbName, cosmosEndpointUri);
         if (defaultPartitionKeyPath != null)
@@ -203,7 +324,7 @@ public class Nostify : INostify
         bool isDeployed = !string.IsNullOrWhiteSpace(kafkaUserName) && !string.IsNullOrWhiteSpace(kafkaPassword);
 
         //Build producer instance
-        var config = new List<KeyValuePair<string, string>>
+        var producerConfig = new List<KeyValuePair<string, string>>
         {
             new KeyValuePair<string, string>("bootstrap.servers", KafkaUrl),
             new KeyValuePair<string, string>("session.timeout.ms", "45000"),
@@ -211,12 +332,12 @@ public class Nostify : INostify
         };
         if (isDeployed)
         {
-            config.Add(new KeyValuePair<string, string>("sasl.username", kafkaUserName));
-            config.Add(new KeyValuePair<string, string>("sasl.password", kafkaPassword));
-            config.Add(new KeyValuePair<string, string>("security.protocol", "SASL_SSL"));
-            config.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
+            producerConfig.Add(new KeyValuePair<string, string>("sasl.username", kafkaUserName));
+            producerConfig.Add(new KeyValuePair<string, string>("sasl.password", kafkaPassword));
+            producerConfig.Add(new KeyValuePair<string, string>("security.protocol", "SASL_SSL"));
+            producerConfig.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
         }
-        KafkaProducer = new ProducerBuilder<string,string>(config).Build();
+        KafkaProducer = new ProducerBuilder<string,string>(producerConfig).Build();
     }
 
 
@@ -548,4 +669,5 @@ public class Nostify : INostify
     }
     
 }
+
 
