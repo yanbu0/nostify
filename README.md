@@ -15,6 +15,11 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.2
+  - Factory method for building Nostify singleton
+  - Bulk patching method
+  - Kafka producer injection
+  - Use 2.2.2 - 2.2.0, 2.2.1 have bugs
 - Changes in 2.1
   - Way to programatically create containers automatically on start up if needed (for facilitating local development)
   - Some documentation updates
@@ -220,21 +225,23 @@ public  class  Program
 
   private  static  void  Main(string[] args)
   {
-    var  host = new  HostBuilder()
+    var host = new  HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices((context, services) =>
     {
       services.AddHttpClient();   
 
-      var  config = context.Configuration;
+      var config = context.Configuration;
 
       //Note: This is the api key for the cosmos emulator by default
-      string  apiKey = config.GetValue<string>("apiKey");
-      string  dbName = config.GetValue<string>("dbName");
-      string  endPoint = config.GetValue<string>("endPoint");
-      string  kafka = config.GetValue<string>("BrokerList");
+      string apiKey = config.GetValue<string>("apiKey");
+      string dbName = config.GetValue<string>("dbName");
+      string endPoint = config.GetValue<string>("endPoint");
+      string kafka = config.GetValue<string>("BrokerList");
 
-      var  nostify = new  Nostify(apiKey, dbName, endPoint, kafka);
+      var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
+                          .WithKafka(kafka)
+                          .Build();
 
       services.AddSingleton<INostify>(nostify);
 
