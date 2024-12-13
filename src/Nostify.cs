@@ -59,13 +59,29 @@ public interface INostify
     ///<summary>
     ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
     ///</summary>
-    public Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle);
+    ///<param name="functionName">Name of function that failed, should be able to trace failure back to Azure function</param>
+    ///<param name="errorMessage">Error message to capture</param>
+    ///<param name="eventToHandle">The event that failed to process</param>
+    ///<param name="errorCommand">Optional. The command that failed, if null will not publish to Kafka</param>
+    public Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle, ErrorCommand? errorCommand = null);
 
     ///<summary>
     ///Published event to messaging bus
     ///</summary>        
     ///<param name="cosmosTriggerOutput">String output from CosmosDBTrigger, will be processed into a List of Events and published to Kafka</param>
     public Task PublishEventAsync(string cosmosTriggerOutput);
+
+    ///<summary>
+    ///Published event to messaging bus
+    ///</summary>
+    ///<param name="peList">List of Events to publish to Kafka</param>
+    public Task PublishEventAsync(List<Event> peList);
+
+    ///<summary>
+    ///Published event to messaging bus
+    ///</summary>
+    ///<param name="eventToPublish">Event to publish to Kafka</param>
+    public Task PublishEventAsync(Event eventToPublish);
 
     ///<summary>
     ///Retrieves the event store container
@@ -355,6 +371,12 @@ public class Nostify : INostify
     public async Task PublishEventAsync(string cosmosTriggerOutput)
     {
         var peList = JsonConvert.DeserializeObject<List<Event>>(cosmosTriggerOutput);
+        await PublishEventAsync(peList);
+    }
+
+    ///<inheritdoc />
+    public async Task PublishEventAsync(List<Event> peList)
+    {
         if (peList != null)
         {
             foreach (Event pe in peList)
@@ -363,6 +385,13 @@ public class Nostify : INostify
                 var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
             }
         }
+    }
+
+    ///<inheritdoc />
+    public async Task PublishEventAsync(Event eventToPublish)
+    {
+        List<Event> peList = new List<Event>(){eventToPublish};
+        await PublishEventAsync(peList);
     }
 
     ///<inheritdoc />
@@ -391,12 +420,12 @@ public class Nostify : INostify
                                     //Wait the specified amount of time or one second then retry, write to undeliverable events if still fails
                                     int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
                                     Task.Delay(waitTime).ContinueWith(_ => eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
-                                        .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe)));
+                                        .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, ErrorCommand.BulkPersistEvent)));
                                 }
                                 else
                                 {
                                     //This will cause a record to get written to the undeliverable events container for retry later if needed
-                                    _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe);
+                                    _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, ErrorCommand.BulkPersistEvent);
                                 }
                             }
                         }));
@@ -407,11 +436,15 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle)
+    public async Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle, ErrorCommand? errorCommand = null)
     {
         var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
 
         await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), eventToHandle.aggregateRootId.ToPartitionKey());
+        if (errorCommand != null)
+        {
+            await PublishEventAsync(new NostifyErrorEvent(errorCommand, eventToHandle.aggregateRootId, eventToHandle));
+        }
     }
 
     ///<inheritdoc />
