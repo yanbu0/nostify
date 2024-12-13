@@ -15,6 +15,9 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.3
+  - HandleUndeliverableAysnc() has the option to publish an Error event to kafka
+  - Bulk methods have `batchSize` option for looping through large lists of events, ability to automatically retry on Cosmos 429 failure, and better error handling
 - Changes in 2.2
   - Factory method for building Nostify singleton
   - Bulk patching method
@@ -49,14 +52,12 @@ To run locally you will need to install some dependencies:
 To install `nostify` and templates:
 
 ```powershell
-
 dotnet new install nostify
 ```
 
 To spin up a nostify project:
 
 ```powershell
-
 dotnet new nostify -ag <Your_Aggregate_Name> -p <Port Number To Run on Locally>
 
 dotnet restore
