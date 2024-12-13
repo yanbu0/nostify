@@ -388,9 +388,10 @@ public class Nostify : INostify
                                 //Retry if too many requests error
                                 if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                                 {
+                                    //Wait the specified amount of time or one second then retry, write to undeliverable events if still fails
                                     int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
-                                    Task.Delay(waitTime).Wait();
-                                    _ = eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey());
+                                    Task.Delay(waitTime).ContinueWith(_ => eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
+                                        .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe)));
                                 }
                                 else
                                 {

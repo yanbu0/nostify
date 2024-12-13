@@ -280,8 +280,8 @@ public static class ContainerExtensions
                 if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                 {
                     int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
-                    Task.Delay(waitTime).Wait();
-                    _ = bulkContainer.UpsertItemAsync(i);
+                    Task.Delay(waitTime).ContinueWith(_ => bulkContainer.UpsertItemAsync(i)
+                                        .ContinueWith(_ => { throw new NostifyException($"Bulk Upsert Error {itemResponse.Exception.Message}"); }));
                 }
                 else
                 {
