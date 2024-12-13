@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Confluent.Kafka;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace nostify;
 
@@ -51,7 +52,9 @@ public interface INostify
     ///Writes event to event store
     ///</summary>        
     ///<param name="events">Events to apply and persist in event store</param>
-    public Task BulkPersistEventAsync(List<Event> events);
+    ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
+    ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error.  Default is false.</param>
+    public Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false);
 
     ///<summary>
     ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
@@ -246,7 +249,7 @@ public static class NostifyFactory
     {
         var Repository = new NostifyCosmosClient(config.cosmosApiKey, config.cosmosDbName, config.cosmosEndpointUri);
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
-        var  DefaultTenantId = config.defaultTenantId;
+        var DefaultTenantId = config.defaultTenantId;
         var KafkaUrl = config.kafkaUrl;
         var KafkaProducer = new ProducerBuilder<string,string>(config.producerConfig).Build();
         return new Nostify(
@@ -363,31 +366,42 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task BulkPersistEventAsync(List<Event> events)
+    public async Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false)
     {
-        Event errorPe = null;
-        try
+        var eventContainer = await GetEventStoreContainerAsync(true);
+        
+        //If batchSize is not null, set loopSize to batchSize, otherwise loop through all events
+        int loopSize = batchSize.HasValue ? batchSize.Value : events.Count;
+
+        //Loop through in batches of batchSize
+        for (int i = 0; i < events.Count; i += loopSize)
         {
-            var eventContainer = await GetEventStoreContainerAsync(true);
+            var eventBatch = events.Skip(i).Take(loopSize).ToList();
 
             List<Task> taskList = new List<Task>();
-            events.ForEach(pe => {
+            eventBatch.ForEach(pe => {
                 taskList.Add(eventContainer.CreateItemAsync(pe,pe.aggregateRootId.ToPartitionKey())
                         .ContinueWith(itemResponse =>
                         {
                             if (!itemResponse.IsCompletedSuccessfully)
                             {
-                                errorPe = pe;
-                                throw new Exception("Bulk save error");
+                                //Retry if too many requests error
+                                if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                                {
+                                    int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
+                                    Task.Delay(waitTime).Wait();
+                                    _ = eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey());
+                                }
+                                else
+                                {
+                                    //This will cause a record to get written to the undeliverable events container for retry later if needed
+                                    _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe);
+                                }
                             }
                         }));
             });
 
             await Task.WhenAll(taskList);
-        }
-        catch (Exception e)
-        {
-            await HandleUndeliverableAsync("BulkPersistEvent", e.Message, errorPe);
         }
     }
 
@@ -550,10 +564,10 @@ public class Nostify : INostify
     ///<summary>
     ///Retrieves the undeliverable events container
     ///</summary>
-    public async Task<Container> GetUndeliverableEventsContainerAsync(string partitionKeyPath = "/tenantId")
+    public async Task<Container> GetUndeliverableEventsContainerAsync()
     {
         var db = await Repository.GetDatabaseAsync();
-        return await GetContainerAsync(Repository.UndeliverableEvents, false, partitionKeyPath);
+        return await GetContainerAsync(Repository.UndeliverableEvents, false, "/aggregateRootId");
     }
 
     ///<inheritdoc />

@@ -22,6 +22,7 @@ namespace nostify
             this.errorMessage = errorMessage;
             this.undeliverableEvent = undeliverableEvent;
             this.id = Guid.NewGuid();
+            this.aggregateRootId = undeliverableEvent.aggregateRootId;
         }
 
         ///<summary>
@@ -43,6 +44,11 @@ namespace nostify
         ///The event the failure occurred on.  If null then deserializing the document failed.
         ///</summary>
         public Event undeliverableEvent { get; set; }
+
+        ///<summary>
+        ///Id of the aggregate the event that failed was for
+        ///</summary>
+        public Guid aggregateRootId { get; set; }
 
        
 

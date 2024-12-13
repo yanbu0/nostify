@@ -16,7 +16,12 @@ namespace nostify;
 ///</summary>
 public static class ContainerExtensions
 {
-    public static async Task<bool> ValidateBulkEnabled(this Container container, bool throwIfNotEnabled = false)
+    ///<summary>
+    ///Checks if Bulk Operations are enabled on a container. If not enabled will throw error if throwIfNotEnabled is true.
+    ///</summary>
+    ///<param name="container">Container to check</param>
+    ///<param name="throwIfNotEnabled">If true will throw error if not enabled</param>
+    public static bool ValidateBulkEnabled(this Container container, bool throwIfNotEnabled = false)
     {
         bool bulkEnabled = container.Database.Client.ClientOptions.AllowBulkExecution;
         //Make sure bulk operations are enabled
@@ -258,16 +263,32 @@ public static class ContainerExtensions
     /// Bulk upserts a list of items
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    /// <param name="bulkContainer"></param>
-    /// <param name="itemList"></param>
+    /// <param name="bulkContainer">Container to upsert items to</param>
+    /// <param name="itemList">List of items to upsert</param>
+    /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
     /// <returns></returns>
-    public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList) where T : IApplyable
+    public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false) where T : IApplyable
     {        
         //throw if bulk not enabled
         bulkContainer.ValidateBulkEnabled(true);
         
         List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i));
+        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i).ContinueWith(itemResponse => {
+            if (!itemResponse.IsCompletedSuccessfully)
+            {
+                //Retry if too many requests error
+                if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
+                    Task.Delay(waitTime).Wait();
+                    _ = bulkContainer.UpsertItemAsync(i);
+                }
+                else
+                {
+                    throw new NostifyException($"Bulk Upsert Error {itemResponse.Exception.Message}");
+                }
+            }
+        }));
         await Task.WhenAll(taskList);
     }
 
