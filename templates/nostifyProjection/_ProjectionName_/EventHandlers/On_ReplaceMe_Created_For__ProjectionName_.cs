@@ -21,6 +21,15 @@ public class On_ReplaceMe_Created_For__ProjectionName_
     [Function(nameof(On_ReplaceMe_Created_For__ProjectionName_))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Create__ReplaceMe_",
+                #if DEBUG
+                Protocol = BrokerProtocol.NotSet,
+                AuthenticationMode = BrokerAuthenticationMode.NotSet,
+                #else
+                Username = "KafkaApiKey",
+                Password = "KafkaApiSecret",
+                Protocol =  BrokerProtocol.SaslSsl,
+                AuthenticationMode = BrokerAuthenticationMode.Plain,
+                #endif
                 ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {

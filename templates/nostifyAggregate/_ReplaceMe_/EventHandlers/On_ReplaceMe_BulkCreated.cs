@@ -20,6 +20,15 @@ public class On_ReplaceMe_BulkCreated
     public async Task Run([KafkaTrigger("BrokerList",
                 "BulkCreate__ReplaceMe_",
                 ConsumerGroup = "_ReplaceMe_",
+                #if DEBUG
+                Protocol = BrokerProtocol.NotSet,
+                AuthenticationMode = BrokerAuthenticationMode.NotSet,
+                #else
+                Username = "KafkaApiKey",
+                Password = "KafkaApiSecret",
+                Protocol =  BrokerProtocol.SaslSsl,
+                AuthenticationMode = BrokerAuthenticationMode.Plain,
+                #endif
                 IsBatched = true)] string[] events,
         ILogger log)
     {

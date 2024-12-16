@@ -20,6 +20,15 @@ public class On_ReplaceMe_Deleted
     [Function(nameof(On_ReplaceMe_Deleted))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Delete__ReplaceMe_",
+                #if DEBUG
+                Protocol = BrokerProtocol.NotSet,
+                AuthenticationMode = BrokerAuthenticationMode.NotSet,
+                #else
+                Username = "KafkaApiKey",
+                Password = "KafkaApiSecret",
+                Protocol =  BrokerProtocol.SaslSsl,
+                AuthenticationMode = BrokerAuthenticationMode.Plain,
+                #endif
                 ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
