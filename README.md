@@ -20,6 +20,7 @@ You should consider using this if you are using .Net and Azure and want to follo
   - Fixed issue with connecting to Kafka
   - Auto create topics during start up
   - NostifyFactory `Build()` is now a generic, so should be used `Build<T>()` where T is the base aggregate for the service
+  - Use >= v2.4.2
 - Changes in 2.3
   - HandleUndeliverableAysnc() has the option to publish an Error event to kafka
   - Bulk methods have `batchSize` option for looping through large lists of events, ability to automatically retry on Cosmos 429 failure, and better error handling
