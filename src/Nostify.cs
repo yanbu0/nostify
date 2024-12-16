@@ -9,6 +9,8 @@ using Confluent.Kafka;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.Configuration;
+using Confluent.Kafka.Admin;
 
 namespace nostify;
 
@@ -214,7 +216,7 @@ public class NostifyConfig
     /// <summary>
     /// The configuration settings for the Kafka producer.
     /// </summary>
-    public List<KeyValuePair<string, string>> producerConfig = new List<KeyValuePair<string, string>>();
+    public ProducerConfig producerConfig = new ProducerConfig();
 }
 
 public static class NostifyFactory
@@ -230,7 +232,18 @@ public static class NostifyFactory
         config.cosmosApiKey = cosmosApiKey;
         config.cosmosDbName = cosmosDbName;
         config.cosmosEndpointUri = cosmosEndpointUri;
-        config.producerConfig.Add(new KeyValuePair<string, string>("client.id", $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}"));
+        return config;
+    }
+
+    public static NostifyConfig WithKafka(ProducerConfig producerConfig)
+    {
+        NostifyConfig config = new NostifyConfig();
+        return config.WithKafka(producerConfig);
+    }   
+
+    public static NostifyConfig WithKafka(this NostifyConfig config, ProducerConfig producerConfig)
+    {
+        config.producerConfig = producerConfig;
         return config;
     }
 
@@ -245,29 +258,60 @@ public static class NostifyFactory
         config.kafkaUrl = kafkaUrl;
         config.kafkaUserName = kafkaUserName;
         config.kafkaPassword = kafkaPassword;
-        config.producerConfig.Add(new KeyValuePair<string, string>("bootstrap.servers", config.kafkaUrl));
-        config.producerConfig.Add(new KeyValuePair<string, string>("session.timeout.ms", "45000"));
+        config.producerConfig.BootstrapServers = kafkaUrl;
+        config.producerConfig.ClientId = $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}";
+        config.producerConfig.AllowAutoCreateTopics = true;
 
         bool isDeployed = !string.IsNullOrWhiteSpace(config.kafkaUserName) && !string.IsNullOrWhiteSpace(config.kafkaPassword);
         if (isDeployed)
         {
-            config.producerConfig.Add(new KeyValuePair<string, string>("sasl.username", kafkaUserName));
-            config.producerConfig.Add(new KeyValuePair<string, string>("sasl.password", kafkaPassword));
-            config.producerConfig.Add(new KeyValuePair<string, string>("security.protocol", "SASL_SSL"));
-            config.producerConfig.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
+            config.producerConfig.SaslUsername = config.kafkaUserName;
+            config.producerConfig.SaslPassword = config.kafkaPassword;
+            config.producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
+            config.producerConfig.SaslMechanism = SaslMechanism.Plain;
+            config.producerConfig.ApiVersionRequest = true;
         }
 
         
         return config;
     }
 
-    public static INostify Build(this NostifyConfig config)
+    public static INostify Build<T>(this NostifyConfig config) where T : IAggregate
     {
         var Repository = new NostifyCosmosClient(config.cosmosApiKey, config.cosmosDbName, config.cosmosEndpointUri);
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
         var DefaultTenantId = config.defaultTenantId;
         var KafkaUrl = config.kafkaUrl;
         var KafkaProducer = new ProducerBuilder<string,string>(config.producerConfig).Build();
+
+        //Create Confluent admin client
+        var adminClientConfig = new AdminClientConfig(config.producerConfig);
+        var adminClient = new AdminClientBuilder(adminClientConfig).Build();
+
+        //Find all NostifyCommand instances in this assembly of T and create a topic for each
+        var assembly = typeof(T).Assembly;
+        var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
+        Console.WriteLine($"Found {string.Join(", ",commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
+        //Get any static properties of each commandType that inherit type NostifyCommand        
+        var commandProperties = commandTypes
+            .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(p => p.FieldType.IsSubclassOf(typeof(NostifyCommand))));
+
+        Console.WriteLine($"Found {string.Join(", ",commandProperties.Select(c => c.Name))} commands");
+
+        List<TopicSpecification> topics = new List<TopicSpecification>();
+        foreach (var commandType in commandProperties)
+        {
+            //Get the name property value of the commandType
+            var topic = commandType.GetValue(null).GetType().GetProperty("name").GetValue(commandType.GetValue(null)).ToString();
+            var topicSpec = new TopicSpecification { Name = topic, NumPartitions = 6 };
+            topics.Add(topicSpec);
+        }
+        Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
+        _ = adminClient.CreateTopicsAsync(topics);
+        var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+        Console.WriteLine($"Existing topics: {string.Join(", ", existingTopics.Select(t => t.Topic))}");
+
         return new Nostify(
             Repository,
             DefaultPartitionKeyPath,
@@ -382,7 +426,10 @@ public class Nostify : INostify
             foreach (Event pe in peList)
             {
                 string topic = pe.command.name;
+                Console.WriteLine($"Publishing event to topic {topic}");
                 var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
+                Console.WriteLine($"Result Headers: {result.Headers}");
+                Console.WriteLine($"Event published to topic {topic} with key {result.Key} and value {result.Value}");
             }
         }
     }
