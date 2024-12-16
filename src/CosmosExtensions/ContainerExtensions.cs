@@ -272,8 +272,7 @@ public static class ContainerExtensions
         //throw if bulk not enabled
         bulkContainer.ValidateBulkEnabled(true);
         
-        List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i).ContinueWith(itemResponse => {
+        IEnumerable<Task> taskList = itemList.Select(i => bulkContainer.UpsertItemAsync(i).ContinueWith(itemResponse => {
             if (!itemResponse.IsCompletedSuccessfully)
             {
                 //Retry if too many requests error
