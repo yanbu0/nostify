@@ -276,13 +276,26 @@ public static class NostifyFactory
         return config;
     }
 
-    public static INostify Build<T>(this NostifyConfig config) where T : IAggregate
+    public static INostify Build(this NostifyConfig config)
     {
         var Repository = new NostifyCosmosClient(config.cosmosApiKey, config.cosmosDbName, config.cosmosEndpointUri);
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
         var DefaultTenantId = config.defaultTenantId;
         var KafkaUrl = config.kafkaUrl;
         var KafkaProducer = new ProducerBuilder<string,string>(config.producerConfig).Build();
+
+        return new Nostify(
+            Repository,
+            DefaultPartitionKeyPath,
+            DefaultTenantId,
+            KafkaUrl,
+            KafkaProducer
+        );
+       
+    }
+
+    public static INostify Build<T>(this NostifyConfig config) where T : IAggregate
+    {
 
         //Create Confluent admin client
         var adminClientConfig = new AdminClientConfig(config.producerConfig);
@@ -307,18 +320,19 @@ public static class NostifyFactory
             var topicSpec = new TopicSpecification { Name = topic, NumPartitions = 6 };
             topics.Add(topicSpec);
         }
-        Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
-        _ = adminClient.CreateTopicsAsync(topics);
+        //Filter topics to only create new topics
         var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-        Console.WriteLine($"Existing topics: {string.Join(", ", existingTopics.Select(t => t.Topic))}");
+        topics = topics.Where(t => !existingTopics.Any(et => et.Topic == t.Name)).ToList();
+        Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
 
-        return new Nostify(
-            Repository,
-            DefaultPartitionKeyPath,
-            DefaultTenantId,
-            KafkaUrl,
-            KafkaProducer
-        );
+        //Create any new topics needed
+        if (topics.Count > 0)
+        {
+            adminClient.CreateTopicsAsync(topics).Wait();
+            var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+            Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+        }
+        return Build(config);
         
     }
 }
