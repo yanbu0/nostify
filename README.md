@@ -15,6 +15,11 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.4
+  - Much improved Kafka config
+  - Fixed issue with connecting to Kafka
+  - Auto create topics during start up
+  - NostifyFactory `Build()` is now a generic, so should be used `Build<T>()` where T is the base aggregate for the service
 - Changes in 2.3
   - HandleUndeliverableAysnc() has the option to publish an Error event to kafka
   - Bulk methods have `batchSize` option for looping through large lists of events, ability to automatically retry on Cosmos 429 failure, and better error handling
@@ -242,7 +247,7 @@ public  class  Program
 
       var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
                           .WithKafka(kafka)
-                          .Build();
+                          .Build<MyAggregate>(); //Where T is the base aggregate of the service
 
       services.AddSingleton<INostify>(nostify);
 
