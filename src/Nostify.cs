@@ -56,7 +56,8 @@ public interface INostify
     ///<param name="events">Events to apply and persist in event store</param>
     ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
     ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error.  Default is false.</param>
-    public Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false);
+    ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container.  Default is false.</param>
+    public Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
 
     ///<summary>
     ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
@@ -433,17 +434,16 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task PublishEventAsync(List<Event> peList)
+    public async Task PublishEventAsync(List<Event> peList, bool showOutput = false)
     {
         if (peList != null)
         {
             foreach (Event pe in peList)
             {
                 string topic = pe.command.name;
-                Console.WriteLine($"Publishing event to topic {topic}");
                 var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
-                Console.WriteLine($"Result Headers: {result.Headers}");
-                Console.WriteLine($"Event published to topic {topic} with key {result.Key} and value {result.Value}");
+                
+                if (showOutput) Console.WriteLine($"Event published to topic {topic} with key {result.Key} and value {result.Value}");
             }
         }
     }
@@ -456,7 +456,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false)
+    public async Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
     {
         var eventContainer = await GetEventStoreContainerAsync(true);
         
@@ -481,12 +481,12 @@ public class Nostify : INostify
                                     //Wait the specified amount of time or one second then retry, write to undeliverable events if still fails
                                     int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
                                     Task.Delay(waitTime).ContinueWith(_ => eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
-                                        .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, ErrorCommand.BulkPersistEvent)));
-                                }
+                                        .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)));
+                                } 
                                 else
                                 {
                                     //This will cause a record to get written to the undeliverable events container for retry later if needed
-                                    _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, ErrorCommand.BulkPersistEvent);
+                                    _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
                                 }
                             }
                         }));
@@ -502,7 +502,7 @@ public class Nostify : INostify
         var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
 
         await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), eventToHandle.aggregateRootId.ToPartitionKey());
-        if (errorCommand != null)
+        if (errorCommand is not null)
         {
             await PublishEventAsync(new NostifyErrorEvent(errorCommand, eventToHandle.aggregateRootId, eventToHandle));
         }
