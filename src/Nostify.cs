@@ -78,7 +78,8 @@ public interface INostify
     ///Published event to messaging bus
     ///</summary>
     ///<param name="peList">List of Events to publish to Kafka</param>
-    public Task PublishEventAsync(List<Event> peList);
+    ///<param name="showOutput">Optional. If true, will write to console the output of each event published.  Default is false.</param>
+    public Task PublishEventAsync(List<Event> peList, bool showOutput = false);
 
     ///<summary>
     ///Published event to messaging bus
@@ -442,7 +443,7 @@ public class Nostify : INostify
             {
                 string topic = pe.command.name;
                 var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
-                
+
                 if (showOutput) Console.WriteLine($"Event published to topic {topic} with key {result.Key} and value {result.Value}");
             }
         }
