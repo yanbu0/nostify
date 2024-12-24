@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using System.Transactions;
 using Microsoft.Azure.Cosmos;
@@ -224,7 +225,7 @@ public static class ContainerExtensions
     /// <param name="events">Array of strings from KafkaTrigger</param>
     /// <param name="partitionKeyName">Name of partition key, default is tenantId</param>
     /// <returns></returns>
-    public static async Task BulkUpdateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string partitionKeyName = "tenantId")
+    public static async Task<PatchItemResult[]> BulkUpdateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string partitionKeyName = "tenantId")
     {
         var triggerEvents = events
             .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
@@ -251,12 +252,49 @@ public static class ContainerExtensions
                 !string.IsNullOrWhiteSpace(patch.partitionId) &&
                 patch.operations.Count > 0);
 
-        // TODO: should invalid patch operations be reported?
-
         var tasks = validPatchOperations
-            .Select(patch => bulkContainer.PatchItemAsync<T>(patch.id, new PartitionKey(patch.partitionId), patch.operations));
+            .Select(patch => SafePatchItemAsync<T>(bulkContainer, patch.id, new PartitionKey(patch.partitionId), patch.operations));
 
-        await Task.WhenAll(tasks);
+        var results = await Task.WhenAll(tasks);
+        return [
+            ..results,
+            ..patchOperations
+                .Where(patch => 
+                    string.IsNullOrWhiteSpace(patch.id) || 
+                    string.IsNullOrWhiteSpace(patch.partitionId) ||
+                    patch.operations.Count == 0)
+                .Select(patch => PatchItemResult.InvalidOperationResult(patch))
+        ];
+    }
+
+    /// <summary>
+    /// Safely patches an item in a container. If the item is not found, returns a NotFound result. If an exception occurs, returns an Exception result.
+    /// </summary>
+    /// <typeparam name="T">The type of item to patch</typeparam>
+    /// <param name="container">The container where the item lives</param>
+    /// <param name="id">The id of the item to patch</param>
+    /// <param name="partitionKey">The partition key of the item</param>
+    /// <param name="patchOperations">The patch operations to apply</param>
+    /// <returns>A PatchItemResult</returns>
+    public static async Task<PatchItemResult> SafePatchItemAsync<T>(this Container container, string id, PartitionKey partitionKey, IReadOnlyList<PatchOperation> patchOperations)
+    {
+        try
+        {
+            await container.PatchItemAsync<T>(id, partitionKey, patchOperations);
+            return PatchItemResult.SuccessResult(id, partitionKey);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return PatchItemResult.NotFoundResult(id, partitionKey);
+        }
+        catch (CosmosException ex)
+        {
+            return PatchItemResult.ExceptionResult(id, partitionKey, ex);
+        }
+        catch (Exception ex)
+        {
+            return PatchItemResult.ExceptionResult(id, partitionKey,ex);
+        }
     }
 
     /// <summary>

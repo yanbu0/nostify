@@ -166,7 +166,8 @@ public interface INostify
     /// This method should only be called at startup (e.g. from Program.cs)
     /// </remarks>
     /// <param name="localhostOnly">Only create the database if running on localhost; default is true.</param>
-    public Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true);
+    /// <param name="throughput">The throughput to use, will use the default if nul</param>
+    public Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true, int? throughput = null);
 
 }
 
@@ -219,21 +220,33 @@ public class NostifyConfig
     /// The configuration settings for the Kafka producer.
     /// </summary>
     public ProducerConfig producerConfig = new ProducerConfig();
+
+    /// <summary>
+    /// If true, create database and Aggregate/Projection containers
+    /// </summary>
+    public bool createContainers { get; set; }
+
+    /// <summary>
+    /// The throughput for the containers.
+    /// </summary>
+    public int? containerThroughput { get; set; }
 }
 
 public static class NostifyFactory
 {
-    public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri)
+    public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null)
     {
         NostifyConfig config = new NostifyConfig();
         return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri);
     }
 
-    public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri)
+    public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null)
     {
         config.cosmosApiKey = cosmosApiKey;
         config.cosmosDbName = cosmosDbName;
         config.cosmosEndpointUri = cosmosEndpointUri;
+        config.createContainers = createContainers ?? false;
+        config.containerThroughput = containerThroughput;
         return config;
     }
 
@@ -334,8 +347,15 @@ public static class NostifyFactory
             var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
             Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
         }
-        return Build(config);
         
+        var nostify = Build(config);
+
+        if (config.createContainers)
+        {
+            nostify.CreateContainersAsync<T>(false, config.containerThroughput).Wait();
+        }
+
+        return nostify;
     }
 }
 
@@ -681,7 +701,7 @@ public class Nostify : INostify
 
 
     ///<inheritdoc />
-    public async Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true)
+    public async Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true, int? throughput = null)
     {
         if (localhostOnly && !Repository.IsLocalEmulator)
         {
@@ -704,22 +724,22 @@ public class Nostify : INostify
         var assembly = typeof(TTypeInAssembly).Assembly;
 
         // Create the event store container
-        await CreateContainerAsync("eventStore", "/aggregateRootId");
+        await CreateContainerAsync("eventStore", "/aggregateRootId", throughput);
 
         // Create the containers for the aggregates and projections
         foreach (var containerName in EnumerateContainerNames(assembly))
         {
-            await CreateContainerAsync(containerName);
+            await CreateContainerAsync(containerName, throughput: throughput);
         }
     }
     
 
-    private async Task CreateContainerAsync(string containerName, string partitionKeyPath = "/tenantId")
+    private async Task CreateContainerAsync(string containerName, string partitionKeyPath = "/tenantId", int? throughput = null)
     {
         try
         {
             // Create the container if it does not exist
-            await Repository.GetContainerAsync(containerName, partitionKeyPath);
+            await Repository.GetContainerAsync(containerName, partitionKeyPath, throughput: throughput);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
