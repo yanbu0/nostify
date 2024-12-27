@@ -15,6 +15,8 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.5
+  - Added new `ExternalDataEvent.GetEventsAsync<T>()` method to help reduce boilerplate code for Projection init
 - Changes in 2.4
   - Much improved Kafka config
   - Fixed issue with connecting to Kafka
@@ -374,7 +376,6 @@ One of the "out of the box" commands handled by `nostify` is the `Create_Aggrega
 
 Other projections added will need to contain their own logic for handling the create event.  The event handler for update naming convention is: `On<AggregateName>Created`.  For example: "OnTestCreated".
 
-
 ### Update Aggregate
 
 Updating the aggregate and its base current state projection is also handled by the templates. The template logic flow is:
@@ -414,11 +415,16 @@ public class TestWithStatus : ProjectionBaseClass<TestWithStatus,Test>, IContain
   public bool isDeleted { get; set; }
 
   //Test properites
-  public string testnName { get; set; }
+  public string testName { get; set; }
   public Guid? statusId { get; set; }
+  public Guid? testTypeId { get; set; }
 
   //Status properties
   public string? statusName { get; set; }
+
+  //Test Type properties
+  public string? testType { get; set; }
+
 
   public override void Apply(Event eventToApply)
   {
@@ -441,16 +447,23 @@ public class TestWithStatus : ProjectionBaseClass<TestWithStatus,Test>, IContain
 
   public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<TestWithStatus> projectionsToInit, INostify nostify, HttpClient httpClient = null, DateTime? pointInTime = null)
   {
-    //Aggregate root ids to get events
-    List<Guid> statiToGetEventsFor = projectionsToInit.Select(s => s.id).ToList();
+    // If data exists within this service, even if a different container, use the container to get the data
+    Container sameServiceEventStore = await nostify.GetEventStoreContainerAsync();
+    
+    //Use GetEventsAsync to get events from the same service, the selectors are a parameter list of the properties that are used to filter the events
+    List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync<TestWithStatus>(sameServiceEventStore, 
+        projectionsToInit, 
+        p => p.testTypeId);
 
-    var resposne = await httpClient.PostAsync("http://localhost:7071/api/Events",statiToGetEventsFor);
+    externalDataEvents.AddRange(externalDataEvents);
+
+    //Get events from other services via http using the EventRequest endpoint
+    var response = await httpClient.PostAsync("http://localhost:7071/api/EventRequest",statiToGetEventsFor);
     if (!response.IsSuccessStatusCode)
       throw new Exception("Something went awry");
 
     List<Event> events = JsonConvert.DeserializeObject<List<Event>>(await response.Content.ReadAsStringAsync());
 
-    List<ExternalDataEvent> externalDataEvents = new List<ExternalDataEvent>();
     projectionsToInit.ForEach(p =>{
         var events = events.Where(e => e.aggrgateRootId == p.id)
           .Select(e => new Event(e.command, e.aggregateRootId, e.payload, e.userId))
