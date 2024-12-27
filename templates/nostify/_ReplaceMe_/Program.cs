@@ -31,7 +31,7 @@ public class Program
 
             var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
                             .WithKafka(kafka)
-                            .Build();
+                            .Build<_ReplaceMe_>();
 
             services.AddSingleton<INostify>(nostify);
             services.AddLogging();

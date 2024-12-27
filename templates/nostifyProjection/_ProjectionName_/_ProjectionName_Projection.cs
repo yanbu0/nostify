@@ -22,6 +22,8 @@ public class _ProjectionName_ : ProjectionBaseClass<_ProjectionName_,_ReplaceMe_
     //**********************************************************************************************
     public Guid sameServiceAggregateExampleId { get; set; }
     public string sameServiceAggregateExampleName { get; set; }
+    public Guid sameServiceAggregateExampleId2 { get; set; }
+    public string sameServiceAggregateExampleName2 { get; set; }
     public Guid externalAggregateExample1Id { get; set; }
     public string externalAggregateExample1Name { get; set; }
     public Guid externalAggregateExample2Id { get; set; }
@@ -48,20 +50,16 @@ public class _ProjectionName_ : ProjectionBaseClass<_ProjectionName_,_ReplaceMe_
 
     public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<_ProjectionName_> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
     {
-        
-
-        List<ExternalDataEvent> externalDataEvents = new List<ExternalDataEvent>();
-
         // If data exists within this service, even if a different container, use the container to get the data
         Container sameServiceEventStore = await nostify.GetEventStoreContainerAsync();
-        List<Event> sameServiceEvents = await sameServiceEventStore
-                            .GetItemLinqQueryable<Event>()
-                            .Where(x => projectionsToInit.Select(p => p.sameServiceAggregateExampleId).Contains(x.aggregateRootId))
-                            .ReadAllAsync();
-        externalDataEvents.AddRange(projectionsToInit.Select(i =>
-                new ExternalDataEvent(i.id, sameServiceEvents.Where(ee => ee.aggregateRootId == i.sameServiceAggregateExampleId).ToList())
-            )
-            .ToList());
+        
+        //Use GetEventsAsync to get events from the same service, the selectors are a parameter list of the properties that are used to filter the events
+        List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync<_ProjectionName_>(sameServiceEventStore, 
+            projectionsToInit, 
+            p => p.sameServiceAggregateExampleId,
+            p => p.sameServiceAggregateExampleId2);
+
+        externalDataEvents.AddRange(externalDataEvents);
 
         // Get external data necessary to initialize projections here
         // To access data in other services, use httpClient and the EventRequest endpoint
