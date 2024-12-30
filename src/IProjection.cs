@@ -27,12 +27,8 @@ public interface IContainerName
 /// </summary>
 public interface IHasExternalData<P> where P : IProjection<P>, IContainerName
 {
-    
-
     ///<summary>
     ///Queries any neccessary external data to create a list of Events to update all of the projections in the param. Gets called in InitAsync.
-    ///Must return an Event for each Projection in the list which, when Apply is called, will update the Projection to the current state.
-    ///Must set <c>initialized</c> to true after each projection is updated.
     ///</summary>
     ///<param name="projectionsToInit">List of projections to query external data for. If empty, will update </param>
     ///<param name="nostify">Nostify instance to use to get current state containers</param>

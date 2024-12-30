@@ -17,9 +17,7 @@ namespace nostify;
 ///</summary>
 public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> where P : ProjectionBaseClass<P,A>, IContainerName, IHasExternalData<P>, new() where A : NostifyObject, IAggregate
 {
-    ///<summary>
-    ///If Projection is initialized or not. Set to false by default, should be set to true after <c>InitAsync()</c> is called.
-    ///</summary>
+    ///<inheritdoc/>
     public bool initialized { get; set; } = false;
 
     ///<inheritdoc/>
