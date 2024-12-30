@@ -15,6 +15,17 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.6
+  - Added `TryGetValue<T>()` method to extract value from payload if it exists and not throw an error, but instead return false if not
+  - Added manual mapping capability to `UpdateProperties()` so you can now specify how to map property values from payload to Projection if the property names don't match up. Example below will set the `ExampleProjection.exampleName`property to the value of the `payload.name` property:
+
+  ```C#
+    Dictionary<string, string> propertyPairs = new Dictionary<string, string>{
+        {"name", "exampleName"}
+    };
+    this.UpdateProperties<ExampleProjection>(eventToApply.payload, propertyPairs, true);
+  ```
+  
 - Changes in 2.5
   - Added new `ExternalDataEvent.GetEventsAsync<T>()` method to help reduce boilerplate code for Projection init
 - Changes in 2.4
