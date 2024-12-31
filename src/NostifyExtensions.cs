@@ -1,19 +1,7 @@
-using System;
 using Microsoft.Azure.Cosmos;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
-using Microsoft.Azure.Cosmos.Linq;
-using System.Net;
-using System.Collections.Concurrent;
-using System.IO;
 using Newtonsoft.Json;
 using System.Data;
-using System.Net.Http;
-using System.Net.Http.Json;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.Functions.Worker;
 
 namespace nostify
 {
@@ -22,7 +10,36 @@ namespace nostify
     ///</summary>
     public static class NostifyExtensions
     {
-        
+        ///<summary>
+        ///Outputs value of a property from an object, if it exists
+        ///</summary>
+        public static bool TryGetValue<T>(this object data, string propertyName, out T value)
+        {
+            JObject jObj = JObject.FromObject(data);
+            return jObj.TryGetValue(propertyName, out value);
+        }
+
+        ///<summary>
+        ///Outputs value of a property from a JObject, if it exists
+        ///</summary>
+        public static bool TryGetValue<T>(this JObject data, string propertyName, out T value)
+        {
+            List<JToken> jToken = data.Children<JProperty>()
+                        .Where(p => p.Name == propertyName)
+                        .Select(u => u.Value)
+                        .ToList();
+
+            if (jToken.Count == 0)
+            {
+                value = default(T);
+                return false;
+            }
+            else 
+            {
+                value = jToken.First().ToObject<T>();
+                return true;
+            }
+        }
 
         ///<summary>
         ///Gets a typed value from JObject by property name

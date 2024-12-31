@@ -72,7 +72,7 @@ public class _ProjectionName_ : ProjectionBaseClass<_ProjectionName_,_ReplaceMe_
             {
                 List<Event> externalEvents = await response.Content.ReadFromJsonAsync<List<Event>>() ?? new List<Event>();
                 externalDataEvents.AddRange(projectionsToInit.Select(i => 
-                        new ExternalDataEvent(i.id, externalEvents.Where(ee => ee.id == i.externalAggregateExample1Id).ToList())
+                        new ExternalDataEvent(i.id, externalEvents.Where(ee => ee.aggregateRootId == i.externalAggregateExample1Id).ToList())
                     )
                     .ToList());
             }
@@ -86,7 +86,7 @@ public class _ProjectionName_ : ProjectionBaseClass<_ProjectionName_,_ReplaceMe_
             {
                 List<Event> externalEvents = await response2.Content.ReadFromJsonAsync<List<Event>>() ?? new List<Event>();
                 externalDataEvents.AddRange(projectionsToInit.Select(i => 
-                        new ExternalDataEvent(i.id, externalEvents.Where(ee => ee.id == i.externalAggregateExample1Id).ToList())
+                        new ExternalDataEvent(i.id, externalEvents.Where(ee => ee.aggregateRootId == i.externalAggregateExample1Id).ToList())
                     )
                     .ToList());
             }
