@@ -159,7 +159,8 @@ public interface INostify
     /// </remarks>
     /// <param name="localhostOnly">Only create the database if running on localhost; default is true.</param>
     /// <param name="throughput">The throughput to use, will use the default if nul</param>
-    public Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true, int? throughput = null);
+    /// <param name="verbose">If true, will write to console the steps taken to create the containers</param>
+    public Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true, int? throughput = null, bool verbose = false);
 
 }
 
@@ -229,7 +230,7 @@ public static class NostifyFactory
     public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null)
     {
         NostifyConfig config = new NostifyConfig();
-        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri);
+        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers, containerThroughput);
     }
 
     public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null)
@@ -301,23 +302,25 @@ public static class NostifyFactory
        
     }
 
-    public static INostify Build<T>(this NostifyConfig config) where T : IAggregate
+    public static INostify Build<T>(this NostifyConfig config, bool verbose = false) where T : IAggregate
     {
 
         //Create Confluent admin client
+         if (verbose) Console.WriteLine("Building Admin Client");
         var adminClientConfig = new AdminClientConfig(config.producerConfig);
         var adminClient = new AdminClientBuilder(adminClientConfig).Build();
+         if (verbose) Console.WriteLine("Admin Client built");
 
         //Find all NostifyCommand instances in this assembly of T and create a topic for each
         var assembly = typeof(T).Assembly;
         var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
-        Console.WriteLine($"Found {string.Join(", ",commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
+         if (verbose) Console.WriteLine($"Found {string.Join(", ",commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
         //Get any static properties of each commandType that inherit type NostifyCommand        
         var commandProperties = commandTypes
             .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(p => p.FieldType.IsSubclassOf(typeof(NostifyCommand))));
 
-        Console.WriteLine($"Found {string.Join(", ",commandProperties.Select(c => c.Name))} commands");
+         if (verbose) Console.WriteLine($"Found {string.Join(", ",commandProperties.Select(c => c.Name))} commands");
 
         List<TopicSpecification> topics = new List<TopicSpecification>();
         foreach (var commandType in commandProperties)
@@ -330,21 +333,22 @@ public static class NostifyFactory
         //Filter topics to only create new topics
         var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
         topics = topics.Where(t => !existingTopics.Any(et => et.Topic == t.Name)).ToList();
-        Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
+         if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
 
         //Create any new topics needed
         if (topics.Count > 0)
         {
             adminClient.CreateTopicsAsync(topics).Wait();
             var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-            Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+             if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
         }
         
         var nostify = Build(config);
 
+         if (verbose) Console.WriteLine($"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}");
         if (config.createContainers)
         {
-            nostify.CreateContainersAsync<T>(false, config.containerThroughput).Wait();
+            nostify.CreateContainersAsync<T>(false, config.containerThroughput, verbose).Wait();
         }
 
         return nostify;
@@ -693,10 +697,11 @@ public class Nostify : INostify
 
 
     ///<inheritdoc />
-    public async Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true, int? throughput = null)
+    public async Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true, int? throughput = null, bool verbose = false)
     {
         if (localhostOnly && !Repository.IsLocalEmulator)
         {
+            Console.WriteLine("Not running on localhost. Containers will not be created.");
             return;
         }
 
@@ -716,22 +721,23 @@ public class Nostify : INostify
         var assembly = typeof(TTypeInAssembly).Assembly;
 
         // Create the event store container
-        await CreateContainerAsync("eventStore", "/aggregateRootId", throughput);
+        await CreateContainerAsync("eventStore", "/aggregateRootId", throughput, verbose);
 
         // Create the containers for the aggregates and projections
         foreach (var containerName in EnumerateContainerNames(assembly))
         {
-            await CreateContainerAsync(containerName, throughput: throughput);
+            await CreateContainerAsync(containerName, throughput: throughput, verbose: verbose);
         }
     }
     
 
-    private async Task CreateContainerAsync(string containerName, string partitionKeyPath = "/tenantId", int? throughput = null)
+    private async Task CreateContainerAsync(string containerName, string partitionKeyPath = "/tenantId", int? throughput = null, bool verbose = false)
     {
         try
         {
             // Create the container if it does not exist
-            await Repository.GetContainerAsync(containerName, partitionKeyPath, throughput: throughput);
+             if (verbose) Console.WriteLine($"Creating container {containerName} with partition key path {partitionKeyPath} and throughput {throughput}, if it does not already exist");
+            await Repository.GetContainerAsync(containerName, partitionKeyPath, throughput: throughput, verbose: verbose);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {

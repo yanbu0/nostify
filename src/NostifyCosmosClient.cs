@@ -49,7 +49,8 @@ namespace nostify
         ///<param name="partitionKeyPath">Partition key path</param>
         ///<param name="allowBulk">If true, will return bulk container reference</param>
         ///<param name="throughput">Throughput for container</param>
-        Task<Container> GetContainerAsync(string containerName, string partitionKeyPath, bool allowBulk = false, int? throughput = null);
+        ///<param name="verbose">If true, will print verbose output</param>
+        Task<Container> GetContainerAsync(string containerName, string partitionKeyPath, bool allowBulk = false, int? throughput = null, bool verbose = false);
         
 
     }
@@ -213,17 +214,20 @@ namespace nostify
             return allowBulk ? _bulkDatabase : _database;
         }
 
-        public async Task<Container> GetContainerAsync(string containerName, string partitionKeyPath, bool allowBulk = false, int? throughput = null)
+        /// <inheritdoc />
+        public async Task<Container> GetContainerAsync(string containerName, string partitionKeyPath, bool allowBulk = false, int? throughput = null, bool verbose = false)
         {
             var db = await GetDatabaseAsync(allowBulk);
             //Check to see if container already exists in known containers list and skip check if it does but if not create it if needed and add to list
             Container container;
             if (db.knownContainers.Any(c => c == containerName))
             { 
+                if (verbose) Console.WriteLine($"Container {containerName} already exists in known containers list");
                 container = db.database.GetContainer(containerName);
                 db.AddContainer(containerName);
             }
             else {
+                 if (verbose) Console.WriteLine($"Creating container {containerName}");
                 ContainerProperties containerProperties = new() {
                     Id = containerName,
                     PartitionKeyPath = partitionKeyPath,
@@ -233,6 +237,7 @@ namespace nostify
                     ThroughputProperties.CreateAutoscaleThroughput(throughput.Value) : 
                     ThroughputProperties.CreateAutoscaleThroughput(DefaultContainerThroughput);
                 container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, throughputProperties);
+                 if (verbose) Console.WriteLine($"Created container {containerName}");
                 db.AddContainer(containerName);
             }
             return container;
