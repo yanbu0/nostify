@@ -1,15 +1,7 @@
-using System;
 using Microsoft.Azure.Cosmos;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.Azure.Cosmos.Linq;
 using Newtonsoft.Json;
 using Confluent.Kafka;
-using System.Net.Http;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using Microsoft.Extensions.Configuration;
 using Confluent.Kafka.Admin;
 
 namespace nostify;
