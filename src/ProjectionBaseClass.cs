@@ -106,15 +106,32 @@ public abstract class ProjectionBaseClass<P,A> : NostifyObject, IProjection<P> w
 
     }
 
+    private const int MAX_LOOP_SIZE = 10;
     ///<inheritdoc />
     public async static Task InitAllUninitialized(INostify nostify, HttpClient? httpClient = null)
     {
-        string containerName = P.containerName;
         //Query for all projections in container where initialized == false
         Container projectionContainer = await nostify.GetProjectionContainerAsync<P>();
         List<P> projections = await projectionContainer.GetItemLinqQueryable<P>().Where(x => x.initialized == false).ReadAllAsync();
 
-        //Call InitAsync
-        await InitAsync(projections, nostify, httpClient);
+        //Call InitAsync until all projections are initialized, must call in a loop due to async creation of projections
+        int i = 0;
+        while(projections.Count > 0)
+        {
+            await InitAsync(projections, nostify, httpClient);
+            projections = projections.Where(x => x.initialized == false).ToList();
+            //If projections == 0 wait a second then check again to see if any new projections were created
+            if(projections.Count == 0)
+            {
+                await Task.Delay(1000);
+                projections = await projectionContainer.GetItemLinqQueryable<P>().Where(x => x.initialized == false).ReadAllAsync();
+            }
+            i++;
+            if(i > MAX_LOOP_SIZE)
+            {
+                await nostify.HandleUndeliverableAsync("InitAllUninitialized", "Exceeded max loop size of " + MAX_LOOP_SIZE, null);
+                break;
+            }
+        }
     }
 }
