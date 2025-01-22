@@ -22,7 +22,7 @@ namespace nostify
         ///<summary>
         ///Gets an instance of CosmosClient
         ///</summary>        
-        CosmosClient GetClient(bool allowBulk = false);
+        CosmosClient GetClient(bool allowBulk = false, bool useGatewayConnection = false);
 
         ///<summary>
         ///Returns database reference. If allowBulk is true, will return bulk database reference. Single database reference is created for each type of database for the lifetime of the application.
@@ -167,25 +167,21 @@ namespace nostify
         }
 
         /// <inheritdoc />
-        public CosmosClient GetClient(bool allowBulk = false)
+        public CosmosClient GetClient(bool allowBulk = false, bool useGatewayConnection = false)
         {
-            if (_cosmosClient == null && !allowBulk)
-            {
-                SocketsHttpHandler handler = new SocketsHttpHandler();
-                handler.PooledConnectionLifetime = TimeSpan.FromMinutes(5);
-                var options = new CosmosClientOptions() { 
+            SocketsHttpHandler handler = new SocketsHttpHandler();
+            handler.PooledConnectionLifetime = TimeSpan.FromMinutes(5);
+            var options = new CosmosClientOptions() { 
                     AllowBulkExecution = allowBulk,
+                    ConnectionMode = useGatewayConnection ? ConnectionMode.Gateway : ConnectionMode.Direct,
                     HttpClientFactory = () => new HttpClient(handler, disposeHandler: false)
                 };
+
+            if (_cosmosClient == null && !allowBulk)
+            {         
                 _cosmosClient = new CosmosClient(EndpointUri, Primarykey, options);
             } else if (_bulkCosmosClient == null && allowBulk)
             {
-                SocketsHttpHandler handler = new SocketsHttpHandler();
-                handler.PooledConnectionLifetime = TimeSpan.FromMinutes(5);
-                var options = new CosmosClientOptions() { 
-                    AllowBulkExecution = allowBulk,
-                    HttpClientFactory = () => new HttpClient(handler, disposeHandler: false)
-                };
                 _bulkCosmosClient = new CosmosClient(EndpointUri, Primarykey, options);
             }
             return allowBulk ? _bulkCosmosClient : _cosmosClient;

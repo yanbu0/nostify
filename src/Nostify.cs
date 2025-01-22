@@ -222,44 +222,86 @@ public class NostifyConfig
     /// The throughput for the containers.
     /// </summary>
     public int? containerThroughput { get; set; }
+
+    /// <summary>
+    /// If true, use the gateway connection instead of direct.
+    /// </summary>
+    public bool useGatewayConnection { get; set; }
 }
 
+///<summary>
+///Nostify factory class
+///</summary>
 public static class NostifyFactory
 {
-    public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null)
+    /// <summary>
+    /// Creates a new instance of Nostify using Cosmos.
+    /// </summary>
+    /// <param name="cosmosApiKey"></param>
+    /// <param name="cosmosDbName"></param>
+    /// <param name="cosmosEndpointUri"></param>
+    /// <param name="createContainers"></param>
+    /// <param name="containerThroughput"></param>
+    /// <param name="useGatewayConnection"></param>
+    /// <returns></returns>
+    public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false)
     {
         NostifyConfig config = new NostifyConfig();
-        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri);
+        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers, containerThroughput, useGatewayConnection);
     }
 
-    public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null)
+    /// <summary>
+    /// Creates a new instance of Nostify using Cosmos.
+    /// </summary>
+    /// <param name="config"></param>
+    /// <param name="cosmosApiKey"></param>
+    /// <param name="cosmosDbName"></param>
+    /// <param name="cosmosEndpointUri"></param>
+    /// <param name="createContainers"></param>
+    /// <param name="containerThroughput"></param>
+    /// <param name="useGatewayConnection"></param>
+    /// <returns></returns>
+    public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false)
     {
         config.cosmosApiKey = cosmosApiKey;
         config.cosmosDbName = cosmosDbName;
         config.cosmosEndpointUri = cosmosEndpointUri;
         config.createContainers = createContainers ?? false;
         config.containerThroughput = containerThroughput;
+        config.useGatewayConnection = useGatewayConnection;
         return config;
     }
 
+    /// <summary>
+    /// Creates a new instance of Nostify using Kafka.
+    /// </summary>
     public static NostifyConfig WithKafka(ProducerConfig producerConfig)
     {
         NostifyConfig config = new NostifyConfig();
         return config.WithKafka(producerConfig);
     }   
 
+    /// <summary>
+    /// Creates a new instance of Nostify using Kafka.
+    /// </summary>
     public static NostifyConfig WithKafka(this NostifyConfig config, ProducerConfig producerConfig)
     {
         config.producerConfig = producerConfig;
         return config;
     }
 
+    /// <summary>
+    /// Creates a new instance of Nostify using Kafka.
+    /// </summary>
     public static NostifyConfig WithKafka(string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null)
     {
         NostifyConfig config = new NostifyConfig();
         return config.WithKafka(kafkaUrl, kafkaUserName, kafkaPassword);
     }
 
+    /// <summary>
+    /// Creates a new instance of Nostify using Kafka.
+    /// </summary>
     public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null)
     {
         config.kafkaUrl = kafkaUrl;
@@ -283,6 +325,9 @@ public static class NostifyFactory
         return config;
     }
 
+    /// <summary>
+    /// Builds the Nostify instance. Use generic method if wanting verbose output or autocreate topics.
+    /// </summary>
     public static INostify Build(this NostifyConfig config)
     {
         var Repository = new NostifyCosmosClient(config.cosmosApiKey, config.cosmosDbName, config.cosmosEndpointUri);
@@ -301,6 +346,9 @@ public static class NostifyFactory
        
     }
 
+    /// <summary>
+    /// Builds the Nostify instance. 
+    /// </summary>
     public static INostify Build<T>(this NostifyConfig config) where T : IAggregate
     {
 
