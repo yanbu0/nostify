@@ -15,7 +15,12 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.7
+  - Added ability to configure using Gateway connection type
+  - Adds retry to `InitAllUninitialized()`
 - Changes in 2.6
+  - 2.6.3 fixes bug in container creation
+  - Added feature for "verbose" start up which outputs more information from steps to console
   - Added `TryGetValue<T>()` method to extract value from payload if it exists and not throw an error, but instead return false if not
   - Added manual mapping capability to `UpdateProperties()` so you can now specify how to map property values from payload to Projection if the property names don't match up. Example below will set the `ExampleProjection.exampleName`property to the value of the `payload.name` property:
 
