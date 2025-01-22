@@ -106,6 +106,11 @@ namespace nostify
         public readonly int DefaultContainerThroughput = 4000;
 
         ///<summary>
+        ///Optional. If true, will use gateway connection mode
+        ///</summary>
+        public readonly bool UseGatewayConnection = false;
+
+        ///<summary>
         ///Non-bulk database reference for lower latency
         ///</summary>
         private DatabaseRef? _database { get; set; } = null;
@@ -143,7 +148,8 @@ namespace nostify
             string EventStoreContainer = "eventStore", 
             string UndeliverableEvents = "undeliverableEvents",
             int DefaultContainerThroughput = 4000,
-            int DefaultDbThroughput = 4000)
+            int DefaultDbThroughput = 4000,
+            bool UseGatewayConnection = false)
         {
             this.EndpointUri = EndpointUri;
             this.Primarykey = ApiKey;
@@ -154,6 +160,7 @@ namespace nostify
             this.UndeliverableEvents = UndeliverableEvents;
             this.DefaultContainerThroughput = DefaultContainerThroughput;
             this.DefaultDbThroughput = DefaultDbThroughput;
+            this.UseGatewayConnection = UseGatewayConnection;
             InitAsync();
         }
 
@@ -199,12 +206,12 @@ namespace nostify
         {
             if (!allowBulk && _database == null)
             {
-                var db = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
+                var db = (await GetClient(allowBulk, this.UseGatewayConnection).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
                 _database = new() { database = db, knownContainers = new() };
             }
             if (allowBulk && _bulkDatabase == null)
             {
-                var bulkDb = (await GetClient(allowBulk).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
+                var bulkDb = (await GetClient(allowBulk, this.UseGatewayConnection).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
                 _bulkDatabase = new() { database = bulkDb, knownContainers = new() };
             }
             return allowBulk ? _bulkDatabase : _database;

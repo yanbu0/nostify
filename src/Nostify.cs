@@ -331,7 +331,7 @@ public static class NostifyFactory
     /// </summary>
     public static INostify Build(this NostifyConfig config)
     {
-        var Repository = new NostifyCosmosClient(config.cosmosApiKey, config.cosmosDbName, config.cosmosEndpointUri);
+        var Repository = new NostifyCosmosClient(config.cosmosApiKey, config.cosmosDbName, config.cosmosEndpointUri, UseGatewayConnection: config.useGatewayConnection);
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
         var DefaultTenantId = config.defaultTenantId;
         var KafkaUrl = config.kafkaUrl;
