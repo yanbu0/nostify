@@ -43,6 +43,16 @@ public interface INostify
     public Task PersistEventAsync(Event eventToPersist);
 
     ///<summary>
+    ///Applies and persists a bulk of events to the specified container.
+    ///</summary>
+    ///<param name="container">The container to which the events will be applied and persisted.</param>
+    ///<param name="events">The events to be applied and persisted.</param>
+    ///<param name="publishErrorEvents">If true, will publish error events to Kafka as well as write to undeliverableEvents container. Default is false.</param>
+    ///<typeparam name="T">The type of the Nostify object.</typeparam>
+    ///<returns>The number of events processed.</returns>   
+    public Task<int> BulkApplyAndPersistAsync<T>(Container container, string[] events, bool publishErrorEvents = false) where T : NostifyObject, new();
+
+    ///<summary>
     ///Writes event to event store
     ///</summary>        
     ///<param name="events">Events to apply and persist in event store</param>
@@ -519,6 +529,35 @@ public class Nostify : INostify
     {
         List<Event> peList = new List<Event>(){eventToPublish};
         await PublishEventAsync(peList);
+    }
+
+    ///<inheritdoc/>
+    public async Task<int> BulkApplyAndPersistAsync<T>(Container container, string[] events, bool publishErrorEvents = false) where T : NostifyObject, new()
+    {
+        //Throw if not bulk container
+        container.ValidateBulkEnabled(true);
+
+        List<Event> eventList = events.Select(e => JsonConvert.DeserializeObject<Event>(e)).ToList();
+        List<PartitionKey> partitionKeys = eventList.Select(e => e.partitionKey.ToPartitionKey()).Distinct().ToList();
+
+        List<Task> tasks = new List<Task>();
+        partitionKeys.ForEach(pk => {
+            var events = eventList.Where(e => e.partitionKey.ToPartitionKey() == pk);
+            events.ToList().ForEach(e => tasks.Add(container.ApplyAndPersistAsync<T>(e, pk)
+                .ContinueWith(itemResponse => {
+                    if (itemResponse.IsFaulted)
+                    {
+                        //This will cause a record to get written to the undeliverable events container for retry later if needed
+                        _ = HandleUndeliverableAsync(nameof(BulkApplyAndPersistAsync), itemResponse.Exception.Message, e, publishErrorEvents ? ErrorCommand.BulkApplyAndPersist : null);
+                                    
+                    }
+                }
+            )));           
+        });
+
+        await Task.WhenAll(tasks);
+
+        return eventList.Count;
     }
 
     ///<inheritdoc />

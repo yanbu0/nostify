@@ -106,6 +106,8 @@ public static class ContainerExtensions
         return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId.ToString()));
     }
 
+    
+
     ///<summary>
     ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
     ///</summary>
@@ -126,10 +128,8 @@ public static class ContainerExtensions
         else 
         {
             //Update container based off aggregate root id
-            aggregate = await container
-                .GetItemLinqQueryable<T>()
-                .Where(agg => agg.id == idToMatch)
-                .FirstOrDefaultAsync();
+            aggregate = await container.ReadItemAsync<T>(idToMatch.ToString(), partitionKey);
+                
         }
 
         //Null means it has been previously deleted
