@@ -114,29 +114,44 @@ public static class ContainerExtensions
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvents">The Event list to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-    ///<param name="projectionBaseAggregateId">Will apply to this id, unless null then will take first in newEvents List</param>
+    ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
     public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
     {
         T? aggregate;
         Event firstEvent = newEvents.First();
         Guid idToMatch = projectionBaseAggregateId ?? firstEvent.aggregateRootId;
 
-        if (firstEvent.command.isNew)
+        //Null projectionBaseAggregateId means it is an event from the projection base aggregate
+        if (firstEvent.command.isNew && projectionBaseAggregateId == null)
         {
             aggregate = new T();
         }
         else 
         {
             //Update container based off aggregate root id
-            aggregate = await container.ReadItemAsync<T>(idToMatch.ToString(), partitionKey);
-                
+            try
+            {
+                aggregate = await container.ReadItemAsync<T>(idToMatch.ToString(), partitionKey);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                Console.WriteLine($"Aggregate not found {idToMatch}");
+                aggregate = null;
+            }                
         }
 
         //Null means it has been previously deleted
         if (aggregate != null)
         {
             newEvents.ForEach(newEvent => aggregate.Apply(newEvent));
-            await container.UpsertItemAsync<T>(aggregate, partitionKey);
+            try
+            {
+                await container.UpsertItemAsync<T>(aggregate, partitionKey);
+            }
+            catch (CosmosException ex)
+            {
+                throw new NostifyException($"Upsert failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
+            }
         }
     }
 
