@@ -41,9 +41,9 @@ public class On_ReplaceMe_Created_For__ProjectionName_
                 //Get projection container
                 Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
                 //Update projection container
-                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
+                var newProj = await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
                 //Initialize projection with external data
-                
+                await newProj.InitAsync(_nostify, _httpClient);
             }                           
         }
         catch (Exception e)

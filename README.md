@@ -15,6 +15,9 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.8
+  - Added `BulkApplyAndPersistAsync()` methods to facilitate bulk changes in Projection event handlers for events not from the base aggregate.
+  - `ApplyAndPersistAsync<T>()` methods now return `Task<T>` and if awaited return the updated object. This makes it easier to call `InitAsync()` on the projection if it requires external data.
 - Changes in 2.7
   - Added ability to configure using Gateway connection type
   - Adds retry to `InitAllUninitialized()`
@@ -528,7 +531,7 @@ For instance, with our `TestWithStatus` projection, we will need to subscribe to
 
 This means we will need two event handler functions, `OnTestUpdated_For_TestWithStatus` and `OnStatusUpdated_For_TestWithStatus`.  Note the naming convention.
 
-They will both take in their respective events and update the projection container.  Using the `ApplyAndPersistAsync()` method for updates to the base aggregate will automatically query the projection for the 
+They will both take in their respective events and update the projection container.  Using the `ApplyAndPersistAsync()` method for updates to the base aggregate will automatically query the projection using the `id` value and call `Apply()` then save the updated projection back to the data store.
 
 ### Delete Projection
 
@@ -536,4 +539,8 @@ For most projections is it appriopriate to delete the item out of the container 
 
 The naming convention of the event handler is: `On<Base Aggregate Name>Deleted_For_<Projection Name>`.  For example: "OnTestDeleted_For_TestWithStatus". The delete event of the base aggregate is the only event to subscribe to in this case for most implementations.
 
+### Event Handlers
 
+Events are things that have already happened and need to be handled by the system. A Command, as discussed elsewhere in the documentation, becomes an Event after validation.  As an example: the user clicks a button, the system issues an http POST to the command endpoint, it passes authentication and authorization, then the data in the body of the http call is validated, then the command code runs to write an Event to the Event Store with the pertinant payload data.
+
+As such there should not be any validation to perform in an Event Handler, the "thing" has already happened.  An Event Handler is there to process the Event and perform any necessary state updates such as updating the data stored in a Projection container.
