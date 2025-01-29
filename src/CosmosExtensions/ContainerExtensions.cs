@@ -34,6 +34,24 @@ public static class ContainerExtensions
     }
 
     ///<summary>
+    ///Bulk deletes items in a container by setting ttl = 1 from a bulk emitted array of KafkaTriggerEvents.  Use in Event Handler.
+    ///</summary>
+    ///<param name="containerToDeleteFrom">Container to delete items from</param>
+    ///<param name="events">Array of strings from KafkaTrigger</param>
+    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<returns>Number of items deleted</returns>
+    public static async Task<int> BulkDeleteFromEventsAsync<T>(this Container containerToDeleteFrom, string[] events) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    {
+        List<Guid> projectionIdsToDelete = events
+            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
+            .Where(e => e != null)
+            .Select(e => e!.aggregateRootId)
+            .ToList();
+        List<T> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<T>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
+        return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete);
+    }
+
+    ///<summary>
     ///Bulk deletes items in a container by setting ttl = 1.
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete items from</param>
