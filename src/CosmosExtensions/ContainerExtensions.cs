@@ -161,44 +161,78 @@ public static class ContainerExtensions
     ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
     public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
     {
-        T? aggregate;
+        T nosObjToUpdate = new T();
+        T unchangedNosObj = new T();
+        bool isNew = false;
         Event firstEvent = newEvents.First();
         Guid idToMatch = projectionBaseAggregateId ?? firstEvent.aggregateRootId;
 
         //Null projectionBaseAggregateId means it is an event from the projection base aggregate
         if (firstEvent.command.isNew && projectionBaseAggregateId == null)
         {
-            aggregate = new T();
+            isNew = true;
         }
         else 
         {
             //Update container based off aggregate root id
             try
             {
-                aggregate = await container.ReadItemAsync<T>(idToMatch.ToString(), partitionKey);
+                nosObjToUpdate = await container.ReadItemAsync<T>(idToMatch.ToString(), partitionKey);
+                unchangedNosObj = JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(nosObjToUpdate));
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
                 Console.WriteLine($"Aggregate not found {idToMatch}");
-                aggregate = null;
+                nosObjToUpdate = null;
             }                
         }
 
         //Null means it has been previously deleted
-        if (aggregate != null)
+        if (nosObjToUpdate != null)
         {
-            newEvents.ForEach(newEvent => aggregate.Apply(newEvent));
-            try
+            newEvents.ForEach(newEvent => nosObjToUpdate.Apply(newEvent));
+
+            if (isNew)
             {
-                await container.UpsertItemAsync<T>(aggregate, partitionKey);
+                //Do create operation
+                try
+                {
+                    await container.CreateItemAsync<T>(nosObjToUpdate, partitionKey);
+                }
+                catch (CosmosException ex)
+                {
+                    throw new NostifyException($"Create failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
+                }
             }
-            catch (CosmosException ex)
+            else
             {
-                throw new NostifyException($"Upsert failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
+                //For existing records, do patch operation
+                try
+                {
+                    //Compare each property and create patch operation for each changed property
+                    List<PatchOperation> patchOperations = new List<PatchOperation>();
+                    JObject unchangedJObj = JObject.Parse(JsonConvert.SerializeObject(unchangedNosObj));
+                    JObject updatedJObj = JObject.Parse(JsonConvert.SerializeObject(nosObjToUpdate));
+                    foreach (var prop in updatedJObj.Properties())
+                    {
+                        if (prop.Value.ToString() != unchangedJObj[prop.Name].ToString())
+                        {
+                            patchOperations.Add(PatchOperation.Set($"/{prop.Name}", prop.Value));
+                        }
+                    }
+
+                    var patchResult = await SafePatchItemAsync<T>(container, nosObjToUpdate.id.ToString(), partitionKey, patchOperations);
+
+                    
+                }
+                catch (CosmosException ex)
+                {
+                    throw new NostifyException($"Update failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
+                }
             }
         }
 
-        return aggregate;
+        return nosObjToUpdate;
     }
 
     ///<summary>
