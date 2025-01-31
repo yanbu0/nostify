@@ -51,7 +51,7 @@ public interface INostify
     ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error. Default is false.</param>
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container. Default is false.</param>
     ///<typeparam name="P">The type of the Nostify object.</typeparam>
-    ///<returns>The number of events processed.</returns>   
+    ///<returns>The nostify objects after Events are Applied</returns>   
     public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new();
 
     ///<summary>
@@ -533,7 +533,7 @@ public class Nostify : INostify
         await PublishEventAsync(peList);
     }
 
-    ///<inheritdoc/>
+    ///<inheritdoc />
     public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new()
     {
         //Throw if not bulk container

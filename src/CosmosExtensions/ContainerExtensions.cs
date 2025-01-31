@@ -308,7 +308,7 @@ public static class ContainerExtensions
             objToUpsertList.Add(objToUpsert);
         });
 
-        await bulkContainer.DoBulkUpsertAsync<T>(objToUpsertList);
+        await bulkContainer.DoBulkCreateAsync<T>(objToUpsertList);
 
     }
 
@@ -320,6 +320,7 @@ public static class ContainerExtensions
     /// <param name="events">Array of strings from KafkaTrigger</param>
     /// <param name="partitionKeyName">Name of partition key, default is tenantId</param>
     /// <returns></returns>
+    [Obsolete("BulkUpdateFromKafkaTriggerEventsAsync is deprecated, please use BulkApplyAndPersist instead.")]
     public static async Task<PatchItemResult[]> BulkUpdateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string partitionKeyName = "tenantId")
     {
         var triggerEvents = events
@@ -419,6 +420,39 @@ public static class ContainerExtensions
                 else
                 {
                     throw new NostifyException($"Bulk Upsert Error {itemResponse.Exception.Message}");
+                }
+            }
+        }));
+        await Task.WhenAll(taskList);
+    }
+
+    /// <summary>
+    /// Bulk creates a list of items
+    /// </summary>
+    /// <typeparam name="T">Must be able to Apply an Event</typeparam>
+    /// <param name="bulkContainer">Container to create items in, must have bulk enabled</param>
+    /// <param name="itemList">List of items to create</param>
+    /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
+    /// <returns></returns>
+    public static async Task DoBulkCreateAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false) where T : IApplyable
+    {        
+        //throw if bulk not enabled
+        bulkContainer.ValidateBulkEnabled(true);
+        
+        List<Task> taskList = new List<Task>();
+        itemList.ForEach(i => bulkContainer.CreateItemAsync(i).ContinueWith(itemResponse => {
+            if (!itemResponse.IsCompletedSuccessfully)
+            {
+                //Retry if too many requests error
+                if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
+                    Task.Delay(waitTime).ContinueWith(_ => bulkContainer.CreateItemAsync(i)
+                                        .ContinueWith(_ => { throw new NostifyException($"Bulk Create Error {itemResponse.Exception.Message}"); }));
+                }
+                else
+                {
+                    throw new NostifyException($"Bulk Create Error {itemResponse.Exception.Message}");
                 }
             }
         }));
