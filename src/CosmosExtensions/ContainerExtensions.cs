@@ -162,7 +162,7 @@ public static class ContainerExtensions
     public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
     {
         T nosObjToUpdate = new T();
-        T unchangedNosObj = new T();
+        JObject unchangedNosObj = new JObject();
         bool isNew = false;
         Event firstEvent = newEvents.First();
         Guid idToMatch = projectionBaseAggregateId ?? firstEvent.aggregateRootId;
@@ -178,7 +178,7 @@ public static class ContainerExtensions
             try
             {
                 nosObjToUpdate = await container.ReadItemAsync<T>(idToMatch.ToString(), partitionKey);
-                unchangedNosObj = JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(nosObjToUpdate));
+                unchangedNosObj = JObject.Parse(JsonConvert.SerializeObject(nosObjToUpdate));
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
@@ -211,11 +211,10 @@ public static class ContainerExtensions
                 {
                     //Compare each property and create patch operation for each changed property
                     List<PatchOperation> patchOperations = new List<PatchOperation>();
-                    JObject unchangedJObj = JObject.Parse(JsonConvert.SerializeObject(unchangedNosObj));
                     JObject updatedJObj = JObject.Parse(JsonConvert.SerializeObject(nosObjToUpdate));
                     foreach (var prop in updatedJObj.Properties())
                     {
-                        if (prop.Value.ToString() != unchangedJObj[prop.Name].ToString())
+                        if (prop.Value.ToString() != unchangedNosObj[prop.Name].ToString())// (JToken.DeepEquals(prop.Value, unchangedNosObj[prop.Name]))
                         {
                             patchOperations.Add(PatchOperation.Set($"/{prop.Name}", prop.Value));
                         }
