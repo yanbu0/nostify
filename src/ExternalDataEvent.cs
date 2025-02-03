@@ -38,50 +38,36 @@ public class ExternalDataEvent
     /// <typeparam name="TProjection">Type of the projection</typeparam>
     /// <param name="eventStore">The Event Store Container</param>
     /// <param name="projectionsToInit">List of projections to initialize</param>
-    /// <param name="foreignIdSelector">Function to get the foreign id for the aggregate required to populate one or more fields in the projection</param>
-    /// <returns>List of ExternalDataEvent</returns>
-    public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, Func<TProjection, Guid?> foreignIdSelector)
-        where TProjection : NostifyObject
-    {
-        List<Guid> foreignIds = projectionsToInit.Select(foreignIdSelector).Where(id => id.HasValue).Select(id => id!.Value).ToList();
-        ILookup<Guid, Event> events = (await eventStore
-                            .GetItemLinqQueryable<Event>()
-                            .Where(e => foreignIds.Contains(e.aggregateRootId))
-                            .OrderBy(e => e.timestamp)
-                            .ReadAllAsync())
-                            .ToLookup(e => e.aggregateRootId)
-                            ;
-
-        var result = (
-            from p in projectionsToInit
-            let foreignId = foreignIdSelector(p)
-            where foreignId.HasValue
-            select new ExternalDataEvent(p.id, events[foreignId!.Value].ToList())
-        ).ToList();
-        
-        return result;
-    }
-    
-    /// <summary>
-    /// Gets the events needed to initialize a list of projections
-    /// </summary>
-    /// <typeparam name="TProjection">Type of the projection</typeparam>
-    /// <param name="eventStore">The Event Store Container</param>
-    /// <param name="projectionsToInit">List of projections to initialize</param>
     /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
     /// <returns>List of ExternalDataEvent</returns>
     public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, params Func<TProjection, Guid?>[] foreignIdSelectors)
-        where TProjection : NostifyObject
+    where TProjection : IUniquelyIdentifiable
     {
-        // NOTE: This runs the requests serially instead of in parallel to avoid overloading Cosmos
-        List<ExternalDataEvent> events = [];
-        foreach(var foreignIdSelector in foreignIdSelectors)
-        {
-            events.AddRange(await GetEventsAsync(eventStore, projectionsToInit, foreignIdSelector));
-        }
-        return events;
+        var foreignIds = 
+            from p in projectionsToInit
+            from f in foreignIdSelectors
+            let foreignId = f(p)
+            where foreignId.HasValue
+            select foreignId!.Value;
+
+        var events = (await eventStore
+            .GetItemLinqQueryable<Event>()
+            .Where(e => foreignIds.Contains(e.aggregateRootId))
+            .OrderBy(e => e.timestamp)
+            .ReadAllAsync())
+            .ToLookup(e => e.aggregateRootId);
+
+        var result = (
+            from p in projectionsToInit
+            from f in foreignIdSelectors
+            let foreignId = f(p)
+            where foreignId.HasValue
+            select new ExternalDataEvent(p.id, events[foreignId!.Value].ToList())
+        ).ToList();
+
+        return result;
     }
-    
+
     /// <summary>
     /// Gets the events needed to initialize a list of projections from an external service
     /// </summary>
@@ -89,18 +75,24 @@ public class ExternalDataEvent
     /// <param name="httpClient">An HTTP client to make the service call</param>
     /// <param name="url">The URL of the service endpoint</param>
     /// <param name="projectionsToInit">List of projections to initialize</param>
-    /// <param name="foreignIdSelector">Function to get the foreign id for the aggregate required to populate one or more fields in the projection</param>
+    /// <param name="foreignIdSelectors">Function to get the foreign id for the aggregate required to populate one or more fields in the projection</param>
     /// <returns>List of ExternalDataEvent</returns>
-    public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(HttpClient httpClient, string url, List<TProjection> projectionsToInit, Func<TProjection, Guid?> foreignIdSelector)
-        where TProjection : NostifyObject
+    public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(HttpClient httpClient, string url, List<TProjection> projectionsToInit, params Func<TProjection, Guid?>[] foreignIdSelectors)
+        where TProjection : IUniquelyIdentifiable
     {
         if (httpClient == null || string.IsNullOrEmpty(url))
         {
             return [];
         }
+        
+        var foreignIds = 
+            from p in projectionsToInit
+            from f in foreignIdSelectors
+            let foreignId = f(p)
+            where foreignId.HasValue
+            select foreignId!.Value;
 
-        var foreignIds = projectionsToInit.Select(foreignIdSelector).Where(id => id.HasValue && id.Value != Guid.Empty).Select(id => id!.Value).ToList();
-        if (foreignIds.Count == 0)
+        if (!foreignIds.Any())
         {
             return [];
         }
@@ -113,35 +105,15 @@ public class ExternalDataEvent
             var events = (JsonConvert.DeserializeObject<List<Event>>(responseText) ?? []).ToLookup(e => e.aggregateRootId);
             var result = (
                 from p in projectionsToInit
-                let foreignId = foreignIdSelector(p)
+                from f in foreignIdSelectors
+                let foreignId = f(p)
                 where foreignId.HasValue
-                select new ExternalDataEvent(p.id, events[foreignId!.Value].ToList())
+                select new ExternalDataEvent(p.id, events[foreignId!.Value].OrderBy(e => e.timestamp).ToList())
             ).ToList();
 
             return result;
         }
 
         return [];
-    }
-    
-    /// <summary>
-    /// Gets the events needed to initialize a list of projections from an external service
-    /// </summary>
-    /// <typeparam name="TProjection">Type of the projection</typeparam>
-    /// <param name="httpClient">An HTTP client to make the service call</param>
-    /// <param name="url">The URL of the service endpoint</param>
-    /// <param name="projectionsToInit">List of projections to initialize</param>
-    /// <param name="foreignIdSelectors">Function to get the foreign id for the aggregate required to populate one or more fields in the projection</param>
-    /// <returns>List of ExternalDataEvent</returns>
-    public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(HttpClient httpClient, string url, List<TProjection> projectionsToInit, params Func<TProjection, Guid?>[] foreignIdSelectors)
-        where TProjection : NostifyObject
-    {
-        // NOTE: This runs the requests serially instead of in parallel to avoid overloading Cosmos
-        List<ExternalDataEvent> events = [];
-        foreach(var foreignIdSelector in foreignIdSelectors)
-        {
-            events.AddRange(await GetEventsAsync(httpClient, url, projectionsToInit, foreignIdSelector));
-        }
-        return events;
     }
 }
