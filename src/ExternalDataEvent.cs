@@ -72,8 +72,8 @@ public class ExternalDataEvent
     /// Gets the events needed to initialize a list of projections from an external service
     /// </summary>
     /// <typeparam name="TProjection">Type of the projection</typeparam>
-    /// <param name="httpClient">An HTTP client to make the service call</param>
-    /// <param name="url">The URL of the service endpoint</param>
+    /// <param name="httpClient">An HTTP client to make the service call. Must not be null.</param>
+    /// <param name="url">The URL of the service EventRequest endpoint. Must not be null or empty.</param>
     /// <param name="projectionsToInit">List of projections to initialize</param>
     /// <param name="foreignIdSelectors">Function to get the foreign id for the aggregate required to populate one or more fields in the projection</param>
     /// <returns>List of ExternalDataEvent</returns>
@@ -82,8 +82,11 @@ public class ExternalDataEvent
     {
         if (httpClient == null || string.IsNullOrEmpty(url))
         {
-            return [];
+            throw new NostifyException("HttpClient and URL of EventRequest endpoint are required to get events from an external service");
         }
+
+        //Empty result set by default
+        List<ExternalDataEvent> result = new List<ExternalDataEvent>();
         
         var foreignIds = 
             from p in projectionsToInit
@@ -92,28 +95,29 @@ public class ExternalDataEvent
             where foreignId.HasValue
             select foreignId!.Value;
 
-        if (!foreignIds.Any())
+        //Don't run query if no ids present
+        if (foreignIds.Any())
         {
-            return [];
+            var foreignIdsJson = JsonConvert.SerializeObject(foreignIds);
+            var response = await httpClient.PostAsync(url, new StringContent(foreignIdsJson, System.Text.Encoding.UTF8, "application/json"));
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new NostifyException($"{response.StatusCode} Error getting events from external service: {response.ReasonPhrase} || {response.Content}");
+            } 
+            else 
+            {
+                var responseText = await response.Content.ReadAsStringAsync();
+                var events = (JsonConvert.DeserializeObject<List<Event>>(responseText) ?? []).ToLookup(e => e.aggregateRootId);
+                result = (
+                    from p in projectionsToInit
+                    from f in foreignIdSelectors
+                    let foreignId = f(p)
+                    where foreignId.HasValue
+                    select new ExternalDataEvent(p.id, events[foreignId!.Value].OrderBy(e => e.timestamp).ToList())
+                ).ToList();
+            }
         }
 
-        var foreignIdsJson = JsonConvert.SerializeObject(foreignIds);
-        var response = await httpClient.PostAsync(url, new StringContent(foreignIdsJson, System.Text.Encoding.UTF8, "application/json"));
-        if (response.IsSuccessStatusCode)
-        {
-            var responseText = await response.Content.ReadAsStringAsync();
-            var events = (JsonConvert.DeserializeObject<List<Event>>(responseText) ?? []).ToLookup(e => e.aggregateRootId);
-            var result = (
-                from p in projectionsToInit
-                from f in foreignIdSelectors
-                let foreignId = f(p)
-                where foreignId.HasValue
-                select new ExternalDataEvent(p.id, events[foreignId!.Value].OrderBy(e => e.timestamp).ToList())
-            ).ToList();
-
-            return result;
-        }
-
-        return [];
+        return result;
     }
 }
