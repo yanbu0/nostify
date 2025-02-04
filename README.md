@@ -20,7 +20,7 @@ You should consider using this if you are using .Net and Azure and want to follo
   - `ApplyAndPersistAsync<T>()` methods now return `Task<T>` and if awaited return the updated object. This makes it easier to call `InitAsync()` on the projection if it requires external data.
   - `ApplyAndPersistAsync<T>()` now uses `CreateItemAsync()` and `PatchItemAsync()` instead of `UpsertItemAsync()` in the background depending if its a create or not, much better performance
 - Changes in 2.7
-  - Added ability to configure using Gateway connection type
+  - Added ability to configure using Gateway connection type. Set `useGatewayConnection` to `true` in `NostifyFactory.WithCosmos()`
   - Adds retry to `InitAllUninitialized()`
 - Changes in 2.6
   - 2.6.3 fixes bug in container creation
