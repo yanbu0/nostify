@@ -15,8 +15,12 @@ You should consider using this if you are using .Net and Azure and want to follo
 
 ### Current Status
 
+- Changes in 2.8
+  - Added `BulkApplyAndPersistAsync()` methods to facilitate bulk changes in Projection event handlers for events not from the base aggregate.
+  - `ApplyAndPersistAsync<T>()` methods now return `Task<T>` and if awaited return the updated object. This makes it easier to call `InitAsync()` on the projection if it requires external data.
+  - `ApplyAndPersistAsync<T>()` now uses `CreateItemAsync()` and `PatchItemAsync()` instead of `UpsertItemAsync()` in the background depending if its a create or not, much better performance
 - Changes in 2.7
-  - Added ability to configure using Gateway connection type
+  - Added ability to configure using Gateway connection type. Set `useGatewayConnection` to `true` in `NostifyFactory.WithCosmos()`
   - Adds retry to `InitAllUninitialized()`
 - Changes in 2.6
   - 2.6.3 fixes bug in container creation
@@ -528,7 +532,7 @@ For instance, with our `TestWithStatus` projection, we will need to subscribe to
 
 This means we will need two event handler functions, `OnTestUpdated_For_TestWithStatus` and `OnStatusUpdated_For_TestWithStatus`.  Note the naming convention.
 
-They will both take in their respective events and update the projection container.  Using the `ApplyAndPersistAsync()` method for updates to the base aggregate will automatically query the projection for the 
+They will both take in their respective events and update the projection container.  Using the `ApplyAndPersistAsync()` method for updates to the base aggregate will automatically query the projection using the `id` value and call `Apply()` then save the updated projection back to the data store.
 
 ### Delete Projection
 
@@ -536,4 +540,43 @@ For most projections is it appriopriate to delete the item out of the container 
 
 The naming convention of the event handler is: `On<Base Aggregate Name>Deleted_For_<Projection Name>`.  For example: "OnTestDeleted_For_TestWithStatus". The delete event of the base aggregate is the only event to subscribe to in this case for most implementations.
 
+### Event Handlers
 
+Events are things that have already happened and need to be handled by the system. A Command, as discussed elsewhere in the documentation, becomes an Event after validation.  As an example: the user clicks a button, the system issues an http POST to the command endpoint, it passes authentication and authorization, then the data in the body of the http call is validated, then the command code runs to write an Event to the Event Store with the pertinant payload data.
+
+As such there should not be any validation to perform in an Event Handler, the "thing" has already happened.  An Event Handler is there to process the Event and perform any necessary state updates such as updating the data stored in a Projection container. After the Event is stored, it is published to the event bus (Kafka being used that way in this case), and then the Event Handlers pick it up by subscribing to the event.  Kafka makes sure each Event Handler receives each event it is subscribed to.
+
+The Event should be applied to the object's (Aggregate/Projection) current state by calling the `Apply()` method. This method needs to take an Event and change the state of the object based on the Event.  A "Create" Event might start with a new instance of the object and then update any properties of the object based off the Event's payload.  
+
+#### Helper Methods
+
+There are a number of methods in the framework to help create Event Handlers. They remove writing a large amount of boilerplate code in most circumstances. There may be Events where the helpers don't really apply, or may be scenarios where you require more performance, but 99% of the time you should leverage these methods to simplify your code.  The templates will create Event Handlers with these methods
+
+##### Create/Update From Single Event
+
+A single "Create" or "Update" Event for an Aggregate or the base Aggregate of a Projection can be handled with a couple lines of code with these helper methods. For an Event Handler for an Aggregate subscribed to a Kafka topic you simply pull the Event out of the triggerEvent, make sure it's not null, then get the container your going to update out of Cosmos and call the `ApplyAndPersistAsync<T>([event])` method. These will get automatically created by the template.
+
+```C#
+public async Task Run([KafkaTrigger(<Trigger Details Here>)] NostifyKafkaTriggerEvent triggerEvent,
+    ILogger log)
+{
+    Event? newEvent = triggerEvent.GetEvent();
+    try
+    {
+        if (newEvent != null)
+        {
+            //Update aggregate current state projection
+            Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<InventoryItem>();
+            await currentStateContainer.ApplyAndPersistAsync<InventoryItem>(newEvent);
+        }                           
+    }
+    catch (Exception e)
+    {
+        await _nostify.HandleUndeliverableAsync(nameof(OnInventoryItemCreated), e.Message, newEvent);
+    }
+
+    
+}
+```
+
+The `ApplyAndPersistAsync()` method will deduce the partition key of the object the Event is being applied to by pulling it from the Event and then either create a new instance of the object if needed or do a point read on the database using the `id` Guid property. This keeps RU consumption down and performance high. Once the object has been created or found, the Event is fed into the object's `Apply([event])` method, which is specified by the developer for each object type. The results are then saved back into the database, either creating a new document or overwriting the existing one. In the example above errors are handled by writing them off into a seperate undeliverable container. The above example is for an Aggregate, which only need to handle internal data updates, ie - Events that update Aggregates will have all of the data needed to perform the state changes internal to the Event. This may not hold true for Projections, they may require getting additional data external to the Event. 

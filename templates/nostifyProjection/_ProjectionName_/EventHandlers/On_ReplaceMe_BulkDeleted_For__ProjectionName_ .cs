@@ -7,20 +7,20 @@ using Newtonsoft.Json.Linq;
 
 namespace _ReplaceMe__Service;
 
-public class On_ReplaceMe_BulkCreated_For__ProjectionName_
+public class On_ReplaceMe_BulkDeletedFor__ProjectionName_
 {
     private readonly INostify _nostify;
     private readonly HttpClient _httpClient;
     
-    public On_ReplaceMe_BulkCreated_For__ProjectionName_(INostify nostify, HttpClient httpClient)
+    public On_ReplaceMe_BulkDeletedFor__ProjectionName_(INostify nostify, HttpClient httpClient)
     {
         this._nostify = nostify;
         _httpClient = httpClient;
     }
 
-    [Function(nameof(On_ReplaceMe_BulkCreated_For__ProjectionName_))]
+    [Function(nameof(On_ReplaceMe_BulkDeletedFor__ProjectionName_))]
     public async Task Run([KafkaTrigger("BrokerList",
-                "BulkCreate__ReplaceMe_",
+                "BulkDelete__ReplaceMe_",
                 ConsumerGroup = "_ProjectionName_",
                 #if DEBUG
                 Protocol = BrokerProtocol.NotSet,
@@ -36,16 +36,15 @@ public class On_ReplaceMe_BulkCreated_For__ProjectionName_
     {
         try
         {
-            Container currentStateContainer = await _nostify.GetBulkProjectionContainerAsync<_ProjectionName_>();
-            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<_ProjectionName_>(events);
-            await _ProjectionName_.InitAllUninitialized(_nostify, _httpClient);
+            Container bulkDeleteContainer = await _nostify.GetBulkProjectionContainerAsync<_ProjectionName_>();
+            await bulkDeleteContainer.BulkDeleteFromKafkaTriggerEventsAsync<_ProjectionName_>(events);
         }
         catch (Exception e)
         {
             events.ToList().ForEach(async eventStr =>
             {
                 Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent() ?? throw new NostifyException("Event is null");
-                await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_BulkCreated_For__ProjectionName_), e.Message, @event);
+                await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_BulkDeletedFor__ProjectionName_), e.Message, @event);
             });
         }
 

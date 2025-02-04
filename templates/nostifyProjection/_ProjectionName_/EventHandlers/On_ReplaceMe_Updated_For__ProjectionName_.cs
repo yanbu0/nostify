@@ -10,10 +10,12 @@ namespace _ReplaceMe__Service;
 public class On_ReplaceMe_Updated_For__ProjectionName_
 {
     private readonly INostify _nostify;
+    private readonly HttpClient _httpClient;
 
-    public On_ReplaceMe_Updated_For__ProjectionName_(INostify nostify)
+    public On_ReplaceMe_Updated_For__ProjectionName_(INostify nostify, HttpClient httpClient)
     {
         this._nostify = nostify;
+        _httpClient = httpClient;
     }
 
     [Function(nameof(On_ReplaceMe_Updated_For__ProjectionName_))]
@@ -38,7 +40,8 @@ public class On_ReplaceMe_Updated_For__ProjectionName_
             {
                 //Update projection container
                 Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
-                await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
+                var updatedProj = await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
+                await updatedProj.InitAsync(_nostify, _httpClient);
             }                       
 
         }

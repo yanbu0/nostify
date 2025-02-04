@@ -43,6 +43,18 @@ public interface INostify
     public Task PersistEventAsync(Event eventToPersist);
 
     ///<summary>
+    ///Applies and persists a bulk array of events from Kafka to the specified container.
+    ///</summary>
+    ///<param name="container">The container to which the events will be applied and persisted.</param>
+    ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List<Guid> to find the projection to apply to</param>
+    ///<param name="events">The events to be applied and persisted.</param>
+    ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error. Default is false.</param>
+    ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container. Default is false.</param>
+    ///<typeparam name="P">The type of the Nostify object.</typeparam>
+    ///<returns>The nostify objects after Events are Applied</returns>   
+    public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new();
+
+    ///<summary>
     ///Writes event to event store
     ///</summary>        
     ///<param name="events">Events to apply and persist in event store</param>
@@ -519,6 +531,83 @@ public class Nostify : INostify
     {
         List<Event> peList = new List<Event>(){eventToPublish};
         await PublishEventAsync(peList);
+    }
+
+    ///<inheritdoc />
+    public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new()
+    {
+        //Throw if not bulk container
+        bulkContainer.ValidateBulkEnabled(true);
+
+        List<Event> eventList = events.Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e).GetEvent()).ToList();
+        List<Guid> partitionKeys = eventList.Select(e => e.partitionKey).Distinct().ToList();
+
+        List<Task> tasks = new List<Task>();
+        List<P> succesfulTasks = new List<P>();
+
+        //For each partition, create a list of tasks to apply and persist the events based off the list of ids in the property specified
+        partitionKeys.ForEach(pk => {
+            List<Event> partitionEvents = eventList.Where(e => e.partitionKey == pk).ToList();
+            partitionEvents.ForEach(pe => {
+                //Set up vars for both list and single id properties
+                List<Guid> ids = new List<Guid>();
+                Guid idToApplyTo = Guid.Empty;
+
+                //Try list first
+                if (pe.payload.TryGetValue<List<Guid>>(idPropertyName, out ids))
+                {
+                    ids.ForEach(id => tasks.Add(
+                        CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, id, allowRetry, publishErrorEvents)
+                            .ContinueWith(itemResponse => {
+                                if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
+                            })
+                    ));
+                }
+                else //If not list try single id
+                {
+                    if (pe.payload.TryGetValue<Guid>(idPropertyName, out idToApplyTo))
+                    {
+                        tasks.Add(
+                            CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, idToApplyTo, allowRetry, publishErrorEvents)
+                                .ContinueWith(itemResponse => {
+                                    if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
+                                })
+                        );
+                    }
+                }
+            });
+        });
+
+        await Task.WhenAll(tasks);
+
+        return succesfulTasks;
+    }
+
+    private Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, Event pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()
+    {
+        return bulkContainer.ApplyAndPersistAsync<P>(
+                                new List<Event>() {pe}, pk.ToPartitionKey(), id
+                            ).ContinueWith(itemResponse =>
+                            {
+                                if (!itemResponse.IsCompletedSuccessfully)
+                                {
+                                    //Retry if too many requests error
+                                    if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                                    {
+                                        //Wait the specified amount of time or one second then retry, write to undeliverable events if still fails
+                                        int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
+                                        Task.Delay(waitTime).ContinueWith(_ => bulkContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
+                                            .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)));
+                                    } 
+                                    else
+                                    {
+                                        //This will cause a record to get written to the undeliverable events container for retry later if needed
+                                        _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                                    }
+                                }
+
+                                return itemResponse.Result;
+                            });
     }
 
     ///<inheritdoc />

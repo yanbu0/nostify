@@ -23,6 +23,11 @@ public class ErrorCommand : NostifyCommand
     public static ErrorCommand BulkPersistEvent = new ErrorCommand("Error_BulkPersistEvent", false);
 
     /// <summary>
+    /// Bulk Apply and Persist Error
+    /// </summary>
+    public static ErrorCommand BulkApplyAndPersist = new ErrorCommand("Error_BulkApplyAndPersist", false);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ErrorCommand"/> class.
     /// </summary>
     /// <param name="name">The name of the error command.</param>

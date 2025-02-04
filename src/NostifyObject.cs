@@ -49,7 +49,9 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="payload">Must be payload from Event, name of property in payload must match property name in T</param>
     public void UpdateProperties<T>(object payload) where T : NostifyObject
     {
-        var nosObjProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
+        var nosObjProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.GetSetMethod() != null)
+            .ToList();
         var jPayload = JObject.FromObject(payload);
         var payloadProps = jPayload.Children<JProperty>();
 

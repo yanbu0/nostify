@@ -34,12 +34,44 @@ public static class ContainerExtensions
     }
 
     ///<summary>
-    ///Deletes all items in a Projection container by setting ttl = 1. Used to clear out when re-initializing. Should not be used in production when in use.
+    ///Bulk deletes items in a container by setting ttl = 1 from a bulk emitted array of KafkaTriggerEvents.  Use in Event Handler.
     ///</summary>
-    ///<param name="containerToDeleteFrom">Container to delete all items from</param>
+    ///<param name="containerToDeleteFrom">Container to delete items from</param>
+    ///<param name="events">Array of strings from KafkaTrigger</param>
     ///<typeparam name="T">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> DeleteAllBulkAsync<T>(this Container containerToDeleteFrom) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    public static async Task<int> BulkDeleteFromEventsAsync<T>(this Container containerToDeleteFrom, string[] events) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    {
+        List<Guid> projectionIdsToDelete = events
+            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
+            .Where(e => e != null)
+            .Select(e => e!.aggregateRootId)
+            .ToList();
+        List<T> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<T>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
+        return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete);
+    }
+
+    ///<summary>
+    ///Bulk deletes items in a container by setting ttl = 1.
+    ///</summary>
+    ///<param name="containerToDeleteFrom">Container to delete items from</param>
+    ///<param name="projectionIdsToDelete">List of projection ids to delete</param>
+    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<returns>Number of items deleted</returns>
+    public static async Task<int> BulkDeleteAsync<T>(this Container containerToDeleteFrom, List<Guid> projectionIdsToDelete) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    {
+        List<T> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<T>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
+        return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete);
+    }
+
+    ///<summary>
+    ///Bulk deletes items in a container by setting ttl = 1.
+    ///</summary>
+    ///<param name="containerToDeleteFrom">Container to delete items from</param>
+    ///<param name="projectionsToDelete">List of projections to delete</param>
+    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<returns>Number of items deleted</returns>
+    public static async Task<int> BulkDeleteAsync<T>(this Container containerToDeleteFrom, List<T> projectionsToDelete) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
     {
         containerToDeleteFrom.ValidateBulkEnabled(true);
         
@@ -53,17 +85,16 @@ public static class ContainerExtensions
             await containerToDeleteFrom.ReplaceContainerAsync(containerProps);
         }
 
-        List<T> allProjections = await containerToDeleteFrom.GetItemLinqQueryable<T>().ReadAllAsync();
         int totalUpdated = 0;
         const int batchSize = 100;
 
         // Loop through batches of 1000
-        for (int i = 0; i < allProjections.Count; i += batchSize)
+        for (int i = 0; i < projectionsToDelete.Count; i += batchSize)
         {
             try
             {
             
-                var batchItems = allProjections.Skip(i).Take(batchSize).ToList();
+                var batchItems = projectionsToDelete.Skip(i).Take(batchSize).ToList();
                 List<Task> tasks = new List<Task>();
 
                 foreach (var item in batchItems)
@@ -76,7 +107,7 @@ public static class ContainerExtensions
                 }
 
                 await Task.WhenAll(tasks);
-                totalUpdated += batchItems.Count;
+                totalUpdated += tasks.Where(t => t.IsCompletedSuccessfully).Count();
             }
             catch (Exception ex)
             {
@@ -86,6 +117,19 @@ public static class ContainerExtensions
         }
 
         return totalUpdated;
+    }
+
+    ///<summary>
+    ///Deletes all items in a Projection container by setting ttl = 1. Used to clear out when re-initializing. Should not be used in production when in use.
+    ///</summary>
+    ///<param name="containerToDeleteFrom">Container to delete all items from</param>
+    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<returns>Number of items deleted</returns>
+    public static async Task<int> DeleteAllBulkAsync<T>(this Container containerToDeleteFrom) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    {
+
+        List<T> allProjections = await containerToDeleteFrom.GetItemLinqQueryable<T>().ReadAllAsync();
+        return await containerToDeleteFrom.BulkDeleteAsync(allProjections);
     }
 
     ///<summary>
@@ -106,38 +150,88 @@ public static class ContainerExtensions
         return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId.ToString()));
     }
 
+    
+
     ///<summary>
     ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
     ///</summary>
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvents">The Event list to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-    ///<param name="projectionBaseAggregateId">Will apply to this id, unless null then will take first in newEvents List</param>
-    public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
+    ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
     {
-        T? aggregate;
+        T nosObjToUpdate = new T();
+        JObject unchangedNosObj = new JObject();
+        bool isNew = false;
         Event firstEvent = newEvents.First();
         Guid idToMatch = projectionBaseAggregateId ?? firstEvent.aggregateRootId;
 
-        if (firstEvent.command.isNew)
+        //Null projectionBaseAggregateId means it is an event from the projection base aggregate
+        if (firstEvent.command.isNew && projectionBaseAggregateId == null)
         {
-            aggregate = new T();
+            isNew = true;
         }
         else 
         {
             //Update container based off aggregate root id
-            aggregate = await container
-                .GetItemLinqQueryable<T>()
-                .Where(agg => agg.id == idToMatch)
-                .FirstOrDefaultAsync();
+            try
+            {
+                nosObjToUpdate = await container.ReadItemAsync<T>(idToMatch.ToString(), partitionKey);
+                unchangedNosObj = JObject.Parse(JsonConvert.SerializeObject(nosObjToUpdate));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                Console.WriteLine($"Aggregate not found {idToMatch}");
+                nosObjToUpdate = null;
+            }                
         }
 
         //Null means it has been previously deleted
-        if (aggregate != null)
+        if (nosObjToUpdate != null)
         {
-            newEvents.ForEach(newEvent => aggregate.Apply(newEvent));
-            await container.UpsertItemAsync<T>(aggregate, partitionKey);
+            newEvents.ForEach(newEvent => nosObjToUpdate.Apply(newEvent));
+
+            if (isNew)
+            {
+                //Do create operation
+                try
+                {
+                    await container.CreateItemAsync<T>(nosObjToUpdate, partitionKey);
+                }
+                catch (CosmosException ex)
+                {
+                    throw new NostifyException($"Create failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
+                }
+            }
+            else
+            {
+                //For existing records, do patch operation
+                try
+                {
+                    //Compare each property and create patch operation for each changed property
+                    List<PatchOperation> patchOperations = new List<PatchOperation>();
+                    JObject updatedJObj = JObject.Parse(JsonConvert.SerializeObject(nosObjToUpdate));
+                    foreach (var prop in updatedJObj.Properties())
+                    {
+                        if (prop.Value.ToString() != unchangedNosObj[prop.Name].ToString())// (JToken.DeepEquals(prop.Value, unchangedNosObj[prop.Name]))
+                        {
+                            patchOperations.Add(PatchOperation.Set($"/{prop.Name}", prop.Value));
+                        }
+                    }
+
+                    var patchResult = await SafePatchItemAsync<T>(container, nosObjToUpdate.id.ToString(), partitionKey, patchOperations);
+
+                    
+                }
+                catch (CosmosException ex)
+                {
+                    throw new NostifyException($"Update failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
+                }
+            }
         }
+
+        return nosObjToUpdate;
     }
 
     ///<summary>
@@ -146,9 +240,9 @@ public static class ContainerExtensions
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvents">The Event list to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-    public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
     {
-        await container.ApplyAndPersistAsync<T>(newEvents, partitionKey, null);
+        return await container.ApplyAndPersistAsync<T>(newEvents, partitionKey, null);
     }
     
 
@@ -157,11 +251,11 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvents">The Event list to apply and persist.</param>
-    public static async Task ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents) where T : NostifyObject, new()
     {
         Event firstEvent = newEvents.First();
 
-        await container.ApplyAndPersistAsync<T>(newEvents, firstEvent.partitionKey.ToPartitionKey());
+        return await container.ApplyAndPersistAsync<T>(newEvents, firstEvent.partitionKey.ToPartitionKey());
     }
 
     ///<summary>
@@ -170,9 +264,9 @@ public static class ContainerExtensions
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvent">The Event object to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-    public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
     {
-        await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, partitionKey);
+        return await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, partitionKey);
     }
 
     ///<summary>
@@ -180,9 +274,9 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvent">The Event object to apply and persist.</param>
-    public static async Task ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
     {
-        await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, newEvent.partitionKey.ToPartitionKey());
+        return await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, newEvent.partitionKey.ToPartitionKey());
     }
 
     /// <summary>
@@ -213,7 +307,7 @@ public static class ContainerExtensions
             objToUpsertList.Add(objToUpsert);
         });
 
-        await bulkContainer.DoBulkUpsertAsync<T>(objToUpsertList);
+        await bulkContainer.DoBulkCreateAsync<T>(objToUpsertList);
 
     }
 
@@ -225,6 +319,7 @@ public static class ContainerExtensions
     /// <param name="events">Array of strings from KafkaTrigger</param>
     /// <param name="partitionKeyName">Name of partition key, default is tenantId</param>
     /// <returns></returns>
+    [Obsolete("BulkUpdateFromKafkaTriggerEventsAsync is deprecated, please use BulkApplyAndPersist instead.")]
     public static async Task<PatchItemResult[]> BulkUpdateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string partitionKeyName = "tenantId")
     {
         var triggerEvents = events
@@ -324,6 +419,39 @@ public static class ContainerExtensions
                 else
                 {
                     throw new NostifyException($"Bulk Upsert Error {itemResponse.Exception.Message}");
+                }
+            }
+        }));
+        await Task.WhenAll(taskList);
+    }
+
+    /// <summary>
+    /// Bulk creates a list of items
+    /// </summary>
+    /// <typeparam name="T">Must be able to Apply an Event</typeparam>
+    /// <param name="bulkContainer">Container to create items in, must have bulk enabled</param>
+    /// <param name="itemList">List of items to create</param>
+    /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
+    /// <returns></returns>
+    public static async Task DoBulkCreateAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false) where T : IApplyable
+    {        
+        //throw if bulk not enabled
+        bulkContainer.ValidateBulkEnabled(true);
+        
+        List<Task> taskList = new List<Task>();
+        itemList.ForEach(i => bulkContainer.CreateItemAsync(i).ContinueWith(itemResponse => {
+            if (!itemResponse.IsCompletedSuccessfully)
+            {
+                //Retry if too many requests error
+                if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
+                    Task.Delay(waitTime).ContinueWith(_ => bulkContainer.CreateItemAsync(i)
+                                        .ContinueWith(_ => { throw new NostifyException($"Bulk Create Error {itemResponse.Exception.Message}"); }));
+                }
+                else
+                {
+                    throw new NostifyException($"Bulk Create Error {itemResponse.Exception.Message}");
                 }
             }
         }));
