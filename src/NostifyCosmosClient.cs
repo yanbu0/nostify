@@ -204,14 +204,19 @@ namespace nostify
         /// <inheritdoc />
         public async Task<DatabaseRef> GetDatabaseAsync(bool allowBulk, int throughput)
         {
+            var client = GetClient(allowBulk, this.UseGatewayConnection);
             if (!allowBulk && _database == null)
             {
-                var db = (await GetClient(allowBulk, this.UseGatewayConnection).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
+                //Create database if it doesn't exist, if throughput is 0 or less assume serverless
+                var db = throughput <= 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
+                    : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;
                 _database = new() { database = db, knownContainers = new() };
             }
             if (allowBulk && _bulkDatabase == null)
             {
-                var bulkDb = (await GetClient(allowBulk, this.UseGatewayConnection).CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database;
+                //Create database if it doesn't exist, if throughput is 0 or less assume serverless
+                var bulkDb = throughput <= 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
+                    : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;  
                 _bulkDatabase = new() { database = bulkDb, knownContainers = new() };
             }
             return allowBulk ? _bulkDatabase : _database;
@@ -230,18 +235,34 @@ namespace nostify
                 db.AddContainer(containerName);
             }
             else {
-                 if (verbose) Console.WriteLine($"Creating container {containerName}");
+                if (verbose) Console.WriteLine($"Creating container {containerName}");
+
                 ContainerProperties containerProperties = new() {
                     Id = containerName,
                     PartitionKeyPath = partitionKeyPath,
                     DefaultTimeToLive = -1
                 }; 
-                ThroughputProperties throughputProperties = throughput.HasValue ? 
-                    ThroughputProperties.CreateAutoscaleThroughput(throughput.Value) : 
-                    ThroughputProperties.CreateAutoscaleThroughput(DefaultContainerThroughput);
-                container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, throughputProperties);
-                 if (verbose) Console.WriteLine($"Created container {containerName}");
+                //Check if throughput is set, if not use default, if throughput is 0 or less assume serverless
+                if (throughput.HasValue)
+                {
+                    if (throughput.Value <= 0)
+                    {
+                        container = await db.database.CreateContainerIfNotExistsAsync(containerProperties);
+                    }
+                    else
+                    {
+                        var throughputValue = ThroughputProperties.CreateAutoscaleThroughput(throughput.Value);
+                        container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, throughputValue);
+                    }
+                }
+                else
+                {
+                    container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, 
+                        DefaultContainerThroughput);
+                }
                 db.AddContainer(containerName);
+                
+                if (verbose) Console.WriteLine($"Created container {containerName}");
             }
             return container;
         }
@@ -249,11 +270,25 @@ namespace nostify
     }
 }
 
+/// <summary>
+/// Represents a reference to a database and its known containers.
+/// </summary>
 public class DatabaseRef
 {
+    /// <summary>
+    /// Gets or sets the database instance.
+    /// </summary>
     public Database database { get; set; }
+
+    /// <summary>
+    /// Gets or sets the list of known container names.
+    /// </summary>
     public List<string> knownContainers { get; set; } = new List<string>();
 
+    /// <summary>
+    /// Adds a container name to the list of known containers if it does not already exist.
+    /// </summary>
+    /// <param name="containerName">The name of the container to add.</param>
     public void AddContainer(string containerName)
     {
         if (!knownContainers.Contains(containerName))
