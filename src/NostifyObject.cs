@@ -119,7 +119,8 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     {
         var nosObjProps = thisNostifyObjectProps ?? typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
         PropertyInfo propToUpdate = nosObjProps.Where(p => p.Name == propertyToSet).SingleOrDefault();
-        if (propToUpdate != null){
+        if (propToUpdate != null)
+        {
             var eg = typeof(NostifyExtensions).GetMethod("GetValue");
             var getValueRef = eg.MakeGenericMethod(propToUpdate.PropertyType);
             var valueToSet = getValueRef.Invoke(null, new object[] {jPayload, propertyToGetValueFrom });
