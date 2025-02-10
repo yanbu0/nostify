@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using System.Transactions;
+using JsonDiffPatchDotNet;
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -214,7 +215,9 @@ public static class ContainerExtensions
                     JObject updatedJObj = JObject.Parse(JsonConvert.SerializeObject(nosObjToUpdate));
                     foreach (var prop in updatedJObj.Properties())
                     {
-                        if (prop.Value.ToString() != unchangedNosObj[prop.Name].ToString())// (JToken.DeepEquals(prop.Value, unchangedNosObj[prop.Name]))
+                        //if (prop.Value.ToString() != unchangedNosObj[prop.Name].ToString())// (JToken.DeepEquals(prop.Value, unchangedNosObj[prop.Name]))
+                        var jdp = new JsonDiffPatch();
+                        if (jdp.Diff(unchangedNosObj[prop.Name], prop.Value) != null)
                         {
                             patchOperations.Add(PatchOperation.Set($"/{prop.Name}", prop.Value));
                         }

@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>2.8.0</Version>
+    <Version>2.9.0</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -17,6 +17,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Confluent.Kafka" Version="2.6.1" />
+    <PackageReference Include="JsonDiffPatch.Net" Version="2.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.46.0" />
     <None Include="LICENSE.txt" Pack="true" PackagePath="$(PackageLicenseFile)" />

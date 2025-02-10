@@ -86,9 +86,9 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
         foreach (JProperty prop in payloadProps)
         {
             bool doUpdate = !strict || propertyPairs.ContainsKey(prop.Name);
-            string propToSet = propertyPairs.ContainsKey(prop.Name) ? propertyPairs[prop.Name] : prop.Name;
             if (doUpdate)
             {
+                string propToSet = propertyPairs.ContainsKey(prop.Name) ? propertyPairs[prop.Name] : prop.Name;
                 UpdateProperty<T>(propToSet, prop.Name, jPayload, nosObjProps);
             }
         }
@@ -119,7 +119,8 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     {
         var nosObjProps = thisNostifyObjectProps ?? typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
         PropertyInfo propToUpdate = nosObjProps.Where(p => p.Name == propertyToSet).SingleOrDefault();
-        if (propToUpdate != null){
+        if (propToUpdate != null)
+        {
             var eg = typeof(NostifyExtensions).GetMethod("GetValue");
             var getValueRef = eg.MakeGenericMethod(propToUpdate.PropertyType);
             var valueToSet = getValueRef.Invoke(null, new object[] {jPayload, propertyToGetValueFrom });
