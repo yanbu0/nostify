@@ -86,9 +86,9 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
         foreach (JProperty prop in payloadProps)
         {
             bool doUpdate = !strict || propertyPairs.ContainsKey(prop.Name);
-            string propToSet = propertyPairs.ContainsKey(prop.Name) ? propertyPairs[prop.Name] : prop.Name;
             if (doUpdate)
             {
+                string propToSet = propertyPairs.ContainsKey(prop.Name) ? propertyPairs[prop.Name] : prop.Name;
                 UpdateProperty<T>(propToSet, prop.Name, jPayload, nosObjProps);
             }
         }
