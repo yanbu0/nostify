@@ -36,8 +36,16 @@ namespace nostify
             }
             else 
             {
-                value = jToken.First().ToObject<T>();
-                return true;
+                try
+                {
+                    value = jToken.First().ToObject<T>();
+                    return true;
+                }
+                catch (Exception)
+                {
+                    value = default(T);
+                    return false;
+                }
             }
         }
 
