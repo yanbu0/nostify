@@ -98,12 +98,12 @@ namespace nostify
         ///<summary>
         ///Optional. Default throughput for cosmos db when creating new databases
         ///</summary>
-        public readonly int DefaultDbThroughput = 4000;
+        public readonly int DefaultDbThroughput = -1;
 
         ///<summary>
         ///Optional. Default throughput for cosmos db when creating new containers
         ///</summary>
-        public readonly int DefaultContainerThroughput = 4000;
+        public readonly int DefaultContainerThroughput = -1;
 
         ///<summary>
         ///Optional. If true, will use gateway connection mode
@@ -147,8 +147,8 @@ namespace nostify
             string EventStorePartitionKey = "/aggregateRootId",
             string EventStoreContainer = "eventStore", 
             string UndeliverableEvents = "undeliverableEvents",
-            int DefaultContainerThroughput = 4000,
-            int DefaultDbThroughput = 4000,
+            int DefaultContainerThroughput = -1,
+            int DefaultDbThroughput = -1,
             bool UseGatewayConnection = false)
         {
             this.EndpointUri = EndpointUri;
@@ -161,7 +161,7 @@ namespace nostify
             this.DefaultContainerThroughput = DefaultContainerThroughput;
             this.DefaultDbThroughput = DefaultDbThroughput;
             this.UseGatewayConnection = UseGatewayConnection;
-            InitAsync();
+            _ = InitAsync();
         }
 
         /// <inheritdoc />
@@ -208,14 +208,14 @@ namespace nostify
             if (!allowBulk && _database == null)
             {
                 //Create database if it doesn't exist, if throughput is 0 or less assume serverless
-                var db = throughput <= 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
+                var db = throughput > 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
                     : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;
                 _database = new() { database = db, knownContainers = new() };
             }
             if (allowBulk && _bulkDatabase == null)
             {
                 //Create database if it doesn't exist, if throughput is 0 or less assume serverless
-                var bulkDb = throughput <= 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
+                var bulkDb = throughput > 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
                     : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;  
                 _bulkDatabase = new() { database = bulkDb, knownContainers = new() };
             }
@@ -234,7 +234,8 @@ namespace nostify
                 container = db.database.GetContainer(containerName);
                 db.AddContainer(containerName);
             }
-            else {
+            else 
+            {
                 if (verbose) Console.WriteLine($"Creating container {containerName}");
 
                 ContainerProperties containerProperties = new() {
@@ -243,23 +244,17 @@ namespace nostify
                     DefaultTimeToLive = -1
                 }; 
                 //Check if throughput is set, if not use default, if throughput is 0 or less assume serverless
-                if (throughput.HasValue)
+                var tp = throughput.HasValue ? throughput.Value : DefaultContainerThroughput;
+                if (tp <= 0)
                 {
-                    if (throughput.Value <= 0)
-                    {
-                        container = await db.database.CreateContainerIfNotExistsAsync(containerProperties);
-                    }
-                    else
-                    {
-                        var throughputValue = ThroughputProperties.CreateAutoscaleThroughput(throughput.Value);
-                        container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, throughputValue);
-                    }
+                    container = await db.database.CreateContainerIfNotExistsAsync(containerProperties);
                 }
                 else
                 {
-                    container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, 
-                        DefaultContainerThroughput);
+                    var throughputValue = ThroughputProperties.CreateAutoscaleThroughput(tp);
+                    container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, tp);
                 }
+                
                 db.AddContainer(containerName);
                 
                 if (verbose) Console.WriteLine($"Created container {containerName}");

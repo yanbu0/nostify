@@ -343,7 +343,13 @@ public static class NostifyFactory
     /// </summary>
     public static INostify Build(this NostifyConfig config)
     {
-        var Repository = new NostifyCosmosClient(config.cosmosApiKey, config.cosmosDbName, config.cosmosEndpointUri, UseGatewayConnection: config.useGatewayConnection);
+        var Repository = new NostifyCosmosClient(config.cosmosApiKey, 
+            config.cosmosDbName, 
+            config.cosmosEndpointUri, 
+            UseGatewayConnection: config.useGatewayConnection, 
+            DefaultContainerThroughput: config.containerThroughput ?? -1,
+            DefaultDbThroughput : config.containerThroughput ?? -1
+        );
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
         var DefaultTenantId = config.defaultTenantId;
         var KafkaUrl = config.kafkaUrl;
@@ -837,6 +843,12 @@ public class Nostify : INostify
     ///<inheritdoc />
     public async Task CreateContainersAsync<TTypeInAssembly>(bool localhostOnly = true, int? throughput = null, bool verbose = false)
     {
+        if (Repository.IsLocalEmulator && !throughput.HasValue)
+        {
+            throughput = 400; // Set a default throughput for local emulator
+            Console.WriteLine("Using default throughput of 400 for local emulator since none was set. This will probably be really slow.");
+        }
+        
         if (localhostOnly && !Repository.IsLocalEmulator)
         {
             Console.WriteLine("Not running on localhost. Containers will not be created.");
