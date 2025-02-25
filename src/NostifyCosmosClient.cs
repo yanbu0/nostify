@@ -208,14 +208,14 @@ namespace nostify
             if (!allowBulk && _database == null)
             {
                 //Create database if it doesn't exist, if throughput is 0 or less assume serverless
-                var db = throughput <= 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
+                var db = throughput > 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
                     : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;
                 _database = new() { database = db, knownContainers = new() };
             }
             if (allowBulk && _bulkDatabase == null)
             {
                 //Create database if it doesn't exist, if throughput is 0 or less assume serverless
-                var bulkDb = throughput <= 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
+                var bulkDb = throughput > 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
                     : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;  
                 _bulkDatabase = new() { database = bulkDb, knownContainers = new() };
             }
