@@ -18,6 +18,7 @@ You should consider using this if you are using .Net and Azure and want to follo
 - Changes in 2.9
   - More effective comparison in `ApplyAndPersistAsync()`
   - Setting `containerThroughput` to 0 or less (convention should be -1) in `WithComos()` to leverage serverless RU provisioning
+  - Fixed bug with setting throughput
 - Changes in 2.8
   - Added `BulkApplyAndPersistAsync()` methods to facilitate bulk changes in Projection event handlers for events not from the base aggregate.
   - `ApplyAndPersistAsync<T>()` methods now return `Task<T>` and if awaited return the updated object. This makes it easier to call `InitAsync()` on the projection if it requires external data.
