@@ -7,7 +7,7 @@ using nostify;
 
 namespace _ReplaceMe__Service;
 
-public class _ProjectionName_ : ProjectionBaseClass<_ProjectionName_,_ReplaceMe_>, IContainerName, IHasExternalData<_ProjectionName_>
+public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_ProjectionName_>
 {
     public _ProjectionName_()
     {
@@ -15,6 +15,8 @@ public class _ProjectionName_ : ProjectionBaseClass<_ProjectionName_,_ReplaceMe_
     }   
 
     public static string containerName => "_ProjectionName_";
+
+    public bool initialized { get; set; } = false;
 
     public bool isDeleted { get; set; }
 

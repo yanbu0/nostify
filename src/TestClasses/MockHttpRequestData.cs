@@ -11,7 +11,7 @@ namespace nostify
     ///<summary>
     ///Use for testing HttpTrigger Azure Functions
     ///</summary>
-    public class MockHttpRequestData
+    public static class MockHttpRequestData
     { 
         ///<summary>
         ///Creates HttpRequestData object with empty body.

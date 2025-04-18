@@ -39,16 +39,16 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete items from</param>
     ///<param name="events">Array of strings from KafkaTrigger</param>
-    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<typeparam name="P">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> BulkDeleteFromEventsAsync<T>(this Container containerToDeleteFrom, string[] events) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    public static async Task<int> BulkDeleteFromEventsAsync<P>(this Container containerToDeleteFrom, string[] events) where P : NostifyObject
     {
         List<Guid> projectionIdsToDelete = events
             .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
             .Where(e => e != null)
             .Select(e => e!.aggregateRootId)
             .ToList();
-        List<T> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<T>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
+        List<P> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<P>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
         return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete);
     }
 
@@ -57,11 +57,11 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete items from</param>
     ///<param name="projectionIdsToDelete">List of projection ids to delete</param>
-    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<typeparam name="P">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> BulkDeleteAsync<T>(this Container containerToDeleteFrom, List<Guid> projectionIdsToDelete) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    public static async Task<int> BulkDeleteAsync<P>(this Container containerToDeleteFrom, List<Guid> projectionIdsToDelete) where P : NostifyObject
     {
-        List<T> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<T>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
+        List<P> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<P>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
         return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete);
     }
 
@@ -70,11 +70,12 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete items from</param>
     ///<param name="projectionsToDelete">List of projections to delete</param>
-    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<typeparam name="P">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> BulkDeleteAsync<T>(this Container containerToDeleteFrom, List<T> projectionsToDelete) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    public static async Task<int> BulkDeleteAsync<P>(this Container containerToDeleteFrom, List<P> projectionsToDelete) where P : NostifyObject
     {
         containerToDeleteFrom.ValidateBulkEnabled(true);
+        var partitionKeyPath = (await containerToDeleteFrom.ReadContainerAsync()).Resource.PartitionKeyPath;
         
         var response = await containerToDeleteFrom.ReadContainerAsync();
         var containerProps = response.Resource;
@@ -101,12 +102,14 @@ public static class ContainerExtensions
                 foreach (var item in batchItems)
                 {
                     // Set TTL to 1
-                    item.ttl = 1;
-                    PartitionKey pk = new PartitionKey(item.tenantId.ToString());
-
-                    tasks.Add(containerToDeleteFrom.UpsertItemAsync(item, pk));
+                    List<PatchOperation> patchOperations = new List<PatchOperation>(){
+                        PatchOperation.Set("/ttl", 1)
+                    };
+                    //Get partition key from item by using the value in partitionKeyPath
+                    string pk = item.GetType().GetProperty(partitionKeyPath.Trim('/')).GetValue(item).ToString();
+                    tasks.Add(containerToDeleteFrom.PatchItemAsync<P>(item.id.ToString(), pk.ToPartitionKey(), patchOperations));
                 }
-
+                // Wait for all tasks to complete
                 await Task.WhenAll(tasks);
                 totalUpdated += tasks.Where(t => t.IsCompletedSuccessfully).Count();
             }
@@ -124,12 +127,12 @@ public static class ContainerExtensions
     ///Deletes all items in a Projection container by setting ttl = 1. Used to clear out when re-initializing. Should not be used in production when in use.
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete all items from</param>
-    ///<typeparam name="T">Type of Projection to delete</typeparam>
+    ///<typeparam name="P">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> DeleteAllBulkAsync<T>(this Container containerToDeleteFrom) where T : IProjection<T>, IUniquelyIdentifiable, ITenantFilterable
+    public static async Task<int> DeleteAllBulkAsync<P>(this Container containerToDeleteFrom) where P : NostifyObject
     {
 
-        List<T> allProjections = await containerToDeleteFrom.GetItemLinqQueryable<T>().ReadAllAsync();
+        List<P> allProjections = await containerToDeleteFrom.GetItemLinqQueryable<P>().ReadAllAsync();
         return await containerToDeleteFrom.BulkDeleteAsync(allProjections);
     }
 

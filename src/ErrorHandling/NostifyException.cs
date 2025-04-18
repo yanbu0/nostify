@@ -1,5 +1,7 @@
 using System;
 
+namespace nostify;
+
 /// <summary>
 /// Represents an exception in the nostify library
 /// </summary>

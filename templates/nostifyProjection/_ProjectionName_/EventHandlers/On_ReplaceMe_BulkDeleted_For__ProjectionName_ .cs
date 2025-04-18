@@ -37,7 +37,7 @@ public class On_ReplaceMe_BulkDeletedFor__ProjectionName_
         try
         {
             Container bulkDeleteContainer = await _nostify.GetBulkProjectionContainerAsync<_ProjectionName_>();
-            await bulkDeleteContainer.BulkDeleteFromKafkaTriggerEventsAsync<_ProjectionName_>(events);
+            await bulkDeleteContainer.BulkDeleteFromEventsAsync<_ProjectionName_>(events);
         }
         catch (Exception e)
         {

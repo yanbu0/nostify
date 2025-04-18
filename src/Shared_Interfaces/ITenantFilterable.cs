@@ -1,6 +1,8 @@
 
 using System;
 
+namespace nostify;
+
 /// <summary>
 /// Interface for tenant filterable aggregates/projections.
 /// </summary>

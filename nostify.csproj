@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>2.9.3</Version>
+    <Version>3.0.0</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -14,12 +14,15 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>   
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <IsPackable>true</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Confluent.Kafka" Version="2.6.1" />
-    <PackageReference Include="JsonDiffPatch.Net" Version="2.3.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.46.0" />
+    <PackageReference Include="Confluent.Kafka" Version="2.10.0" />
+    <PackageReference Include="JsonDiffPatch.Net" Version="2.4.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" /> <!-- Don't update this to 2.3.0 or IEndpointFeature will not resolve, Microsoft messed something up -->
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.48.1" />
     <None Include="LICENSE.txt" Pack="true" PackagePath="$(PackageLicenseFile)" />
     <None Include="README.md" Pack="true" PackagePath="\" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.0.0" />
@@ -30,5 +33,6 @@
   <ItemGroup>
     <Content Include="templates\**\*" Exclude="templates\**\bin\**;template\**\obj\**" />
     <Compile Remove="templates\**\*" />
+    <Compile Remove="*.Tests\**\*" />
   </ItemGroup>
 </Project>
