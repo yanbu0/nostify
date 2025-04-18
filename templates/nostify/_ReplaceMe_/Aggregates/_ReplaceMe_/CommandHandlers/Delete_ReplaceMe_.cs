@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+
 using Microsoft.Extensions.Logging;
 using nostify;
 using Microsoft.Azure.Functions.Worker;
@@ -18,7 +18,7 @@ public class Delete_ReplaceMe_
     }
 
     [Function(nameof(Delete_ReplaceMe_))]
-    public async Task<IActionResult> Run(
+    public async Task<Guid> Run(
         [HttpTrigger("delete", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
         ILogger log)
@@ -26,7 +26,7 @@ public class Delete_ReplaceMe_
         Event pe = new Event(_ReplaceMe_Command.Delete, aggregateId, null);
         await _nostify.PersistEventAsync(pe);
 
-        return new OkObjectResult(aggregateId);
+        return aggregateId;
     }
 }
 
