@@ -24,14 +24,26 @@ public class Program
             var config = context.Configuration;
 
             //Note: This is the api key for the cosmos emulator by default
-            string apiKey = config.GetValue<string>("cosmosApiKey");
-            string dbName = config.GetValue<string>("cosmosDbName");
-            string endPoint = config.GetValue<string>("cosmosEndPoint");
-            string kafka = config.GetValue<string>("BrokerList");
+            string? cosmosApiKey = config.GetValue<string>("cosmosApiKey");
+            string? cosmosDbName = config.GetValue<string>("cosmosDbName");
+            string? cosmosEndPoint = config.GetValue<string>("cosmosEndPoint");
+            string? kafka = config.GetValue<string>("BrokerList");
+            bool autoCreateContainers = config.GetValue<bool>("AutoCreateContainers");
+            int defaultThroughput = config.GetValue<int>("DefaultContainerThroughput");
+            bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
+            bool useGatewayConnection = config.GetValue<bool>("UseGatewayConnection");
+            var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
 
-            var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
+            var nostify = NostifyFactory.WithCosmos(
+                                cosmosApiKey: cosmosApiKey,
+                                cosmosDbName: cosmosDbName,
+                                cosmosEndpointUri: cosmosEndPoint,
+                                createContainers: autoCreateContainers,
+                                containerThroughput: defaultThroughput,
+                                useGatewayConnection: useGatewayConnection)
                             .WithKafka(kafka)
-                            .Build<_ReplaceMe_>(verbose: true);
+                            .WithHttp(httpClientFactory)
+                            .Build<_ReplaceMe_>(verboseNostifyBuild);
 
             services.AddSingleton<INostify>(nostify);
             services.AddLogging();
