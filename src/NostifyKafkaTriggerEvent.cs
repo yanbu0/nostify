@@ -1,4 +1,3 @@
-
 using System;
 using Newtonsoft.Json;
 using nostify;
@@ -16,15 +15,38 @@ public class NostifyKafkaTriggerEvent
 
     }
 
+    ///<summary>
+    ///Gets or sets the offset of the Kafka message.
+    ///</summary>
     public int Offset { get; set; }
+
+    ///<summary>
+    ///Gets or sets the partition of the Kafka message.
+    ///</summary>
     public int Partition { get; set; }
+
+    ///<summary>
+    ///Gets or sets the topic of the Kafka message.
+    ///</summary>
     public string Topic { get; set; }
+
+    ///<summary>
+    ///Gets or sets the value of the Kafka message.
+    ///</summary>
     public string Value { get; set; }
+
+    ///<summary>
+    ///Gets or sets the key of the Kafka message.
+    ///</summary>
     public string Key { get; set; }
+
+    ///<summary>
+    ///Gets or sets the headers of the Kafka message.
+    ///</summary>
     public string[] Headers { get; set; }
 
     ///<summary>
-    ///Converts string value of the Value to a Event
+    ///Converts string value of the Value to an Event.
     ///</summary>
     public Event? GetEvent()
     {

@@ -4,8 +4,6 @@ using System.Reflection;
 using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.Collections.Generic;
-using nostify.Attributes;
-using Microsoft.Azure.Cosmos.Serialization.HybridRow.Schemas;
 
 namespace nostify;
 
@@ -24,6 +22,12 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///</summary>
     protected internal NostifyObject(){
     }
+
+    /// <summary>
+    /// Time to live in seconds, default is -1 which means never expire.  Can be set to any positive integer to bulk delete from container using spare RUs.
+    /// Container must have TTL enabled for the delete to work.
+    /// </summary>
+    public int ttl { get; set; } = -1;  
     
     ///<summary>
     ///Id of tenant of logged in user

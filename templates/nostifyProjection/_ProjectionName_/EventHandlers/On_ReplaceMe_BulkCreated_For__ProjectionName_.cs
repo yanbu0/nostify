@@ -38,7 +38,7 @@ public class On_ReplaceMe_BulkCreated_For__ProjectionName_
         {
             Container currentStateContainer = await _nostify.GetBulkProjectionContainerAsync<_ProjectionName_>();
             await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<_ProjectionName_>(events);
-            await _ProjectionName_.InitAllUninitialized(_nostify, _httpClient);
+            await _nostify.InitAllUninitializedAsync<_ProjectionName_>();
         }
         catch (Exception e)
         {

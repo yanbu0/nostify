@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+
 using Microsoft.Extensions.Logging;
 using nostify;
 using Microsoft.Azure.Functions.Worker;
@@ -19,7 +19,7 @@ public class Update_ReplaceMe_
     }
 
     [Function(nameof(Update_ReplaceMe_))]
-    public async Task<IActionResult> Run(
+    public async Task<Guid> Run(
         [HttpTrigger("patch", Route = "_ReplaceMe_")] HttpRequestData req,
         ILogger log)
     {
@@ -28,7 +28,7 @@ public class Update_ReplaceMe_
         Event pe = new Event(_ReplaceMe_Command.Update, aggRootId, update_ReplaceMe_);
         await _nostify.PersistEventAsync(pe);
 
-        return new OkObjectResult(update_ReplaceMe_.id);
+        return update_ReplaceMe_.id;
     }
 }
 

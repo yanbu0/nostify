@@ -7,6 +7,9 @@ using System.Collections.Generic;
 using Microsoft.Azure.Cosmos;
 using nostify;
 using Newtonsoft.Json;
+using System.Net.Http;
+
+namespace nostify;
 
 ///<summary>
 ///List of Events queried from external data source to update a Projection
@@ -43,7 +46,7 @@ public class ExternalDataEvent
     public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, params Func<TProjection, Guid?>[] foreignIdSelectors)
     where TProjection : IUniquelyIdentifiable
     {
-        var foreignIds = 
+        var foreignIds =
             from p in projectionsToInit
             from f in foreignIdSelectors
             let foreignId = f(p)
@@ -87,8 +90,8 @@ public class ExternalDataEvent
 
         //Empty result set by default
         List<ExternalDataEvent> result = new List<ExternalDataEvent>();
-        
-        var foreignIds = 
+
+        var foreignIds =
             from p in projectionsToInit
             from f in foreignIdSelectors
             let foreignId = f(p)
@@ -103,8 +106,8 @@ public class ExternalDataEvent
             if (!response.IsSuccessStatusCode)
             {
                 throw new NostifyException($"{response.StatusCode} Error getting events from external service: {response.ReasonPhrase} || {response.Content}");
-            } 
-            else 
+            }
+            else
             {
                 var responseText = await response.Content.ReadAsStringAsync();
                 var events = (JsonConvert.DeserializeObject<List<Event>>(responseText) ?? []).ToLookup(e => e.aggregateRootId);

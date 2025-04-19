@@ -1,9 +1,8 @@
 using nostify;
-using nostify.Attributes;
 
 namespace _ReplaceMe__Service;
 
-public class _ReplaceMe_ : NostifyObject, IAggregate
+public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
 {
     public _ReplaceMe_()
     {

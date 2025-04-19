@@ -12,14 +12,14 @@ namespace nostify;
 
 public static class QueryExtensions
 {
-   ///<summary>
+    ///<summary>
     ///Nostify: Runs query through FeedIterator and returns first item that matches criteria or a new instance of the class
     ///</summary>
     public static async Task<T> FirstOrNewAsync<T>(this IQueryable<T> query) where T : new()
     {
         FeedIterator<T> fi = query.ToFeedIterator<T>();
         List<T> list = await fi.ReadFeedIteratorAsync<T>();
-        
+
         return list.FirstOrDefault() ?? new T();
     }
 
@@ -30,7 +30,7 @@ public static class QueryExtensions
     {
         FeedIterator<T> fi = query.ToFeedIterator<T>();
         List<T> list = await fi.ReadFeedIteratorAsync<T>();
-        
+
         return list.FirstOrDefault();
     }
 

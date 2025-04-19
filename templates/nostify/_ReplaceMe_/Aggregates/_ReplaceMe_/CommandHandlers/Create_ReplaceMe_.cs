@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Net.Http;
@@ -23,7 +22,7 @@ public class Create_ReplaceMe_
     }
 
     [Function(nameof(Create_ReplaceMe_))]
-    public async Task<IActionResult> Run(
+    public async Task<Guid> Run(
         [HttpTrigger("post", Route = "_ReplaceMe_")] HttpRequestData req,
         ILogger log)
     {
@@ -36,7 +35,7 @@ public class Create_ReplaceMe_
         Event pe = new Event(_ReplaceMe_Command.Create, newId, new_ReplaceMe_);
         await _nostify.PersistEventAsync(pe);
 
-        return new OkObjectResult(newId);
+        return newId;
     }
 }
 

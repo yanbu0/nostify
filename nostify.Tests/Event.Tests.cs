@@ -7,6 +7,8 @@ using Moq;
 using nostify;
 using System.ComponentModel.DataAnnotations;
 
+namespace nostify.Tests;
+
 public class EventTests
 {
     public class TestAggregate : NostifyObject, IAggregate, ITenantFilterable
@@ -38,7 +40,7 @@ public class EventTests
         var eventToTest = new Event { command = command, payload = JObject.FromObject(payload) };
 
         // Act & Assert
-        eventToTest.ValidatePayload<TestAggregate>();
+        Assert.Equal<Event>(eventToTest.ValidatePayload<TestAggregate>(), eventToTest);
     }
 
     [Fact]
@@ -161,7 +163,7 @@ public class EventTests
         Assert.Equal(payload, eventToTest.payload);
         Assert.Equal(validAggregateRootId, eventToTest.aggregateRootId);
     }
-    
+
     [Fact]
     public void EventConstructor_ShouldFail_WithInvalidUserId()
     {
@@ -201,32 +203,32 @@ public class EventTests
         // Arrange
         var command = new NostifyCommand("Test", true);
         var payload = JObject.FromObject(new { name = "Test", id = "invalid-guid" });
-    
+
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new Event(command, payload));
     }
-    
+
     [Fact]
     public void EventConstructor_ShouldFail_WithMissingAggregateRootIdInPayload()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
         var payload = JObject.FromObject(new { name = "Test" });
-    
+
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new Event(command, payload));
     }
-    
+
     [Fact]
     public void EventConstructor_ShouldPass_WithValidAggregateRootIdInPayload()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
         var payload = JObject.FromObject(new { name = "Test", id = Guid.NewGuid() });
-    
+
         // Act
         var eventToTest = new Event(command, payload);
-    
+
         // Assert
         Assert.NotNull(eventToTest);
         Assert.Equal(command, eventToTest.command);

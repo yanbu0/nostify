@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Net.Http;
@@ -23,7 +22,7 @@ public class BulkCreate_ReplaceMe_
     }
 
     [Function(nameof(BulkCreate_ReplaceMe_))]
-    public async Task<IActionResult> Run(
+    public async Task<int> Run(
         [HttpTrigger("post", Route = "_ReplaceMe_/BulkCreate")] HttpRequestData req,
         ILogger log)
     {
@@ -42,7 +41,7 @@ public class BulkCreate_ReplaceMe_
 
         await _nostify.BulkPersistEventAsync(peList);
 
-        return new OkObjectResult(new_ReplaceMe_List.Count);
+        return new_ReplaceMe_List.Count;
     }
 }
 
