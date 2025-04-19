@@ -13,57 +13,23 @@ When should I use this?
 
 You should consider using this if you are using .Net and Azure and want to follow a strong set of guidelines to quickly and easily spin up services that can massively scale without spending tons of time architecting it yourself.
 
-### Current Status
+## Current Status
 
-- Changes in 2.9
-  - More effective comparison in `ApplyAndPersistAsync()`
-  - Setting `containerThroughput` to 0 or less (convention should be -1) in `WithComos()` to leverage serverless RU provisioning
-  - Fixed bug with setting throughput
-  - Fixed bug with TryGetValue
-- Changes in 2.8
-  - Added `BulkApplyAndPersistAsync()` methods to facilitate bulk changes in Projection event handlers for events not from the base aggregate.
-  - `ApplyAndPersistAsync<T>()` methods now return `Task<T>` and if awaited return the updated object. This makes it easier to call `InitAsync()` on the projection if it requires external data.
-  - `ApplyAndPersistAsync<T>()` now uses `CreateItemAsync()` and `PatchItemAsync()` instead of `UpsertItemAsync()` in the background depending if its a create or not, much better performance
-- Changes in 2.7
-  - Added ability to configure using Gateway connection type. Set `useGatewayConnection` to `true` in `NostifyFactory.WithCosmos()`
-  - Adds retry to `InitAllUninitialized()`
-- Changes in 2.6
-  - 2.6.3 fixes bug in container creation
-  - Added feature for "verbose" start up which outputs more information from steps to console
-  - Added `TryGetValue<T>()` method to extract value from payload if it exists and not throw an error, but instead return false if not
-  - Added manual mapping capability to `UpdateProperties()` so you can now specify how to map property values from payload to Projection if the property names don't match up. Example below will set the `ExampleProjection.exampleName`property to the value of the `payload.name` property:
+### Updates
 
-  ```C#
-    Dictionary<string, string> propertyPairs = new Dictionary<string, string>{
-        {"name", "exampleName"}
-    };
-    this.UpdateProperties<ExampleProjection>(eventToApply.payload, propertyPairs, true);
-  ```
-  
-- Changes in 2.5
-  - Added new `ExternalDataEvent.GetEventsAsync<T>()` method to help reduce boilerplate code for Projection init
-- Changes in 2.4
-  - Much improved Kafka config
-  - Fixed issue with connecting to Kafka
-  - Auto create topics during start up
-  - NostifyFactory `Build()` is now a generic, so should be used `Build<T>()` where T is the base aggregate for the service
-- Changes in 2.3
-  - HandleUndeliverableAysnc() has the option to publish an Error event to kafka
-  - Bulk methods have `batchSize` option for looping through large lists of events, ability to automatically retry on Cosmos 429 failure, and better error handling
-- Changes in 2.2
-  - Factory method for building Nostify singleton
-  - Bulk patching method
-  - Kafka producer injection
-  - Use 2.2.2 - 2.2.0, 2.2.1 have bugs
-- Changes in 2.1
-  - Way to programatically create containers automatically on start up if needed (for facilitating local development)
-  - Some documentation updates
-- Changes in 2.0
-  - Projection initialization is vastly different/better (breaking change)
-  - Proper caching of references to CosmosClient and containers speeds up db actions significantly
-  - Basic validation for create commands
-  - Leveraging TTL to add delete all in a projection container rather than deleting and recreating container
-  - More unit tests
+- 3.0.0 Released
+  - Improved inheritance, now simpler to build Projections
+  - Consistent, easier way to init Projeciton Containers, can call from `INostify` rather than a static class
+  - No more `ProjectionBaseClass<P>` abstract class, Projections now only have to implement `NostifyObject` and `IProjection`, making it easy to
+  create a base class for both the root Aggregate and Projections of it containing common properties and methods.
+  - Templates updated to use 3.0.0 compatible code, remove `OkResult()`, add base class by default
+
+### Coming Soon
+
+- Improved/Update Documentation
+- Updated example repo, current one is v1, not worth looking at
+- Better test coverage
+- Improved Command payload validation, currently only really have validation for Create, as defined by the `isNew` flag in the Command, will be adding a `ValidateFor(<Command>)` attribute to run validation specific to the Command being handled by the http function
 
 ## Getting Started
 
@@ -267,14 +233,26 @@ public  class  Program
       var config = context.Configuration;
 
       //Note: This is the api key for the cosmos emulator by default
-      string apiKey = config.GetValue<string>("apiKey");
-      string dbName = config.GetValue<string>("dbName");
-      string endPoint = config.GetValue<string>("endPoint");
-      string kafka = config.GetValue<string>("BrokerList");
+      string? apiKey = config.GetValue<string>("cosmosApiKey");
+      string? dbName = config.GetValue<string>("cosmosDbName");
+      string? endPoint = config.GetValue<string>("cosmosEndPoint");
+      string? kafka = config.GetValue<string>("BrokerList");
+      bool autoCreateContainers = config.GetValue<bool>("AutoCreateContainers");
+      int defaultThroughput = config.GetValue<int>("DefaultContainerThroughput");
+      bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
+      bool useGatewayConnection = config.GetValue<bool>("UseGatewayConnection");
+      var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
 
-      var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
-                          .WithKafka(kafka)
-                          .Build<MyAggregate>(); //Where T is the base aggregate of the service
+      var nostify = NostifyFactory.WithCosmos(
+                                cosmosApiKey: apiKey,
+                                cosmosDbName: dbName,
+                                cosmosEndpointUri: endPoint,
+                                createContainers: autoCreateContainers,
+                                containerThroughput: defaultThroughput,
+                                useGatewayConnection: useGatewayConnection)
+                            .WithKafka(kafka)
+                            .WithHttp(httpClientFactory)
+                            .Build<InventoryItem>(verboseNostifyBuild); //Where T is the base aggregate of the service
 
       services.AddSingleton<INostify>(nostify);
 
@@ -287,32 +265,7 @@ public  class  Program
 }
 ```
 
-By default, the template will contain the single Aggregate specified. In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out. The AggregateCommand base class contains default implementations for Create, Update, and Delete. The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name.
-
-```C#
-
-public  class  TestCommand : NostifyCommand
-{
-  ///<summary>
-  ///Base Create Command
-  ///</summary>
-  public  static  readonly  TestCommand  Create = new  TestCommand("Create_Test", true);
-  ///<summary>
-  ///Base Update Command
-  ///</summary>
-  public  static  readonly  TestCommand  Update = new  TestCommand("Update_Test");
-  ///<summary>
-  ///Base Delete Command
-  ///</summary>
-  public  static  readonly  TestCommand  Delete = new  TestCommand("Delete_Test");    
-
-  public  TestCommand(string  name, bool  isNew = false)
-  : base(name, isNew)
-  {
-  }
-
-}
-```
+By default, the template will contain the single Aggregate specified. In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out. The AggregateCommand base class contains default implementations for Create, Update, and Delete. The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name. Note that `UpdateProperties<T>()` uses reflection, so extremely high performance may require writing code to directly handle the updates for your Aggregate's specific properties.
 
 ```C#
 
@@ -339,9 +292,7 @@ public  class  Test : NostifyObject, IAggregate
       this.isDeleted = true;
     }
   }
-}
-
-  
+}  
 
 ```
 
@@ -479,8 +430,6 @@ public class TestWithStatus : ProjectionBaseClass<TestWithStatus,Test>, IContain
     List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync<TestWithStatus>(sameServiceEventStore, 
         projectionsToInit, 
         p => p.testTypeId);
-
-    externalDataEvents.AddRange(externalDataEvents);
 
     //Get events from other services via http using the EventRequest endpoint
     var response = await httpClient.PostAsync("http://localhost:7071/api/EventRequest",statiToGetEventsFor);
