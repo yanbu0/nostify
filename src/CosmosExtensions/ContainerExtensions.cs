@@ -105,8 +105,17 @@ public static class ContainerExtensions
                     List<PatchOperation> patchOperations = new List<PatchOperation>(){
                         PatchOperation.Set("/ttl", 1)
                     };
-                    //Get partition key from item by using the value in partitionKeyPath
-                    string pk = item.GetType().GetProperty(partitionKeyPath.Trim('/')).GetValue(item).ToString();
+                    // Get partition key from item by using the value in partitionKeyPath
+                    var propertyInfo = item.GetType().GetProperty(partitionKeyPath.Trim('/'));
+                    if (propertyInfo == null)
+                    {
+                        throw new NostifyException($"Property '{partitionKeyPath.Trim('/')}' does not exist on type '{item.GetType().Name}'.");
+                    }
+                    string pk = propertyInfo.GetValue(item)?.ToString();
+                    if (string.IsNullOrEmpty(pk))
+                    {
+                        throw new NostifyException($"Partition key value is null or empty for property '{partitionKeyPath.Trim('/')}' on item of type '{item.GetType().Name}'.");
+                    }
                     tasks.Add(containerToDeleteFrom.PatchItemAsync<P>(item.id.ToString(), pk.ToPartitionKey(), patchOperations));
                 }
                 // Wait for all tasks to complete
