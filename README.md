@@ -379,7 +379,7 @@ Deleting an aggregate by default does not actually remove it from the current st
 Note: for the following `Projection` examples we will be using the following projection `TestWithStatus` as an example:
 
 ```C#
-public class TestWithStatus : ProjectionBaseClass<TestWithStatus,Test>, IContainerName, IHasExternalData<TestWithStatus>
+public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestWithStatus>
 {
   public TestWithStatus()
   {
@@ -387,9 +387,7 @@ public class TestWithStatus : ProjectionBaseClass<TestWithStatus,Test>, IContain
   }
 
   public static string containerName => "TestWithStatus";
-
-  public bool isDeleted { get; set; }
-
+  
   //Test properites
   public string testName { get; set; }
   public Guid? statusId { get; set; }
