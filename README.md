@@ -202,11 +202,11 @@ The commands may then be handled in the `Apply()` method:
 ```C#
 public override void Apply(Event eventToApply)
 {
-    if (eventToApply.command == _ReplaceMe_Command.Create || eventToApply.command == _ReplaceMe_Command.Update)
+    if (eventToApply.command == TestCommand.Create || eventToApply.command == TestCommand.Update)
     {
-        this.UpdateProperties<_ReplaceMe_>(eventToApply.payload);
+        this.UpdateProperties<Test>(eventToApply.payload);
     }
-    else if (eventToApply.command == _ReplaceMe_Command.Delete)
+    else if (eventToApply.command == TestCommand.Delete)
     {
         this.isDeleted = true;
     }
