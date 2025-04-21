@@ -1,17 +1,21 @@
 
 # nostify
 
-Dirtball simple, easy to use, scalable event driven microservices framework for .Net.
+## Overview
 
-This framework is intended to simplify the implementation of the ES/CQRS, microservice, and materialized view patterns in a specific tech stack. It also assumes some basic familiarity with domain driven design.
+`nostify` provides a framework for creating event driven microservices implementing the CQRS/ES pattern. It leverages Azure Functions for scalability and Cosmos DB for data storage, making it suitable for applications requiring high throughput and low latency. It also assumes some basic familiarity with domain driven design.
 
-When should I NOT use this?
+## Features
 
-The framework makes numerous assumptions to cut down on complexity. It has dependencies on Azure components, notably Cosmos. If you need to accommodate a wide range of possible technology stacks, or want lots of flexibility in how to implement, this may not be for you. If you are going to ignore the tech stack requirements there are other libraries you should look at.
+- Microservice Architecture: Encapsulates domain logic within services, promoting modularity and scalability.
 
-When should I use this?
+- CQRS Implementation: Separates command and query responsibilities to optimize performance and maintainability.
 
-You should consider using this if you are using .Net and Azure and want to follow a strong set of guidelines to quickly and easily spin up services that can massively scale without spending tons of time architecting it yourself.
+- Event Sourcing: Utilizes events to represent state changes, enabling traceability and auditability.
+
+- Azure Functions Integration: Scales automatically to handle varying loads, ensuring high availability.
+
+- Cosmos DB Storage: Provides a globally distributed, multi-model database for storing aggregates and projections.
 
 ## Current Status
 
@@ -74,6 +78,7 @@ You should set up a Function App and Cosmos DB per Aggregate Microservice.
 Projections that contain data from multiple Aggregates can be updated by Event Handlers from other microservices. Why would this happen? Well say you have a Bank Account record. If we were using a relational database for a data store we'd have to either run two queries or do a join to get the Bank Account and the name of the Account Manager. Using the CQRS model, we can "pre-render" a projection that contains both the account info and the account manager info without having to join tables together. This example is obviously very simple, but in a complex environment where you're joining together dozens of tables to create a DTO to send to the user interface and returning 100's of thousands or millions of records, this type of architecture can dramatically improve BOTH system performance and throughput.
 
 ![image](https://user-images.githubusercontent.com/26099646/287053131-fe8741c4-6547-482e-a03b-2b2635925602.png)
+![image](https://github.com/user-attachments/assets/f3c4e079-a0e9-49f7-8f4a-64b64937df3b)
 
 ## Why????
 
