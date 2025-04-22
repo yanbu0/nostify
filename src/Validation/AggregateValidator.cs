@@ -32,9 +32,9 @@ public sealed class AggregateValidator : IAggregateValidator
     public string DefaultMaxStringLengthConfigKey { get; set; } = "Nostify:Validation:DefaultMaxStringLength";
     
     /// <summary>
-    /// The default maximum string length; defaults to 1024.
+    /// The default maximum string length; defaults to 100,000.
     /// </summary>
-    public int? DefaultMaxStringLengthValue { get; set; } = 1024;
+    public int? DefaultMaxStringLengthValue { get; set; } = 100000;
 
     private readonly IConfiguration _config;
     private readonly ConcurrentDictionary<Type, object> _cache = new();
