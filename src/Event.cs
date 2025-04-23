@@ -184,7 +184,13 @@ public class Event
     {
         if (validator != null)
         {
-            validator.Validate<T>(JObject.FromObject(payload).ToObject<T>());
+            var validationErrors = validator.Validate<T>(JObject.FromObject(payload).ToObject<T>());
+            if (validationErrors.Count > 0)
+            {
+                // create a single validation message string of the format $"{property}: {message}" separated by newlines for each error
+                var validationMessage = string.Join("\n", validationErrors.Select(e => $"  {e.Property}: {e.Message}"));
+                throw new ValidationException($"Validation failed for {typeof(T).Name}:\n{validationMessage}");
+            }
         }
 
         if (this.command.isNew)
