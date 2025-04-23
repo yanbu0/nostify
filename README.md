@@ -17,6 +17,8 @@
 
 - Cosmos DB Storage: Provides a globally distributed, multi-model database for storing aggregates and projections.
 
+- Multi-tenant by default, ideal for SaaS applications
+
 ## Current Status
 
 ### Updates
