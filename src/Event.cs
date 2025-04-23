@@ -22,8 +22,10 @@ public class Event
     ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
     ///<param name="userId">ID of User responsible for Event.</param>
     ///<param name="partitionKey">Tenant ID to apply Event to.</param>
-    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
+    ///<param name="validator">Validator to use to validate the event payload.</param>
+    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default, IAggregateValidator? validator = null)
     {
+        _validator = validator;
         SetUp(command, aggregateRootId, payload, userId, partitionKey);
     }
 
@@ -34,8 +36,10 @@ public class Event
     ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
     ///<param name="userId">ID of User responsible for Event.</param>
     ///<param name="partitionKey">Tenant ID to apply Event to.</param>
-    public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
+    ///<param name="validator">Validator to use to validate the event payload.</param>
+    public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default, IAggregateValidator? validator = null)
     {
+        _validator = validator;
         Guid aggregateRootId = default;
         //Check payload is not null
         CheckPayload(payload);
@@ -60,8 +64,10 @@ public class Event
     ///<param name="payload">Properties to update or the id of the Aggregate to delete.</param>
     ///<param name="userId">ID of User responsible for Event.</param>
     ///<param name="partitionKey">Partition key to apply Event to.</param>
-    public Event(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey)
+    ///<param name="validator">Validator to use to validate the event payload.</param>
+    public Event(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey, IAggregateValidator? validator = null)
     {
+        _validator = validator;
         Guid aggGuid;
         if (!Guid.TryParse(aggregateRootId, out aggGuid)){
             throw new ArgumentException("Aggregate Root ID is not parsable to a Guid");
@@ -109,6 +115,8 @@ public class Event
     ///Empty constructor for PeristedEvent, used when querying from db
     ///</summary>
     public Event() { }
+
+    private readonly IAggregateValidator? _validator;
 
     ///<summary>
     ///Timestamp of event
@@ -182,6 +190,11 @@ public class Event
     ///<typeparam name="T">The type of the aggregate to validate against.</typeparam>
     public Event ValidatePayload<T>() where T : NostifyObject, IAggregate
     {
+        if (_validator != null)
+        {
+            _validator.Validate<T>(JObject.FromObject(payload).ToObject<T>());
+        }
+
         if (this.command.isNew)
         {
             ValidateForCreate<T>();

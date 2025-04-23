@@ -18,7 +18,7 @@ public interface IAggregateValidator
     /// <typeparam name="T">The type of the aggregate/projection.</typeparam>
     /// <param name="aggregate">The aggregate to validate.</param>
     /// <returns>A list of ValidationErrors.</returns>
-    IReadOnlyList<ValidationError> Validate<T>(T aggregate);
+    IReadOnlyList<ValidationError> Validate<T>(T? aggregate);
 }
 
 /// <summary>
@@ -50,9 +50,13 @@ public sealed class AggregateValidator : IAggregateValidator
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<ValidationError> Validate<T>(T aggregate)
+    public IReadOnlyList<ValidationError> Validate<T>(T? aggregate)
     {
-        if (aggregate is null) throw new ArgumentNullException(nameof(aggregate));
+        if (aggregate is null)
+        {
+            // nothing to validate
+            return [];
+        }
 
         // get/build the cached array of ValidationRule<T>
         var rules = (ValidationRule<T>[])_cache.GetOrAdd(
