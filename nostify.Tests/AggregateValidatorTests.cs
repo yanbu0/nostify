@@ -14,7 +14,7 @@ namespace nostify.Tests;
 public class AggregateValidatorTests
 {
     private readonly Mock<IConfiguration> _mockConfig;
-    private readonly AggregateValidator _validator;
+    private AggregateValidator _validator;
 
     // Test data classes
     private record TestAggregateDirect
@@ -60,7 +60,9 @@ public class AggregateValidatorTests
         _mockConfig.Setup(c => c["Validation:TestNameMaxLength"]).Returns("20");
         //dont' setup Validation:MissingKey in order to test default fallback
 
-        _validator = new AggregateValidator(_mockConfig.Object);
+        var defaultMaxStringLength = new MaxStringLengthAttribute("Nostify:Validation:DefaultMaxStringLength");
+
+        _validator = new AggregateValidator(_mockConfig.Object, defaultMaxStringLength);
     }
 
     [Fact]
@@ -229,13 +231,16 @@ public class AggregateValidatorTests
     }
 
     [Fact]
-    public void Validate_NullAggregate_ThrowsArgumentNullException()
+    public void Validate_NullAggregate_ReturnsNoErrors()
     {
         // Arrange
-        TestAggregateDirect aggregate = null;
+        TestAggregateDirect? aggregate = null;
 
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _validator.Validate(aggregate));
+        // Act
+        var errors = _validator.Validate(aggregate);
+
+        // Assert
+        Assert.Empty(errors);
     }
 
     [Fact]
@@ -254,10 +259,10 @@ public class AggregateValidatorTests
     [Fact]
     public void Validate_TypeWithoutValidationAttributes_ReturnsNoErrors()
     {
-        _validator.DefaultMaxStringLengthValue = int.MaxValue;
+        _validator = new AggregateValidator(_mockConfig.Object);
+
         // Arrange
-        // This type has no MaxStringLengthAttribute; DefaultMaxStringLengthValue is set to int.MaxValue
-        var aggregate = new { SomeData = "This should pass as there's no validation configured for it implicitly or explicitly beyond the default" };
+        var aggregate = new { SomeData = "This should pass as there's no validation configured for - no default max string length attributes have been passed to the AggregateValidator constructor" };
 
         // Act
         var errors = _validator.Validate(aggregate);

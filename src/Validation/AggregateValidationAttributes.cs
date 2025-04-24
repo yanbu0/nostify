@@ -17,7 +17,7 @@ public record ValidationError(string Property, string Message);
 /// <typeparam name="T">The type of the instance being validated.</typeparam>
 /// <param name="instance">The instance being validated.</param>
 /// <returns>The validation error, or null if the instance is valid.</returns>
-public delegate ValidationError ValidationRule<T>(T instance);
+public delegate ValidationError? ValidationRule<T>(T instance);
 
 /// <summary>
 /// An attribute that defines a validation rule.
@@ -25,13 +25,18 @@ public delegate ValidationError ValidationRule<T>(T instance);
 public interface IValidationAttribute
 {
     /// <summary>
+    /// The types of properties that the validation rule applies to.
+    /// </summary>
+    public Type PropertyType { get; }
+
+    /// <summary>
     /// Creates a validation rule for the specified property.
     /// </summary>
     /// <typeparam name="T">The type of the instance being validated.</typeparam>
     /// <param name="property">The property to validate.</param>
     /// <param name="config">The configuration.</param>
     /// <returns>The validation rule.</returns>
-    ValidationRule<T> CreateRule<T>(
+    ValidationRule<T>? CreateRule<T>(
         PropertyInfo property,
         IConfiguration config);
 }
@@ -42,15 +47,6 @@ public interface IValidationAttribute
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
 public class MaxStringLengthAttribute : Attribute, IValidationAttribute
 {
-    /// <summary>
-    /// The maximum length of the string property.
-    /// </summary>
-    public int? Length { get; }
-    /// <summary>
-    /// The configuration key for the maximum length.
-    /// </summary>
-    public string ConfigKey { get; }
-
     /// <summary>
     /// Creates a new instance with the specified maximum length.
     /// </summary>
@@ -63,11 +59,29 @@ public class MaxStringLengthAttribute : Attribute, IValidationAttribute
     /// <param name="configKey">The configuration key for the maximum length.</param>
     public MaxStringLengthAttribute(string configKey) { ConfigKey = configKey; }
 
+    /// <summary>
+    /// The maximum length of the string property.
+    /// </summary>
+    public int? Length { get; }
+    /// <summary>
+    /// The configuration key for the maximum length.
+    /// </summary>
+    public string? ConfigKey { get; }
+
     /// <inheritdoc/>
-    public ValidationRule<T> CreateRule<T>(
+    public Type PropertyType => typeof(string);
+
+    /// <inheritdoc/>
+    public ValidationRule<T>? CreateRule<T>(
         PropertyInfo property,
         IConfiguration config)
     {
+        if (PropertyType != property.PropertyType)
+        {
+            // don't try to validate a property of the wrong type
+            return null;
+        }
+
         int? maxLength;
         if (Length.HasValue)
         {
@@ -82,9 +96,10 @@ public class MaxStringLengthAttribute : Attribute, IValidationAttribute
             return null;
         }
 
+        // return a function that takes an Aggregate or Projection instance and validates the property
         return instance =>
         {
-            var str = (string)property.GetValue(instance);
+            var str = (string?)property.GetValue(instance);
             if (!string.IsNullOrEmpty(str) && str.Length > maxLength)
             {
                 return new ValidationError(

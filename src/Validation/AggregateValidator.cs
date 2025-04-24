@@ -26,44 +26,41 @@ public interface IAggregateValidator
 /// </summary>
 public sealed class AggregateValidator : IAggregateValidator
 {
-    /// <summary>
-    /// The configuration key for the default maximum string length; defaults to "Nostify:Validation:DefaultMaxStringLength".
-    /// </summary>
-    public string DefaultMaxStringLengthConfigKey { get; set; } = "Nostify:Validation:DefaultMaxStringLength";
-    
-    /// <summary>
-    /// The default maximum string length; defaults to 1024
-    /// </summary>
-    public int? DefaultMaxStringLengthValue { get; set; } = 1024;
-
     private readonly IConfiguration _config;
-    private readonly ConcurrentDictionary<Type, object> _cache = new();
+    private readonly ConcurrentDictionary<Type, IReadOnlyList<ValidationRule<object>>> _ruleCache = new();
+    private readonly IReadOnlyList<IValidationAttribute> _defaultValidationAttributes;
 
     /// <summary>
     /// Creates a new AggregateValidator with the specified configuration.
     /// </summary>
     /// <param name="config">The configuration.</param>
-    public AggregateValidator(IConfiguration config)
+    /// <param name="defaultValidationAttributes">Default validation attributes, if any</param>
+    public AggregateValidator(IConfiguration config, params IValidationAttribute[] defaultValidationAttributes)
     {
         _config = config;
-        DefaultMaxStringLengthValue = config.GetValue<int?>(DefaultMaxStringLengthConfigKey, DefaultMaxStringLengthValue);
+        _defaultValidationAttributes = defaultValidationAttributes.ToList().AsReadOnly();
     }
 
     /// <inheritdoc />
     public IReadOnlyList<ValidationError> Validate<T>(T? aggregate)
     {
+        var errors = new List<ValidationError>();
+
         if (aggregate is null)
         {
             // nothing to validate
-            return [];
+            return errors.AsReadOnly();
         }
 
-        // get/build the cached array of ValidationRule<T>
-        var rules = (ValidationRule<T>[])_cache.GetOrAdd(
+        // get/build the cached array of ValidationRule<T> - this is only done once per type T
+        var rules = _ruleCache.GetOrAdd(
             typeof(T),
-            _ => BuildRules<T>());
+            type => BuildRules<T>()
+                      .Select(rule => (ValidationRule<object>)(obj => rule((T)obj))) 
+                      .ToList()
+                      .AsReadOnly()
+            );
 
-        var errors = new List<ValidationError>();
         foreach (var rule in rules)
         {
             var err = rule(aggregate);
@@ -73,63 +70,62 @@ public sealed class AggregateValidator : IAggregateValidator
             }
         }
 
-        return errors;
+        return errors.AsReadOnly();
     }
 
-    private ValidationRule<T>[] BuildRules<T>()
+    private List<ValidationRule<T>> BuildRules<T>()
     {
         var rules = new List<ValidationRule<T>>();
         var allProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        var handledProperties = new HashSet<PropertyInfo>();
 
-        // Process attributes first
+        // process IValidationAttributes
         foreach (var prop in allProps)
         {
             var validationAttributes = prop.GetCustomAttributes().OfType<IValidationAttribute>().ToList();
-            if (validationAttributes.Any())
+            var handledValidationAttributeTypes = new HashSet<Type>();
+
+            foreach (var attr in validationAttributes.Where(v => v.PropertyType == prop.PropertyType))
             {
-                // Mark property as handled so the global default isn't applied later
-                foreach (var attr in validationAttributes)
+                try
                 {
-                    // Pass the non-nullable fallback int to CreateRule
-                    // MaxStringLengthAttribute uses this if it doesn't define its own Length or ConfigKey
                     var rule = attr.CreateRule<T>(prop, _config);
                     if (rule != null)
                     {
                         rules.Add(rule);
-                        handledProperties.Add(prop);
+
+                        // mark the attribute type as handled so it isn't included in the default attributes
+                        handledValidationAttributeTypes.Add(attr.GetType());
                     }
+                }
+                catch(Exception ex)
+                {
+                    // don't allow broken CreateRule<T> implementations to crash the app (TODO: is this what we want?)
+                    Console.WriteLine($"Error creating rule for {typeof(T).Name}.{prop.Name}: {ex.Message}");
+                }
+            }
+
+            // get the default attributes that have not been handled (i.e. added to handledValidationAttributeTypes)
+            var defaultValidationAttributes = _defaultValidationAttributes.Where(a => !handledValidationAttributeTypes.Contains(a.GetType())).ToList();
+
+            // process default attributes
+            foreach (var defaultValidationAttribute in defaultValidationAttributes.Where(a => a.PropertyType == prop.PropertyType))
+            {
+                try
+                {
+                    var rule = defaultValidationAttribute.CreateRule<T>(prop, _config);
+                    if (rule != null)
+                    {
+                        rules.Add(rule);
+                    }
+                }
+                catch(Exception ex)
+                {
+                    // don't allow broken CreateRule<T> implementations to crash the app (TODO: is this what we want?)
+                    Console.WriteLine($"Error creating rule for {typeof(T).Name}.{prop.Name}: {ex.Message}");
                 }
             }
         }
 
-        // Now process string properties *without* attributes, if the global default length is set
-        if (DefaultMaxStringLengthValue.HasValue) // Check if a global default was configured
-        {
-            var maxLength = DefaultMaxStringLengthValue.Value;
-            var stringProps = allProps
-                .Where(p => p.PropertyType == typeof(string) && !handledProperties.Contains(p));
-
-            foreach (var prop in stringProps)
-            {
-                // Create a default MaxStringLength rule for unattributed string properties
-                rules.Add(instance =>
-                {
-                    if (instance != null)
-                    {
-                        var str = prop.GetValue(instance) as string;
-                        if (!string.IsNullOrEmpty(str) && str.Length > maxLength)
-                        {
-                            return new ValidationError(
-                                prop.Name,
-                                $"Length {str.Length} exceeds max {maxLength}.");
-                        }
-                    }
-                    return null;
-                });
-            }
-        }
-
-        return rules.Where(rule => rule != null).ToArray();
+        return rules;
     }
 }
