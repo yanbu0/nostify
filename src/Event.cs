@@ -180,8 +180,19 @@ public class Event
     ///Validates if the payload contains all required properties for performing a command on an aggregate of type T. Will throw a ValidationException if any required properties are missing or null.
     ///</summary>
     ///<typeparam name="T">The type of the aggregate to validate against.</typeparam>
-    public Event ValidatePayload<T>() where T : NostifyObject, IAggregate
+    public Event ValidatePayload<T>(IAggregateValidator? validator = null) where T : NostifyObject, IAggregate
     {
+        if (validator != null)
+        {
+            var validationErrors = validator.Validate<T>(JObject.FromObject(payload).ToObject<T>());
+            if (validationErrors.Count > 0)
+            {
+                // create a single validation message string of the format $"{property}: {message}" separated by newlines for each error
+                var validationMessage = string.Join("\n", validationErrors.Select(e => $"  {e.Property}: {e.Message}"));
+                throw new ValidationException($"Validation failed for {typeof(T).Name}:\n{validationMessage}");
+            }
+        }
+
         if (this.command.isNew)
         {
             ValidateForCreate<T>();
