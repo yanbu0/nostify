@@ -23,7 +23,7 @@
 
 ### Updates
 
-- 3.1.0
+- 3.1.1
   - Improved details available in errors published to Kafka
   - Aggregate template updated with ability to set namespace properly
 - 3.0.0 Released
