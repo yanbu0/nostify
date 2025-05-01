@@ -247,7 +247,9 @@ public class Nostify : INostify
         await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), eventToHandle.aggregateRootId.ToPartitionKey());
         if (errorCommand is not null)
         {
-            await PublishEventAsync(new NostifyErrorEvent(errorCommand, eventToHandle.aggregateRootId, eventToHandle));
+            var errorPayload = new ErrorPayload(errorMessage, eventToHandle);
+            //Publish error event to kafka
+            await PublishEventAsync(new NostifyErrorEvent(errorCommand, eventToHandle.aggregateRootId, errorPayload, eventToHandle.userId, eventToHandle.partitionKey));
         }
     }
 
