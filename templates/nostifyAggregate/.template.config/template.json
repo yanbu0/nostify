@@ -13,6 +13,14 @@
             "FileRename": "_ReplaceMe_",
             "replaces":"_ReplaceMe_",
             "description": "Name of the Aggregate Root"
+        },
+        "serviceName":{
+            "type": "parameter",
+            "isRequired": true,
+            "replaces":"_ServiceName_",
+            "FileRename":"_ServiceName_",
+            "description": "The name of the service the aggregate is added to. Will set the namespace of the aggregate correctly.",
+            "shortName": "s"
         }
     },
     "sources": [
