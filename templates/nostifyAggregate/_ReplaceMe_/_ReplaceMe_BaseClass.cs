@@ -1,7 +1,7 @@
 using nostify;
 
 
-namespace _ReplaceMe__Service;
+namespace _ServiceName_Service;
 
 public abstract class _ReplaceMe_BaseClass : NostifyObject
 {

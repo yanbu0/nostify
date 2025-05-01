@@ -9,7 +9,7 @@ using nostify;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.Functions.Worker;
 
-namespace _ReplaceMe__Service;
+namespace _ServiceName_Service;
 
 public class BulkCreate_ReplaceMe_
 {

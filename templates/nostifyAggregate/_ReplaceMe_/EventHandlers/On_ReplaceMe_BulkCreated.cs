@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json.Linq;
 
-namespace _ReplaceMe__Service;
+namespace _ServiceName_Service;
 
 public class On_ReplaceMe_BulkCreated
 {
