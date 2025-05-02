@@ -66,6 +66,17 @@ public class ErrorPayload
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ErrorPayload"/> class.
+    /// </summary>
+    /// <remarks>Default constructor for serialization.</remarks>
+    public ErrorPayload()
+    {
+        ErrorMessage = string.Empty;
+        StackTrace = null;
+        Payload = new object();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ErrorPayload"/> class.
     /// <param name="errorMessage">The error message.</param>
     /// <param name="payload">The payload of the event that failed.</param>
     /// <param name="stackTrace">Optional. The stack trace.</param>
