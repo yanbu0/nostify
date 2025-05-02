@@ -6,6 +6,7 @@ using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.ComponentModel.DataAnnotations;
 using Newtonsoft.Json.Linq;
+using Confluent.Kafka;
 
 namespace nostify;
 
@@ -171,9 +172,9 @@ public class Event
     ///<summary>
     ///Returns typed value of payload
     ///</summary>
-    public T GetPayload<T>() where T : new()
+    public T GetPayload<T>()
     {
-        return JObject.FromObject(payload).ToObject<T>() ?? new T();
+        return JObject.FromObject(payload).ToObject<T>() ?? throw new NullReferenceException($"Payload is null for type {typeof(T).Name}");
     }
 
     ///<summary>
