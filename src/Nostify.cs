@@ -401,18 +401,21 @@ public class Nostify : INostify
     }
     
 
-    ///<summary>
-    ///Retrieves the undeliverable events container
-    ///</summary>
+    ///<inheritdoc />
     public async Task<Container> GetUndeliverableEventsContainerAsync()
     {
-        var db = await Repository.GetDatabaseAsync();
         return await GetContainerAsync(Repository.UndeliverableEvents, false, "/aggregateRootId");
+    }
+    
+    ///<inheritdoc />
+    public async Task<Container> GetSagaContainerAsync()
+    {
+        return await GetContainerAsync(Repository.SagaContainer, false, "/tenantId");
     }
 
     ///<inheritdoc />
     public async Task DoBulkUpsertAsync<T>(Container bulkContainer, List<T> itemList) where T : IApplyable
-    {        
+    {
         await bulkContainer.DoBulkUpsertAsync<T>(itemList);
     }
 
@@ -455,7 +458,7 @@ public class Nostify : INostify
         var assembly = typeof(TTypeInAssembly).Assembly;
 
         // Create the event store container
-        await CreateContainerAsync("eventStore", "/aggregateRootId", throughput, verbose);
+        await CreateContainerAsync(Repository.EventStoreContainer, Repository.EventStorePartitionKey, throughput, verbose);
 
         // Create the containers for the aggregates and projections
         foreach (var containerName in EnumerateContainerNames(assembly))

@@ -91,6 +91,11 @@ namespace nostify
         public readonly string UndeliverableEvents;
 
         ///<summary>
+        /// Optional. Name of saga container, defaults to "sagaContainer"
+        /// </summary>
+        public readonly string SagaContainer;
+
+        ///<summary>
         ///Optional. Will default to "AccountEndpoint={this.EndpointUri}/;AccountKey={this.Primarykey};"
         ///</summary>
         public readonly string ConnectionString;
@@ -149,7 +154,8 @@ namespace nostify
             string UndeliverableEvents = "undeliverableEvents",
             int DefaultContainerThroughput = -1,
             int DefaultDbThroughput = -1,
-            bool UseGatewayConnection = false)
+            bool UseGatewayConnection = false,
+            string SagaContainer = "sagaContainer")
         {
             this.EndpointUri = EndpointUri;
             this.Primarykey = ApiKey;
@@ -161,6 +167,7 @@ namespace nostify
             this.DefaultContainerThroughput = DefaultContainerThroughput;
             this.DefaultDbThroughput = DefaultDbThroughput;
             this.UseGatewayConnection = UseGatewayConnection;
+            this.SagaContainer = SagaContainer;
             _ = InitAsync();
         }
 
