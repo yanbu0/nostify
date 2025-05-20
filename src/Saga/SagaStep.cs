@@ -23,4 +23,12 @@ public class SagaStep
     /// Gets or sets the status of the step in the saga process.
     /// </summary>
     public SagaStepStatus status { get; set; }
+    /// <summary>
+    /// Gets or sets the data returned from the Saga Step if needed for a subsequent step.
+    /// </summary>
+    public object? successData { get; set; }    
+    /// <summary>
+    /// Gets or sets the data from the rollback if needed to rollback a previous step.
+    /// </summary>
+    public object? rollbackData { get; set; }
 }
