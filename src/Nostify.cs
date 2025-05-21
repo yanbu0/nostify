@@ -410,7 +410,7 @@ public class Nostify : INostify
     ///<inheritdoc />
     public async Task<Container> GetSagaContainerAsync()
     {
-        return await GetContainerAsync(Repository.SagaContainer, false, "/aggregateRootId");
+        return await GetContainerAsync(Repository.SagaContainer, false, "/id");
     }
 
     ///<inheritdoc />
