@@ -30,7 +30,7 @@
   - Aggregate template updated with ability to set namespace properly
 - 3.0.0 Released
   - Improved inheritance, now simpler to build Projections
-  - Consistent, easier way to init Projeciton Containers, can call from `INostify` rather than a static class
+  - Consistent, easier way to init Projection Containers, can call from `INostify` rather than a static class
   - No more `ProjectionBaseClass<P>` abstract class, Projections now only have to implement `NostifyObject` and `IProjection`, making it easy to
   create a base class for both the root Aggregate and Projections of it containing common properties and methods.
   - Templates updated to use 3.0.0 compatible code, remove `OkResult()`, add base class by default
