@@ -1,52 +1,51 @@
-
-
 namespace nostify;
 
 /// <summary>
 /// Represents a step in the saga process, including its order, events, and status.
 /// </summary>
-public class SagaStep
+public class SagaStep : ISagaStep
 {
-    /// <summary>
-    /// Gets or sets the order of the step in the saga process.
-    /// </summary>
-    public int order { get; set; }
-    /// <summary>
-    /// Gets or sets the event that will be published during this step in the saga process.
-    /// </summary>
+    /// <inheritdoc/>
+    public int order { get; set; } = 0;
+    /// <inheritdoc/>
     public Event stepEvent { get; set; }
-    /// <summary>
-    /// Gets or sets the event that will be published during the rollback of this step in the saga process.
-    /// </summary>
+    /// <inheritdoc/>
     public Event? rollbackEvent { get; set; }
-    /// <summary>
-    /// Gets or sets the status of the step in the saga process.
-    /// </summary>
+    /// <inheritdoc/>
     public SagaStepStatus status { get; set; }
-    /// <summary>
-    /// Gets or sets the data returned from the Saga Step if needed for a subsequent step.
-    /// </summary>
+    /// <inheritdoc/>
     public object? successData { get; set; }
-    /// <summary>
-    /// Gets or sets the data from the rollback if needed to rollback a previous step.
-    /// </summary>
+    /// <inheritdoc/>
     public object? rollbackData { get; set; }
-    /// <summary>
-    /// Gets or sets the start time of the step execution.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime? executionStart { get; set; }
-    /// <summary>
-    /// Gets or sets the completion time of the step execution.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime? executionComplete { get; set; }
-    /// <summary>
-    /// Gets or sets the start time of the rollback execution.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime? rollbackStart { get; set; }
-    /// <summary>
-    /// Gets or sets the completion time of the rollback execution.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime? rollbackComplete { get; set; }
+    /// <inheritdoc/>
+    public Guid aggregateRootId => stepEvent.aggregateRootId;
+
+    /// <summary>
+    /// For JSON serialization purposes only.
+    /// This constructor is not intended for use in application logic.
+    /// </summary>
+    public SagaStep()
+    {
+        order = 1;
+        stepEvent = new Event(); 
+        rollbackEvent = null;
+        status = SagaStepStatus.WaitingForTrigger;
+        successData = null;
+        rollbackData = null;
+        executionStart = null;
+        executionComplete = null;
+        rollbackStart = null;
+        rollbackComplete = null;
+
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SagaStep"/> class.
@@ -59,11 +58,7 @@ public class SagaStep
         status = SagaStepStatus.WaitingForTrigger;
     }
 
-    /// <summary>
-    /// Starts the execution of this saga step by publishing its event and updating its status.
-    /// </summary>
-    /// <param name="nostify">The INostify instance used to persist the event.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <inheritdoc/>
     public async Task StartAsync(INostify nostify)
     {
         // Validate this step is in the correct state to start
@@ -78,30 +73,31 @@ public class SagaStep
         status = SagaStepStatus.Triggered;
     }
 
-    /// <summary>
-    /// Rolls back this saga step by publishing its rollback event, if one exists, and updating its status.
-    /// If no rollback event is defined, the step will be marked as rolled back without any action.
-    /// </summary>
-    /// <param name="nostify">The INostify instance used to persist the rollback event.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <inheritdoc/>
     public async Task RollbackAsync(INostify nostify)
     {
         // Validate this step is in the correct state to rollback
         if (status != SagaStepStatus.Triggered && status != SagaStepStatus.CompletedSuccessfully)
             throw new InvalidOperationException("Step is not in a valid state to rollback.");
 
+        // Set the rollback completion time
+        rollbackStart = DateTime.UtcNow;
+        // Set the status to rolling back
+        status = SagaStepStatus.RollingBack;
+
         // Publish the rollback event
         if (rollbackEvent != null)
         {
             await nostify.PersistEventAsync(rollbackEvent);
         }
-
-        // Set the rollback completion time
-        rollbackComplete = DateTime.UtcNow;
-        // Set the status to rolled back
-        status = SagaStepStatus.RolledBack;
+        else
+        {
+            // Complete the rollback if no rollback event is provided
+            CompleteRollback();
+        }
     }
 
+    /// <inheritdoc/>
     public void Complete(object? successData = null)
     {
         // Validate this step is in the correct state to complete
@@ -115,6 +111,7 @@ public class SagaStep
         this.successData = successData;
     }
 
+    /// <inheritdoc/>
     public void CompleteRollback(object? rollbackData = null)
     {
         // Validate this step is in the correct state to complete rollback

@@ -1,6 +1,6 @@
-
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace nostify;
@@ -9,107 +9,106 @@ namespace nostify;
 /// Represents a Saga, which is a long-running process or transaction 
 /// that can be broken into smaller steps and coordinated.
 /// </summary>
-public class Saga
+public class Saga : ISaga
 {
-    /// <summary>
-    /// Gets or sets the unique identifier of the Saga.
-    /// </summary>
+    /// <inheritdoc/>
     public Guid id { get; set; }
 
-    /// <summary>
-    /// Gets or sets the name of the Saga.
-    /// </summary>
-    public string name { get; set; }
+    /// <inheritdoc/>
+    public string name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Gets or sets the current status of the Saga.
-    /// </summary>
+    /// <inheritdoc/>
     public SagaStatus status { get; set; }
 
-    /// <summary>
-    /// Gets or sets the date and time when the Saga was created.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime createdOn { get; set; }
 
-    /// <summary>
-    /// Gets or sets the date and time when the Saga was completed successfully.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime? executionCompletedOn { get; set; }
 
-    /// <summary>
-    /// Gets or sets the date and time when the Saga execution started.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime? executionStart { get; set; }
 
-    /// <summary>
-    /// Gets or sets the date and time when the rollback process started.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime? rollbackStartedOn { get; set; }
 
-    /// <summary>
-    /// Gets or sets the date and time when the rollback process completed.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTime? rollbackCompletedOn { get; set; }
 
-    /// <summary>
-    /// Gets or sets the error message if the Saga fails.
-    /// </summary>
+    /// <inheritdoc/>
     public string? errorMessage { get; set; }
 
-    /// <summary>
-    /// Gets or sets the error message if the Saga rollback fails.
-    /// </summary>
+    /// <inheritdoc/>
     public string? rollbackErrorMessage { get; set; }
 
-    /// <summary>
-    /// Gets or sets the list of steps that make up the Saga.
-    /// </summary>
-    public List<SagaStep> steps { get; set; }
+    /// <inheritdoc/>
+    public List<SagaStep> steps { get; set; } = new List<SagaStep>();
 
-    /// <summary>
-    /// If the saga is executing, this is the step that is currently executing. If it is rolling back, this is the step that is currently rolling back. 
-    /// Will return -1 if the saga is completed or rolled back, will return 0 if saga has not yet been started.
-    /// </summary>
-    public int currentlyExecutingStep
+    /// <inheritdoc/>
+    public int GetCurrentlyExecutingStepIndex()
     {
-        get
+        if (status == SagaStatus.RolledBack || status == SagaStatus.CompletedSuccessfully || status == SagaStatus.Pending)
         {
-            if (status == SagaStatus.RolledBack || status == SagaStatus.CompletedSuccessfully)
-            {
-                return -1;
-            }
-            else if (status == SagaStatus.Pending)
-            {
-                return 0;
-            }
-            else
-            {
-                return steps.OrderBy(x => x.order).ToList().First(x => x.status == SagaStepStatus.Triggered || x.status == SagaStepStatus.RollingBack)?.order ?? -1;
-            }
+            return -1;
+        }
+        else
+        {
+            var step = steps.OrderBy(x => x.order).FirstOrDefault(x => x.status == SagaStepStatus.Triggered || x.status == SagaStepStatus.RollingBack);
+            return step != null ? steps.IndexOf(step) : -1;
         }
     }
 
-    /// <summary>
-    /// If the saga is rolling back, this will return the next step to rollback. If the saga is executing, this will return the next step to execute.  
-    /// Will return -1 if the currently executing step is the final step, or the saga is completed or rolled back.
-    /// </summary>
-    public int nextStep
+    /// <inheritdoc/>
+    public ISagaStep? GetCurrentlyExecutingStep() => GetCurrentlyExecutingStepIndex() != -1 ? steps[GetCurrentlyExecutingStepIndex()] : null;
+
+    /// <inheritdoc/>
+    public int GetNextStepIndex()
     {
-        get
+        if (status == SagaStatus.RollingBack)
         {
-            if (currentlyExecutingStep == -1)
-            {
-                return -1;
-            }
-            else if (status == SagaStatus.RollingBack)
-            {
-                return steps.OrderBy(x => x.order).ToList().First(x => x.status == SagaStepStatus.RolledBack)?.order - 1 ?? -1;
-            }
-            else
-            {
-                return steps.OrderBy(x => x.order).ToList().First(x => x.status == SagaStepStatus.WaitingForTrigger)?.order ?? -1;
-            }
+            var step = steps.OrderBy(x => x.order).LastOrDefault(x => x.status == SagaStepStatus.CompletedSuccessfully);
+            return step != null ? steps.IndexOf(step) : -1;
         }
+        else
+        {
+            var step = steps.OrderBy(x => x.order).FirstOrDefault(x => x.status == SagaStepStatus.WaitingForTrigger);
+            return step != null ? steps.IndexOf(step) : -1;
+        }
+        
+    }
+
+    /// <inheritdoc/>
+    public ISagaStep? GetNextStep() => GetNextStepIndex() != -1 ? steps[GetNextStepIndex()] : null;
+
+    /// <inheritdoc/>
+    public int GetLastCompletedStepIndex()
+    {
+        if (status == SagaStatus.RollingBack)
+        {
+            var step = steps.OrderBy(x => x.order).FirstOrDefault(x => x.status == SagaStepStatus.RolledBack);
+            return step != null ? steps.IndexOf(step) - 1 : -1;
+        }
+        else if (status == SagaStatus.InProgress)
+        {
+            var step = steps.OrderBy(x => x.order).FirstOrDefault(x => x.status == SagaStepStatus.CompletedSuccessfully);
+            return step != null ? steps.IndexOf(step) : -1;
+        }
+        else
+        {
+            return -1;
+        }
+        
+    }
+
+    /// <inheritdoc/>
+    public ISagaStep? GetLastCompletedStep() => GetLastCompletedStepIndex() != -1 ? steps[GetLastCompletedStepIndex()] : null;
+
+    /// <summary>
+    /// Default constructor for JSON serialization/deserialization.
+    /// </summary>
+    public Saga()
+    {
+
     }
 
     /// <summary>
@@ -136,28 +135,19 @@ public class Saga
         this.name = name;
         status = SagaStatus.Pending;
         createdOn = DateTime.UtcNow;
-        steps = new List<SagaStep>();
     }
     
-    /// <summary>
-    /// Adds a step to the Saga with the specified event and optional rollback event.
-    /// </summary>
-    /// <param name="stepEvent">The event representing the step to add.</param>
-    /// <param name="rollbackEvent">The optional event to use for rolling back this step.</param>
+    /// <inheritdoc/>
     public void AddStep(Event stepEvent, Event? rollbackEvent = null)
     {
         // Find next highest order
-        var nextOrder = steps.Count == 0 ? 1 : steps.Max(x => x.order) + 1;
+        int nextOrder = steps.Count == 0 ? 1 : steps.Max(x => x.order) + 1;
         // Add step
         var step = new SagaStep(nextOrder, stepEvent, rollbackEvent);
         steps.Add(step);
     }
 
-    /// <summary>
-    /// Starts the Saga by triggering the first step.
-    /// </summary>
-    /// <param name="nostify">The Nostify instance used to publish events.</param>
-    /// <exception cref="InvalidOperationException">Thrown if the Saga has already been started or if the first step is invalid.</exception>
+    /// <inheritdoc/>
     public async Task StartAsync(INostify nostify)
     {
         // Check if the saga is already started
@@ -165,32 +155,28 @@ public class Saga
         // Check if the first step is valid
         var firstStep = steps.Where(s => s.status == SagaStepStatus.WaitingForTrigger).Single(x => x.order == 1) ?? throw new InvalidOperationException("Saga has no unexecuted step 1.");
 
-        // Start the first step
-        await firstStep.StartAsync(nostify);
-
         // Update saga status and execution start time
         status = SagaStatus.InProgress;
         executionStart = DateTime.UtcNow;
 
+        // Have to save here as well to ensure the saga is in a valid state before starting the first step
+        await SaveAsync(nostify);
+
+        // Start the first step
+        await firstStep.StartAsync(nostify);
         await SaveAsync(nostify);
     }
 
-    /// <summary>
-    /// When the currently executing step is completed successfully, this method will be called to update the status of the saga and the step and trigger the next step.
-    /// </summary>
-    /// <param name="nostify">The Nostify instance used to publish events.</param>
-    /// <param name="successData">The data returned from the step if needed for a subsequent step.</param>
+    /// <inheritdoc/>
     public async Task HandleSuccessfulStepAsync(INostify nostify, object? successData = null)
     {
         // Check if the saga is in progress
         if (status != SagaStatus.InProgress) throw new InvalidOperationException("Saga is not in progress.");
         // Check if the currently executing step is valid
-        var currentStep = steps.Where(s => s.status == SagaStepStatus.Triggered).Single(x => x.order == currentlyExecutingStep);
-        // Update the status of the current step and the saga
-        currentStep.Complete(successData);
+        var currentStep = GetCurrentlyExecutingStep() ?? throw new InvalidOperationException("Saga has no currently executing step.");
 
         // Check if the saga is completed
-        if (currentlyExecutingStep == steps.Max(x => x.order))
+        if (GetCurrentlyExecutingStepIndex() == steps.IndexOf(steps.Last()))
         {
             CompleteSaga();
         }
@@ -199,6 +185,9 @@ public class Saga
             // Trigger the next step
             await TriggerNextStepAfterSuccess(nostify);
         }
+        
+        // Complete the current step, this needs to be done after the next step is triggered
+        currentStep.Complete(successData);
 
         await SaveAsync(nostify);
     }
@@ -207,10 +196,10 @@ public class Saga
     {
         // Check that saga is in valid state to trigger next step
         if (status == SagaStatus.CompletedSuccessfully || status == SagaStatus.RolledBack) throw new InvalidOperationException("Saga is completed, cannot trigger next step");
-        if (currentlyExecutingStep == -1) throw new InvalidOperationException("Saga has no currently executing step.");
+        if (GetCurrentlyExecutingStepIndex() == -1) throw new InvalidOperationException("Saga has no currently executing step.");
 
         // Get the next step
-        SagaStep nextSagaStep = steps[nextStep];
+        ISagaStep nextSagaStep = GetNextStep() ?? throw new InvalidOperationException("Saga has no next step.");
         await nextSagaStep.StartAsync(nostify);
     }
 
@@ -223,17 +212,14 @@ public class Saga
         executionCompletedOn = DateTime.UtcNow;
     }
 
-    /// <summary>
-    /// Handles a failed step in the Saga by updating the status and initiating the rollback process.
-    /// </summary>
-    /// <param name="nostify">The Nostify instance used to publish events.</param>
+    /// <inheritdoc/>
     public async Task StartRollbackAsync(INostify nostify)
     {
         // Check if the saga is in progress
         if (status != SagaStatus.InProgress) throw new InvalidOperationException("Saga is not in progress.");
         
         // Get the currently executing step
-        var currentStep = steps[currentlyExecutingStep] ?? throw new InvalidOperationException("Saga has no currently executing step.");
+        ISagaStep currentStep = GetCurrentlyExecutingStep() ?? throw new InvalidOperationException("Saga has no currently executing step.");
 
         // Update saga rollback data
         rollbackStartedOn = DateTime.UtcNow;
@@ -245,24 +231,34 @@ public class Saga
         await SaveAsync(nostify);
     }
 
+    /// <inheritdoc/>
     public async Task HandleSuccessfulStepRollbackAsync(INostify nostify, object? rollbackData = null)
     {
         // Check if the saga is rolling back
         if (status != SagaStatus.RollingBack) throw new InvalidOperationException("Saga is not rolling back.");
         // Check if the currently executing step is valid
-        var currentStep = steps[currentlyExecutingStep] ?? throw new InvalidOperationException("Saga has no currently executing step.");
+        ISagaStep currentStep = GetCurrentlyExecutingStep() ?? throw new InvalidOperationException("Saga has no currently executing step.");
+        //Get the next step index before changes
+        ISagaStep? nextStepBeforeChanges = GetNextStep();
+
         currentStep.CompleteRollback(rollbackData);
 
         // Check if the saga is completed
-        if (nextStep == -1)
+        if (nextStepBeforeChanges == null)
         {
             CompleteSagaRollback();
         }
         else
         {
             // Trigger the next step
-            var nextRollbackStep = steps[nextStep];
+            var nextRollbackStep = nextStepBeforeChanges ?? throw new InvalidOperationException("Saga has no next step.");
             await nextRollbackStep.RollbackAsync(nostify);
+        }
+
+        // If all steps rolled back then complete the saga rollback
+        if (!steps.Any(s => s.status != SagaStepStatus.RolledBack))
+        {
+            CompleteSagaRollback();
         }
 
         await SaveAsync(nostify);
