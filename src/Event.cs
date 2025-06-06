@@ -211,16 +211,17 @@ public class Event
     private void RemoveNonExistentPayloadProperties<T>()
     {
         var validProperties = typeof(T).GetProperties().Select(p => p.Name).ToHashSet();
-        var payloadProperties = JObject.FromObject(payload).Properties().Select(p => p.Name).ToHashSet();
-
+        var payloadObject = JObject.FromObject(payload) ?? throw new NullReferenceException("Payload cannot be null when removing non-existent properties.");
         // Remove any properties from the payload that are not valid for the aggregate
-        foreach (var prop in payloadProperties)
+        foreach (var prop in payloadObject.Properties().Select(p => p.Name).ToList())
         {
             if (!validProperties.Contains(prop))
             {
-                JObject.FromObject(payload).Remove(prop);
+                payloadObject.Remove(prop);
             }
         }
+        // Reassign the modified JObject back to the payload
+        payload = payloadObject.ToObject(payload.GetType()) ?? throw new NullReferenceException("Payload cannot be null after removing non-existent properties.");
     }
 
     private void ValidateForCreate<T>()

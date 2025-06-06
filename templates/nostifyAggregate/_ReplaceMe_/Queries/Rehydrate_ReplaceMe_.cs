@@ -5,7 +5,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 
-namespace _ServiceName_Service;
+namespace _ServiceName__Service;
 
 public class Rehydrate_ReplaceMe_
 {
