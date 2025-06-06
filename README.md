@@ -23,6 +23,8 @@
 
 ### Updates
 
+- 3.2.0
+  - Added support for Saga orchestration
 - 3.1.1
   - Improved details available in errors published to Kafka
   - Aggregate template updated with ability to set namespace properly
@@ -35,10 +37,10 @@
 
 ### Coming Soon
 
-- Improved/Update Documentation
+- Improved/Updated Documentation
 - Updated example repo, current one is v1, not worth looking at
 - Better test coverage
-- Improved Command payload validation, currently only really have validation for Create, as defined by the `isNew` flag in the Command, will be adding a `ValidateFor(<Command>)` attribute to run validation specific to the Command being handled by the http function
+- Improved Command payload validation
 
 ## Getting Started
 
@@ -219,6 +221,10 @@ public override void Apply(Event eventToApply)
     }
 }
 ```
+
+### Saga
+
+The `Saga` pattern allows you to create multi-step, long lived transactions across multiple services and define rollback actions in case of failure to maintain data consistency. `nostify` does not require a particular method of implementation but provides a class structure and some basic functions to support implementing `Saga` orchestration.
 
 ## Setup
 
