@@ -4,7 +4,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using nostify;
 
-namespace _ServiceName_Service;
+namespace _ServiceName__Service;
 
 public class _ReplaceMe_CurrentStateInit
 {

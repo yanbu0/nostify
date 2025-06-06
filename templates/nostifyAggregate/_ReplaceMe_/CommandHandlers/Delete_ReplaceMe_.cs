@@ -4,7 +4,7 @@ using nostify;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 
-namespace _ServiceName_Service;
+namespace _ServiceName__Service;
 
 public class Delete_ReplaceMe_
 {

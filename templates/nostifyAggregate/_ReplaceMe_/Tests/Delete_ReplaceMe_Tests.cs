@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using System;
 using Microsoft.Azure.Functions.Worker.Http;
 
-namespace _ServiceName_Service.Tests;
+namespace _ServiceName__Service.Tests;
 
 public class Delete__ReplaceMe__Command_Should
 {
