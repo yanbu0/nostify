@@ -49,12 +49,57 @@ public class NostifyErrorEvent : Event
     /// </summary>
     /// <param name="errorCommand">The error command.</param>
     /// <param name="aggregateRootId">The aggregate root identifier.</param>
-    /// <param name="eventThatFailed">The event that failed.</param>
+    /// <param name="errorPayload">Error payload for the event that failed. Will contain error message and payload.</param>
     /// <param name="userId">The user identifier.</param>
     /// <param name="partitionKey">The partition key.</param>
-    public NostifyErrorEvent(ErrorCommand errorCommand, Guid aggregateRootId, object eventThatFailed, Guid userId = default, Guid partitionKey = default) 
-        : base(errorCommand, aggregateRootId, eventThatFailed, userId, partitionKey)
+    public NostifyErrorEvent(ErrorCommand errorCommand, Guid aggregateRootId, ErrorPayload errorPayload, Guid userId, Guid partitionKey) 
+        : base(errorCommand, aggregateRootId, errorPayload, userId, partitionKey)
     {
     }
 
+}
+
+/// <summary>
+/// Represents an error payload for NostifyErrorEvent
+/// </summary>
+public class ErrorPayload
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ErrorPayload"/> class.
+    /// </summary>
+    /// <remarks>Default constructor for serialization.</remarks>
+    public ErrorPayload()
+    {
+        ErrorMessage = string.Empty;
+        StackTrace = null;
+        Payload = new object();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ErrorPayload"/> class.
+    /// <param name="errorMessage">The error message.</param>
+    /// <param name="payload">The payload of the event that failed.</param>
+    /// <param name="stackTrace">Optional. The stack trace.</param>
+    /// </summary>
+    public ErrorPayload(string errorMessage, object payload, string? stackTrace = null)
+    {
+        ErrorMessage = errorMessage;
+        StackTrace = stackTrace;
+        Payload = payload;
+    }
+
+    /// <summary>
+    /// Gets or sets the error message.
+    /// </summary>
+    public string ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Gets or sets the stack trace.
+    /// </summary>
+    public string? StackTrace { get; set; }
+
+    /// <summary>
+    /// Payload of the event that failed.
+    /// </summary>
+    public object Payload { get; set; }
 }

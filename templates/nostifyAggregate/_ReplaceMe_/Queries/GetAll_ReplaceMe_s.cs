@@ -5,7 +5,7 @@ using nostify;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 
-namespace _ReplaceMe__Service;
+namespace _ServiceName_Service;
 
 public class GetAll_ReplaceMe_s
 {

@@ -2,7 +2,7 @@
 
 using nostify;
 
-namespace _ReplaceMe__Service;
+namespace _ServiceName_Service;
 
 public class _ReplaceMe_Command : NostifyCommand
 {

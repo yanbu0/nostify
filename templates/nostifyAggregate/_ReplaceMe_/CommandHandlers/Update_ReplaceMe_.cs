@@ -5,7 +5,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Newtonsoft.Json;
 
-namespace _ReplaceMe__Service;
+namespace _ServiceName_Service;
 
 public class Update_ReplaceMe_
 {

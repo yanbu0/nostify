@@ -106,6 +106,7 @@ public interface INostify
     ///<summary>
     ///Retrieves the event store container
     ///</summary>
+    /// <param name="allowBulk">If true, will allow bulk operations</param>
     public Task<Container> GetEventStoreContainerAsync(bool allowBulk = false);
 
     ///<summary>    
@@ -131,6 +132,16 @@ public interface INostify
     ///</summary>
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
     public Task<Container> GetBulkProjectionContainerAsync<P>(string partitionKeyPath = "/tenantId") where P : IProjection;
+
+    ///<<summary>
+    ///Retrieves the undeliverable events container
+    ///</summary>>
+    public Task<Container> GetUndeliverableEventsContainerAsync();
+    
+    ///<summary>
+    ///Retrieves the saga container
+    ///</summary>
+    public Task<Container> GetSagaContainerAsync();
 
     ///<summary>
     ///Retrieves the container.  Uses the knownContainers list to skip checks if container already exists. Will create if it doesn't exist and update knownContainers list.

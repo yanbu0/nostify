@@ -6,6 +6,7 @@ using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.ComponentModel.DataAnnotations;
 using Newtonsoft.Json.Linq;
+using Confluent.Kafka;
 
 namespace nostify;
 
@@ -171,20 +172,27 @@ public class Event
     ///<summary>
     ///Returns typed value of payload
     ///</summary>
-    public T GetPayload<T>() where T : new()
+    public T GetPayload<T>()
     {
-        return JObject.FromObject(payload).ToObject<T>() ?? new T();
+        return JObject.FromObject(payload).ToObject<T>() ?? throw new NullReferenceException($"Payload is null for type {typeof(T).Name}");
     }
 
     ///<summary>
     ///Validates if the payload contains all required properties for performing a command on an aggregate of type T. Will throw a ValidationException if any required properties are missing or null.
     ///</summary>
+    /// <param name="validator">Validator to use for validating the payload. If null, no validation will be performed.</param>
+    /// <param name="removeNonExistent">If true, will remove any properties from the payload that are not valid for the aggregate.</param>
+    ///<returns>Returns the event for chaining.</returns>
     ///<typeparam name="T">The type of the aggregate to validate against.</typeparam>
-    public Event ValidatePayload<T>(IAggregateValidator? validator = null) where T : NostifyObject, IAggregate
+    public Event ValidatePayload<T>(IAggregateValidator? validator = null, bool removeNonExistent = true) where T : NostifyObject, IAggregate
     {
+        if (removeNonExistent)
+        {
+            RemoveNonExistentPayloadProperties<T>();
+        }
         if (validator != null)
         {
-            var validationErrors = validator.Validate<T>(JObject.FromObject(payload).ToObject<T>());
+            var validationErrors = validator.Validate<T>(GetPayload<T>());
             if (validationErrors.Count > 0)
             {
                 // create a single validation message string of the format $"{property}: {message}" separated by newlines for each error
@@ -198,6 +206,21 @@ public class Event
             ValidateForCreate<T>();
         }
         return this;
+    }
+
+    private void RemoveNonExistentPayloadProperties<T>()
+    {
+        var validProperties = typeof(T).GetProperties().Select(p => p.Name).ToHashSet();
+        var payloadProperties = JObject.FromObject(payload).Properties().Select(p => p.Name).ToHashSet();
+
+        // Remove any properties from the payload that are not valid for the aggregate
+        foreach (var prop in payloadProperties)
+        {
+            if (!validProperties.Contains(prop))
+            {
+                JObject.FromObject(payload).Remove(prop);
+            }
+        }
     }
 
     private void ValidateForCreate<T>()

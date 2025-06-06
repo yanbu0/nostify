@@ -23,6 +23,11 @@
 
 ### Updates
 
+- 3.2.0
+  - Added support for Saga orchestration
+- 3.1.1
+  - Improved details available in errors published to Kafka
+  - Aggregate template updated with ability to set namespace properly
 - 3.0.0 Released
   - Improved inheritance, now simpler to build Projections
   - Consistent, easier way to init Projeciton Containers, can call from `INostify` rather than a static class
@@ -32,10 +37,10 @@
 
 ### Coming Soon
 
-- Improved/Update Documentation
+- Improved/Updated Documentation
 - Updated example repo, current one is v1, not worth looking at
 - Better test coverage
-- Improved Command payload validation, currently only really have validation for Create, as defined by the `isNew` flag in the Command, will be adding a `ValidateFor(<Command>)` attribute to run validation specific to the Command being handled by the http function
+- Improved Command payload validation
 
 ## Getting Started
 
@@ -133,7 +138,7 @@ dotnet new nostify -ag <Your_Aggregate_Name> -p <Port Number To Run on Locally>
 If you are adding a new aggregate to an existing service, run the below cli command from the Aggregates directory.
 
 ```powershell
-dotnet new nostifyAggregate -ag <Your_Aggregate_Name>
+dotnet new nostifyAggregate -ag <Your_Aggregate_Name> -s <Name_Of_Service>
 ```
 
 ### Projection
@@ -216,6 +221,10 @@ public override void Apply(Event eventToApply)
     }
 }
 ```
+
+### Saga
+
+The `Saga` pattern allows you to create multi-step, long lived transactions across multiple services and define rollback actions in case of failure to maintain data consistency. `nostify` does not require a particular method of implementation but provides a class structure and some basic functions to support implementing `Saga` orchestration.
 
 ## Setup
 
