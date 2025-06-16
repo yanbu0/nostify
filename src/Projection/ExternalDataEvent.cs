@@ -68,7 +68,6 @@ public class ExternalDataEvent
             .Select(guid => new Func<TProjection, Guid?>(_ => guid))
             .ToArray();
     }
-    }
 
     /// <summary>
     /// Gets the events needed to initialize a list of projections from an external service using a list of foreign ID selector functions that return lists of Guid?.
@@ -83,10 +82,7 @@ public class ExternalDataEvent
         where TProjection : IUniquelyIdentifiable
     {
         // transform the foreignIdSelectors to an array of Func<TProjection, Guid?>
-        Func<TProjection, Guid?>[] foreignIdSelectors = projectionsToInit
-                                    .SelectMany(p => foreignIdSelectorsList.SelectMany(selector => selector(p)))
-                                    .Select(guid => new Func<TProjection, Guid?>(_ => guid))
-                                    .ToArray();
+        Func<TProjection, Guid?>[] foreignIdSelectors = TransformForeignIdSelectors(projectionsToInit, foreignIdSelectorsList);
         return await GetEventsAsync(httpClient, url, projectionsToInit, foreignIdSelectors);
     }
 
