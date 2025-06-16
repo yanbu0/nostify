@@ -8,9 +8,9 @@
     "KafkaApiKey":"API_KEY_GOES_HERE",
     "KafkaApiSecret":"API_SECRET_GOES_HERE",
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-    "cosmosApiKey":"C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
-    "cosmosDbName":"_ReplaceMe__DB",
-    "cosmosEndPoint":"https://localhost:8081",
+    "CosmosApiKey":"C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+    "CosmosDbName":"_ReplaceMe__DB",
+    "CosmosEndPoint":"https://localhost:8081",
     "ASPNETCORE_ENVIRONMENT":"Development",
     "AzureSignalRConnectionString":"Endpoint=http://localhost;Port=8888;AccessKey=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGH;Version=1.0;"
   },
