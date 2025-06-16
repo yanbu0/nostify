@@ -46,12 +46,28 @@ public class ExternalDataEvent
     public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, params Func<TProjection, List<Guid?>>[] foreignIdSelectorsList)
         where TProjection : IUniquelyIdentifiable
     {
-        // transform the foreignIdSelectors to an array of Func<TProjection, Guid?>
-        Func<TProjection, Guid?>[] foreignIdSelectors = projectionsToInit
-                                    .SelectMany(p => foreignIdSelectorsList.SelectMany(selector => selector(p)))
-                                    .Select(guid => new Func<TProjection, Guid?>(_ => guid))
-                                    .ToArray();
+        // transform the foreignIdSelectors using a helper function
+        Func<TProjection, Guid?>[] foreignIdSelectors = TransformForeignIdSelectors(projectionsToInit, foreignIdSelectorsList);
         return await GetEventsAsync(eventStore, projectionsToInit, foreignIdSelectors);
+    }
+
+    /// <summary>
+    /// Helper method to transform foreign ID selectors into an array of Func<TProjection, Guid?>
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="foreignIdSelectorsList">Functions to get lists of foreign ids for the aggregates</param>
+    /// <returns>Array of Func<TProjection, Guid?></returns>
+    private static Func<TProjection, Guid?>[] TransformForeignIdSelectors<TProjection>(
+        List<TProjection> projectionsToInit,
+        Func<TProjection, List<Guid?>>[] foreignIdSelectorsList)
+        where TProjection : IUniquelyIdentifiable
+    {
+        return projectionsToInit
+            .SelectMany(p => foreignIdSelectorsList.SelectMany(selector => selector(p)))
+            .Select(guid => new Func<TProjection, Guid?>(_ => guid))
+            .ToArray();
+    }
     }
 
     /// <summary>
