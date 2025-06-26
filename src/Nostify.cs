@@ -122,23 +122,33 @@ public class Nostify : INostify
     }
     
     ///<inheritdoc />
-    public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate) where P : NostifyObject, new()
+    public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
     {
+        //Throw if not bulk container
+        bulkContainer.ValidateBulkEnabled(true);
+
         List<Task> tasks = new List<Task>();
         List<P> succesfulTasks = new List<P>();
 
-        projectionsToUpdate.ForEach(proj =>
+        //Loop through in batches to avoid overwhelming CosmosDB
+        for (int i = 0; i < projectionsToUpdate.Count; i += batchSize)
         {
-            tasks.Add(
-                CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, proj.id, false, false)
+            var batch = projectionsToUpdate.Skip(i).Take(batchSize).ToList();
+            List<Task> batchTasks = new List<Task>();
+
+            batch.ForEach(proj =>
+            {
+                batchTasks.Add(
+                    CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, proj.id, false, false)
                     .ContinueWith(itemResponse =>
                     {
                         if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
                     })
-            );
-        });
+                );
+            });
 
-        await Task.WhenAll(tasks);
+            await Task.WhenAll(batchTasks);
+        }
 
         //Only return first 1000 results to avoid overwhelming caller
         return succesfulTasks.Take(1000).ToList();

@@ -62,7 +62,7 @@ public interface INostify
     /// and persists the changes to the specified container. Primarily intended for updates
     /// when an event affects multiple projections.
     /// </remarks>
-    public Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate) where P : NostifyObject, new();
+    public Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new();
 
     ///<summary>
     ///Applies and persists a bulk array of events from Kafka to the specified container.
