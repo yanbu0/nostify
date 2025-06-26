@@ -19,6 +19,19 @@ namespace nostify;
 public static class ContainerExtensions
 {
     ///<summary>
+    ///Applies and persists an event to a list of projections in the specified container.
+    ///</summary>
+    /// <remarks>
+    /// This method applies the given event to each projection in the list, updates their state,
+    /// and persists the changes to the specified container. Primarily intended for updates
+    /// when an event affects multiple projections.
+    /// </remarks>
+    public static async Task<List<P>> BulkApplyAndPersistAsync<P>(this Container bulkContainer, INostify nostify, Event eventToApply, List<P> projectionsToUpdate) where P : NostifyObject, new()
+    {
+        return await nostify.BulkApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate);
+    }
+
+    ///<summary>
     ///Checks if Bulk Operations are enabled on a container. If not enabled will throw error if throwIfNotEnabled is true.
     ///</summary>
     ///<param name="container">Container to check</param>

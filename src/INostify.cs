@@ -54,6 +54,16 @@ public interface INostify
     ///<param name="eventToPersist">Event to apply and persist in event store</param>
     public Task PersistEventAsync(Event eventToPersist);
 
+    /// <summary>
+    /// Applies and persists an event to a list of projections in the specified container.
+    /// </summary>
+    /// <remarks>
+    /// This method applies the given event to each projection in the list, updates their state,
+    /// and persists the changes to the specified container. Primarily intended for updates
+    /// when an event affects multiple projections.
+    /// </remarks>
+    public Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate) where P : NostifyObject, new();
+
     ///<summary>
     ///Applies and persists a bulk array of events from Kafka to the specified container.
     ///</summary>
