@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Linq.Expressions;
 
 namespace nostify;
 
@@ -119,6 +120,17 @@ public class Nostify : INostify
     {
         List<Event> peList = new List<Event>(){eventToPublish};
         await PublishEventAsync(peList);
+    }
+
+    ///<inheritdoc />
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Event eventToApply, Expression<Func<P, bool>> predicate, int batchSize = 100) where P : NostifyObject, IProjection, new()
+    {
+        Container bulkContainer = await GetBulkProjectionContainerAsync<P>();
+        List<Guid> projectionIds = await bulkContainer.GetItemLinqQueryable<P>()
+            .Where(predicate)
+            .Select(p => p.id)
+            .ReadAllAsync();
+        return await MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionIds, batchSize);
     }
 
     ///<inheritdoc />

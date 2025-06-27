@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System;
 using System.Net.Http;
+using System.Linq.Expressions;
 
 namespace nostify;
 
@@ -53,6 +54,20 @@ public interface INostify
     ///</summary>        
     ///<param name="eventToPersist">Event to apply and persist in event store</param>
     public Task PersistEventAsync(Event eventToPersist);
+
+    ///<summary>
+    /// Applies and persists an event to a list of projections in the specified container.
+    ///</summary>
+    /// <remarks>
+    /// This method applies the given event to each projection in the list, updates their state,
+    /// and persists the changes to the specified container. Primarily intended for updates
+    /// when an event affects multiple projections.
+    /// </remarks>
+    /// <param name="eventToApply">The event to be applied and persisted.</param>
+    /// <param name="predicate">The predicate to filter the projections to update. Gets applied inside the '.Where(predicate)' clause in the query for the projection ids</param>
+    /// <param name="batchSize">Optional. Number of projections to update in a batch. Default is 100.</param>
+    /// <typeparam name="P">The type of the Nostify object.</typeparam>
+    public Task<List<P>> MultiApplyAndPersistAsync<P>(Event eventToApply, Expression<Func<P, bool>> predicate, int batchSize = 100) where P : NostifyObject, IProjection, new();
 
     /// <summary>
     /// Applies and persists an event to a list of projections in the specified container.
