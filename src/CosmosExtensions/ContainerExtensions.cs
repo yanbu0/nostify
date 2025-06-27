@@ -26,11 +26,22 @@ public static class ContainerExtensions
     /// and persists the changes to the specified container. Primarily intended for updates
     /// when an event affects multiple projections.
     /// </remarks>
-    public static async Task<List<P>> BulkApplyAndPersistAsync<P>(this Container bulkContainer, INostify nostify, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    public static async Task<List<P>> MultiApplyAndPersistAsync<P>(this Container bulkContainer, INostify nostify, Event eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
     {
-        //throw if bulk not enabled
-        bulkContainer.ValidateBulkEnabled(true);
-        return await nostify.BulkApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate, batchSize);
+        return await nostify.MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionIds, batchSize);
+    }
+
+    ///<summary>
+    ///Applies and persists an event to a list of projections in the specified container.
+    ///</summary>
+    /// <remarks>
+    /// This method applies the given event to each projection in the list, updates their state,
+    /// and persists the changes to the specified container. Primarily intended for updates
+    /// when an event affects multiple projections.
+    /// </remarks>
+    public static async Task<List<P>> MultiApplyAndPersistAsync<P>(this Container bulkContainer, INostify nostify, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    {
+        return await nostify.MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate, batchSize);
     }
 
     ///<summary>

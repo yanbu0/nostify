@@ -120,9 +120,9 @@ public class Nostify : INostify
         List<Event> peList = new List<Event>(){eventToPublish};
         await PublishEventAsync(peList);
     }
-    
+
     ///<inheritdoc />
-    public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
     {
         //Throw if not bulk container
         bulkContainer.ValidateBulkEnabled(true);
@@ -131,15 +131,15 @@ public class Nostify : INostify
         List<P> succesfulTasks = new List<P>();
 
         //Loop through in batches to avoid overwhelming CosmosDB
-        for (int i = 0; i < projectionsToUpdate.Count; i += batchSize)
+        for (int i = 0; i < projectionIds.Count; i += batchSize)
         {
-            var batch = projectionsToUpdate.Skip(i).Take(batchSize).ToList();
+            var batch = projectionIds.Skip(i).Take(batchSize).ToList();
             List<Task> batchTasks = new List<Task>();
 
-            batch.ForEach(proj =>
+            batch.ForEach(projId =>
             {
                 batchTasks.Add(
-                    CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, proj.id, false, false)
+                    CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, projId, false, false)
                     .ContinueWith(itemResponse =>
                     {
                         if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
@@ -152,6 +152,12 @@ public class Nostify : INostify
 
         //Only return first 1000 results to avoid overwhelming caller
         return succesfulTasks.Take(1000).ToList();
+    }
+    
+    ///<inheritdoc />
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    {
+        return await MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate.Select(p => p.id).ToList(), batchSize);
     }
 
     ///<inheritdoc />
