@@ -23,6 +23,10 @@
 
 ### Updates
 
+- 3.4.0
+  - Added `MultiApplyAndPersistAsync<P>` methods in `Nostfy` and container extensions to allow applying and saving the results of an `Event` across multiple Projections. This is useful when you have a large number of Projections in a container that will be updated simultaneously by a single event. Incorporates multi-threaded, batch processing and retries for larger amounts of data.
+- 3.3.0
+  - Added overload to GetEventsAsync to accept a `params Func<TProjection, List<Guid?>>[]` foreignIdSelectorsList so you can now get id properties inside lists of child objects
 - 3.2.0
   - Added support for Saga orchestration
 - 3.1.1
