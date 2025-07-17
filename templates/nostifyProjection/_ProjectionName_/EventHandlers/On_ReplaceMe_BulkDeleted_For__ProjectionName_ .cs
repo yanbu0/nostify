@@ -22,6 +22,7 @@ public class On_ReplaceMe_BulkDeletedFor__ProjectionName_
     public async Task Run([KafkaTrigger("BrokerList",
                 "BulkDelete__ReplaceMe_",
                 ConsumerGroup = "_ProjectionName_",
+//-:cnd:noEmit
                 #if DEBUG
                 Protocol = BrokerProtocol.NotSet,
                 AuthenticationMode = BrokerAuthenticationMode.NotSet,
@@ -31,6 +32,7 @@ public class On_ReplaceMe_BulkDeletedFor__ProjectionName_
                 Protocol =  BrokerProtocol.SaslSsl,
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
+//+:cnd:noEmit
                 IsBatched = true)] string[] events,
         ILogger log)
     {
