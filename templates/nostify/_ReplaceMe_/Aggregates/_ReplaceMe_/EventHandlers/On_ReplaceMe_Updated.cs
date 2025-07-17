@@ -19,6 +19,7 @@ public class On_ReplaceMe_Updated
     [Function(nameof(On_ReplaceMe_Updated))]
     public async Task Run([KafkaTrigger("BrokerList",
                 "Update__ReplaceMe_",
+//-:cnd:noEmit
                 #if DEBUG
                 Protocol = BrokerProtocol.NotSet,
                 AuthenticationMode = BrokerAuthenticationMode.NotSet,
@@ -28,6 +29,7 @@ public class On_ReplaceMe_Updated
                 Protocol =  BrokerProtocol.SaslSsl,
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
+//+:cnd:noEmit
                 ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
