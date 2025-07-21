@@ -38,8 +38,7 @@ public class Create__ReplaceMe__Command_Should
         var resp = await _func.Run(testReq, _loggerMock.Object);
 
         // Assert
-        Guid guidTest;
-        Assert.True(Guid.TryParse(resp.ToString(), out guidTest));
+        Assert.True(resp != Guid.Empty);
     }
 
 

@@ -1,11 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
-using System.Threading.Tasks;
 using Xunit;
 using nostify;
-using System.Net.Http;
-using Microsoft.AspNetCore.Mvc;
-using System;
 using Microsoft.Azure.Functions.Worker.Http;
 
 namespace _ServiceName__Service.Tests;
@@ -33,13 +29,12 @@ public class Create__ReplaceMe__Command_Should
         //Arrange
         _ReplaceMe_ test = new _ReplaceMe_();
         HttpRequestData testReq = MockHttpRequestData.Create(test);
-
+        
         // Act
         var resp = await _func.Run(testReq, _loggerMock.Object);
 
         // Assert
-        Guid guidTest;
-        Assert.True(Guid.TryParse(resp.ToString(), out guidTest));
+        Assert.True(resp != Guid.Empty);
     }
 
 

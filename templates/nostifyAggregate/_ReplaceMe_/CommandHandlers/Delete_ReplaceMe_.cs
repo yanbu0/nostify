@@ -19,7 +19,7 @@ public class Delete_ReplaceMe_
 
     [Function(nameof(Delete_ReplaceMe_))]
     public async Task<Guid> Run(
-        [HttpTrigger("delete", Route = "_ReplaceMe_/{aggregateId}")] HttpRequestData req,
+        [HttpTrigger("delete", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
         ILogger log)
     {

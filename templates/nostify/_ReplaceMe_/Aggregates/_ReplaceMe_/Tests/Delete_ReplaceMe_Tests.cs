@@ -31,14 +31,13 @@ public class Delete__ReplaceMe__Command_Should
         //Arrange
         _ReplaceMe_ test = new _ReplaceMe_();
         HttpRequestData testReq = MockHttpRequestData.Create();
+        Guid newId = Guid.NewGuid();
 
         // Act
-        var resp = await _func.Run(testReq, Guid.NewGuid(), _loggerMock.Object);
+        var resp = await _func.Run(testReq, newId, _loggerMock.Object);
 
         // Assert
-        Assert.NotNull(resp);
-        Guid guidTest;
-        Assert.True(Guid.TryParse(resp.ToString(), out guidTest));
+        Assert.True(newId == resp);
     }
 
 
