@@ -34,14 +34,13 @@ public class Update__ReplaceMe__Command_Should
         };
         _ReplaceMe_ test = new _ReplaceMe_();
         HttpRequestData testReq = MockHttpRequestData.Create(update_ReplaceMe_);
-        
-        // //Act
-        var resp = await _func.Run(testReq, _loggerMock.Object) as OkObjectResult;
 
-        // //Assert
-        Assert.NotNull(resp);
+        // Act
+        var resp = await _func.Run(testReq, _loggerMock.Object);
+
+        // Assert
         Guid guidTest;
-        Assert.True(Guid.TryParse(resp.Value.ToString(), out guidTest));
+        Assert.True(Guid.TryParse(resp.ToString(), out guidTest));
     }
 
 
