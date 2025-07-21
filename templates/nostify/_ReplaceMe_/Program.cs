@@ -28,9 +28,20 @@ public class Program
             string dbName = config.GetValue<string>("CosmosDbName");
             string endPoint = config.GetValue<string>("CosmosEndPoint");
             string kafka = config.GetValue<string>("BrokerList");
+            bool autoCreateContainers = config.GetValue<bool>("AutoCreateContainers");
+            int defaultThroughput = config.GetValue<int>("DefaultContainerThroughput");
+            bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
+            var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
 
-            var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
+            var nostify = NostifyFactory.WithCosmos(
+                                cosmosApiKey: apiKey,
+                                cosmosDbName: dbName,
+                                cosmosEndpointUri: endPoint,
+                                createContainers: autoCreateContainers,
+                                containerThroughput: defaultThroughput,
+                                useGatewayConnection: false)
                             .WithKafka(kafka)
+                            .WithHttp(httpClientFactory)
                             .Build<_ReplaceMe_>(verbose: true);
 
             services.AddSingleton<INostify>(nostify);
