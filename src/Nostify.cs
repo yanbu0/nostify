@@ -122,6 +122,45 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
+    {
+        //Throw if not bulk container
+        bulkContainer.ValidateBulkEnabled(true);
+
+        List<Task> tasks = new List<Task>();
+        List<P> succesfulTasks = new List<P>();
+
+        //Loop through in batches to avoid overwhelming CosmosDB
+        for (int i = 0; i < projectionIds.Count; i += batchSize)
+        {
+            var batch = projectionIds.Skip(i).Take(batchSize).ToList();
+            List<Task> batchTasks = new List<Task>();
+
+            batch.ForEach(projId =>
+            {
+                batchTasks.Add(
+                    CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, projId, false, false)
+                    .ContinueWith(itemResponse =>
+                    {
+                        if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
+                    })
+                );
+            });
+
+            await Task.WhenAll(batchTasks);
+        }
+
+        //Only return first 1000 results to avoid overwhelming caller
+        return succesfulTasks.Take(1000).ToList();
+    }
+    
+    ///<inheritdoc />
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    {
+        return await MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate.Select(p => p.id).ToList(), batchSize);
+    }
+
+    ///<inheritdoc />
     public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new()
     {
         //Throw if not bulk container
@@ -134,9 +173,11 @@ public class Nostify : INostify
         List<P> succesfulTasks = new List<P>();
 
         //For each partition, create a list of tasks to apply and persist the events based off the list of ids in the property specified
-        partitionKeys.ForEach(pk => {
+        partitionKeys.ForEach(pk =>
+        {
             List<Event> partitionEvents = eventList.Where(e => e.partitionKey == pk).ToList();
-            partitionEvents.ForEach(pe => {
+            partitionEvents.ForEach(pe =>
+            {
                 //Set up vars for both list and single id properties
                 List<Guid> ids = new List<Guid>();
                 Guid idToApplyTo = Guid.Empty;
@@ -146,7 +187,8 @@ public class Nostify : INostify
                 {
                     ids.ForEach(id => tasks.Add(
                         CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, id, allowRetry, publishErrorEvents)
-                            .ContinueWith(itemResponse => {
+                            .ContinueWith(itemResponse =>
+                            {
                                 if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
                             })
                     ));
@@ -157,7 +199,8 @@ public class Nostify : INostify
                     {
                         tasks.Add(
                             CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, idToApplyTo, allowRetry, publishErrorEvents)
-                                .ContinueWith(itemResponse => {
+                                .ContinueWith(itemResponse =>
+                                {
                                     if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
                                 })
                         );
@@ -168,7 +211,8 @@ public class Nostify : INostify
 
         await Task.WhenAll(tasks);
 
-        return succesfulTasks;
+        //Only return first 1000 results to avoid overwhelming caller
+        return succesfulTasks.Take(1000).ToList();
     }
 
     private Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, Event pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()

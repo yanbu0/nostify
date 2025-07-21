@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Net.Http;
@@ -23,7 +22,7 @@ public class BulkCreate_ReplaceMe_
     }
 
     [Function(nameof(BulkCreate_ReplaceMe_))]
-    public async Task<IActionResult> Run(
+    public async Task<int> Run(
         [HttpTrigger("post", Route = "_ReplaceMe_/BulkCreate")] HttpRequestData req,
         ILogger log)
     {
@@ -36,13 +35,13 @@ public class BulkCreate_ReplaceMe_
             Guid newId = Guid.NewGuid();
             e.id = newId;
             
-            Event pe = new Event(_ReplaceMe_Command.BulkCreate, newId, e);
+            Event pe = new Event(_ReplaceMe_Command.BulkCreate, newId, e, Guid.Empty, Guid.Empty); //Empty guids should be replaced with user id and tenant id respectively
             peList.Add(pe);
         });
 
         await _nostify.BulkPersistEventAsync(peList);
 
-        return new OkObjectResult(new_ReplaceMe_List.Count);
+        return new_ReplaceMe_List.Count;
     }
 }
 

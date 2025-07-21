@@ -7,6 +7,7 @@ using System.Net.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.Cosmos.Linq;
 
 namespace _ReplaceMe__Service.Tests;
 
@@ -29,19 +30,18 @@ public class Update__ReplaceMe__Command_Should
     public async Task Insert_Update_Event()
     {
         //Arrange
+        Guid newId = Guid.NewGuid();
         object update_ReplaceMe_ = new {
-            id = Guid.NewGuid()
+            id = newId
         };
         _ReplaceMe_ test = new _ReplaceMe_();
         HttpRequestData testReq = MockHttpRequestData.Create(update_ReplaceMe_);
-        
-        // //Act
-        var resp = await _func.Run(testReq, _loggerMock.Object) as OkObjectResult;
 
-        // //Assert
-        Assert.NotNull(resp);
-        Guid guidTest;
-        Assert.True(Guid.TryParse(resp.Value.ToString(), out guidTest));
+        // Act
+        var resp = await _func.Run(testReq, _loggerMock.Object);
+
+        // Assert
+        Assert.True(newId == resp);
     }
 
 
