@@ -23,6 +23,8 @@
 
 ### Updates
 
+- 3.4.3
+  - Updated service template to use latest factory method
 - 3.4.2
   - Fixed template connection string error
 - 3.4.0
