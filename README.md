@@ -23,6 +23,8 @@
 
 ### Updates
 
+- 3.4.2
+  - Fixed template connection string error
 - 3.4.0
   - Added `MultiApplyAndPersistAsync<P>` methods in `Nostify` and container extensions to allow applying and saving the results of an `Event` across multiple Projections. This is useful when you have a large number of Projections in a container that will be updated simultaneously by a single event. Incorporates multi-threaded, batch processing and retries for larger amounts of data.
   - Changed template return types to base object type
