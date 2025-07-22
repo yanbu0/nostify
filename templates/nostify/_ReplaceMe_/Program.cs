@@ -16,7 +16,10 @@ public class Program
     private static void Main(string[] args)
     {
         var host = new HostBuilder()
-        .ConfigureFunctionsWorkerDefaults()
+        .ConfigureFunctionsWorkerDefaults(builder =>
+        {
+            builder.UseNewtonsoftJson();
+        })
         .ConfigureServices((context, services) =>
         {
             services.AddHttpClient();
@@ -57,31 +60,14 @@ public class Program
 
 internal static class WorkerConfigurationExtensions
 {
-    /// <summary>
-    /// Calling ConfigureFunctionsWorkerDefaults() configures the Functions Worker to use System.Text.Json for all JSON
-    /// serialization and sets JsonSerializerOptions.PropertyNameCaseInsensitive = true;
-    /// This method uses DI to modify the JsonSerializerOptions. Call /api/HttpFunction to see the changes.
-    /// </summary>
-    public static IFunctionsWorkerApplicationBuilder ConfigureSystemTextJson(this IFunctionsWorkerApplicationBuilder builder)
-    {
-        builder.Services.Configure<JsonSerializerOptions>(jsonSerializerOptions =>
-        {
-            jsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-            jsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-            jsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
-
-            // override the default value
-            jsonSerializerOptions.PropertyNameCaseInsensitive = false;
-        });
-
-        return builder;
-    }
 
     /// <summary>
     /// The functions worker uses the Azure SDK's ObjectSerializer to abstract away all JSON serialization. This allows you to
     /// swap out the default System.Text.Json implementation for the Newtonsoft.Json implementation.
     /// To do so, add the Microsoft.Azure.Core.NewtonsoftJson nuget package and then update the WorkerOptions.Serializer property.
     /// This method updates the Serializer to use Newtonsoft.Json. Call /api/HttpFunction to see the changes.
+    /// Not using Newtonsoft.Json will cause weird serialization issues with the HttpRequestData and HttpResponseData objects.
+    /// This method should be called in the ConfigureFunctionsWorkerDefaults() method in the Program.cs
     /// </summary>
     public static IFunctionsWorkerApplicationBuilder UseNewtonsoftJson(this IFunctionsWorkerApplicationBuilder builder)
     {
