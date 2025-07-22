@@ -55,7 +55,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
         Container sameServiceEventStore = await nostify.GetEventStoreContainerAsync();
         
         //Use GetEventsAsync to get events from the same service, the selectors are a parameter list of the properties that are used to filter the events
-        List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync<_ProjectionName_>(sameServiceEventStore, 
+        List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync(sameServiceEventStore, 
             projectionsToInit, 
             p => p.sameServiceAggregateExampleId,
             p => p.sameServiceAggregateExampleId2);
