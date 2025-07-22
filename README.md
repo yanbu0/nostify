@@ -23,6 +23,9 @@
 
 ### Updates
 
+- 3.4.4
+  - Updated service template to use Newtonsoft.Json explicitly by default, System.Text.Json is a hot mess
+  - Updated Projection template to use GetEventsAsync
 - 3.4.3
   - Updated service template to use latest factory method
 - 3.4.2
