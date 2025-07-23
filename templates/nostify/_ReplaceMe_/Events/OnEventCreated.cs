@@ -17,7 +17,7 @@ public class OnEventCreated
     public async Task Run([CosmosDBTrigger(
             databaseName: "_ReplaceMe__DB",
             containerName: "eventStore",
-            Connection = "CosmosEmulatorConnectionString",
+            Connection = "CosmosConnectionString",
             CreateLeaseContainerIfNotExists = true,
             LeaseContainerPrefix = "OnEventCreated_",
             LeaseContainerName = "leases")] string peListString,

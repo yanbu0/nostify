@@ -38,8 +38,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     {
         //Should update the command tree below to not use string matching
         if (eventToApply.command.name.Equals("Create__ReplaceMe_") 
-                || eventToApply.command.name.Equals("Update__ReplaceMe_") 
-                || eventToApply.command.name.Equals("Init__ProjectionName_"))
+                || eventToApply.command.name.Equals("Update__ReplaceMe_"))
         {
             this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
         }
@@ -56,7 +55,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
         Container sameServiceEventStore = await nostify.GetEventStoreContainerAsync();
         
         //Use GetEventsAsync to get events from the same service, the selectors are a parameter list of the properties that are used to filter the events
-        List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync<_ProjectionName_>(sameServiceEventStore, 
+        List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync(sameServiceEventStore, 
             projectionsToInit, 
             p => p.sameServiceAggregateExampleId,
             p => p.sameServiceAggregateExampleId2);
@@ -68,30 +67,22 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
         if (httpClient != null)
         {
             //An EventRequest endpoint is created by the template in every service
-            var response = await httpClient.PostAsJsonAsync<List<Guid>>("https://externalDataExample1Url/api/EventRequest", 
-                                    projectionsToInit.Select(x => x.externalAggregateExample1Id).ToList());
-            if (response.IsSuccessStatusCode)
-            {
-                List<Event> externalEvents = await response.Content.ReadFromJsonAsync<List<Event>>() ?? new List<Event>();
-                externalDataEvents.AddRange(projectionsToInit.Select(i => 
-                        new ExternalDataEvent(i.id, externalEvents.Where(ee => ee.aggregateRootId == i.externalAggregateExample1Id).ToList())
-                    )
-                    .ToList());
-            }
+            var externalEventsFromExternalService = await ExternalDataEvent.GetEventsAsync(httpClient,
+                "https://externalDataExampleUrl/api/EventRequest",
+                projectionsToInit,
+                p => p.externalAggregateExample1Id
+            );
+            externalDataEvents.AddRange(externalEventsFromExternalService);
 
             //If this Projection has more than one external Aggregate to get data from, create more queries, 
             //its OK to create multiple ExternalDataEvent objects for the same Projection, all of the Events get flattened into one list
             //in the InitAsync method
-            var response2 = await httpClient.PostAsJsonAsync<List<Guid>>("https://externalDataExample2Url/api/EventRequest", 
-                                    projectionsToInit.Select(x => x.externalAggregateExample2Id).ToList());
-            if (response2.IsSuccessStatusCode)
-            {
-                List<Event> externalEvents = await response2.Content.ReadFromJsonAsync<List<Event>>() ?? new List<Event>();
-                externalDataEvents.AddRange(projectionsToInit.Select(i => 
-                        new ExternalDataEvent(i.id, externalEvents.Where(ee => ee.aggregateRootId == i.externalAggregateExample1Id).ToList())
-                    )
-                    .ToList());
-            }
+            var externalEventsFromSecondExternalService = await ExternalDataEvent.GetEventsAsync(httpClient,
+                "https://externalDataExampleUrl2/api/EventRequest",
+                projectionsToInit,
+                p => p.externalAggregateExample2Id
+            );
+            externalDataEvents.AddRange(externalEventsFromSecondExternalService);
         }
 
         return externalDataEvents;

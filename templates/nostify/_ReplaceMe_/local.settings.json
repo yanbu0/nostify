@@ -12,7 +12,10 @@
     "CosmosDbName":"_ReplaceMe__DB",
     "CosmosEndPoint":"https://localhost:8081",
     "ASPNETCORE_ENVIRONMENT":"Development",
-    "AzureSignalRConnectionString":"Endpoint=http://localhost;Port=8888;AccessKey=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGH;Version=1.0;"
+    "AzureSignalRConnectionString":"Endpoint=http://localhost;Port=8888;AccessKey=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGH;Version=1.0;",
+    "AutoCreateContainers":true,
+    "DefaultContainerThroughput":-1,
+    "VerboseNostifyBuild":true
   },
   "Host": {
     "CORS": "*"
