@@ -3,7 +3,7 @@
 
 ## Overview
 
-`nostify` provides a framework for creating event driven microservices implementing the CQRS/ES pattern. It leverages Azure Functions for scalability and Cosmos DB for data storage, making it suitable for applications requiring high throughput and low latency. It also assumes some basic familiarity with domain driven design.
+`nostify` provides a framework for creating event driven microservices implementing the CQRS/ES pattern. It leverages Azure Functions for scalability and Cosmos DB for data storage, making it suitable for applications requiring high throughput and low latency. It also assumes some basic familiarity with domain driven design. For a practical demonstration, see the [nostify-example repository](https://github.com/yanbu0/nostify-example) which showcases microservices built with this framework.
 
 ## Features
 
