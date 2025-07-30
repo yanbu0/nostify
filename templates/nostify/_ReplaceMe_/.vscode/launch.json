@@ -5,7 +5,8 @@
             "name": "Attach to _ReplaceMe_",
             "type": "coreclr",
             "request": "attach",
-            "processId": "${command:azureFunctions.pickProcess}"
+            "processId": "${command:azureFunctions.pickProcess}",
+            "postDebugTask": "kill debug" 
         }
     ]
 }

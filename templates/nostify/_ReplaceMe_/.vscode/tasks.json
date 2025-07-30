@@ -64,6 +64,11 @@
             "command": "host start --port <ThePortNumber>",
             "isBackground": true,
             "problemMatcher": "$func-dotnet-watch"
+        },
+        {
+            "label": "kill debug",
+            "type":"shell",
+            "command": "powershell -ExecutionPolicy Bypass -File \"${workspaceFolder}/Scripts/killDebug.ps1\""
         }
     ]
 }
