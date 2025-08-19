@@ -1,4 +1,3 @@
-
 using System;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -68,29 +67,32 @@ public class Event
     public Event(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey)
     {
         Guid aggGuid;
-        if (!Guid.TryParse(aggregateRootId, out aggGuid)){
+        if (!Guid.TryParse(aggregateRootId, out aggGuid))
+        {
             throw new ArgumentException("Aggregate Root ID is not parsable to a Guid");
         }
 
         Guid userGuid;
-        if (!Guid.TryParse(userId, out userGuid)){
+        if (!Guid.TryParse(userId, out userGuid))
+        {
             throw new ArgumentException("User ID is not parsable to a Guid");
         }
 
         Guid pKey;
-        if (!Guid.TryParse(partitionKey, out pKey)){
+        if (!Guid.TryParse(partitionKey, out pKey))
+        {
             throw new ArgumentException("Partition Key is not parsable to a Guid");
         }
 
         SetUp(command, aggGuid, payload, userGuid, pKey);
-    }    
-    
+    }
+
     private void SetUp(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId, Guid partitionKey)
-    {       
+    {
         if (command is null)
         {
             throw new ArgumentNullException("Command cannot be null");
-        } 
+        }
         this.aggregateRootId = aggregateRootId;
         this.id = Guid.NewGuid();
         this.command = command;
@@ -98,14 +100,6 @@ public class Event
         this.payload = payload;
         this.partitionKey = partitionKey;
         this.userId = userId;
-    }
-
-    private void CheckPayload(object payload)
-    {
-        if (payload == null || !JObject.FromObject(payload).HasValues)
-        {
-            throw new ArgumentNullException("Payload cannot be null");
-        }
     }
 
     /// <summary>
@@ -145,7 +139,7 @@ public class Event
     /// <strong>The series of events for an Aggregate should have the same key.</strong>
     /// </para>
     public Guid aggregateRootId { get; set; }
-    
+
     /// <summary>
     /// Internal use only
     /// </summary>
@@ -191,7 +185,7 @@ public class Event
         JObject cleanedPayload = RemoveNonExistentPayloadProperties<T>(throwErrorIfExtraProps, out List<ValidationResult> validationMessages) as JObject ?? throw new NullReferenceException("Payload cannot be null after removing non-existent properties.");
 
         // Covert to type
-        var deserializedPayload = cleanedPayload.ToObject<T>() ?? throw new NullReferenceException("Payload cannot be null after deserialization.") ;
+        var deserializedPayload = cleanedPayload.ToObject<T>() ?? throw new NullReferenceException("Payload cannot be null after deserialization.");
 
         // Create a new validation context and add the command
         ValidationContext validationContext = new ValidationContext(deserializedPayload, new Dictionary<object, object?> { { "command", command } });
@@ -218,7 +212,7 @@ public class Event
                     }
                 }
             });
-            if (i > 0 &&i == vm.MemberNames.Count())
+            if (i > 0 && i == vm.MemberNames.Count())
             {
                 // If all member names were removed, return true to remove the validation message
                 return true;
@@ -258,10 +252,8 @@ public class Event
                 payloadObject.Remove(prop);
             }
         }
-        
+
         return payloadObject.ToObject<object>() ?? throw new NullReferenceException("Payload cannot be null after removing non-existent properties.");
 
     }
-
-    
 }

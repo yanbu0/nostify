@@ -819,4 +819,225 @@ public class EventTests
     }
 
     #endregion
+
+    #region EventBuilder.Create Tests
+
+    [Fact]
+    public void EventBuilder_Create_ShouldCreateValidatedEventWithGuids()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { name = "Test Name", id = aggregateRootId, value = 50 };
+
+        // Act
+        var result = EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload, userId, partitionKey);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Equal(payload, result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldCreateValidatedEventFromPayload()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { name = "Test Name", id = aggregateRootId, value = 75 };
+
+        // Act
+        var result = EventBuilder.Create<TestAggregateWithValidation>(command, payload, userId, partitionKey);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId); // Should be parsed from payload
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Equal(payload, result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldCreateValidatedEventFromStrings()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { name = "Test Name", id = aggregateRootId, value = 25 };
+
+        // Act
+        var result = EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId.ToString(), payload, userId.ToString(), partitionKey.ToString());
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Equal(payload, result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldThrowValidationException_WhenPayloadInvalid()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var payload = new { id = aggregateRootId, value = 150 }; // Missing required name, value out of range
+
+        // Act & Assert
+        var exception = Assert.Throws<ValidationException>(() => 
+            EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
+        
+        // Should contain validation errors
+        Assert.Contains("Name is required", exception.Message);
+        Assert.Contains("Value must be between 1 and 100", exception.Message);
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldThrowValidationException_WhenRequiredForCommandMissing()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_ValueUpdate", true);
+        var aggregateRootId = Guid.NewGuid();
+        var payload = new { name = "Test Name", id = aggregateRootId }; // Missing required value for Test_ValueUpdate
+
+        // Act & Assert
+        var exception = Assert.Throws<ValidationException>(() => 
+            EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
+        
+        Assert.Contains("value", exception.Message.ToLower());
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldValidateStringLengthAndRegex()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var longDescription = new string('a', 101); // Exceeds StringLength(100)
+        var payload = new { 
+            name = "Test Name", 
+            id = aggregateRootId, 
+            value = 50,
+            description = longDescription,
+            code = "INVALID_FORMAT" // Doesn't match regex pattern
+        };
+
+        // Act & Assert
+        var exception = Assert.Throws<ValidationException>(() => 
+            EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
+        
+        Assert.Contains("field description must be a string with a maximum length of 100", exception.Message);
+        Assert.Contains("Code must match pattern AAA-1234", exception.Message);
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldThrowArgumentException_WhenInvalidGuidStrings()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var payload = new { name = "Test Name", id = Guid.NewGuid(), value = 50 };
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => 
+            EventBuilder.Create<TestAggregateWithValidation>(command, "invalid-guid", payload, "invalid-user-guid", "invalid-partition-guid"));
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldThrowArgumentException_WhenPayloadMissingId()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var payload = new { name = "Test Name", value = 50 }; // Missing id
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => 
+            EventBuilder.Create<TestAggregateWithValidation>(command, payload));
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldPassValidationWithAllValidAttributes()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_Create", true);
+        var aggregateRootId = Guid.NewGuid();
+        var payload = new { 
+            name = "Test Name", 
+            id = aggregateRootId, 
+            value = 50,
+            description = "Valid description under 100 chars", // Required for Test_Create and valid length
+            code = "ABC-1234" // Valid regex pattern
+        };
+
+        // Act
+        var result = EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload);
+
+        // Assert - Should not throw and should create valid event
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(payload, result.payload);
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldValidateMultipleCommands()
+    {
+        // Arrange - Test both commands in RequiredFor array
+        var command1 = new NostifyCommand("Test_ValueUpdate", true);
+        var command2 = new NostifyCommand("Test_TwoCommands", true);
+        var aggregateRootId = Guid.NewGuid();
+        var payloadWithoutValue = new { name = "Test Name", id = aggregateRootId }; // Missing value
+        var payloadWithValue = new { name = "Test Name", id = aggregateRootId, value = 50 };
+
+        // Act & Assert - Both commands should require value
+        Assert.Throws<ValidationException>(() => 
+            EventBuilder.Create<TestAggregateWithValidation>(command1, aggregateRootId, payloadWithoutValue));
+        Assert.Throws<ValidationException>(() => 
+            EventBuilder.Create<TestAggregateWithValidation>(command2, aggregateRootId, payloadWithoutValue));
+
+        // Both should pass with value
+        var result1 = EventBuilder.Create<TestAggregateWithValidation>(command1, aggregateRootId, payloadWithValue);
+        var result2 = EventBuilder.Create<TestAggregateWithValidation>(command2, aggregateRootId, payloadWithValue);
+        
+        Assert.NotNull(result1);
+        Assert.NotNull(result2);
+    }
+
+    [Fact]
+    public void EventBuilder_Create_ShouldUseDefaultParametersWhenNotProvided()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var payload = new { name = "Test Name", id = aggregateRootId, value = 50 };
+
+        // Act - Using method without userId and partitionKey parameters
+        var result = EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload);
+
+        // Assert - Should use default values (Guid.Empty for userId and partitionKey)
+        Assert.NotNull(result);
+        Assert.Equal(Guid.Empty, result.userId);
+        Assert.Equal(Guid.Empty, result.partitionKey);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+    }
+
+    #endregion
 }

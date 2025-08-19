@@ -38,7 +38,6 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<summary>
     ///Unique value for Aggregate
     ///</summary>
-    [RequiredForCreate]
     public Guid id { get; set; }
 
     
