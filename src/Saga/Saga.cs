@@ -254,14 +254,13 @@ public class Saga : ISaga
             // Trigger the next step
             var nextRollbackStep = nextStepBeforeChanges ?? throw new InvalidOperationException("Saga has no next step.");
             await nextRollbackStep.RollbackAsync(nostify);
+            // If all steps rolled back then complete the saga rollback
+            if (!steps.Any(s => s.status != SagaStepStatus.RolledBack))
+            {
+                CompleteSagaRollback();
+            }
         }
-
-        // If all steps rolled back then complete the saga rollback
-        if (!steps.Any(s => s.status != SagaStepStatus.RolledBack))
-        {
-            CompleteSagaRollback();
-        }
-
+        
         await SaveAsync(nostify);
     }
 

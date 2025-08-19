@@ -21,7 +21,6 @@ public class TestAggregate : NostifyObject, IAggregate
 
 public class TestProjection : NostifyObject, IProjection, IHasExternalData<TestProjection>
 {
-    public Guid id { get; set; }
     public bool initialized { get; set; } = false;
     public string name { get; set; } = string.Empty;
 
