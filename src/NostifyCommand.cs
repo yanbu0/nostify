@@ -21,16 +21,25 @@ public class NostifyCommand
     /// </summary>
     public bool isNew { get; }
 
+    /// <summary>
+    /// Null payload throws an exception by default, but can be overridden by setting this property to true.
+    /// </summary>
+    public bool allowNullPayload { get; }
+
     ///<summary>
     ///Base Constructor
     ///</summary>
     ///<param name="name">Human readable friendly name of command</param>
     ///<param name="isNew">Signifies if this command results in the creation of a new aggregate</param>
-    ///<param name="isBulk">Signifies if this command is a bulk operation</param>
-    public NostifyCommand(string name, bool isNew = false)
+    /// <param name="allowNullPayload">Allows null payloads to be sent with this command</param>
+    public NostifyCommand(string name, bool isNew = false, bool allowNullPayload = false)
     {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Command name cannot be null or empty", nameof(name));
+
         this.name = name;
         this.isNew = isNew;
+        this.allowNullPayload = allowNullPayload;
     }
 
     ///<summary>
