@@ -9,7 +9,7 @@ namespace nostify;
 public interface INostifyValidation
 {
     /// <summary>
-    /// Gets the list of commands for which this property requires validation
+    /// Gets the list of commands for which this property requires validation.
     /// </summary>
     public List<string> Commands { get; }
 }
