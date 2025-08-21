@@ -102,7 +102,7 @@ public static class ContainerExtensions
     {
         containerToDeleteFrom.ValidateBulkEnabled(true);
         var partitionKeyPath = (await containerToDeleteFrom.ReadContainerAsync()).Resource.PartitionKeyPath;
-        
+
         var response = await containerToDeleteFrom.ReadContainerAsync();
         var containerProps = response.Resource;
         //Make sure TTL is enabled
@@ -121,7 +121,7 @@ public static class ContainerExtensions
         {
             try
             {
-            
+
                 var batchItems = projectionsToDelete.Skip(i).Take(batchSize).ToList();
                 List<Task> tasks = new List<Task>();
 
@@ -189,7 +189,7 @@ public static class ContainerExtensions
         return await c.DeleteItemAsync<T>(aggregateRootId.ToString(), new PartitionKey(tenantId.ToString()));
     }
 
-    
+
 
     ///<summary>
     ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
@@ -211,7 +211,7 @@ public static class ContainerExtensions
         {
             isNew = true;
         }
-        else 
+        else
         {
             //Update container based off aggregate root id
             try
@@ -223,7 +223,7 @@ public static class ContainerExtensions
             {
                 Console.WriteLine($"Aggregate not found {idToMatch}");
                 nosObjToUpdate = null;
-            }                
+            }
         }
 
         //Null means it has been previously deleted
@@ -263,7 +263,7 @@ public static class ContainerExtensions
 
                     var patchResult = await SafePatchItemAsync<T>(container, nosObjToUpdate.id.ToString(), partitionKey, patchOperations);
 
-                    
+
                 }
                 catch (CosmosException ex)
                 {
@@ -285,7 +285,7 @@ public static class ContainerExtensions
     {
         return await container.ApplyAndPersistAsync<T>(newEvents, partitionKey, null);
     }
-    
+
 
     ///<summary>
     ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers. Uses partitionKey from first Event in List.
@@ -307,7 +307,7 @@ public static class ContainerExtensions
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
     public static async Task<T> ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
     {
-        return await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, partitionKey);
+        return await container.ApplyAndPersistAsync<T>(new List<Event>() { newEvent }, partitionKey);
     }
 
     ///<summary>
@@ -317,7 +317,7 @@ public static class ContainerExtensions
     ///<param name="newEvent">The Event object to apply and persist.</param>
     public static async Task<T> ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
     {
-        return await container.ApplyAndPersistAsync<T>(new List<Event>(){newEvent}, newEvent.partitionKey.ToPartitionKey());
+        return await container.ApplyAndPersistAsync<T>(new List<Event>() { newEvent }, newEvent.partitionKey.ToPartitionKey());
     }
 
     /// <summary>
@@ -370,7 +370,7 @@ public static class ContainerExtensions
 
         var patchOperations = triggerEvents
             .Where(evt => evt.payload is JObject)
-            .Select(evt => 
+            .Select(evt =>
             {
                 var jobj = (JObject)evt.payload;
                 var id = jobj["id"]?.ToString();
@@ -383,8 +383,8 @@ public static class ContainerExtensions
             });
 
         var validPatchOperations = patchOperations
-            .Where(patch => 
-                !string.IsNullOrWhiteSpace(patch.id) && 
+            .Where(patch =>
+                !string.IsNullOrWhiteSpace(patch.id) &&
                 !string.IsNullOrWhiteSpace(patch.partitionId) &&
                 patch.operations.Count > 0);
 
@@ -395,8 +395,8 @@ public static class ContainerExtensions
         return [
             ..results,
             ..patchOperations
-                .Where(patch => 
-                    string.IsNullOrWhiteSpace(patch.id) || 
+                .Where(patch =>
+                    string.IsNullOrWhiteSpace(patch.id) ||
                     string.IsNullOrWhiteSpace(patch.partitionId) ||
                     patch.operations.Count == 0)
                 .Select(patch => PatchItemResult.InvalidOperationResult(patch))
@@ -429,7 +429,7 @@ public static class ContainerExtensions
         }
         catch (Exception ex)
         {
-            return PatchItemResult.ExceptionResult(id, partitionKey,ex);
+            return PatchItemResult.ExceptionResult(id, partitionKey, ex);
         }
     }
 
@@ -442,12 +442,13 @@ public static class ContainerExtensions
     /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
     /// <returns></returns>
     public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false) where T : IApplyable
-    {        
+    {
         //throw if bulk not enabled
         bulkContainer.ValidateBulkEnabled(true);
-        
+
         List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i).ContinueWith(itemResponse => {
+        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i).ContinueWith(itemResponse =>
+        {
             if (!itemResponse.IsCompletedSuccessfully)
             {
                 //Retry if too many requests error
@@ -475,12 +476,13 @@ public static class ContainerExtensions
     /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
     /// <returns></returns>
     public static async Task DoBulkCreateAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false) where T : IApplyable
-    {        
+    {
         //throw if bulk not enabled
         bulkContainer.ValidateBulkEnabled(true);
-        
+
         List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => bulkContainer.CreateItemAsync(i).ContinueWith(itemResponse => {
+        itemList.ForEach(i => bulkContainer.CreateItemAsync(i).ContinueWith(itemResponse =>
+        {
             if (!itemResponse.IsCompletedSuccessfully)
             {
                 //Retry if too many requests error

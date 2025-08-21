@@ -38,7 +38,7 @@ public class SagaStep : ISagaStep
     public SagaStep()
     {
         order = 1;
-        stepEvent = new Event(); 
+        stepEvent = new Event();
         rollbackEvent = null;
         status = SagaStepStatus.WaitingForTrigger;
         successData = null;

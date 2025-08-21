@@ -57,7 +57,7 @@ public class NostifyCommand
         // if (otherValue == null)
         //     return false;
 
-        var t= obj.GetType();
+        var t = obj.GetType();
         var t2 = GetType();
         var typeMatches = typeof(NostifyCommand).IsAssignableFrom(obj.GetType());
         var valueMatches = name.Equals(otherValue.name);

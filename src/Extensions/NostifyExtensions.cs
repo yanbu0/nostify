@@ -39,7 +39,7 @@ public static class NostifyExtensions
             value = default(T);
             return false;
         }
-        else 
+        else
         {
             try
             {
@@ -93,7 +93,7 @@ public static class NostifyExtensions
         return Guid.TryParse(value, out Guid guid) ? guid : throw new FormatException("String is not a Guid");
     }
 
-    
+
     ///<summary>
     ///Reads from Stream into <c>dynamic</c>
     ///<para>
@@ -107,7 +107,7 @@ public static class NostifyExtensions
     {
         //Read body, throw error if null
         dynamic updateObj = JsonConvert.DeserializeObject<dynamic>(await new StreamReader(body).ReadToEndAsync()) ?? throw new NostifyException("Body contains no data");
-        
+
         //Check for "id" property, throw error if not exists.  Ignore if isCreate is true since create objects don't have ids yet.
         if (!isCreate && updateObj.id == null)
         {
@@ -117,5 +117,5 @@ public static class NostifyExtensions
         return updateObj;
     }
 
-    
+
 }

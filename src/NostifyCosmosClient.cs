@@ -51,7 +51,7 @@ namespace nostify
         ///<param name="throughput">Throughput for container</param>
         ///<param name="verbose">If true, will print verbose output</param>
         Task<Container> GetContainerAsync(string containerName, string partitionKeyPath, bool allowBulk = false, int? throughput = null, bool verbose = false);
-        
+
 
     }
 
@@ -145,12 +145,12 @@ namespace nostify
         ///<summary>
         ///Constructor for cosmos client
         ///</summary>
-        public NostifyCosmosClient(string ApiKey, 
-            string DbName, 
-            string EndpointUri = "", 
-            string ConnectionString = "", 
+        public NostifyCosmosClient(string ApiKey,
+            string DbName,
+            string EndpointUri = "",
+            string ConnectionString = "",
             string EventStorePartitionKey = "/aggregateRootId",
-            string EventStoreContainer = "eventStore", 
+            string EventStoreContainer = "eventStore",
             string UndeliverableEvents = "undeliverableEvents",
             int DefaultContainerThroughput = -1,
             int DefaultDbThroughput = -1,
@@ -175,7 +175,7 @@ namespace nostify
         public bool IsLocalEmulator => ConnectionString != null && ConnectionString.Contains("localhost");
 
         private async Task InitAsync()
-        {            
+        {
             //Init bulk and normal database clients for use throughout lifetime of application
             GetDatabaseAsync();
             GetDatabaseAsync(true);
@@ -186,21 +186,23 @@ namespace nostify
         {
             SocketsHttpHandler handler = new SocketsHttpHandler();
             handler.PooledConnectionLifetime = TimeSpan.FromMinutes(5);
-            var options = new CosmosClientOptions() { 
-                    AllowBulkExecution = allowBulk,
-                    ConnectionMode = useGatewayConnection ? ConnectionMode.Gateway : ConnectionMode.Direct,
-                    HttpClientFactory = () => new HttpClient(handler, disposeHandler: false)
-                };
+            var options = new CosmosClientOptions()
+            {
+                AllowBulkExecution = allowBulk,
+                ConnectionMode = useGatewayConnection ? ConnectionMode.Gateway : ConnectionMode.Direct,
+                HttpClientFactory = () => new HttpClient(handler, disposeHandler: false)
+            };
 
             if (_cosmosClient == null && !allowBulk)
-            {         
+            {
                 _cosmosClient = new CosmosClient(EndpointUri, Primarykey, options);
-            } else if (_bulkCosmosClient == null && allowBulk)
+            }
+            else if (_bulkCosmosClient == null && allowBulk)
             {
                 _bulkCosmosClient = new CosmosClient(EndpointUri, Primarykey, options);
             }
             return allowBulk ? _bulkCosmosClient : _cosmosClient;
-        } 
+        }
 
         /// <inheritdoc />
         public async Task<DatabaseRef> GetDatabaseAsync(bool allowBulk = false)
@@ -223,7 +225,7 @@ namespace nostify
             {
                 //Create database if it doesn't exist, if throughput is 0 or less assume serverless
                 var bulkDb = throughput > 0 ? (await client.CreateDatabaseIfNotExistsAsync(DbName, throughput)).Database
-                    : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;  
+                    : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;
                 _bulkDatabase = new() { database = bulkDb, knownContainers = new() };
             }
             return allowBulk ? _bulkDatabase : _database;
@@ -236,20 +238,21 @@ namespace nostify
             //Check to see if container already exists in known containers list and skip check if it does but if not create it if needed and add to list
             Container container;
             if (db.knownContainers.Any(c => c == containerName))
-            { 
+            {
                 if (verbose) Console.WriteLine($"Container {containerName} already exists in known containers list");
                 container = db.database.GetContainer(containerName);
                 db.AddContainer(containerName);
             }
-            else 
+            else
             {
                 if (verbose) Console.WriteLine($"Creating container {containerName}");
 
-                ContainerProperties containerProperties = new() {
+                ContainerProperties containerProperties = new()
+                {
                     Id = containerName,
                     PartitionKeyPath = partitionKeyPath,
                     DefaultTimeToLive = -1
-                }; 
+                };
                 //Check if throughput is set, if not use default, if throughput is 0 or less assume serverless
                 var tp = throughput.HasValue ? throughput.Value : DefaultContainerThroughput;
                 if (tp <= 0)
@@ -261,9 +264,9 @@ namespace nostify
                     var throughputValue = ThroughputProperties.CreateAutoscaleThroughput(tp);
                     container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, tp);
                 }
-                
+
                 db.AddContainer(containerName);
-                
+
                 if (verbose) Console.WriteLine($"Created container {containerName}");
             }
             return container;

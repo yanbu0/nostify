@@ -17,9 +17,9 @@ namespace nostify
         ///Constructor
         ///</summary>
         public MockHttpResponseData(FunctionContext functionContext) : base(functionContext)
-        {           
+        {
         }
-        
+
 
         public override HttpStatusCode StatusCode { get; set; } = HttpStatusCode.OK;
 

@@ -18,7 +18,7 @@ public static class EventBuilder
     /// <param name="userId">The ID of the user responsible for the event.</param>
     /// <param name="partitionKey">The ID of the partition that the aggregate to apply the event to is in.</param>
     /// <returns>A validated <see cref="Event"/> instance.</returns>
-    public static Event Create<T>(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default) where T : NostifyObject, IAggregate
+    public static IEvent Create<T>(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default) where T : NostifyObject, IAggregate
     {
         return new Event(command, aggregateRootId, payload, userId, partitionKey).ValidatePayload<T>();
     }
@@ -32,7 +32,7 @@ public static class EventBuilder
     /// <param name="userId">The ID of the user responsible for the event.</param>
     /// <param name="partitionKey">The ID of the partition that the aggregate to apply the event to is in.</param>
     /// <returns>A validated <see cref="Event"/> instance.</returns>
-    public static Event Create<T>(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default) where T : NostifyObject, IAggregate
+    public static IEvent Create<T>(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default) where T : NostifyObject, IAggregate
     {
         return new Event(command, payload, userId, partitionKey).ValidatePayload<T>();
     }
@@ -47,7 +47,7 @@ public static class EventBuilder
     /// <param name="userId">The ID of the user responsible for the event, as a string.</param>
     /// <param name="partitionKey">The ID of the partition that the aggregate to apply the event to is in, as a string.</param>
     /// <returns>A validated <see cref="Event"/> instance.</returns>
-    public static Event Create<T>(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey) where T : NostifyObject, IAggregate
+    public static IEvent Create<T>(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey) where T : NostifyObject, IAggregate
     {
         return new Event(command, aggregateRootId, payload, userId, partitionKey).ValidatePayload<T>();
     }

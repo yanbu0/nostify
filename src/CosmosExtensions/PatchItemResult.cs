@@ -79,17 +79,17 @@ public readonly struct PatchItemResult
     public static PatchItemResult InvalidOperationResult((string id, string partitionId, List<PatchOperation> operations) patch)
     {
         PartitionKey partitionKey = new PartitionKey(patch.partitionId);
-        if(string.IsNullOrWhiteSpace(patch.id))
+        if (string.IsNullOrWhiteSpace(patch.id))
         {
             return new PatchItemResult(patch.id, partitionKey, HttpStatusCode.BadRequest, "id cannot be null or empty");
         }
 
-        if(string.IsNullOrWhiteSpace(patch.partitionId))
+        if (string.IsNullOrWhiteSpace(patch.partitionId))
         {
             return new PatchItemResult(patch.id, partitionKey, HttpStatusCode.BadRequest, "partitionId cannot be null or empty");
         }
 
-        if(patch.operations == null || patch.operations.Count == 0)
+        if (patch.operations == null || patch.operations.Count == 0)
         {
             return new PatchItemResult(patch.id, partitionKey, HttpStatusCode.BadRequest, "No patch operations to perform");
         }
