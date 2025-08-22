@@ -23,7 +23,7 @@ public class Delete_ReplaceMe_
         Guid aggregateId,
         ILogger log)
     {
-        Event pe = (Event)EventBuilder.Create<_ReplaceMe_>(_ReplaceMe_Command.Delete, aggregateId, new { id = aggregateId });
+        Event pe = EventBuilder.Create<_ReplaceMe_>(_ReplaceMe_Command.Delete, aggregateId, new { id = aggregateId });
         await _nostify.PersistEventAsync(pe);
 
         return aggregateId;

@@ -146,7 +146,7 @@ In `nostify` all state changes coming from the UI are called a `NostifyCommand` 
 - All state changes must be applied to an aggregate, and not directly to a projection or to an entity within an aggregate.  
 - Aggregates may only refer to other aggregates by id value.
 - An aggregate must implement the `NostifyObject` abstract class and the `IAggregate` interface.
-- All state changes must be applied using the `Apply()` method, either directly or by using the `ApplyAndPersist()` method.  The current state projection of an aggregate is simply the sum of all the events in the event store applied to a new instance of that aggregate object.
+- All state changes must be applied using the `Apply()` method, either directly or by using the `ApplyAndPersistAsync<T>()` method.  The current state projection of an aggregate is simply the sum of all the events in the event store applied to a new instance of that aggregate object.
 - In `nostify` only the changed properties should be included when creating an `Event`, best practice is to not send the entire aggregate.
 - A service generally contains one or more aggregates.  A read-only service, such as for BI purposes might not.  Domain boundaries should be respected when grouping aggregates together in a service.  IE - grouping a `WorkOrder` aggregate in the same service as a `WorkOrderStatus` aggregate (which might be an aggregate if your application allows users to add and update them) might make sense, where as putting a `PurchaseRequest` and a `WorkOrder` in the same service might not.  This is an art not a science so do what makes sense to your application.  It is theoretically possible to completely abandon the microservice concept and group an entire application into a single service, but probably not a good idea for scalability and maintainability.
 
@@ -176,8 +176,8 @@ The solution to this in `nostify` is the projection pattern.  A projection defin
 
 - No command is ever performed on a projection, they are updated by subscribing to and handling events on their component aggregates.
 - A projection will have a "base" aggregate and the `id` property of the projection will match the `id` property of the base aggregate. The base aggregate will be the aggregate that the create event is handled, creating a new instance of the projection in the container.
-- A projection must implement the `ProjectionBaseClass<P,A>` abstract class, where `P` is the concrete class of the projection, and `A` is the "base" aggregate, and the `IContainerName` interface, most will also need to implement `IHasExternalData<P>`.
-- For projections with data coming from aggregates external to the "base" aggregate, `IHasExternalData.GetExternalDataEvents()` method must be implemented to handle getting events from external sources to apply to the projection. The results of this method are used by the `ProjectionBaseClass` to update either the external data of a new single projection instance, or many projections when the container is initialized or data is imported.
+- A projection must implement `IProjection` and the `NostifyObject` class, usually by inheirting the base class of the root Aggregate. Most will also need to implement `IHasExternalData<P>`.
+- For projections with data coming from aggregates external to the "base" aggregate, `IHasExternalData.GetExternalDataEvents()` method must be implemented to handle getting events from external sources to apply to the projection. The results of this method are used by the projection initialization process to update either the external data of a new single projection instance, or many projections when the container is initialized or data is imported.
 
 #### Create
 
@@ -191,10 +191,10 @@ dotnet new nostifyProjection -ag <Base_Aggregate_Name> --projectionName <Project
 
 An `Event` captures a state change to the application.  Generally, this is caused by the user issuing a command such as "save".  When a command comes in from the front end to the endpoint, the http triggers a command handler function which validates the command, composes an `Event` and persists it to the event store.  Note that while a `Command` is always an `Event`, an `Event` is not necessarily always a `Command`.  It is possible for an `Event` to originate elsewhere, say from an IoT device for example.
 
-In a typical scenario, the `Event` is created in the command handler, and then saved to the event store:
+In a typical scenario, the `Event` is created in the command handler using the EventBuilder factory class, the `payload` is validated, and then saved to the event store:
 
 ```C#
-Event pe = new Event(TestCommand.Create, newId, newTest);
+Event pe = EventBuilder.Create<TestAggregate>(TestCommand.Create, newId, newTest);
 await _nostify.PersistEventAsync(pe);
 ```
 
@@ -202,15 +202,15 @@ When a command becomes an `Event` the text name of the command becomes the topic
 
 #### Payload Validation
 
-Events can validate their payload against aggregate properties using the `ValidatePayload<T>()` method. This ensures that required properties are present and valid according to the specified command:
+Event payloads are validated by default. This is done by placing `ValidationAttribute` attributes on the properties of the Aggregate the Command is being performed on. This ensures that required properties are present and valid according to the specified command. Only properties present on the current payload will be validated, except for `[Required]` and `[RequiredFor()]`. 
 
 ```C#
-Event pe = new Event(TestCommand.Create, newId, newTest);
+Event pe = EventBuilder.Create<TestAggregate>(TestCommand.Create, newId, newTest);
 pe.ValidatePayload<TestAggregate>(throwErrorIfExtraProps: false);
 await _nostify.PersistEventAsync(pe);
 ```
 
-Use the `RequiredForAttribute` on aggregate properties to specify validation rules for specific commands:
+Most of the time, you will want to use `RequiredFor` instead of `Required` to mark a property as required for that specific command or list of commands. `Required` is still a valid validation attribute, but it will require that property to be present and not null for EVERY command:
 
 ```C#
 public class TestAggregate : NostifyObject, IAggregate
@@ -602,7 +602,7 @@ The `ApplyAndPersistAsync()` method will deduce the partition key of the object 
 
 ##### Multi Apply From A Single Event
 
-Frequently with Projections you will need to apply a single Event to multiple Projections to update data. Use the `MutiApplyAndPersistAsync<P>()` method to facilitate this. You will need to get a reference to the bulk enabled Container and query for the Projections to update. This will frequently follow the pattern shown below:
+Frequently with Projections you will need to apply a single Event to multiple Projections to update data. Use the `MultiApplyAndPersistAsync<P>()` method to facilitate this. You will need to get a reference to the bulk enabled Container and query for the Projections to update. This will frequently follow the pattern shown below:
 
 ```C#
 public async Task Run([KafkaTrigger(<Trigger details go here>)] NostifyKafkaTriggerEvent triggerEvent,
@@ -633,3 +633,450 @@ public async Task Run([KafkaTrigger(<Trigger details go here>)] NostifyKafkaTrig
     
 }
 ```
+
+## Advanced Features
+
+### Error Handling and Undeliverable Events
+
+`nostify` provides robust error handling mechanisms for event processing failures. When an event handler fails to process an event, the framework can capture the failure details and store them for analysis and potential reprocessing.
+
+#### UndeliverableEvent Class
+
+The `UndeliverableEvent` class captures events that fail to process:
+
+```C#
+public class UndeliverableEvent
+{
+    public Guid id { get; set; }
+    public string functionName { get; set; }
+    public string errorMessage { get; set; }
+    public Event undeliverableEvent { get; set; }
+    public Guid aggregateRootId { get; set; }
+}
+```
+
+#### Handling Undeliverable Events
+
+Use the `HandleUndeliverableAsync` method in your event handlers to capture processing failures:
+
+```C#
+try
+{
+    // Event processing logic
+    Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<Test>();
+    await currentStateContainer.ApplyAndPersistAsync<Test>(newEvent);
+}
+catch (Exception e)
+{
+    await _nostify.HandleUndeliverableAsync(nameof(OnTestCreated), e.Message, newEvent);
+}
+```
+
+#### Custom Exception Handling
+
+The framework includes a `NostifyException` class for library-specific exceptions:
+
+```C#
+public class NostifyException : Exception
+{
+    public NostifyException(string message) : base(message) { }
+}
+```
+
+### Bulk Operations and Performance
+
+#### Bulk Container Operations
+
+For high-throughput scenarios, `nostify` provides bulk operations that can process multiple items efficiently:
+
+```C#
+// Get a bulk-enabled container
+Container bulkContainer = await _nostify.GetBulkProjectionContainerAsync<TestProjection>();
+
+// Bulk delete operations
+await bulkContainer.BulkDeleteAsync<TestProjection>(projectionIdsToDelete);
+
+// Bulk delete from Kafka trigger events
+await bulkContainer.BulkDeleteFromEventsAsync<TestProjection>(kafkaTriggerEvents);
+```
+
+#### Multi-Apply Operations
+
+Apply a single event to multiple projections efficiently:
+
+```C#
+// Apply single event to multiple projections by ID
+await _nostify.MultiApplyAndPersistAsync<TestProjection>(
+    bulkContainer, 
+    eventToApply, 
+    projectionIds, 
+    batchSize: 100
+);
+
+// Apply single event to multiple projection objects
+await _nostify.MultiApplyAndPersistAsync<TestProjection>(
+    bulkContainer, 
+    eventToApply, 
+    projectionsToUpdate, 
+    batchSize: 100
+);
+```
+
+#### Bulk Event Processing
+
+Process multiple events in batches:
+
+```C#
+await _nostify.BulkPersistEventAsync(
+    events, 
+    batchSize: 100, 
+    allowRetry: true, 
+    publishErrorEvents: false
+);
+
+await _nostify.BulkApplyAndPersistAsync<TestProjection>(
+    bulkContainer, 
+    "id", 
+    kafkaEvents, 
+    allowRetry: true, 
+    publishErrorEvents: false
+);
+```
+
+### Advanced Querying and Cosmos Extensions
+
+#### Safe Patch Operations
+
+The framework provides safe patch operations with result tracking:
+
+```C#
+// Safe patch with result information
+PatchItemResult result = await container.SafePatchItemAsync<TestAggregate>(
+    id, 
+    partitionKey, 
+    patchOperations
+);
+
+if (result.PatchedSuccessfully)
+{
+    // Handle successful patch
+}
+else if (result.NotFound)
+{
+    // Handle item not found
+}
+```
+
+#### Custom LINQ Query Extensions
+
+Use the `NostifyLinqQuery` class for advanced query operations:
+
+```C#
+var linqQuery = new NostifyLinqQuery();
+var feedIterator = linqQuery.GetFeedIterator(queryable);
+
+// Process results with feed iterator
+while (feedIterator.HasMoreResults)
+{
+    var response = await feedIterator.ReadNextAsync();
+    foreach (var item in response)
+    {
+        // Process each item
+    }
+}
+```
+
+### Testing Utilities
+
+The framework includes testing utilities to facilitate unit testing:
+
+#### Mock HTTP Request Data
+
+```C#
+// Create empty HTTP request for testing
+var request = MockHttpRequestData.Create();
+
+// Create HTTP request with specific data
+var testData = new { name = "Test", value = 42 };
+var request = MockHttpRequestData.Create(testData);
+```
+
+#### Mock HTTP Response Data
+
+```C#
+public class MockHttpResponseData : HttpResponseData
+{
+    public HttpStatusCode StatusCode { get; set; }
+    public HttpHeadersCollection Headers { get; }
+    public Stream Body { get; set; }
+    public HttpCookies Cookies { get; }
+}
+```
+
+### Projection Initialization and External Data
+
+#### Advanced External Data Handling
+
+For projections requiring data from multiple external sources:
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<TestProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var externalEvents = new List<ExternalDataEvent>();
+    
+    // Get events from same service (different container)
+    Container eventStore = await nostify.GetEventStoreContainerAsync();
+    var sameServiceEvents = await ExternalDataEvent.GetEventsAsync<TestProjection>(
+        eventStore, 
+        projectionsToInit, 
+        p => p.relatedIds,           // Single foreign ID
+        p => p.nestedObjectIds       // List of foreign IDs
+    );
+    externalEvents.AddRange(sameServiceEvents);
+    
+    // Get events from external services via HTTP
+    if (httpClient != null)
+    {
+        var externalServiceEvents = await ExternalDataEvent.GetEventsAsync(
+            httpClient,
+            "https://external-service/api/EventRequest",
+            projectionsToInit,
+            p => p.externalServiceId
+        );
+        externalEvents.AddRange(externalServiceEvents);
+    }
+    
+    return externalEvents;
+}
+```
+
+#### Projection Container Initialization
+
+Initialize entire projection containers:
+
+```C#
+// Initialize all projections in a container
+await nostify.ProjectionInitializer.InitContainerAsync<TestProjection, TestAggregate>(
+    nostify, 
+    httpClient, 
+    partitionKeyPath: "/tenantId", 
+    loopSize: 1000
+);
+
+// Initialize only uninitialized projections
+await nostify.ProjectionInitializer.InitAllUninitialized<TestProjection>(
+    nostify, 
+    httpClient, 
+    maxloopSize: 10
+);
+```
+
+### Rehydration and Point-in-Time Queries
+
+#### Aggregate Rehydration
+
+Reconstruct aggregate state from event stream:
+
+```C#
+// Rehydrate to current state
+TestAggregate aggregate = await _nostify.RehydrateAsync<TestAggregate>(aggregateId);
+
+// Rehydrate to specific point in time
+DateTime pointInTime = DateTime.UtcNow.AddDays(-7);
+TestAggregate historicalAggregate = await _nostify.RehydrateAsync<TestAggregate>(
+    aggregateId, 
+    pointInTime
+);
+```
+
+#### Projection Rehydration
+
+Rehydrate projections with external data:
+
+```C#
+TestProjection projection = await _nostify.RehydrateAsync<TestProjection, TestAggregate>(
+    projectionId, 
+    httpClient
+);
+```
+
+### Saga Pattern Implementation
+
+`nostify` provides comprehensive support for the Saga pattern to handle long-running, distributed transactions.
+
+#### Saga Class Structure
+
+```C#
+public class Saga : ISaga
+{
+    public Guid id { get; set; }
+    public string name { get; set; }
+    public SagaStatusEnum status { get; set; }
+    public DateTime createdOn { get; set; }
+    public DateTime? executionCompletedOn { get; set; }
+    public DateTime? executionStart { get; set; }
+    public DateTime? rollbackStartedOn { get; set; }
+    public DateTime? rollbackCompletedOn { get; set; }
+    public string? errorMessage { get; set; }
+    public string? rollbackErrorMessage { get; set; }
+    public List<SagaStep> steps { get; set; } = new List<SagaStep>();
+}
+```
+
+#### Saga Status Enumeration
+
+```C#
+public enum SagaStatusEnum
+{
+    Created,
+    Executing,
+    Completed,
+    RollingBack,
+    RollbackCompleted,
+    Failed,
+    RollbackFailed
+}
+```
+
+#### Saga Step Implementation
+
+```C#
+public class SagaStep : ISagaStep
+{
+    public Guid id { get; set; }
+    public string name { get; set; }
+    public int order { get; set; }
+    public SagaStepStatusEnum status { get; set; }
+    public DateTime? executionStart { get; set; }
+    public DateTime? executionCompleted { get; set; }
+    public DateTime? rollbackStart { get; set; }
+    public DateTime? rollbackCompleted { get; set; }
+    public string? errorMessage { get; set; }
+    public string? rollbackErrorMessage { get; set; }
+    public object? stepData { get; set; }
+    public object? rollbackData { get; set; }
+}
+```
+
+#### Using Sagas
+
+```C#
+// Create and start a saga
+var saga = new OrderProcessingSaga();
+saga.steps.Add(new SagaStep { name = "ReserveInventory", order = 1 });
+saga.steps.Add(new SagaStep { name = "ProcessPayment", order = 2 });
+saga.steps.Add(new SagaStep { name = "ShipOrder", order = 3 });
+
+await saga.StartAsync(nostify);
+
+// Handle successful step completion
+await saga.HandleSuccessfulStepAsync(nostify, stepData);
+
+// Handle failures and rollback
+await saga.StartRollbackAsync(nostify);
+```
+
+### Container Management
+
+#### Dynamic Container Creation
+
+```C#
+// Get containers with specific configuration
+Container eventStore = await _nostify.GetEventStoreContainerAsync(allowBulk: true);
+Container currentState = await _nostify.GetCurrentStateContainerAsync<TestAggregate>("/customPartitionKey");
+Container bulkProjection = await _nostify.GetBulkProjectionContainerAsync<TestProjection>("/tenantId");
+
+// Get custom containers
+Container customContainer = await _nostify.GetContainerAsync(
+    "CustomContainerName", 
+    bulkEnabled: true, 
+    partitionKeyPath: "/customKey"
+);
+```
+
+#### Database Management
+
+```C#
+// Get database reference with bulk operations
+DatabaseRef database = await _nostify.Repository.GetDatabaseAsync(allowBulk: true);
+
+// Get database with specific throughput
+DatabaseRef database = await _nostify.Repository.GetDatabaseAsync(allowBulk: true, throughput: 1000);
+
+// Get containers with specific settings
+Container container = await _nostify.Repository.GetContainerAsync(
+    containerName: "Events",
+    partitionKeyPath: "/tenantId",
+    allowBulk: false,
+    throughput: 400,
+    verbose: true
+);
+```
+
+### Validation System
+
+The framework includes a validation system for ensuring data integrity:
+
+#### RequiredForAttribute
+
+Use the `RequiredForAttribute` to specify when fields are required based on event type:
+
+```C#
+public class TestEvent : Event
+{
+    [RequiredFor(EventTypeEnum.Created)]
+    public string name { get; set; }
+    
+    [RequiredFor(EventTypeEnum.Updated, EventTypeEnum.Deleted)]
+    public string description { get; set; }
+}
+```
+
+#### Validation Extensions
+
+Validate objects and events:
+
+```C#
+// Validate an object
+bool isValid = myObject.IsValid();
+
+// Get validation messages
+var validationMessages = myObject.GetValidationMessages();
+
+// Validate with specific event type
+bool isValidForEventType = myEvent.IsValidForEventType(EventTypeEnum.Created);
+```
+
+## Performance Considerations
+
+### Bulk Operations
+
+- Always use bulk-enabled containers for high-throughput scenarios
+- Configure appropriate batch sizes (typically 100-1000 items)
+- Enable retry logic for transient failures
+- Monitor RU consumption and adjust throughput accordingly
+
+### Query Optimization
+
+- Use partition keys effectively to avoid cross-partition queries
+- Implement proper indexing strategies
+- Use `ReadAllAsync()` for small result sets
+- Use feed iterators for large result sets
+
+### Memory Management
+
+- Dispose of containers and clients properly
+- Use appropriate batch sizes for bulk operations
+- Consider using pagination for large data sets
+- Monitor memory usage in long-running processes
+
+### Event Store Optimization
+
+- Use appropriate TTL settings for event data
+- Implement event archiving strategies for long-term storage
+- Consider event snapshotting for frequently accessed aggregates
+- Monitor and optimize event store throughput

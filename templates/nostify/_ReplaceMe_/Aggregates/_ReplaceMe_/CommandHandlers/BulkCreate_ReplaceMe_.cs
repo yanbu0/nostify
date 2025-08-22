@@ -35,7 +35,7 @@ public class BulkCreate_ReplaceMe_
             Guid newId = Guid.NewGuid();
             e.id = newId;
             
-            Event pe = (Event)EventBuilder.Create<_ReplaceMe_>(_ReplaceMe_Command.BulkCreate, newId, e, Guid.Empty, Guid.Empty); //Empty guids should be replaced with user id and tenant id respectively
+            Event pe = EventBuilder.Create<_ReplaceMe_>(_ReplaceMe_Command.BulkCreate, newId, e, Guid.Empty, Guid.Empty); //Empty guids should be replaced with user id and tenant id respectively
             peList.Add(pe);
         });
 
