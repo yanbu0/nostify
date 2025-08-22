@@ -28,6 +28,10 @@
   - Enhanced `EventBuilder` with optional validation parameter (defaults to true) for all Create methods
   - Updated all templates to use `EventBuilder.Create<T>()` instead of direct Event instantiation for consistency
   - Templates now reference nostify 3.6.0 across all project types (nostify, nostifyAggregate, nostifyProjection)
+- 3.5.0
+  - Added comprehensive payload validation system with `ValidatePayload<T>()` method on Events
+  - Introduced `RequiredForAttribute` to specify command-specific property validation requirements
+  - Enhanced Event class with validation capabilities for aggregate properties
 - 3.4.4
   - Updated service template to use Newtonsoft.Json explicitly by default, System.Text.Json is a hot mess
   - Updated Projection template to use GetEventsAsync
@@ -60,7 +64,6 @@
 - Improved/Updated Documentation
 - Updated example repo, current one is v1, not worth looking at
 - Better test coverage
-- Improved Command payload validation
 
 ## Getting Started
 
@@ -196,6 +199,29 @@ await _nostify.PersistEventAsync(pe);
 ```
 
 When a command becomes an `Event` the text name of the command becomes the topic name published to Kafka, so for this example the event handler, `OnTestCreated` would subscribe to the `Create_Test` topic.
+
+#### Payload Validation
+
+Events can validate their payload against aggregate properties using the `ValidatePayload<T>()` method. This ensures that required properties are present and valid according to the specified command:
+
+```C#
+Event pe = new Event(TestCommand.Create, newId, newTest);
+pe.ValidatePayload<TestAggregate>(throwErrorIfExtraProps: false);
+await _nostify.PersistEventAsync(pe);
+```
+
+Use the `RequiredForAttribute` on aggregate properties to specify validation rules for specific commands:
+
+```C#
+public class TestAggregate : NostifyObject, IAggregate
+{
+    [RequiredFor("Create_Test")]
+    public string Name { get; set; }
+    
+    [RequiredFor(["Update_Test", "Create_Test"])]
+    public int Value { get; set; }
+}
+```
 
 ### Command
 
