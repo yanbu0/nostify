@@ -64,9 +64,7 @@ public static class NostifyExtensions
                     .Select(u => u.Value)
                     .SingleOrDefault();
 
-        if (jToken == null)
-        {
-            return default(T);
+            return default;
         }
 
         T? retVal = jToken.ToObject<T>();
