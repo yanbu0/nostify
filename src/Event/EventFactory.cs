@@ -63,6 +63,46 @@ public static class EventFactory
     /// <returns>An <see cref="Event"/> instance with a null payload and no validation.</returns>
     public static Event CreateNullPayloadEvent(NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default)
     {
-        return new Event(command, aggregateRootId, null, userId, partitionKey);
+        var eventInstance = new Event();
+        eventInstance.command = command ?? throw new ArgumentNullException(nameof(command));
+        eventInstance.aggregateRootId = aggregateRootId;
+        eventInstance.userId = userId;
+        eventInstance.partitionKey = partitionKey;
+        eventInstance.payload = null;
+        eventInstance.id = Guid.NewGuid();
+        eventInstance.timestamp = DateTime.UtcNow;
+        return eventInstance;
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="Event"/> instance with a null payload without validation, parsing the aggregateRootId, userId, and partitionKey from string values.
+    /// This method is typically used for delete operations where no payload data is needed.
+    /// </summary>
+    /// <param name="command">The command to persist.</param>
+    /// <param name="aggregateRootId">The ID of the root aggregate to perform the command on, as a string.</param>
+    /// <param name="userId">The ID of the user responsible for the event, as a string.</param>
+    /// <param name="partitionKey">The ID of the partition that the aggregate to apply the event to is in, as a string.</param>
+    /// <returns>An <see cref="Event"/> instance with a null payload and no validation.</returns>
+    public static Event CreateNullPayloadEvent(NostifyCommand command, string aggregateRootId, string userId = "", string partitionKey = "")
+    {
+        Guid aggGuid;
+        if (!Guid.TryParse(aggregateRootId, out aggGuid))
+        {
+            throw new ArgumentException("Aggregate Root ID is not parsable to a Guid", nameof(aggregateRootId));
+        }
+
+        Guid userGuid = default;
+        if (!string.IsNullOrEmpty(userId) && !Guid.TryParse(userId, out userGuid))
+        {
+            throw new ArgumentException("User ID is not parsable to a Guid", nameof(userId));
+        }
+
+        Guid pKey = default;
+        if (!string.IsNullOrEmpty(partitionKey) && !Guid.TryParse(partitionKey, out pKey))
+        {
+            throw new ArgumentException("Partition Key is not parsable to a Guid", nameof(partitionKey));
+        }
+
+        return CreateNullPayloadEvent(command, aggGuid, userGuid, pKey);
     }
 }

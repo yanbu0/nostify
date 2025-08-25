@@ -24,9 +24,10 @@
 ### Updates
 
 - 3.6.0
-  - Added `EventFactory` class with `CreateNullPayloadEvent()` method for creating events with null payloads without validation
-  - Updated delete command handlers in templates to use `EventFactory.CreateNullPayloadEvent()` for cleaner null payload handling
-  - EventFactory provides factory methods for event creation with optional validation, ideal for delete operations
+  - Fixed `EventFactory.CreateNullPayloadEvent()` method to properly handle null payloads without validation
+  - Updated delete command handlers in templates to use `EventFactory.CreateNullPayloadEvent()` for proper null payload handling
+  - EventFactory now provides factory methods for event creation with both validation and explicit null payload creation
+  - Added string overload support for EventFactory.CreateNullPayloadEvent() to parse Guid parameters from strings
 - 3.5.0
   - Added comprehensive payload validation system with `ValidatePayload<T>()` method on Events
   - Introduced `RequiredForAttribute` to specify command-specific property validation requirements

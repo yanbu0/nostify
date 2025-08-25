@@ -1184,5 +1184,98 @@ public class EventTests
         Assert.Throws<ArgumentNullException>(() => EventFactory.CreateNullPayloadEvent(null!, aggregateRootId));
     }
 
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldCreateEventWithNullPayloadFromStrings()
+    {
+        // Arrange
+        var command = new NostifyCommand("Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+
+        // Act
+        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId.ToString(), userId.ToString(), partitionKey.ToString());
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Null(result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldThrowArgumentException_WhenAggregateRootIdStringIsInvalid()
+    {
+        // Arrange
+        var command = new NostifyCommand("Delete", true);
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => 
+            EventFactory.CreateNullPayloadEvent(command, "invalid-guid"));
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldThrowArgumentException_WhenUserIdStringIsInvalid()
+    {
+        // Arrange
+        var command = new NostifyCommand("Delete", true);
+        var aggregateRootId = Guid.NewGuid().ToString();
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => 
+            EventFactory.CreateNullPayloadEvent(command, aggregateRootId, "invalid-user-guid"));
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldThrowArgumentException_WhenPartitionKeyStringIsInvalid()
+    {
+        // Arrange
+        var command = new NostifyCommand("Delete", true);
+        var aggregateRootId = Guid.NewGuid().ToString();
+        var userId = Guid.NewGuid().ToString();
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => 
+            EventFactory.CreateNullPayloadEvent(command, aggregateRootId, userId, "invalid-partition-key"));
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldAllowEmptyStringForOptionalParameters()
+    {
+        // Arrange
+        var command = new NostifyCommand("Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act
+        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId.ToString(), "", "");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(Guid.Empty, result.userId);
+        Assert.Equal(Guid.Empty, result.partitionKey);
+        Assert.Null(result.payload);
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldGenerateUniqueIds()
+    {
+        // Arrange
+        var command = new NostifyCommand("Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act
+        var event1 = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+        var event2 = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+
+        // Assert
+        Assert.NotEqual(event1.id, event2.id);
+    }
+
     #endregion
 }
