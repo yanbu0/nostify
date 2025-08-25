@@ -7,6 +7,9 @@ using Moq;
 using nostify;
 using System.ComponentModel.DataAnnotations;
 
+
+namespace nostify.Tests;
+
 public class NostifyExtensionsJObjectTests
 {
     [Fact]
