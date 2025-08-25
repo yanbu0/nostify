@@ -1053,7 +1053,7 @@ public class EventTests
         var partitionKey = Guid.NewGuid();
 
         // Act
-        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId, userId, partitionKey);
+        var result = new EventFactory().CreateNullPayloadEvent(command, aggregateRootId, userId, partitionKey);
 
         // Assert
         Assert.NotNull(result);
@@ -1074,7 +1074,7 @@ public class EventTests
         var aggregateRootId = Guid.NewGuid();
 
         // Act
-        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+        var result = new EventFactory().CreateNullPayloadEvent(command, aggregateRootId);
 
         // Assert
         Assert.NotNull(result);
@@ -1095,7 +1095,7 @@ public class EventTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => 
-            EventFactory.CreateNullPayloadEvent(null!, aggregateRootId));
+            new EventFactory().CreateNullPayloadEvent(null!, aggregateRootId));
     }
 
     [Fact]
@@ -1106,7 +1106,7 @@ public class EventTests
         var aggregateRootId = Guid.NewGuid();
 
         // Act - This should not throw any validation exceptions
-        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+        var result = new EventFactory().CreateNullPayloadEvent(command, aggregateRootId);
 
         // Assert
         Assert.NotNull(result);
@@ -1122,8 +1122,8 @@ public class EventTests
         var aggregateRootId = Guid.NewGuid();
 
         // Act
-        var result1 = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
-        var result2 = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+        var result1 = new EventFactory().CreateNullPayloadEvent(command, aggregateRootId);
+        var result2 = new EventFactory().CreateNullPayloadEvent(command, aggregateRootId);
 
         // Assert
         Assert.NotEqual(result1.id, result2.id);
