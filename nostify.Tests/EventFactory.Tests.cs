@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using Xunit;
 using nostify;
 
@@ -39,7 +40,7 @@ public class EventFactoryTests
         var invalidPayload = new { id = aggregateId }; // Missing required 'name'
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregate>(command, aggregateId, invalidPayload));
         
         Assert.Contains("Name is required", exception.Message);
@@ -71,7 +72,7 @@ public class EventFactoryTests
         var invalidPayload = new { id = aggregateId }; // Missing required 'name'
 
         // Act & Assert - Default behavior should validate
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregate>(command, aggregateId, invalidPayload));
         
         Assert.Contains("Name is required", exception.Message);
@@ -86,7 +87,7 @@ public class EventFactoryTests
         var invalidPayload = new { id = aggregateId }; // Missing required 'name'
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregate>(command, invalidPayload));
         
         Assert.Contains("Name is required", exception.Message);
@@ -120,7 +121,7 @@ public class EventFactoryTests
         var invalidPayload = new { id = aggregateId }; // Missing required 'name'
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregate>(command, aggregateId, invalidPayload, userId, partitionKey));
         
         Assert.Contains("Name is required", exception.Message);
@@ -198,5 +199,99 @@ public class EventFactoryTests
         // Assert
         Assert.True(factory1.ValidatePayload);
         Assert.False(factory2.ValidatePayload);
+    }
+
+    [Fact]
+    public void CreateNullPayloadEvent_WithValidCommand_ShouldCreateEventWithEmptyPayload()
+    {
+        // Arrange
+        var command = new TestCommand("test-command");
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+
+        // Act
+        var result = new EventFactory().CreateNullPayloadEvent(command, aggregateId, userId, partitionKey);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.NotNull(result.payload);
+    }
+
+    [Fact]
+    public void CreateNullPayloadEvent_WithStringParameters_ShouldCreateEventWithEmptyPayload()
+    {
+        // Arrange
+        var command = new TestCommand("test-command");
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+
+        // Act
+        var result = new EventFactory().CreateNullPayloadEvent(
+            command, 
+            aggregateId.ToString(), 
+            userId.ToString(), 
+            partitionKey.ToString()
+        );
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.NotNull(result.payload);
+    }
+
+    [Fact]
+    public void CreateNullPayloadEvent_ShouldAutomaticallyDisableValidation()
+    {
+        // Arrange
+        var factory = new EventFactory();
+        var command = new TestCommand("test-command");
+        var aggregateId = Guid.NewGuid();
+
+        // Verify factory starts with validation enabled
+        Assert.True(factory.ValidatePayload);
+
+        // Act
+        var result = factory.CreateNullPayloadEvent(command, aggregateId);
+
+        // Assert - Validation should be disabled after calling CreateNullPayloadEvent
+        Assert.False(factory.ValidatePayload);
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void CreateNullPayloadEvent_JsonSerialization_ShouldSerializeSuccessfully()
+    {
+        // Arrange
+        var command = new TestCommand("test-command");
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+
+        // Act
+        var result = new EventFactory().CreateNullPayloadEvent(command, aggregateId, userId, partitionKey);
+
+        // Act - Serialize to JSON using System.Text.Json (as used in Saga tests)
+        var json = System.Text.Json.JsonSerializer.Serialize(result);
+
+        // Assert - Should serialize without throwing exceptions
+        Assert.NotNull(json);
+        Assert.NotEmpty(json);
+        
+        // Verify JSON contains expected properties
+        Assert.Contains($"\"aggregateRootId\":\"{aggregateId}\"", json);
+        Assert.Contains($"\"userId\":\"{userId}\"", json);
+        Assert.Contains($"\"partitionKey\":\"{partitionKey}\"", json);
+        
+        // Verify payload is serialized as empty object
+        Assert.Contains("\"payload\":{}", json);
     }
 }

@@ -341,7 +341,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("Name is required", exception.Message);
     }
@@ -355,7 +355,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("Name is required", exception.Message);
     }
@@ -382,7 +382,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("Description is required for Create", exception.Message);
     }
@@ -396,7 +396,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("Description is required for Create", exception.Message);
     }
@@ -410,7 +410,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("Value must be between 1 and 100", exception.Message);
     }
@@ -424,7 +424,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: true));
         Assert.Contains("Invalid property 'extraProperty' found in payload", exception.Message);
     }
@@ -490,7 +490,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         
         // Should contain multiple error messages
@@ -536,7 +536,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("field description must be a string with a maximum length of 100", exception.Message);
     }
@@ -563,7 +563,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("Code must match pattern AAA-1234", exception.Message);
     }
@@ -610,7 +610,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         
         // Should contain multiple error messages
@@ -647,7 +647,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         
         // The RequiredFor attribute should trigger validation failure when value is missing for Test_ValueUpdate command
@@ -669,7 +669,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         
         // The RequiredFor attribute should trigger validation failure when value is missing for Test_ValueUpdate command
@@ -713,7 +713,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert - Should throw because Range validation still applies regardless of command
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("Value must be between 1 and 100", exception.Message);
     }
@@ -727,7 +727,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         
         // The RequiredFor attribute should trigger validation failure when value is missing for Test_TwoCommands command
@@ -743,7 +743,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         
         // The RequiredFor attribute should trigger validation failure when value is null for Test_TwoCommands command
@@ -772,7 +772,7 @@ public class EventTests
         var eventToTest = new Event(command, payload);
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             eventToTest.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         Assert.Contains("Value must be between 1 and 100", exception.Message);
     }
@@ -808,9 +808,9 @@ public class EventTests
         var eventTwoCommands = new Event(twoCommandsCommand, payloadWithoutValue);
 
         // Act & Assert - Both should throw ValidationException
-        var exception1 = Assert.Throws<ValidationException>(() => 
+        var exception1 = Assert.Throws<NostifyValidationException>(() => 
             eventValueUpdate.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
-        var exception2 = Assert.Throws<ValidationException>(() => 
+        var exception2 = Assert.Throws<NostifyValidationException>(() => 
             eventTwoCommands.ValidatePayload<TestAggregateWithValidation>(throwErrorIfExtraProps: false));
         
         // Both should complain about missing value
@@ -903,7 +903,7 @@ public class EventTests
         var payload = new { id = aggregateRootId, value = 150 }; // Missing required name, value out of range
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
         
         // Should contain validation errors
@@ -920,7 +920,7 @@ public class EventTests
         var payload = new { name = "Test Name", id = aggregateRootId }; // Missing required value for Test_ValueUpdate
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
         
         Assert.Contains("value", exception.Message.ToLower());
@@ -942,7 +942,7 @@ public class EventTests
         };
 
         // Act & Assert
-        var exception = Assert.Throws<ValidationException>(() => 
+        var exception = Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
         
         Assert.Contains("field description must be a string with a maximum length of 100", exception.Message);
@@ -1008,9 +1008,9 @@ public class EventTests
         var payloadWithValue = new { name = "Test Name", id = aggregateRootId, value = 50 };
 
         // Act & Assert - Both commands should require value
-        Assert.Throws<ValidationException>(() => 
+        Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregateWithValidation>(command1, aggregateRootId, payloadWithoutValue));
-        Assert.Throws<ValidationException>(() => 
+        Assert.Throws<NostifyValidationException>(() => 
             new EventFactory().Create<TestAggregateWithValidation>(command2, aggregateRootId, payloadWithoutValue));
 
         // Both should pass with value
