@@ -820,10 +820,10 @@ public class EventTests
 
     #endregion
 
-    #region EventBuilder.Create Tests
+    #region EventFactory.Create Tests
 
     [Fact]
-    public void EventBuilder_Create_ShouldCreateValidatedEventWithGuids()
+    public void EventFactory_Create_ShouldCreateValidatedEventWithGuids()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
@@ -833,7 +833,7 @@ public class EventTests
         var payload = new { name = "Test Name", id = aggregateRootId, value = 50 };
 
         // Act
-        var result = EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload, userId, partitionKey);
+        var result = new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload, userId, partitionKey);
 
         // Assert
         Assert.NotNull(result);
@@ -847,7 +847,7 @@ public class EventTests
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldCreateValidatedEventFromPayload()
+    public void EventFactory_Create_ShouldCreateValidatedEventFromPayload()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
@@ -857,7 +857,7 @@ public class EventTests
         var payload = new { name = "Test Name", id = aggregateRootId, value = 75 };
 
         // Act
-        var result = EventBuilder.Create<TestAggregateWithValidation>(command, payload, userId, partitionKey);
+        var result = new EventFactory().Create<TestAggregateWithValidation>(command, payload, userId, partitionKey);
 
         // Assert
         Assert.NotNull(result);
@@ -871,7 +871,7 @@ public class EventTests
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldCreateValidatedEventFromStrings()
+    public void EventFactory_Create_ShouldCreateValidatedEventFromStrings()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
@@ -881,7 +881,7 @@ public class EventTests
         var payload = new { name = "Test Name", id = aggregateRootId, value = 25 };
 
         // Act
-        var result = EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId.ToString(), payload, userId.ToString(), partitionKey.ToString());
+        var result = new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId.ToString(), payload, userId.ToString(), partitionKey.ToString());
 
         // Assert
         Assert.NotNull(result);
@@ -895,7 +895,7 @@ public class EventTests
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldThrowValidationException_WhenPayloadInvalid()
+    public void EventFactory_Create_ShouldThrowValidationException_WhenPayloadInvalid()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
@@ -904,7 +904,7 @@ public class EventTests
 
         // Act & Assert
         var exception = Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
+            new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
         
         // Should contain validation errors
         Assert.Contains("Name is required", exception.Message);
@@ -912,7 +912,7 @@ public class EventTests
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldThrowValidationException_WhenRequiredForCommandMissing()
+    public void EventFactory_Create_ShouldThrowValidationException_WhenRequiredForCommandMissing()
     {
         // Arrange
         var command = new NostifyCommand("Test_ValueUpdate", true);
@@ -921,13 +921,13 @@ public class EventTests
 
         // Act & Assert
         var exception = Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
+            new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
         
         Assert.Contains("value", exception.Message.ToLower());
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldValidateStringLengthAndRegex()
+    public void EventFactory_Create_ShouldValidateStringLengthAndRegex()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
@@ -943,14 +943,14 @@ public class EventTests
 
         // Act & Assert
         var exception = Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
+            new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload));
         
         Assert.Contains("field description must be a string with a maximum length of 100", exception.Message);
         Assert.Contains("Code must match pattern AAA-1234", exception.Message);
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldThrowArgumentException_WhenInvalidGuidStrings()
+    public void EventFactory_Create_ShouldThrowArgumentException_WhenInvalidGuidStrings()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
@@ -958,11 +958,11 @@ public class EventTests
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() => 
-            EventBuilder.Create<TestAggregateWithValidation>(command, "invalid-guid", payload, "invalid-user-guid", "invalid-partition-guid"));
+            new EventFactory().Create<TestAggregateWithValidation>(command, "invalid-guid", payload, "invalid-user-guid", "invalid-partition-guid"));
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldThrowArgumentException_WhenPayloadMissingId()
+    public void EventFactory_Create_ShouldThrowArgumentException_WhenPayloadMissingId()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
@@ -970,11 +970,11 @@ public class EventTests
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() => 
-            EventBuilder.Create<TestAggregateWithValidation>(command, payload));
+            new EventFactory().Create<TestAggregateWithValidation>(command, payload));
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldPassValidationWithAllValidAttributes()
+    public void EventFactory_Create_ShouldPassValidationWithAllValidAttributes()
     {
         // Arrange
         var command = new NostifyCommand("Test_Create", true);
@@ -988,7 +988,7 @@ public class EventTests
         };
 
         // Act
-        var result = EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload);
+        var result = new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload);
 
         // Assert - Should not throw and should create valid event
         Assert.NotNull(result);
@@ -998,7 +998,7 @@ public class EventTests
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldValidateMultipleCommands()
+    public void EventFactory_Create_ShouldValidateMultipleCommands()
     {
         // Arrange - Test both commands in RequiredFor array
         var command1 = new NostifyCommand("Test_ValueUpdate", true);
@@ -1009,20 +1009,20 @@ public class EventTests
 
         // Act & Assert - Both commands should require value
         Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregateWithValidation>(command1, aggregateRootId, payloadWithoutValue));
+            new EventFactory().Create<TestAggregateWithValidation>(command1, aggregateRootId, payloadWithoutValue));
         Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregateWithValidation>(command2, aggregateRootId, payloadWithoutValue));
+            new EventFactory().Create<TestAggregateWithValidation>(command2, aggregateRootId, payloadWithoutValue));
 
         // Both should pass with value
-        var result1 = EventBuilder.Create<TestAggregateWithValidation>(command1, aggregateRootId, payloadWithValue);
-        var result2 = EventBuilder.Create<TestAggregateWithValidation>(command2, aggregateRootId, payloadWithValue);
+        var result1 = new EventFactory().Create<TestAggregateWithValidation>(command1, aggregateRootId, payloadWithValue);
+        var result2 = new EventFactory().Create<TestAggregateWithValidation>(command2, aggregateRootId, payloadWithValue);
         
         Assert.NotNull(result1);
         Assert.NotNull(result2);
     }
 
     [Fact]
-    public void EventBuilder_Create_ShouldUseDefaultParametersWhenNotProvided()
+    public void EventFactory_Create_ShouldUseDefaultParametersWhenNotProvided()
     {
         // Arrange
         var command = new NostifyCommand("Test", true);
@@ -1030,7 +1030,7 @@ public class EventTests
         var payload = new { name = "Test Name", id = aggregateRootId, value = 50 };
 
         // Act - Using method without userId and partitionKey parameters
-        var result = EventBuilder.Create<TestAggregateWithValidation>(command, aggregateRootId, payload);
+        var result = new EventFactory().Create<TestAggregateWithValidation>(command, aggregateRootId, payload);
 
         // Assert - Should use default values (Guid.Empty for userId and partitionKey)
         Assert.NotNull(result);

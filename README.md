@@ -25,8 +25,8 @@
 
 - 3.6.0
   - Added `IEvent` interface for better abstraction and testability of Event objects
-  - Enhanced `EventBuilder` with optional validation parameter (defaults to true) for all Create methods
-  - Updated all templates to use `EventBuilder.Create<T>()` instead of direct Event instantiation for consistency
+  - Enhanced `EventFactory` (renamed from EventBuilder) with instance-based design and optional validation
+  - Updated all templates to use `new EventFactory().Create<T>()` instead of direct Event instantiation for consistency
   - Templates now reference nostify 3.6.0 across all project types (nostify, nostifyAggregate, nostifyProjection)
 - 3.5.0
   - Added comprehensive payload validation system with `ValidatePayload<T>()` method on Events
@@ -191,10 +191,14 @@ dotnet new nostifyProjection -ag <Base_Aggregate_Name> --projectionName <Project
 
 An `Event` captures a state change to the application.  Generally, this is caused by the user issuing a command such as "save".  When a command comes in from the front end to the endpoint, the http triggers a command handler function which validates the command, composes an `Event` and persists it to the event store.  Note that while a `Command` is always an `Event`, an `Event` is not necessarily always a `Command`.  It is possible for an `Event` to originate elsewhere, say from an IoT device for example.
 
-In a typical scenario, the `Event` is created in the command handler using the EventBuilder factory class, the `payload` is validated, and then saved to the event store:
+In a typical scenario, the `Event` is created in the command handler using the EventFactory factory class, the `payload` is validated, and then saved to the event store:
 
 ```C#
-Event pe = EventBuilder.Create<TestAggregate>(TestCommand.Create, newId, newTest);
+// Default behavior - validation enabled
+Event pe = new EventFactory().Create<TestAggregate>(TestCommand.Create, newId, newTest);
+
+// Or disable validation using method chaining
+Event pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
 await _nostify.PersistEventAsync(pe);
 ```
 
@@ -202,11 +206,15 @@ When a command becomes an `Event` the text name of the command becomes the topic
 
 #### Payload Validation
 
-Event payloads are validated by default. This is done by placing `ValidationAttribute` attributes on the properties of the Aggregate the Command is being performed on. This ensures that required properties are present and valid according to the specified command. Only properties present on the current payload will be validated, except for `[Required]` and `[RequiredFor()]`. 
+Event payloads are validated by default when using EventFactory. This is done by placing `ValidationAttribute` attributes on the properties of the Aggregate the Command is being performed on. This ensures that required properties are present and valid according to the specified command. Only properties present on the current payload will be validated, except for `[Required]` and `[RequiredFor()]`. 
 
 ```C#
-Event pe = EventBuilder.Create<TestAggregate>(TestCommand.Create, newId, newTest);
-pe.ValidatePayload<TestAggregate>(throwErrorIfExtraProps: false);
+// EventFactory validates by default - no need for manual validation
+Event pe = new EventFactory().Create<TestAggregate>(TestCommand.Create, newId, newTest);
+await _nostify.PersistEventAsync(pe);
+
+// Or skip validation if needed
+Event pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
 await _nostify.PersistEventAsync(pe);
 ```
 

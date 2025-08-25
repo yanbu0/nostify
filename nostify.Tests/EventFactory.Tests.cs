@@ -5,7 +5,7 @@ using nostify;
 
 namespace nostify.Tests;
 
-public class EventBuilderTests
+public class EventFactoryTests
 {
     public class TestAggregate : NostifyObject, IAggregate
     {
@@ -40,7 +40,7 @@ public class EventBuilderTests
 
         // Act & Assert
         var exception = Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregate>(command, aggregateId, invalidPayload, validate: true));
+            new EventFactory().Create<TestAggregate>(command, aggregateId, invalidPayload));
         
         Assert.Contains("Name is required", exception.Message);
     }
@@ -54,7 +54,7 @@ public class EventBuilderTests
         var invalidPayload = new { id = aggregateId }; // Missing required 'name'
 
         // Act - Should not throw even with invalid payload
-        var result = EventBuilder.Create<TestAggregate>(command, aggregateId, invalidPayload, validate: false);
+        var result = new EventFactory().NoValidate().Create<TestAggregate>(command, aggregateId, invalidPayload);
 
         // Assert
         Assert.NotNull(result);
@@ -72,7 +72,7 @@ public class EventBuilderTests
 
         // Act & Assert - Default behavior should validate
         var exception = Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregate>(command, aggregateId, invalidPayload));
+            new EventFactory().Create<TestAggregate>(command, aggregateId, invalidPayload));
         
         Assert.Contains("Name is required", exception.Message);
     }
@@ -87,7 +87,7 @@ public class EventBuilderTests
 
         // Act & Assert
         var exception = Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregate>(command, invalidPayload, validate: true));
+            new EventFactory().Create<TestAggregate>(command, invalidPayload));
         
         Assert.Contains("Name is required", exception.Message);
     }
@@ -101,7 +101,7 @@ public class EventBuilderTests
         var invalidPayload = new { id = aggregateId }; // Missing required 'name'
 
         // Act - Should not throw even with invalid payload
-        var result = EventBuilder.Create<TestAggregate>(command, invalidPayload, validate: false);
+        var result = new EventFactory().NoValidate().Create<TestAggregate>(command, invalidPayload);
 
         // Assert
         Assert.NotNull(result);
@@ -121,7 +121,7 @@ public class EventBuilderTests
 
         // Act & Assert
         var exception = Assert.Throws<ValidationException>(() => 
-            EventBuilder.Create<TestAggregate>(command, aggregateId, invalidPayload, userId, partitionKey, validate: true));
+            new EventFactory().Create<TestAggregate>(command, aggregateId, invalidPayload, userId, partitionKey));
         
         Assert.Contains("Name is required", exception.Message);
     }
@@ -137,11 +137,66 @@ public class EventBuilderTests
         var invalidPayload = new { id = aggregateId }; // Missing required 'name'
 
         // Act - Should not throw even with invalid payload
-        var result = EventBuilder.Create<TestAggregate>(command, aggregateId, invalidPayload, userId, partitionKey, validate: false);
+        var result = new EventFactory().NoValidate().Create<TestAggregate>(command, aggregateId, invalidPayload, userId, partitionKey);
 
         // Assert
         Assert.NotNull(result);
         Assert.Equal(command, result.command);
         Assert.Equal(Guid.Parse(aggregateId), result.aggregateRootId);
+    }
+
+    [Fact]
+    public void NoValidate_ShouldReturnSameInstance()
+    {
+        // Arrange
+        var factory = new EventFactory();
+
+        // Act
+        var result = factory.NoValidate();
+
+        // Assert
+        Assert.Same(factory, result);
+        Assert.False(factory.ValidatePayload);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldDefaultToTrue()
+    {
+        // Arrange & Act
+        var factory = new EventFactory();
+
+        // Assert
+        Assert.True(factory.ValidatePayload);
+    }
+
+    [Fact]
+    public void NoValidate_ShouldAllowMethodChaining()
+    {
+        // Arrange
+        var command = TestCommand.Create;
+        var aggregateId = Guid.NewGuid();
+        var invalidPayload = new { id = aggregateId }; // Missing required 'name'
+
+        // Act - Should not throw due to chained NoValidate()
+        var result = new EventFactory()
+            .NoValidate()
+            .Create<TestAggregate>(command, aggregateId, invalidPayload);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+    }
+
+    [Fact]
+    public void EventFactory_SeparateInstances_ShouldHaveIndependentValidationSettings()
+    {
+        // Arrange
+        var factory1 = new EventFactory();
+        var factory2 = new EventFactory().NoValidate();
+
+        // Assert
+        Assert.True(factory1.ValidatePayload);
+        Assert.False(factory2.ValidatePayload);
     }
 }
