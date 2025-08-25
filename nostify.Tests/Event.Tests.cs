@@ -1040,4 +1040,149 @@ public class EventTests
     }
 
     #endregion
+
+    #region EventFactory Tests
+
+    [Fact]
+    public void EventFactory_Create_ShouldCreateValidatedEventWithPayload()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { name = "Test Name", id = aggregateRootId, value = 75 };
+
+        // Act
+        var result = EventFactory.Create<TestAggregateWithValidation>(command, aggregateRootId, payload, userId, partitionKey);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Equal(payload, result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventFactory_Create_ShouldCreateValidatedEventFromPayload()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { name = "Test Name", id = aggregateRootId, value = 75 };
+
+        // Act
+        var result = EventFactory.Create<TestAggregateWithValidation>(command, payload, userId, partitionKey);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId); // Should be parsed from payload
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Equal(payload, result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventFactory_Create_ShouldCreateValidatedEventFromStrings()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { name = "Test Name", id = aggregateRootId, value = 25 };
+
+        // Act
+        var result = EventFactory.Create<TestAggregateWithValidation>(command, aggregateRootId.ToString(), payload, userId.ToString(), partitionKey.ToString());
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Equal(payload, result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldCreateEventWithNullPayload()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+
+        // Act
+        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId, userId, partitionKey);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Null(result.payload); // Should be null
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldUseDefaultParameters()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act - Using method without userId and partitionKey parameters
+        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+
+        // Assert - Should use default values (Guid.Empty for userId and partitionKey)
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(Guid.Empty, result.userId);
+        Assert.Equal(Guid.Empty, result.partitionKey);
+        Assert.Null(result.payload); // Should be null
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldNotValidatePayload()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act & Assert - Should not throw because no validation is performed
+        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+        
+        // This should work without throwing exceptions even though payload is null
+        Assert.NotNull(result);
+        Assert.Null(result.payload);
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldThrowWhenCommandIsNull()
+    {
+        // Arrange
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => EventFactory.CreateNullPayloadEvent(null!, aggregateRootId));
+    }
+
+    #endregion
 }
