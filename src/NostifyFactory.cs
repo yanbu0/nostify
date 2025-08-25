@@ -77,7 +77,7 @@ public class NostifyConfig
     /// The IHttpClientFactory instance for creating HttpClient instances to make HTTP requests.
     /// </summary>
     public IHttpClientFactory? httpClientFactory { get; set; } = null;
-    
+
 }
 
 ///<summary>
@@ -198,7 +198,7 @@ public static class NostifyFactory
         );
     }
 
-    
+
     /// <summary>
     /// Builds the Nostify instance. Will autocreate topics in Kafka for each NostifyCommand found in the assembly of T.
     /// </summary>
@@ -208,21 +208,21 @@ public static class NostifyFactory
     {
 
         //Create Confluent admin client
-         if (verbose) Console.WriteLine("Building Admin Client");
+        if (verbose) Console.WriteLine("Building Admin Client");
         var adminClientConfig = new AdminClientConfig(config.producerConfig);
         var adminClient = new AdminClientBuilder(adminClientConfig).Build();
-         if (verbose) Console.WriteLine("Admin Client built");
+        if (verbose) Console.WriteLine("Admin Client built");
 
         //Find all NostifyCommand instances in this assembly of T and create a topic for each
         var assembly = typeof(T).Assembly;
         var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
-         if (verbose) Console.WriteLine($"Found {string.Join(", ",commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
+        if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
         //Get any static properties of each commandType that inherit type NostifyCommand        
         var commandProperties = commandTypes
             .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(p => p.FieldType.IsSubclassOf(typeof(NostifyCommand))));
 
-         if (verbose) Console.WriteLine($"Found {string.Join(", ",commandProperties.Select(c => c.Name))} commands");
+        if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");
 
         List<TopicSpecification> topics = new List<TopicSpecification>();
         foreach (var commandType in commandProperties)
@@ -235,19 +235,19 @@ public static class NostifyFactory
         //Filter topics to only create new topics
         var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
         topics = topics.Where(t => !existingTopics.Any(et => et.Topic == t.Name)).ToList();
-         if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
+        if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
 
         //Create any new topics needed
         if (topics.Count > 0)
         {
             adminClient.CreateTopicsAsync(topics).Wait();
             var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-             if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+            if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
         }
-        
+
         var nostify = Build(config);
 
-         if (verbose) Console.WriteLine($"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}");
+        if (verbose) Console.WriteLine($"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}");
         if (config.createContainers)
         {
             nostify.CreateContainersAsync<T>(false, config.containerThroughput, verbose).Wait();

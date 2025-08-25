@@ -13,7 +13,7 @@ public static class ProjectionExtensions
     ///<summary>
     ///Initialize this instance of the Projection.  Will requery all needed external data.
     ///</summary>
-    public static async Task<P> InitAsync<P>(this P self, INostify nostify, HttpClient? httpClient = null) 
+    public static async Task<P> InitAsync<P>(this P self, INostify nostify, HttpClient? httpClient = null)
         where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         P? initProj = (await nostify.ProjectionInitializer.InitAsync(new List<P>() { self }, nostify, httpClient)).FirstOrDefault();

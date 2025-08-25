@@ -10,10 +10,8 @@ using Newtonsoft.Json;
 
 namespace nostify;
 
-/// <summary>
-/// Represents events in event store
-/// </summary>
-public class Event
+/// <inheritdoc />
+public class Event : IEvent
 {
     /// <summary>
     /// Constructor for Event, use when creating object to save to event store
@@ -107,37 +105,22 @@ public class Event
     /// </summary>
     public Event() { }
 
-    /// <summary>
-    /// Timestamp of event
-    /// </summary>
+    /// <inheritdoc />
     public DateTime timestamp { get; set; } = DateTime.UtcNow;
 
-    /// <summary>
-    /// Partition key to apply event to
-    /// </summary>
+    /// <inheritdoc />
     public Guid partitionKey { get; set; }
 
-    /// <summary>
-    /// Id of user
-    /// </summary>
+    /// <inheritdoc />
     public Guid userId { get; set; }
 
-    /// <summary>
-    /// Id of event
-    /// </summary>
+    /// <inheritdoc />
     public Guid id { get; set; }
 
-    /// <summary>
-    /// Command to perform, defined in Aggregate implementation
-    /// </summary>
+    /// <inheritdoc />
     public NostifyCommand command { get; set; }  //This is an object because otherwise newtonsoft.json pukes creating an NostifyCommand
 
-    /// <summary>
-    /// Key of the Aggregate to perform the event on
-    /// </summary>
-    /// <para>
-    /// <strong>The series of events for an Aggregate should have the same key.</strong>
-    /// </para>
+    /// <inheritdoc />
     public Guid aggregateRootId { get; set; }
 
     /// <summary>
@@ -145,41 +128,23 @@ public class Event
     /// </summary>
     protected int schemaVersion = 1; //Update to reflect schema changes in Persisted Event
 
-    /// <summary>
-    /// Object containing properties of Aggregate to perform the command on
-    /// </summary>
-    /// <para>
-    /// Properties must be the exact same name to have updates applied.
-    /// </para>
-    /// <para>
-    /// Delete command should contain solelly the id value of the Aggregate to delete.
-    /// </para>
+    /// <inheritdoc />
     public object payload { get; set; }
 
-    /// <summary>
-    /// Checks if the payload of this event has a property
-    /// </summary>
-    /// <param name="propertyName">Property to check for</param>
+    /// <inheritdoc />
     public bool PayloadHasProperty(string propertyName)
     {
         return payload.GetType().GetProperty(propertyName) != null;
     }
 
-    /// <summary>
-    /// Returns typed value of payload
-    /// </summary>
+    /// <inheritdoc />
     public T GetPayload<T>()
     {
         return JObject.FromObject(payload).ToObject<T>() ?? throw new NullReferenceException($"Payload is null for type {typeof(T).Name}");
     }
 
-    /// <summary>
-    /// Validates if the payload contains all required properties for performing a command on an aggregate of type T.
-    /// </summary>
-    /// <param name="throwErrorIfExtraProps">If true, will throw a ValidationException if any properties on payload not existing on T are found.</param>
-    /// <returns>Returns the event for chaining.</returns>
-    /// <typeparam name="T">The type of the aggregate to validate against.</typeparam>
-    public Event ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : NostifyObject, IAggregate
+    /// <inheritdoc />
+    public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : NostifyObject, IAggregate
     {
         // Remove properties that do not exist on the Aggregate, 
         JObject cleanedPayload = RemoveNonExistentPayloadProperties<T>(throwErrorIfExtraProps, out List<ValidationResult> validationMessages) as JObject ?? throw new NullReferenceException("Payload cannot be null after removing non-existent properties.");
@@ -223,7 +188,7 @@ public class Event
         // If there are any validation messages left, throw a ValidationException
         if (validationMessages.Any())
         {
-            throw new ValidationException($"Payload validation failed. {validationMessages.Select(vm => vm.ErrorMessage).Aggregate((current, next) => $"{current} {next}")}");
+            throw new NostifyValidationException(validationMessages);
         }
 
         return this;

@@ -170,7 +170,7 @@ public interface INostify
     ///Retrieves the undeliverable events container
     ///</summary>>
     public Task<Container> GetUndeliverableEventsContainerAsync();
-    
+
     ///<summary>
     ///Retrieves the saga container
     ///</summary>
@@ -235,13 +235,13 @@ public interface INostify
     ///Must have called WithHttp() in the NostifyFactory builder to use this method or it will throw an error.
     ///</summary>
     public Task<List<P>> InitAsync<P, A>(Guid id) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new();
-   
+
     ///<summary>
     ///Initialize the Projections with the specified ids.  Will requery all needed data from all services.
     ///Must have called WithHttp() in the NostifyFactory builder to use this method or it will throw an error.
     ///</summary>
     public Task<List<P>> InitAsync<P, A>(List<Guid> idsToInit) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new();
-    
+
     /// <summary>
     /// Initializes a list of projections asynchronously. Will requery all needed data from all external services, set <c>initialized = true</c> and update projection container. 
     /// Must have called WithHttp() in the NostifyFactory builder to use this method or it will throw an error.
@@ -249,7 +249,7 @@ public interface INostify
     /// <param name="projectionsToInit">List of projections to initialize.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains a list of initialized projections of type T.</returns>
     public Task<List<P>> InitAsync<P>(List<P> projectionsToInit) where P : NostifyObject, IProjection, IHasExternalData<P>, new();
-    
+
     ///<summary>
     ///Recreate container for this Projection.  
     ///Will delete container and recreate it then will query the specified base Aggregate where isDeleted == false and populate all matching properties in the projection. 
@@ -261,7 +261,7 @@ public interface INostify
     ///<param name="partitionKeyPath">Path to the partition key.  Defaults to "/tenantId".</param>
     ///<param name="loopSize">Number of items to init at a time.  Defaults to 1000.</param>
     public Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 1000) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new();
-    
+
     ///<summary>
     ///Init all non-initialized projections in the container.  Will requery all needed data from all external services by calling InitAsync  
     ///</summary>

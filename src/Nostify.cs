@@ -107,7 +107,7 @@ public class Nostify : INostify
             foreach (Event pe in peList)
             {
                 string topic = pe.command.name;
-                var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string>{  Value = JsonConvert.SerializeObject(pe) });
+                var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) });
 
                 if (showOutput) Console.WriteLine($"Event published to topic {topic} with key {result.Key} and value {result.Value}");
             }
@@ -117,7 +117,7 @@ public class Nostify : INostify
     ///<inheritdoc />
     public async Task PublishEventAsync(Event eventToPublish)
     {
-        List<Event> peList = new List<Event>(){eventToPublish};
+        List<Event> peList = new List<Event>() { eventToPublish };
         await PublishEventAsync(peList);
     }
 
@@ -153,7 +153,7 @@ public class Nostify : INostify
         //Only return first 1000 results to avoid overwhelming caller
         return succesfulTasks.Take(1000).ToList();
     }
-    
+
     ///<inheritdoc />
     public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
     {
@@ -218,7 +218,7 @@ public class Nostify : INostify
     private Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, Event pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()
     {
         return bulkContainer.ApplyAndPersistAsync<P>(
-                                new List<Event>() {pe}, pk.ToPartitionKey(), id
+                                new List<Event>() { pe }, pk.ToPartitionKey(), id
                             ).ContinueWith(itemResponse =>
                             {
                                 if (!itemResponse.IsCompletedSuccessfully)
@@ -230,7 +230,7 @@ public class Nostify : INostify
                                         int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
                                         Task.Delay(waitTime).ContinueWith(_ => bulkContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
                                             .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)));
-                                    } 
+                                    }
                                     else
                                     {
                                         //This will cause a record to get written to the undeliverable events container for retry later if needed
@@ -246,7 +246,7 @@ public class Nostify : INostify
     public async Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
     {
         var eventContainer = await GetEventStoreContainerAsync(true);
-        
+
         //If batchSize is not null, set loopSize to batchSize, otherwise loop through all events
         int loopSize = batchSize.HasValue ? batchSize.Value : events.Count;
 
@@ -256,8 +256,9 @@ public class Nostify : INostify
             var eventBatch = events.Skip(i).Take(loopSize).ToList();
 
             List<Task> taskList = new List<Task>();
-            eventBatch.ForEach(pe => {
-                taskList.Add(eventContainer.CreateItemAsync(pe,pe.aggregateRootId.ToPartitionKey())
+            eventBatch.ForEach(pe =>
+            {
+                taskList.Add(eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
                         .ContinueWith(itemResponse =>
                         {
                             if (!itemResponse.IsCompletedSuccessfully)
@@ -269,7 +270,7 @@ public class Nostify : INostify
                                     int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
                                     Task.Delay(waitTime).ContinueWith(_ => eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
                                         .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)));
-                                } 
+                                }
                                 else
                                 {
                                     //This will cause a record to get written to the undeliverable events container for retry later if needed
@@ -301,7 +302,7 @@ public class Nostify : INostify
     public async Task<T> RehydrateAsync<T>(Guid id, DateTime? untilDate = null) where T : NostifyObject, IAggregate, new()
     {
         var eventContainer = await GetEventStoreContainerAsync();
-        
+
         T rehyd = new T();
         List<Event> peList = await eventContainer.GetItemLinqQueryable<Event>()
             .Where(pe => pe.aggregateRootId == id
@@ -318,10 +319,10 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task<P> RehydrateAsync<P,A>(Guid id, HttpClient httpClient) where P : NostifyObject, IProjection, IHasExternalData<P>, new() where A : NostifyObject, IAggregate, new()
+    public async Task<P> RehydrateAsync<P, A>(Guid id, HttpClient httpClient) where P : NostifyObject, IProjection, IHasExternalData<P>, new() where A : NostifyObject, IAggregate, new()
     {
         var eventContainer = await GetEventStoreContainerAsync();
-        
+
         P rehydratedProjection = new P();
         List<Event> eventList = await eventContainer.GetItemLinqQueryable<Event>()
             .Where(e => e.aggregateRootId == id)
@@ -372,7 +373,7 @@ public class Nostify : INostify
     public async Task<Container> GetContainerAsync(string containerName, bool bulkEnabled, string partitionKeyPath)
     {
         return await Repository.GetContainerAsync(containerName, partitionKeyPath, bulkEnabled);
-    } 
+    }
 
 
     ///<inheritdoc />
@@ -394,7 +395,7 @@ public class Nostify : INostify
             .Select(pe => pe.aggregateRootId)
             .Distinct()
             .ReadAllAsync();
-        
+
         //TODO: probably can just use the feed iterator here?
         //Loop through a query the events for 1,000 at a time, then rehydrate 
         const int GET_THIS_MANY = 1000;
@@ -403,26 +404,28 @@ public class Nostify : INostify
         while (i < endOfRange)
         {
             int rangeNum = (i + GET_THIS_MANY >= endOfRange) ? endOfRange - 1 : i + GET_THIS_MANY;
-            var aggRange = uniqueAggregateRootIds.GetRange(i,rangeNum);
+            var aggRange = uniqueAggregateRootIds.GetRange(i, rangeNum);
 
             var peList = await eventStore.GetItemLinqQueryable<Event>()
                 .Where(pe => aggRange.Contains(pe.aggregateRootId))
                 .ReadAllAsync();
-            
-            aggRange.ForEach(id => {
+
+            aggRange.ForEach(id =>
+            {
                 rehydratedAggregates.Add(Rehydrate<T>(peList.Where(e => e.aggregateRootId == id).OrderBy(e => e.timestamp).ToList()));
             });
             i = i + GET_THIS_MANY;
         }
-        
+
         //Recreate container
         Container rebuiltContainer = await GetContainerAsync(containerName, true, partitionKeyPath);
 
         //Save
         List<Task> saveTasks = new List<Task>();
-        rehydratedAggregates.ForEach(agg => {
+        rehydratedAggregates.ForEach(agg =>
+        {
             saveTasks.Add(rebuiltContainer.UpsertItemAsync<T>(agg));
-        });   
+        });
         await Task.WhenAll(saveTasks);
     }
 
@@ -434,23 +437,23 @@ public class Nostify : INostify
     ///</returns>
     ///<param name="peList">The event stream for the aggregate to be rehydrated</param>
     private T Rehydrate<T>(List<Event> peList) where T : NostifyObject, new()
-    {            
+    {
         T rehyd = new T();
-        foreach (var pe in peList) 
+        foreach (var pe in peList)
         {
             rehyd.Apply(pe);
         }
 
         return rehyd;
     }
-    
+
 
     ///<inheritdoc />
     public async Task<Container> GetUndeliverableEventsContainerAsync()
     {
         return await GetContainerAsync(Repository.UndeliverableEvents, false, "/aggregateRootId");
     }
-    
+
     ///<inheritdoc />
     public async Task<Container> GetSagaContainerAsync()
     {
@@ -479,7 +482,7 @@ public class Nostify : INostify
             throughput = 400; // Set a default throughput for local emulator
             Console.WriteLine("Using default throughput of 400 for local emulator since none was set. This will probably be really slow.");
         }
-        
+
         if (localhostOnly && !Repository.IsLocalEmulator)
         {
             Console.WriteLine("Not running on localhost. Containers will not be created.");
@@ -497,7 +500,7 @@ public class Nostify : INostify
             Console.WriteLine("Database name is null or empty. Containers will not be created.");
             return;
         }
-        
+
         // get the calling assembly
         var assembly = typeof(TTypeInAssembly).Assembly;
 
@@ -551,7 +554,7 @@ public class Nostify : INostify
         var httpClient = HttpClientFactory.CreateClient();
         return await ProjectionInitializer.InitAsync<P>(projectionsToInit, this, httpClient);
     }
-    
+
     ///<inheritdoc />
     public async Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 1000) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
@@ -642,7 +645,7 @@ public class Nostify : INostify
 
         return null;
     }
-    
+
 }
 
 

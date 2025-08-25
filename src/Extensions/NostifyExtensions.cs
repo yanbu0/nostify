@@ -39,7 +39,7 @@ public static class NostifyExtensions
             value = default(T);
             return false;
         }
-        else 
+        else
         {
             try
             {
@@ -57,14 +57,17 @@ public static class NostifyExtensions
     ///<summary>
     ///Gets a typed value from JObject by property name
     ///</summary>
-    public static T GetValue<T>(this JObject data, string propertyName)
+    public static T? GetValue<T>(this JObject data, string propertyName)
     {
-        JToken jToken = data.Children<JProperty>()
+        JToken? jToken = data.Children<JProperty>()
                     .Where(p => p.Name == propertyName)
                     .Select(u => u.Value)
-                    .Single();
+                    .SingleOrDefault();
 
-        T retVal = jToken.ToObject<T>();
+            return default;
+        }
+
+        T? retVal = jToken.ToObject<T>();
 
         return retVal;
     }
@@ -93,7 +96,7 @@ public static class NostifyExtensions
         return Guid.TryParse(value, out Guid guid) ? guid : throw new FormatException("String is not a Guid");
     }
 
-    
+
     ///<summary>
     ///Reads from Stream into <c>dynamic</c>
     ///<para>
@@ -107,7 +110,7 @@ public static class NostifyExtensions
     {
         //Read body, throw error if null
         dynamic updateObj = JsonConvert.DeserializeObject<dynamic>(await new StreamReader(body).ReadToEndAsync()) ?? throw new NostifyException("Body contains no data");
-        
+
         //Check for "id" property, throw error if not exists.  Ignore if isCreate is true since create objects don't have ids yet.
         if (!isCreate && updateObj.id == null)
         {
@@ -117,5 +120,5 @@ public static class NostifyExtensions
         return updateObj;
     }
 
-    
+
 }

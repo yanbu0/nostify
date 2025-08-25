@@ -52,7 +52,7 @@ public class NostifyErrorEvent : Event
     /// <param name="errorPayload">Error payload for the event that failed. Will contain error message and payload.</param>
     /// <param name="userId">The user identifier.</param>
     /// <param name="partitionKey">The partition key.</param>
-    public NostifyErrorEvent(ErrorCommand errorCommand, Guid aggregateRootId, ErrorPayload errorPayload, Guid userId, Guid partitionKey) 
+    public NostifyErrorEvent(ErrorCommand errorCommand, Guid aggregateRootId, ErrorPayload errorPayload, Guid userId, Guid partitionKey)
         : base(errorCommand, aggregateRootId, errorPayload, userId, partitionKey)
     {
     }

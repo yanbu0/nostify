@@ -29,7 +29,7 @@ public class NostifyCommand
     ///<summary>
     ///Base Constructor
     ///</summary>
-    ///<param name="name">Human readable friendly name of command</param>
+    ///<param name="name">Human readable friendly name of command. MUST BE UNIQUE - should follow convention "{Action}_{Entity Name}", ie - "Create_User".  This will also become the name of the related Kafka topic.</param>
     ///<param name="isNew">Signifies if this command results in the creation of a new aggregate</param>
     /// <param name="allowNullPayload">Allows null payloads to be sent with this command</param>
     public NostifyCommand(string name, bool isNew = false, bool allowNullPayload = false)
@@ -52,12 +52,15 @@ public class NostifyCommand
     ///</summary>
     public override bool Equals(object obj)
     {
+        if (obj == null || !typeof(NostifyCommand).IsAssignableFrom(obj.GetType()))
+            return false;
+            
         var otherValue = obj as NostifyCommand;
 
         // if (otherValue == null)
         //     return false;
 
-        var t= obj.GetType();
+        var t = obj.GetType();
         var t2 = GetType();
         var typeMatches = typeof(NostifyCommand).IsAssignableFrom(obj.GetType());
         var valueMatches = name.Equals(otherValue.name);

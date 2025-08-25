@@ -75,7 +75,7 @@ public class Saga : ISaga
             var step = steps.OrderBy(x => x.order).FirstOrDefault(x => x.status == SagaStepStatus.WaitingForTrigger);
             return step != null ? steps.IndexOf(step) : -1;
         }
-        
+
     }
 
     /// <inheritdoc/>
@@ -98,7 +98,7 @@ public class Saga : ISaga
         {
             return -1;
         }
-        
+
     }
 
     /// <inheritdoc/>
@@ -137,7 +137,7 @@ public class Saga : ISaga
         status = SagaStatus.Pending;
         createdOn = DateTime.UtcNow;
     }
-    
+
     /// <inheritdoc/>
     public void AddStep(Event stepEvent, Event? rollbackEvent = null)
     {
@@ -186,7 +186,7 @@ public class Saga : ISaga
             // Trigger the next step
             await TriggerNextStepAfterSuccess(nostify);
         }
-        
+
         // Complete the current step, this needs to be done after the next step is triggered
         currentStep.Complete(successData);
 
@@ -218,7 +218,7 @@ public class Saga : ISaga
     {
         // Check if the saga is in progress
         if (status != SagaStatus.InProgress) throw new InvalidOperationException("Saga is not in progress.");
-        
+
         // Get the currently executing step
         ISagaStep currentStep = GetCurrentlyExecutingStep() ?? throw new InvalidOperationException("Saga has no currently executing step.");
 
@@ -260,7 +260,7 @@ public class Saga : ISaga
                 CompleteSagaRollback();
             }
         }
-        
+
         await SaveAsync(nostify);
     }
 
