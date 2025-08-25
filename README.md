@@ -26,6 +26,7 @@
 - 3.6.0
   - Added `IEvent` interface for better abstraction and testability of Event objects
   - Enhanced `EventFactory` (renamed from EventBuilder) with instance-based design and optional validation
+  - Added `CreateNullPayloadEvent()` method to EventFactory for operations without payload data (e.g., delete operations)
   - Updated all templates to use `new EventFactory().Create<T>()` instead of direct Event instantiation for consistency
   - Templates now reference nostify 3.6.0 across all project types (nostify, nostifyAggregate, nostifyProjection)
 - 3.5.0
@@ -216,6 +217,10 @@ await _nostify.PersistEventAsync(pe);
 // Or skip validation if needed
 Event pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
 await _nostify.PersistEventAsync(pe);
+
+// For events with no payload data (like delete operations)
+Event pe = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
+await _nostify.PersistEventAsync(pe);
 ```
 
 Most of the time, you will want to use `RequiredFor` instead of `Required` to mark a property as required for that specific command or list of commands. `Required` is still a valid validation attribute, but it will require that property to be present and not null for EVERY command:
@@ -229,6 +234,24 @@ public class TestAggregate : NostifyObject, IAggregate
     [RequiredFor(["Update_Test", "Create_Test"])]
     public int Value { get; set; }
 }
+```
+
+#### CreateNullPayloadEvent Method
+
+The `CreateNullPayloadEvent` method is specifically designed for operations that don't require payload data, such as delete operations or events that only need to record that an action occurred. This method:
+
+- Automatically disables validation (since there's no meaningful payload to validate)
+- Creates an event with an empty object as payload
+- Is ideal for delete operations, status changes, or audit trail events
+
+```C#
+// Typical delete operation - no payload data needed
+Event deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
+await _nostify.PersistEventAsync(deleteEvent);
+
+// With user and partition information
+Event deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId, userId, partitionKey);
+await _nostify.PersistEventAsync(deleteEvent);
 ```
 
 ### Command
