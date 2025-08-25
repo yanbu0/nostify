@@ -63,8 +63,10 @@
 ### Coming Soon
 
 - Improved/Updated Documentation
-- Updated example repo, current one is v1, not worth looking at
 - Better test coverage
+- ValidationException middleware
+- Bump example repo up to 3.6
+- Better support for non-command events
 
 ## Getting Started
 
