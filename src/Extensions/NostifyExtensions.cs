@@ -57,14 +57,19 @@ public static class NostifyExtensions
     ///<summary>
     ///Gets a typed value from JObject by property name
     ///</summary>
-    public static T GetValue<T>(this JObject data, string propertyName)
+    public static T? GetValue<T>(this JObject data, string propertyName)
     {
-        JToken jToken = data.Children<JProperty>()
+        JToken? jToken = data.Children<JProperty>()
                     .Where(p => p.Name == propertyName)
                     .Select(u => u.Value)
-                    .Single();
+                    .SingleOrDefault();
 
-        T retVal = jToken.ToObject<T>();
+        if (jToken == null)
+        {
+            return default(T);
+        }
+
+        T? retVal = jToken.ToObject<T>();
 
         return retVal;
     }

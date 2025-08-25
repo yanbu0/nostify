@@ -52,6 +52,9 @@ public class NostifyCommand
     ///</summary>
     public override bool Equals(object obj)
     {
+        if (obj == null || !typeof(NostifyCommand).IsAssignableFrom(obj.GetType()))
+            return false;
+            
         var otherValue = obj as NostifyCommand;
 
         // if (otherValue == null)

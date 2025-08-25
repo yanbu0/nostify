@@ -51,7 +51,7 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     /// </returns>
     protected override ValidationResult IsValid(object? value, ValidationContext validationContext)
     {
-        NostifyCommand? command = validationContext.Items["command"] as NostifyCommand;
+        NostifyCommand? command = validationContext.Items.ContainsKey("command") ? validationContext.Items["command"] as NostifyCommand : null;
         // If command is null return ValidationResult
         if (command is null)
         {
