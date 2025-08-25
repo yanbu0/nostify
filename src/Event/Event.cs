@@ -188,7 +188,7 @@ public class Event : IEvent
         // If there are any validation messages left, throw a ValidationException
         if (validationMessages.Any())
         {
-            throw new ValidationException($"Payload validation failed. {validationMessages.Select(vm => vm.ErrorMessage).Aggregate((current, next) => $"{current} {next}")}");
+            throw new NostifyValidationException(validationMessages);
         }
 
         return this;
