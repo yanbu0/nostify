@@ -1040,4 +1040,97 @@ public class EventTests
     }
 
     #endregion
+
+    #region EventFactory.CreateNullPayloadEvent Tests
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldCreateEventWithNullPayload()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+
+        // Act
+        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId, userId, partitionKey);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.Null(result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldUseDefaultParametersWhenNotProvided()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act
+        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(command, result.command);
+        Assert.Equal(aggregateRootId, result.aggregateRootId);
+        Assert.Equal(Guid.Empty, result.userId);
+        Assert.Equal(Guid.Empty, result.partitionKey);
+        Assert.Null(result.payload);
+        Assert.NotEqual(Guid.Empty, result.id);
+        Assert.True(result.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldThrowArgumentNullException_WhenCommandIsNull()
+    {
+        // Arrange
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => 
+            EventFactory.CreateNullPayloadEvent(null!, aggregateRootId));
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldNotValidatePayload()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act - This should not throw any validation exceptions
+        var result = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Null(result.payload);
+        // The fact that we get here without exception proves payload validation was skipped
+    }
+
+    [Fact]
+    public void EventFactory_CreateNullPayloadEvent_ShouldCreateUniqueIds()
+    {
+        // Arrange
+        var command = new NostifyCommand("Test_Delete", true);
+        var aggregateRootId = Guid.NewGuid();
+
+        // Act
+        var result1 = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+        var result2 = EventFactory.CreateNullPayloadEvent(command, aggregateRootId);
+
+        // Assert
+        Assert.NotEqual(result1.id, result2.id);
+        // Both should still have the same other properties
+        Assert.Equal(result1.command, result2.command);
+        Assert.Equal(result1.aggregateRootId, result2.aggregateRootId);
+    }
+
+    #endregion
 }

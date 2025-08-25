@@ -23,6 +23,10 @@
 
 ### Updates
 
+- 3.6.0
+  - Added `EventFactory` class to create Event instances for the event store
+  - Introduced `EventFactory.CreateNullPayloadEvent()` method for creating Events with null payloads without validation, specifically for delete operations
+  - Updated Delete command handlers in templates to use the new `CreateNullPayloadEvent` method
 - 3.5.0
   - Added comprehensive payload validation system with `ValidatePayload<T>()` method on Events
   - Introduced `RequiredForAttribute` to specify command-specific property validation requirements
@@ -217,6 +221,26 @@ public class TestAggregate : NostifyObject, IAggregate
     public int Value { get; set; }
 }
 ```
+
+#### EventFactory
+
+For creating Events with validation, use the `EventFactory` class which provides several factory methods:
+
+```C#
+// Create event with payload validation
+Event pe = EventFactory.Create<TestAggregate>(TestCommand.Create, newId, newTest);
+await _nostify.PersistEventAsync(pe);
+```
+
+For delete operations where no payload is needed, use the `CreateNullPayloadEvent` method which bypasses payload validation:
+
+```C#
+// Create event with null payload for delete operations
+Event pe = EventFactory.CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
+await _nostify.PersistEventAsync(pe);
+```
+
+This method is particularly useful for delete commands where the only information needed is the aggregate ID, and payload validation would otherwise fail due to the null payload.
 
 ### Command
 
