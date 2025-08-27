@@ -64,6 +64,8 @@ public static class NostifyExtensions
                     .Select(u => u.Value)
                     .SingleOrDefault();
 
+        if (jToken == null)
+        {
             return default;
         }
 
@@ -119,6 +121,4 @@ public static class NostifyExtensions
 
         return updateObj;
     }
-
-
 }
