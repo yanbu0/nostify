@@ -33,7 +33,7 @@ public class EventTests
 
         public bool isDeleted { get; set; }
 
-        public override void Apply(Event eventToApply)
+        public override void Apply(IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -67,7 +67,7 @@ public class EventTests
 
         public bool isDeleted { get; set; }
 
-        public override void Apply(Event eventToApply)
+        public override void Apply(IEvent eventToApply)
         {
             throw new NotImplementedException();
         }

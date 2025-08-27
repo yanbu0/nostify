@@ -22,7 +22,7 @@ public class NostifyObjectTests
         public DateTime? createdDate { get; set; }
         public List<string>? tags { get; set; }
 
-        public override void Apply(Event eventToApply)
+        public override void Apply(IEvent eventToApply)
         {
             // Implementation not needed for these tests
             throw new NotImplementedException("Apply method not implemented for test");
@@ -39,7 +39,7 @@ public class NostifyObjectTests
         public int userAge { get; set; }
         public string? status { get; set; }
 
-        public override void Apply(Event eventToApply)
+        public override void Apply(IEvent eventToApply)
         {
             throw new NotImplementedException("Apply method not implemented for test");
         }

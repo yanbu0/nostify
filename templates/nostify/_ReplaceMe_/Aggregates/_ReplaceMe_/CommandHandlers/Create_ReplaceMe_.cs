@@ -32,7 +32,7 @@ public class Create_ReplaceMe_
         Guid newId = Guid.NewGuid();
         new_ReplaceMe_.id = newId;
         
-        Event pe = new EventFactory().Create<_ReplaceMe_>(_ReplaceMe_Command.Create, newId, new_ReplaceMe_);
+        IEvent pe = new EventFactory().Create<_ReplaceMe_>(_ReplaceMe_Command.Create, newId, new_ReplaceMe_);
         await _nostify.PersistEventAsync(pe);
 
         return newId;

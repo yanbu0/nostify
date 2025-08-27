@@ -52,7 +52,7 @@ public interface INostify
     ///Writes event to event store
     ///</summary>        
     ///<param name="eventToPersist">Event to apply and persist in event store</param>
-    public Task PersistEventAsync(Event eventToPersist);
+    public Task PersistEventAsync(IEvent eventToPersist);
 
     /// <summary>
     /// Applies and persists an event to a list of projections in the specified container.
@@ -106,7 +106,7 @@ public interface INostify
     ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
     ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error.  Default is false.</param>
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container.  Default is false.</param>
-    public Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
+    public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
 
     ///<summary>
     ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
@@ -115,7 +115,7 @@ public interface INostify
     ///<param name="errorMessage">Error message to capture</param>
     ///<param name="eventToHandle">The event that failed to process</param>
     ///<param name="errorCommand">Optional. The command that failed, if null will not publish to Kafka</param>
-    public Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle, ErrorCommand? errorCommand = null);
+    public Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null);
 
     ///<summary>
     ///Published event to messaging bus
@@ -128,13 +128,13 @@ public interface INostify
     ///</summary>
     ///<param name="peList">List of Events to publish to Kafka</param>
     ///<param name="showOutput">Optional. If true, will write to console the output of each event published.  Default is false.</param>
-    public Task PublishEventAsync(List<Event> peList, bool showOutput = false);
+    public Task PublishEventAsync(List<IEvent> peList, bool showOutput = false);
 
     ///<summary>
     ///Published event to messaging bus
     ///</summary>
     ///<param name="eventToPublish">Event to publish to Kafka</param>
-    public Task PublishEventAsync(Event eventToPublish);
+    public Task PublishEventAsync(IEvent eventToPublish);
 
     ///<summary>
     ///Retrieves the event store container

@@ -37,8 +37,8 @@ public class Nostify : INostify
     /// Nostify constructor for development with no username and password for Kafka.
     ///</summary>
     public Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, IHttpClientFactory httpClientFactory, string defaultPartitionKeyPath = "/tenantId", Guid defaultTenantId = default)
+        : this(primaryKey, dbName, cosmosEndpointUri, kafkaUrl, null, null, httpClientFactory, defaultPartitionKeyPath, defaultTenantId)
     {
-        new Nostify(primaryKey, dbName, cosmosEndpointUri, kafkaUrl, null, null, httpClientFactory, defaultPartitionKeyPath, defaultTenantId);
     }
 
     internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory)
@@ -84,9 +84,8 @@ public class Nostify : INostify
         KafkaProducer = new ProducerBuilder<string, string>(producerConfig).Build();
     }
 
-
     /// <inheritdoc />
-    public async Task PersistEventAsync(Event eventToPersist)
+    public async Task PersistEventAsync(IEvent eventToPersist)
     {
         var eventContainer = await GetEventStoreContainerAsync();
         await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
@@ -95,12 +94,13 @@ public class Nostify : INostify
     ///<inheritdoc />
     public async Task PublishEventAsync(string cosmosTriggerOutput)
     {
-        var peList = JsonConvert.DeserializeObject<List<Event>>(cosmosTriggerOutput);
+        var eventList = JsonConvert.DeserializeObject<List<Event>>(cosmosTriggerOutput) ?? new List<Event>();
+        List<IEvent> peList = eventList.Cast<IEvent>().ToList();
         await PublishEventAsync(peList);
     }
 
     ///<inheritdoc />
-    public async Task PublishEventAsync(List<Event> peList, bool showOutput = false)
+    public async Task PublishEventAsync(List<IEvent> peList, bool showOutput = false)
     {
         if (peList != null)
         {
@@ -115,9 +115,9 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task PublishEventAsync(Event eventToPublish)
+    public async Task PublishEventAsync(IEvent eventToPublish)
     {
-        List<Event> peList = new List<Event>() { eventToPublish };
+        List<IEvent> peList = new List<IEvent>() { eventToPublish };
         await PublishEventAsync(peList);
     }
 
@@ -215,10 +215,10 @@ public class Nostify : INostify
         return succesfulTasks.Take(1000).ToList();
     }
 
-    private Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, Event pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()
+    private Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()
     {
         return bulkContainer.ApplyAndPersistAsync<P>(
-                                new List<Event>() { pe }, pk.ToPartitionKey(), id
+                                new List<IEvent>() { pe }, pk.ToPartitionKey(), id
                             ).ContinueWith(itemResponse =>
                             {
                                 if (!itemResponse.IsCompletedSuccessfully)
@@ -243,7 +243,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
+    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
     {
         var eventContainer = await GetEventStoreContainerAsync(true);
 
@@ -285,7 +285,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task HandleUndeliverableAsync(string functionName, string errorMessage, Event eventToHandle, ErrorCommand? errorCommand = null)
+    public async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
     {
         var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
 
