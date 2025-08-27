@@ -9,7 +9,7 @@ namespace nostify;
 
 public interface IApplyable
 {
-    public abstract void Apply(Event eventToApply);
+    public abstract void Apply(IEvent eventToApply);
 }
 
 ///<summary>
@@ -45,7 +45,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<summary>
     ///Applies event to this Aggregate or Projection
     ///</summary>
-    public abstract void Apply(Event eventToApply);
+    public abstract void Apply(IEvent eventToApply);
 
     ///<summary>
     ///Updates properties of Aggregate or Projection

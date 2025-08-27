@@ -198,12 +198,12 @@ public static class ContainerExtensions
     ///<param name="newEvents">The Event list to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
     ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
     {
         T nosObjToUpdate = new T();
         JObject unchangedNosObj = new JObject();
         bool isNew = false;
-        Event firstEvent = newEvents.First();
+        IEvent firstEvent = newEvents.First();
         Guid idToMatch = projectionBaseAggregateId ?? firstEvent.aggregateRootId;
 
         //Null projectionBaseAggregateId means it is an event from the projection base aggregate
@@ -281,7 +281,7 @@ public static class ContainerExtensions
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvents">The Event list to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
     {
         return await container.ApplyAndPersistAsync<T>(newEvents, partitionKey, null);
     }
@@ -292,9 +292,9 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvents">The Event list to apply and persist.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<Event> newEvents) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents) where T : NostifyObject, new()
     {
-        Event firstEvent = newEvents.First();
+        IEvent firstEvent = newEvents.First();
 
         return await container.ApplyAndPersistAsync<T>(newEvents, firstEvent.partitionKey.ToPartitionKey());
     }
@@ -305,9 +305,9 @@ public static class ContainerExtensions
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvent">The Event object to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, Event newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
     {
-        return await container.ApplyAndPersistAsync<T>(new List<Event>() { newEvent }, partitionKey);
+        return await container.ApplyAndPersistAsync<T>(new List<IEvent>() { newEvent }, partitionKey);
     }
 
     ///<summary>
@@ -315,9 +315,9 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvent">The Event object to apply and persist.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, Event newEvent) where T : NostifyObject, new()
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent) where T : NostifyObject, new()
     {
-        return await container.ApplyAndPersistAsync<T>(new List<Event>() { newEvent }, newEvent.partitionKey.ToPartitionKey());
+        return await container.ApplyAndPersistAsync<T>(new List<IEvent>() { newEvent }, newEvent.partitionKey.ToPartitionKey());
     }
 
     /// <summary>

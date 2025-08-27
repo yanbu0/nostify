@@ -27,7 +27,7 @@ public class BulkCreate_ReplaceMe_
         ILogger log)
     {
         List<dynamic> new_ReplaceMe_List = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync()) ?? new List<dynamic>();
-        List<Event> peList = new List<Event>();
+        List<IEvent> peList = new List<IEvent>();
 
         new_ReplaceMe_List.ForEach(e =>
         {
@@ -35,7 +35,7 @@ public class BulkCreate_ReplaceMe_
             Guid newId = Guid.NewGuid();
             e.id = newId;
             
-            Event pe = new EventFactory().Create<_ReplaceMe_>(_ReplaceMe_Command.BulkCreate, newId, e, Guid.Empty, Guid.Empty); //Empty guids should be replaced with user id and tenant id respectively
+            IEvent pe = new EventFactory().Create<_ReplaceMe_>(_ReplaceMe_Command.BulkCreate, newId, e, Guid.Empty, Guid.Empty); //Empty guids should be replaced with user id and tenant id respectively
             peList.Add(pe);
         });
 

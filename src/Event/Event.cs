@@ -123,10 +123,8 @@ public class Event : IEvent
     /// <inheritdoc />
     public Guid aggregateRootId { get; set; }
 
-    /// <summary>
-    /// Internal use only
-    /// </summary>
-    protected int schemaVersion = 1; //Update to reflect schema changes in Persisted Event
+    /// <inheritdoc />
+    public int schemaVersion { get; } = 1; //Update to reflect schema changes in Event
 
     /// <inheritdoc />
     public object payload { get; set; }

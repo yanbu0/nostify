@@ -60,6 +60,11 @@ public interface IEvent
     bool PayloadHasProperty(string propertyName);
 
     /// <summary>
+    /// Version of the event schema for compatibility and migration purposes.
+    /// </summary>
+    int schemaVersion { get; }
+
+    /// <summary>
     /// Returns typed value of payload
     /// </summary>
     T GetPayload<T>();
