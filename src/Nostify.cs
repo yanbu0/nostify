@@ -166,7 +166,12 @@ public class Nostify : INostify
         //Throw if not bulk container
         bulkContainer.ValidateBulkEnabled(true);
 
-        List<Event> eventList = events.Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e).GetEvent()).ToList();
+        List<IEvent> eventList = events
+            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e))
+            .Where(x => x != null)
+            .Select(x => x.GetEvent())
+            .Where(ev => ev != null)
+            .ToList<IEvent>()!;
         List<Guid> partitionKeys = eventList.Select(e => e.partitionKey).Distinct().ToList();
 
         List<Task> tasks = new List<Task>();
@@ -175,7 +180,7 @@ public class Nostify : INostify
         //For each partition, create a list of tasks to apply and persist the events based off the list of ids in the property specified
         partitionKeys.ForEach(pk =>
         {
-            List<Event> partitionEvents = eventList.Where(e => e.partitionKey == pk).ToList();
+            List<IEvent> partitionEvents = eventList.Where(e => e.partitionKey == pk).ToList();
             partitionEvents.ForEach(pe =>
             {
                 //Set up vars for both list and single id properties
@@ -412,7 +417,7 @@ public class Nostify : INostify
 
             aggRange.ForEach(id =>
             {
-                rehydratedAggregates.Add(Rehydrate<T>(peList.Where(e => e.aggregateRootId == id).OrderBy(e => e.timestamp).ToList()));
+                rehydratedAggregates.Add(Rehydrate<T>(peList.Where(e => e.aggregateRootId == id).OrderBy(e => e.timestamp).ToList<IEvent>()));
             });
             i = i + GET_THIS_MANY;
         }
@@ -436,7 +441,7 @@ public class Nostify : INostify
     ///The projection state rehydrated to the extent of the events fed into it.
     ///</returns>
     ///<param name="peList">The event stream for the aggregate to be rehydrated</param>
-    private T Rehydrate<T>(List<Event> peList) where T : NostifyObject, new()
+    private T Rehydrate<T>(List<IEvent> peList) where T : NostifyObject, new()
     {
         T rehyd = new T();
         foreach (var pe in peList)
