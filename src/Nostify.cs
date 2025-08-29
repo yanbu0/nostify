@@ -87,6 +87,12 @@ public class Nostify : INostify
     /// <inheritdoc />
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
+        await PersistEventAsync((Event)eventToPersist);
+    }
+
+    /// <inheritdoc />
+    public async Task PersistEventAsync(Event eventToPersist)
+    {
         var eventContainer = await GetEventStoreContainerAsync();
         await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
     }
@@ -98,7 +104,7 @@ public class Nostify : INostify
         List<IEvent> peList = eventList.Cast<IEvent>().ToList();
         await PublishEventAsync(peList);
     }
-
+    
     ///<inheritdoc />
     public async Task PublishEventAsync(List<IEvent> peList, bool showOutput = false)
     {
@@ -248,7 +254,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
+    public async Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
     {
         var eventContainer = await GetEventStoreContainerAsync(true);
 

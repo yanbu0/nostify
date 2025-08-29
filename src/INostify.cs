@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System;
 using System.Net.Http;
+using System.Linq;
 
 namespace nostify;
 
@@ -52,7 +53,55 @@ public interface INostify
     ///Writes event to event store
     ///</summary>        
     ///<param name="eventToPersist">Event to apply and persist in event store</param>
-    public Task PersistEventAsync(IEvent eventToPersist);
+    public async Task PersistEventAsync(IEvent eventToPersist)
+    {
+        await PersistEventAsync((Event)eventToPersist);
+    }
+
+    ///<summary>
+    ///Writes event to event store
+    ///</summary>        
+    ///<param name="eventToPersist">Event to apply and persist in event store</param>
+    public Task PersistEventAsync(Event eventToPersist);
+
+    /// <summary>
+    /// Applies and persists an event to a list of projections in the specified container.
+    /// </summary>
+    /// <remarks>
+    /// This method applies the given event to each projection in the list, updates their state,
+    /// and persists the changes to the specified container. Primarily intended for updates
+    /// when an event affects multiple projections.
+    /// </remarks>
+    /// <param name="bulkContainer">The container to which the event will be applied and persisted.</param>
+    /// <param name="eventToApply">The event to be applied and persisted.</param>
+    /// <param name="projectionIds">The list of projection IDs to which the event will be applied.</param>
+    /// <param name="batchSize">Optional. Number of projections to update in a batch. Default is 100.</param>
+    /// <typeparam name="P">The type of the Nostify object.</typeparam>
+    /// <returns>The nostify objects after Events are Applied</returns>
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
+    {
+        return await MultiApplyAndPersistAsync<P>(bulkContainer, (Event)eventToApply, projectionIds, batchSize);
+    }
+
+    /// <summary>
+    /// Applies and persists an event to a list of projections in the specified container.
+    /// </summary>
+    /// <remarks>
+    /// This method applies the given event to each projection in the list, updates their state,
+    /// and persists the changes to the specified container. Primarily intended for updates
+    /// when an event affects multiple projections. You can use this overload when you already have the projection objects,
+    /// but there is an overload where you only need to pass a list of the IDs, which is probably what you want to do most of the time.
+    /// </remarks>
+    /// <param name="bulkContainer">The container to which the event will be applied and persisted.</param>
+    /// <param name="eventToApply">The event to be applied and persisted.</param>
+    /// <param name="projectionsToUpdate">The list of projections to which the event will be applied.</param>
+    /// <param name="batchSize">Optional. Number of projections to update in a batch. Default is 100.</param>
+    /// <typeparam name="P">The type of the Nostify object.</typeparam>
+    /// <returns>The nostify objects after Events are Applied</returns>
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    {
+        return await MultiApplyAndPersistAsync<P>(bulkContainer, (Event)eventToApply, projectionsToUpdate, batchSize);
+    }
 
     /// <summary>
     /// Applies and persists an event to a list of projections in the specified container.
@@ -100,13 +149,26 @@ public interface INostify
     public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new();
 
     ///<summary>
-    ///Writes event to event store
+    ///Bulk writes a list of events to the event store.
     ///</summary>        
     ///<param name="events">Events to apply and persist in event store</param>
     ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
     ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error.  Default is false.</param>
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container.  Default is false.</param>
-    public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
+    public Task BulkPersistEventAsync(List<Event> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
+
+
+    ///<summary>
+    ///Bulk writes a list of events to the event store.
+    ///</summary>        
+    ///<param name="events">Events to apply and persist in event store</param>
+    ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
+    ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error.  Default is false.</param>
+    ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container.  Default is false.</param>
+    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
+    {
+        await BulkPersistEventAsync(events.Cast<Event>().ToList(), batchSize, allowRetry, publishErrorEvents);
+    }
 
     ///<summary>
     ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
