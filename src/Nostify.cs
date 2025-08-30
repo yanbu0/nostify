@@ -128,6 +128,13 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
+    {
+        Event @event = (Event)eventToApply;
+        return await MultiApplyAndPersistAsync<P>(bulkContainer, @event, projectionIds, batchSize);
+    }
+
+    ///<inheritdoc />
     public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
     {
         //Throw if not bulk container
@@ -158,6 +165,13 @@ public class Nostify : INostify
 
         //Only return first 1000 results to avoid overwhelming caller
         return succesfulTasks.Take(1000).ToList();
+    }
+
+    ///<inheritdoc />
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    {
+        Event @event = (Event)eventToApply;
+        return await MultiApplyAndPersistAsync<P>(bulkContainer, @event, projectionsToUpdate, batchSize);
     }
 
     ///<inheritdoc />
