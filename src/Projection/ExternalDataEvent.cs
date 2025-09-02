@@ -174,4 +174,76 @@ public class ExternalDataEvent
 
         return result;
     }
+
+    /// <summary>
+    /// Gets events from multiple external services in parallel
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="httpClient">An HTTP client to make the service calls. Must not be null.</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="eventRequests">Array of EventRequest objects containing URLs and foreign ID selectors</param>
+    /// <returns>Combined list of ExternalDataEvent from all services</returns>
+    public async static Task<List<ExternalDataEvent>> GetMultiServiceEventsAsync<TProjection>(HttpClient httpClient, List<TProjection> projectionsToInit, params EventRequest<TProjection>[] eventRequests)
+        where TProjection : IUniquelyIdentifiable
+    {
+        if (httpClient == null)
+        {
+            throw new NostifyException("HttpClient is required to get events from external services");
+        }
+
+        if (eventRequests == null || eventRequests.Length == 0)
+        {
+            return new List<ExternalDataEvent>();
+        }
+
+        // Create tasks for all service calls to run in parallel
+        var tasks = eventRequests.Select(request =>
+            GetEventsAsync(httpClient, request.Url, projectionsToInit, request.ForeignIdSelectors)
+        ).ToArray();
+
+        // Wait for all tasks to complete
+        var results = await Task.WhenAll(tasks);
+
+        // Combine all results into a single list
+        var combinedResults = new List<ExternalDataEvent>();
+        foreach (var result in results)
+        {
+            combinedResults.AddRange(result);
+        }
+
+        return combinedResults;
+    }
+}
+
+/// <summary>
+/// Represents a request for events from an external service
+/// </summary>
+/// <typeparam name="TProjection">Type of the projection</typeparam>
+public class EventRequest<TProjection> where TProjection : IUniquelyIdentifiable
+{
+    /// <summary>
+    /// The URL of the service EventRequest endpoint
+    /// </summary>
+    public string Url { get; }
+
+    /// <summary>
+    /// Functions to get the foreign id for the aggregates required to populate one or more fields in the projection
+    /// </summary>
+    public Func<TProjection, Guid?>[] ForeignIdSelectors { get; }
+
+    /// <summary>
+    /// Constructor for EventRequest
+    /// </summary>
+    /// <param name="url">The URL of the service EventRequest endpoint. Must not be null or empty.</param>
+    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
+    public EventRequest(string url, params Func<TProjection, Guid?>[] foreignIdSelectors)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            throw new NostifyException("URL of EventRequest endpoint is required");
+        }
+
+        Url = url;
+        ForeignIdSelectors = foreignIdSelectors ?? Array.Empty<Func<TProjection, Guid?>>();
+    }
 }
