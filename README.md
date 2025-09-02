@@ -5,6 +5,19 @@
 
 `nostify` provides a framework for creating event driven microservices implementing the CQRS/ES pattern. It leverages Azure Functions for scalability and Cosmos DB for data storage, making it suitable for applications requiring high throughput and low latency. It also assumes some basic familiarity with domain driven design. For a practical demonstration, see the [nostify-example repository](https://github.com/yanbu0/nostify-example) which showcases microservices built with this framework.
 
+## Quality Assurance
+
+The framework is thoroughly tested with **247 comprehensive unit tests** covering all major functionality:
+- ✅ All tests passing
+- ✅ Event sourcing and CQRS patterns
+- ✅ Aggregate operations and validation
+- ✅ Projection handling and initialization  
+- ✅ Saga orchestration workflows
+- ✅ Error handling and exception management
+- ✅ Factory patterns and configuration
+- ✅ Kafka integration and messaging
+- ✅ Cosmos DB operations and queries
+
 ## Features
 
 - Microservice Architecture: Encapsulates domain logic within services, promoting modularity and scalability.
@@ -23,6 +36,19 @@
 
 ### Updates
 
+- 3.6.3
+  - Bug fixes and usability improvements
+  - Enhanced test coverage with 247 comprehensive unit tests
+  - **Improved stability and error handling:**
+    - Enhanced `NostifyValidationException` with structured validation error handling
+    - Added `ValidationErrorResponse` and `ValidationErrorDetail` classes for standardized API error responses
+    - Introduced `NostifyValidationExceptionHandler` utility for consistent validation error processing
+    - Added `NostifyValidationExceptionMiddleware` for Azure Functions error handling
+    - Improved error message formatting with `GetAllErrorMessages()` and `GetErrorsByMember()` methods
+    - Better support for multiple validation errors with detailed member-specific error reporting
+    - Enhanced JSON serialization support for validation errors
+    - Added utility methods for object validation with structured error responses
+  - All tests passing, ensuring reliability
 - 3.6.0
   - Added `IEvent` interface for better abstraction and testability of Event objects
   - Enhanced `EventFactory` (renamed from EventBuilder) with instance-based design and optional validation
@@ -63,12 +89,13 @@
 ### Coming Soon
 
 - Improved/Updated Documentation
-- Better test coverage
 - ValidationException middleware
-- Bump example repo up to 3.6
+- Bump example repo up to 3.6.3
 - Better support for non-command events
 
 ## Getting Started
+
+### Development Setup
 
 To run locally you will need to install some dependencies:
 
@@ -84,10 +111,38 @@ To run locally you will need to install some dependencies:
 
 - Cosmos Emulator: <https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-develop-emulator?tabs=windows%2Ccsharp&pivots=api-nosql>
 
+### Building and Testing
+
+To build the library:
+```bash
+dotnet build
+```
+
+To run tests:
+```bash
+dotnet test nostify.Tests/
+```
+
+The test suite includes 247 comprehensive unit tests covering all aspects of the framework:
+- Event creation and validation
+- Aggregate operations
+- Projection handling
+- Saga orchestration
+- Error handling and exceptions
+- Factory patterns and configuration
+
+### Template Installation
+
 To install `nostify` and templates:
 
 ```powershell
 dotnet new install nostify
+```
+
+Or install a specific version:
+
+```powershell
+dotnet new install nostify::3.6.3
 ```
 
 To spin up a nostify project:
