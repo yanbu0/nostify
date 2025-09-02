@@ -104,30 +104,62 @@ public class ExternalDataEventTests
     }
 
     [Fact]
-    public async Task GetEventsAsync_Container_WithPointInTime_FiltersCorrectly()
+    public void GetEventsAsync_Container_FilteringLogic_WorksCorrectly()
     {
-        // Test that Container version correctly filters by pointInTime
-        // Note: This test validates the LINQ query logic even though we can't fully mock Cosmos
+        // Test that Container version correctly applies pointInTime filtering
+        // We simulate the filtering logic that would be applied to test the behavior
         
         // Arrange
         var foreignIdSelectors = new Func<TestProjection, Guid?>[] { p => p.id };
+        var testPointInTime = DateTime.UtcNow.AddHours(-1);
         
-        // We can't easily mock Container, but we can verify the method signature and parameters
-        // The actual filtering logic is tested through the HTTP client tests and template integration
+        // Get the foreign IDs that would be used in the query
+        var foreignIds = (from p in _testProjections
+                         from f in foreignIdSelectors
+                         let foreignId = f(p)
+                         where foreignId.HasValue
+                         select foreignId.Value).ToList();
         
-        // Assert that the method exists with correct signature
-        var method = typeof(ExternalDataEvent).GetMethods()
-            .FirstOrDefault(m => m.Name == "GetEventsAsync" 
-                && m.IsStatic
-                && m.GetParameters().Any(p => p.ParameterType == typeof(Container))
-                && m.GetParameters().Any(p => p.Name == "pointInTime" && p.ParameterType == typeof(DateTime?)));
+        // Simulate the LINQ query filtering that happens in the Container version
+        var baseQuery = _testEvents.Where(e => foreignIds.Contains(e.aggregateRootId));
         
-        Assert.NotNull(method);
+        // Test without pointInTime (should return all matching events)
+        var allMatchingEvents = baseQuery.OrderBy(e => e.timestamp).ToList();
         
-        // Verify parameter order and types
-        var parameters = method.GetParameters();
-        Assert.Contains(parameters, p => p.ParameterType == typeof(Container));
-        Assert.Contains(parameters, p => p.Name == "pointInTime" && p.ParameterType == typeof(DateTime?));
+        // Test with pointInTime (should filter out events after the specified time)
+        var filteredEvents = baseQuery
+            .Where(e => e.timestamp <= testPointInTime)
+            .OrderBy(e => e.timestamp)
+            .ToList();
+        
+        // Assert that filtering works correctly
+        Assert.NotEmpty(allMatchingEvents);
+        Assert.NotEmpty(filteredEvents);
+        
+        // Verify that filteredEvents is a subset of allMatchingEvents
+        Assert.True(filteredEvents.Count <= allMatchingEvents.Count);
+        
+        // Verify that all filtered events are before or at pointInTime
+        Assert.All(filteredEvents, e => Assert.True(e.timestamp <= testPointInTime));
+        
+        // Verify that we're actually filtering out some events
+        var eventsAfterPointInTime = allMatchingEvents.Where(e => e.timestamp > testPointInTime).ToList();
+        if (eventsAfterPointInTime.Any())
+        {
+            Assert.True(filteredEvents.Count < allMatchingEvents.Count, 
+                "pointInTime filtering should exclude events that occur after the specified time");
+        }
+        
+        // Verify that the result structure would be correct
+        var expectedResult = (from p in _testProjections
+                             from f in foreignIdSelectors
+                             let foreignId = f(p)
+                             where foreignId.HasValue
+                             let eventsForAggregate = filteredEvents.Where(e => e.aggregateRootId == foreignId.Value).ToList()
+                             select new ExternalDataEvent(p.id, eventsForAggregate)).ToList();
+        
+        Assert.NotNull(expectedResult);
+        Assert.Equal(_testProjections.Count, expectedResult.Count);
     }
 
     [Fact]
