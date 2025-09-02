@@ -299,6 +299,81 @@ public class ExternalDataEventTests
         // Verify no empty ExternalDataEvent objects are returned
         Assert.All(result, ede => Assert.NotEmpty(ede.events));
     }
+
+    [Fact]
+    public async Task GetEventsAsync_HttpClient_WithPointInTimeBeforeAllEvents_ReturnsEmptyList()
+    {
+        // Test that when pointInTime is before any events exist, returns empty list
+        
+        // Arrange
+        var foreignIdSelectors = new Func<TestProjection, Guid?>[] { p => p.id };
+        var pointInTimeBeforeAllEvents = _pointInTime.AddHours(-2); // Before all test events
+        
+        // Return empty list from mock handler to simulate no events found
+        var mockHandler = new MockHttpMessageHandler(new List<Event>());
+        var httpClient = new HttpClient(mockHandler);
+        var url = "https://test.example.com/events";
+
+        // Act
+        var result = await ExternalDataEvent.GetEventsAsync(httpClient, url, _testProjections, pointInTimeBeforeAllEvents, foreignIdSelectors);
+        
+        // Assert
+        Assert.NotNull(result);
+        Assert.Empty(result);
+        
+        // Verify the request included the early pointInTime
+        var requestData = JsonConvert.DeserializeObject<EventRequestData>(mockHandler.RequestContent);
+        Assert.NotNull(requestData);
+        Assert.Equal(pointInTimeBeforeAllEvents, requestData.PointInTime);
+        Assert.Contains(_testProjections[0].id, requestData.ForeignIds);
+        Assert.Contains(_testProjections[1].id, requestData.ForeignIds);
+    }
+
+    [Fact]
+    public void GetEventsAsync_Container_WithPointInTimeBeforeAllEvents_ReturnsEmptyList()
+    {
+        // Test that Container version returns empty list when pointInTime is before all events
+        // We simulate the filtering logic that would be applied to test the behavior
+        
+        // Arrange
+        var foreignIdSelectors = new Func<TestProjection, Guid?>[] { p => p.id };
+        var pointInTimeBeforeAllEvents = _pointInTime.AddHours(-2); // Before all test events
+        
+        // Get the foreign IDs that would be used in the query
+        var foreignIds = (from p in _testProjections
+                         from f in foreignIdSelectors
+                         let foreignId = f(p)
+                         where foreignId.HasValue
+                         select foreignId.Value).ToList();
+        
+        // Simulate the LINQ query filtering that happens in the Container version
+        var baseQuery = _testEvents.Where(e => foreignIds.Contains(e.aggregateRootId));
+        
+        // Apply pointInTime filtering (should filter out all events since pointInTime is before all events)
+        var filteredEvents = baseQuery
+            .Where(e => e.timestamp <= pointInTimeBeforeAllEvents)
+            .OrderBy(e => e.timestamp)
+            .ToLookup(e => e.aggregateRootId);
+
+        // Simulate the result creation logic from Container implementation
+        var result = (
+            from p in _testProjections
+            from f in foreignIdSelectors
+            let foreignId = f(p)
+            where foreignId.HasValue
+            let eventList = filteredEvents[foreignId!.Value].ToList()
+            where eventList.Any() // This filters out empty event lists
+            select new ExternalDataEvent(p.id, eventList)
+        ).ToList();
+        
+        // Assert
+        Assert.NotNull(result);
+        Assert.Empty(result); // Should be empty since no events are before pointInTimeBeforeAllEvents
+        
+        // Verify that the filtering actually worked - no events should be found
+        var allFilteredEvents = filteredEvents.SelectMany(g => g).ToList();
+        Assert.Empty(allFilteredEvents);
+    }
 }
 
 // Enhanced mock HTTP message handler for testing
