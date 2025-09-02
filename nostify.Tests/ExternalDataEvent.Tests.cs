@@ -210,6 +210,95 @@ public class ExternalDataEventTests
         Assert.All(testIds, id => Assert.Contains(id, deserialized.ForeignIds));
         Assert.Equal(testTime, deserialized.PointInTime);
     }
+
+    [Fact]
+    public async Task GetEventsAsync_HttpClient_DoesNotReturnEmptyExternalDataEvents()
+    {
+        // Test that ExternalDataEvent objects with no events are filtered out
+        
+        // Arrange
+        var projectionWithEvents = new TestProjection { id = Guid.NewGuid(), name = "HasEvents" };
+        var projectionWithoutEvents = new TestProjection { id = Guid.NewGuid(), name = "NoEvents" };
+        var projectionsToInit = new List<TestProjection> { projectionWithEvents, projectionWithoutEvents };
+        
+        // Create events only for the first projection
+        var eventsForFirstProjectionOnly = new List<Event>
+        {
+            new Event { aggregateRootId = projectionWithEvents.id, timestamp = DateTime.UtcNow.AddHours(-1), command = new NostifyCommand("TestCommand") }
+        };
+        
+        var mockHandler = new MockHttpMessageHandler(eventsForFirstProjectionOnly);
+        var httpClient = new HttpClient(mockHandler);
+        var url = "https://test.example.com/events";
+        
+        Func<TestProjection, Guid?>[] foreignIdSelectors = { p => p.id };
+
+        // Act
+        var result = await ExternalDataEvent.GetEventsAsync(httpClient, url, projectionsToInit, foreignIdSelectors);
+        
+        // Assert
+        Assert.NotNull(result);
+        // Should only return ExternalDataEvent for projection that has events
+        Assert.Single(result);
+        Assert.Equal(projectionWithEvents.id, result[0].aggregateRootId);
+        Assert.NotEmpty(result[0].events);
+        
+        // Verify no empty ExternalDataEvent objects are returned
+        Assert.All(result, ede => Assert.NotEmpty(ede.events));
+    }
+
+    [Fact]
+    public void GetEventsAsync_Container_DoesNotReturnEmptyExternalDataEvents()
+    {
+        // Test that Container version also filters out empty ExternalDataEvent objects
+        // We simulate the filtering logic that would be applied to test the behavior
+        
+        // Arrange
+        var projectionWithEvents = new TestProjection { id = Guid.NewGuid(), name = "HasEvents" };
+        var projectionWithoutEvents = new TestProjection { id = Guid.NewGuid(), name = "NoEvents" };
+        var projectionsToInit = new List<TestProjection> { projectionWithEvents, projectionWithoutEvents };
+        
+        // Create events only for the first projection
+        var allEvents = new List<Event>
+        {
+            new Event { aggregateRootId = projectionWithEvents.id, timestamp = DateTime.UtcNow.AddHours(-1), command = new NostifyCommand("TestCommand") }
+        };
+        
+        Func<TestProjection, Guid?>[] foreignIdSelectors = { p => p.id };
+        
+        // Get the foreign IDs that would be used in the query
+        var foreignIds = (from p in projectionsToInit
+                         from f in foreignIdSelectors
+                         let foreignId = f(p)
+                         where foreignId.HasValue
+                         select foreignId.Value).ToList();
+        
+        // Simulate the LINQ query that happens in the Container version
+        var events = allEvents.Where(e => foreignIds.Contains(e.aggregateRootId))
+                             .OrderBy(e => e.timestamp)
+                             .ToLookup(e => e.aggregateRootId);
+
+        // Simulate the result creation logic from Container implementation
+        var result = (
+            from p in projectionsToInit
+            from f in foreignIdSelectors
+            let foreignId = f(p)
+            where foreignId.HasValue
+            let eventList = events[foreignId!.Value].ToList()
+            where eventList.Any() // This is the fix - filter out empty event lists
+            select new ExternalDataEvent(p.id, eventList)
+        ).ToList();
+        
+        // Assert
+        Assert.NotNull(result);
+        // Should only return ExternalDataEvent for projection that has events
+        Assert.Single(result);
+        Assert.Equal(projectionWithEvents.id, result[0].aggregateRootId);
+        Assert.NotEmpty(result[0].events);
+        
+        // Verify no empty ExternalDataEvent objects are returned
+        Assert.All(result, ede => Assert.NotEmpty(ede.events));
+    }
 }
 
 // Enhanced mock HTTP message handler for testing

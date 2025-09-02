@@ -127,7 +127,9 @@ public class ExternalDataEvent
             from f in foreignIdSelectors
             let foreignId = f(p)
             where foreignId.HasValue
-            select new ExternalDataEvent(p.id, events[foreignId!.Value].ToList())
+            let eventList = events[foreignId!.Value].ToList()
+            where eventList.Any()
+            select new ExternalDataEvent(p.id, eventList)
         ).ToList();
 
         return result;
@@ -184,7 +186,9 @@ public class ExternalDataEvent
                     from f in foreignIdSelectors
                     let foreignId = f(p)
                     where foreignId.HasValue
-                    select new ExternalDataEvent(p.id, events[foreignId!.Value].OrderBy(e => e.timestamp).ToList())
+                    let eventList = events[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
+                    where eventList.Any()
+                    select new ExternalDataEvent(p.id, eventList)
                 ).ToList();
             }
         }
