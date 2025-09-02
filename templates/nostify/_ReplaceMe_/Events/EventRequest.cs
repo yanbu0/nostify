@@ -21,15 +21,25 @@ public class EventRequest
     [Function(nameof(EventRequest))]
     public async Task<List<Event>> Run(
         [HttpTrigger("post", Route = "EventRequest")] HttpRequestData req,
-        [FromBody] List<Guid> aggregateRootIds,
+        [FromBody] EventRequestData requestData,
         FunctionContext context,
         ILogger log)
     {
         Container eventStore = await _nostify.GetEventStoreContainerAsync();
-        List<Event> allEvents = await eventStore
-                            .GetItemLinqQueryable<Event>()
-                            .Where(x => aggregateRootIds.Contains(x.aggregateRootId))
-                            .ReadAllAsync();
+        
+        var eventsQuery = eventStore
+            .GetItemLinqQueryable<Event>()
+            .Where(x => requestData.ForeignIds.Contains(x.aggregateRootId));
+
+        // Filter by pointInTime if provided
+        if (requestData.PointInTime.HasValue)
+        {
+            eventsQuery = eventsQuery.Where(e => e.timestamp <= requestData.PointInTime.Value);
+        }
+
+        List<Event> allEvents = await eventsQuery
+            .OrderBy(e => e.timestamp)
+            .ReadAllAsync();
 
         return allEvents;
     }
