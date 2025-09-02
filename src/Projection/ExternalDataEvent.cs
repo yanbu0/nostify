@@ -164,10 +164,10 @@ public class ExternalDataEvent
         //Don't run query if no ids present
         if (foreignIds.Any())
         {
-            var requestData = new 
+            var requestData = new EventRequestData
             {
-                foreignIds = foreignIds.ToList(),
-                pointInTime = pointInTime
+                ForeignIds = foreignIds.ToList(),
+                PointInTime = pointInTime
             };
             var requestJson = JsonConvert.SerializeObject(requestData);
             var response = await httpClient.PostAsync(url, new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json"));
