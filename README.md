@@ -7,7 +7,7 @@
 
 ## Quality Assurance
 
-The framework is thoroughly tested with **247 comprehensive unit tests** covering all major functionality:
+The framework is thoroughly tested with **comprehensive unit tests** covering all major functionality:
 - ✅ All tests passing
 - ✅ Event sourcing and CQRS patterns
 - ✅ Aggregate operations and validation
