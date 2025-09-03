@@ -1,4 +1,13 @@
-# nostify - Event-Sourced Microservices Framework
+# nostify - Event-Sou### Template System
+- Package first: `dotnet pack` to create bin/Rele3. **Template validation**: 
+   - `dotnet pack` to create the NuGet package
+   - `dotnet new install bin/Release/nostify.3.7.4.nupkg` ### Template Installation
+```bash
+$ dotnet new install bin/Release/nostify.3.7.4.nupkg
+Success: nostify::3.7.4 installed the following templates:nstall templates
+   - Create test service: `mkdir /tmp/test && cd /tmp/test && dotnet new nostify -ag TestItem -p 7999`nostify.3.7.4.nupkg
+- Install templates locally: `dotnet new install bin/Release/nostify.3.7.4.nupkg`
+- Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>` Microservices Framework
 
 Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
 
@@ -20,8 +29,8 @@ Always reference these instructions first and fallback to search or bash command
 - Use `dotnet format` to fix whitespace formatting issues before committing
 
 ### Template System
-- Package first: `dotnet pack` to create bin/Release/nostify.3.5.0.nupkg
-- Install templates locally: `dotnet new install bin/Release/nostify.3.5.0.nupkg`
+- Package first: `dotnet pack` to create bin/Release/nostify.3.7.3.nupkg
+- Install templates locally: `dotnet new install bin/Release/nostify.3.7.3.nupkg`
 - Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>`
   - This creates a complete Azure Functions project with CQRS/Event Sourcing pattern
   - Example: `dotnet new nostify -ag InventoryItem -p 7072`
@@ -88,7 +97,7 @@ After making changes to the nostify library, validate by:
 2. **Test validation**: All 78 tests pass in `dotnet test nostify.Tests/`
 3. **Template validation**: 
    - `dotnet pack` to create the NuGet package
-   - `dotnet new install bin/Release/nostify.3.5.0.nupkg` to install templates
+   - `dotnet new install bin/Release/nostify.3.7.3.nupkg` to install templates
    - Create test service: `mkdir /tmp/test && cd /tmp/test && dotnet new nostify -ag TestItem -p 7999`
    - `cd TestItem && dotnet restore && dotnet build` -- should succeed with warnings but no errors
 4. **Integration validation**: Start Cosmos DB emulator and Kafka, run generated service with `func start`
@@ -221,8 +230,8 @@ Passed!  - Failed:     0, Passed:    78, Skipped:     0, Total:    78, Duration:
 
 ### Template Installation
 ```bash
-$ dotnet new install bin/Release/nostify.3.5.0.nupkg
-Success: nostify::3.5.0 installed the following templates:
+$ dotnet new install bin/Release/nostify.3.7.3.nupkg
+Success: nostify::3.7.3 installed the following templates:
 Template Name       Short Name         Language  Tags              
 ------------------  -----------------  --------  ------------------
 Nostify Aggregate   nostifyAggregate             Azure/Microservice
