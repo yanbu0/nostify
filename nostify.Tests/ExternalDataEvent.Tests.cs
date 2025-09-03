@@ -863,13 +863,6 @@ public class MultiServiceMockHttpHandler : HttpMessageHandler
             if (pointInTime.HasValue)
             {
                 eventsToReturn = events.Where(e => e.timestamp <= pointInTime.Value).ToList();
-                Console.WriteLine($"Service {baseUrl}: Original events: {events.Count}, Filtered events: {eventsToReturn.Count}");
-                Console.WriteLine($"PointInTime: {pointInTime.Value:O} (Kind: {pointInTime.Value.Kind})");
-                foreach (var evt in events)
-                {
-                    Console.WriteLine($"  Event timestamp: {evt.timestamp:O} (Kind: {evt.timestamp.Kind}), AggregateRootId: {evt.aggregateRootId}");
-                    Console.WriteLine($"  Comparison: {evt.timestamp:O} <= {pointInTime.Value:O} = {evt.timestamp <= pointInTime.Value}");
-                }
             }
             
             var responseContent = JsonConvert.SerializeObject(eventsToReturn);
