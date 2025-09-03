@@ -75,5 +75,5 @@ public interface IEvent
     /// <param name="throwErrorIfExtraProps">If true, will throw a ValidationException if any properties on payload not existing on T are found.</param>
     /// <returns>Returns the event for chaining.</returns>
     /// <typeparam name="T">The type of the aggregate to validate against.</typeparam>
-    IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : NostifyObject, IAggregate;
+    IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : class;
 }
