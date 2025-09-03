@@ -166,13 +166,13 @@ public class ExternalDataEvent
         //Don't run query if no ids present
         if (foreignIds.Any())
         {
-            var requestData = new EventRequestData
+            var requestJson = JsonConvert.SerializeObject(foreignIds.Distinct().ToList());
+            var urlWithPath = url;
+            if (pointInTime.HasValue)
             {
-                ForeignIds = foreignIds.ToList(),
-                PointInTime = pointInTime
-            };
-            var requestJson = JsonConvert.SerializeObject(requestData);
-            var response = await httpClient.PostAsync(url, new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json"));
+                urlWithPath = $"{url}/{pointInTime.Value:O}";
+            }
+            var response = await httpClient.PostAsync(urlWithPath, new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json"));
             if (!response.IsSuccessStatusCode)
             {
                 throw new NostifyException($"{response.StatusCode} Error getting events from external service: {response.ReasonPhrase} || {response.Content}");
@@ -196,7 +196,6 @@ public class ExternalDataEvent
         return result;
     }
 
-    /// <summary>
     /// Gets the events needed to initialize a list of projections (backward compatibility overload)
     /// </summary>
     /// <typeparam name="TProjection">Type of the projection</typeparam>
@@ -252,5 +251,92 @@ public class ExternalDataEvent
         where TProjection : IUniquelyIdentifiable
     {
         return await GetEventsAsync(httpClient, url, projectionsToInit, null, foreignIdSelectorsList);
+    }
+
+    /// <summary>
+    /// Gets events from multiple external services in parallel
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="httpClient">An HTTP client to make the service calls. Must not be null.</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="eventRequests">Array of EventRequester objects containing URLs and foreign ID selectors</param>
+    /// <returns>Combined list of ExternalDataEvent from all services</returns>
+    public async static Task<List<ExternalDataEvent>> GetMultiServiceEventsAsync<TProjection>(HttpClient httpClient, List<TProjection> projectionsToInit, DateTime? pointInTime = null, params EventRequester<TProjection>[] eventRequests)
+        where TProjection : IUniquelyIdentifiable
+    {
+        if (httpClient == null)
+        {
+            throw new NostifyException("HttpClient is required to get events from external services");
+        }
+
+        if (eventRequests == null || eventRequests.Length == 0)
+        {
+            return new List<ExternalDataEvent>();
+        }
+
+        // Create tasks for all service calls to run in parallel
+        var tasks = eventRequests.Select(request =>
+            GetEventsAsync(httpClient, request.Url, projectionsToInit, pointInTime, request.ForeignIdSelectors)
+        ).ToArray();
+
+        // Wait for all tasks to complete
+        var results = await Task.WhenAll(tasks);
+
+        // Combine all results into a single list
+        var combinedResults = new List<ExternalDataEvent>();
+        foreach (var result in results)
+        {
+            combinedResults.AddRange(result);
+        }
+
+        return combinedResults;
+    }
+
+    /// <summary>
+    /// Gets events from multiple external services in parallel (backward compatibility overload)
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="httpClient">An HTTP client to make the service calls. Must not be null.</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="eventRequests">Array of EventRequester objects containing URLs and foreign ID selectors</param>
+    /// <returns>Combined list of ExternalDataEvent from all services</returns>
+    public async static Task<List<ExternalDataEvent>> GetMultiServiceEventsAsync<TProjection>(HttpClient httpClient, List<TProjection> projectionsToInit, params EventRequester<TProjection>[] eventRequests)
+        where TProjection : IUniquelyIdentifiable
+    {
+        return await GetMultiServiceEventsAsync(httpClient, projectionsToInit, null, eventRequests);
+    }
+}
+
+/// <summary>
+/// Represents a request for events from an external service
+/// </summary>
+/// <typeparam name="TProjection">Type of the projection</typeparam>
+public class EventRequester<TProjection> where TProjection : IUniquelyIdentifiable
+{
+    /// <summary>
+    /// The URL of the service EventRequest endpoint
+    /// </summary>
+    public string Url { get; }
+
+    /// <summary>
+    /// Functions to get the foreign id for the aggregates required to populate one or more fields in the projection
+    /// </summary>
+    public Func<TProjection, Guid?>[] ForeignIdSelectors { get; }
+
+    /// <summary>
+    /// Constructor for EventRequester
+    /// </summary>
+    /// <param name="url">The URL of the service EventRequest endpoint. Must not be null or empty.</param>
+    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
+    public EventRequester(string url, params Func<TProjection, Guid?>[] foreignIdSelectors)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            throw new NostifyException("URL of EventRequest endpoint is required");
+        }
+
+        Url = url;
+        ForeignIdSelectors = foreignIdSelectors ?? Array.Empty<Func<TProjection, Guid?>>();
     }
 }

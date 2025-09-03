@@ -71,8 +71,7 @@ public class Nostify : INostify
         var producerConfig = new List<KeyValuePair<string, string>>
         {
             new KeyValuePair<string, string>("bootstrap.servers", KafkaUrl),
-            new KeyValuePair<string, string>("session.timeout.ms", "45000"),
-            new KeyValuePair<string, string>("client.id", $"Nostifyd-{dbName}-{Guid.NewGuid()}")
+            new KeyValuePair<string, string>("client.id", $"Nostify-{dbName}-{Guid.NewGuid()}")
         };
         if (isDeployed)
         {
