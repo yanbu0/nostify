@@ -137,10 +137,22 @@ public class ExternalDataEventTests
 
         // Act & Assert - This tests that the API signature compiles correctly
         // We're not actually calling it to avoid making HTTP requests in unit tests
-        var methodInfo = typeof(ExternalDataEvent).GetMethod("GetMultiServiceEventsAsync");
+        var methodInfo = typeof(ExternalDataEvent).GetMethods()
+            .Where(m => m.Name == "GetMultiServiceEventsAsync" && m.GetParameters().Length == 3)
+            .FirstOrDefault();  // Get the overload without pointInTime (backward compatibility)
+        
         Assert.NotNull(methodInfo);
         Assert.True(methodInfo.IsStatic);
         Assert.True(methodInfo.IsGenericMethodDefinition);
+        
+        // Also verify the new overload with pointInTime exists
+        var methodInfoWithPointInTime = typeof(ExternalDataEvent).GetMethods()
+            .Where(m => m.Name == "GetMultiServiceEventsAsync" && m.GetParameters().Length == 4)
+            .FirstOrDefault();  // Get the overload with pointInTime
+        
+        Assert.NotNull(methodInfoWithPointInTime);
+        Assert.True(methodInfoWithPointInTime.IsStatic);
+        Assert.True(methodInfoWithPointInTime.IsGenericMethodDefinition);
         
         // Verify the EventRequest constructor works as expected
         var eventRequest = new EventRequest<TestProjectionForApiTest>($"https://localhost/LocationService/api/EventRequest",
@@ -341,6 +353,62 @@ public class ExternalDataEventTests
         
         // Verify all returned events are before the pointInTime (due to server-side filtering)
         var allEvents = result.SelectMany(r => r.events).ToList();
+        Assert.All(allEvents, e => Assert.True(e.timestamp <= pointInTime));
+    }
+
+    [Fact]
+    public async Task GetMultiServiceEventsAsync_WithPointInTimeParameter_PassesToServices()
+    {
+        // Test that the new pointInTime parameter is properly passed to each service call
+        
+        // Arrange
+        var pointInTime = DateTime.UtcNow.AddMinutes(-20);
+        
+        var service1Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = pointInTime.AddMinutes(-10), command = new NostifyCommand("Service1Event") }
+        };
+        
+        var service2Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = pointInTime.AddMinutes(-5), command = new NostifyCommand("Service2Event") }
+        };
+
+        var combinedHandler = new MultiServiceMockHttpHandler();
+        combinedHandler.AddService("https://service1.com/events", service1Events);
+        combinedHandler.AddService("https://service2.com/events", service2Events);
+        
+        var httpClient = new HttpClient(combinedHandler);
+        
+        var eventRequests = new[]
+        {
+            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
+        };
+
+        // Act
+        var result = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, pointInTime, eventRequests);
+        
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Count);
+        
+        // Verify that both services received requests with the pointInTime parameter
+        Assert.True(combinedHandler.RequestContents.ContainsKey("https://service1.com/events"));
+        Assert.True(combinedHandler.RequestContents.ContainsKey("https://service2.com/events"));
+        
+        // Parse the requests to verify pointInTime was included
+        var service1Request = JsonConvert.DeserializeObject<EventRequestData>(combinedHandler.RequestContents["https://service1.com/events"]);
+        var service2Request = JsonConvert.DeserializeObject<EventRequestData>(combinedHandler.RequestContents["https://service2.com/events"]);
+        
+        Assert.NotNull(service1Request);
+        Assert.NotNull(service2Request);
+        Assert.Equal(pointInTime, service1Request.PointInTime);
+        Assert.Equal(pointInTime, service2Request.PointInTime);
+        
+        // Verify the events returned match our expected filtered events
+        var allEvents = result.SelectMany(r => r.events).ToList();
+        Assert.Equal(2, allEvents.Count);
         Assert.All(allEvents, e => Assert.True(e.timestamp <= pointInTime));
     }
 

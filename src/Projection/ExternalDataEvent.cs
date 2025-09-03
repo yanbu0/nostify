@@ -259,9 +259,10 @@ public class ExternalDataEvent
     /// <typeparam name="TProjection">Type of the projection</typeparam>
     /// <param name="httpClient">An HTTP client to make the service calls. Must not be null.</param>
     /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
     /// <param name="eventRequests">Array of EventRequest objects containing URLs and foreign ID selectors</param>
     /// <returns>Combined list of ExternalDataEvent from all services</returns>
-    public async static Task<List<ExternalDataEvent>> GetMultiServiceEventsAsync<TProjection>(HttpClient httpClient, List<TProjection> projectionsToInit, params EventRequest<TProjection>[] eventRequests)
+    public async static Task<List<ExternalDataEvent>> GetMultiServiceEventsAsync<TProjection>(HttpClient httpClient, List<TProjection> projectionsToInit, DateTime? pointInTime = null, params EventRequest<TProjection>[] eventRequests)
         where TProjection : IUniquelyIdentifiable
     {
         if (httpClient == null)
@@ -276,7 +277,7 @@ public class ExternalDataEvent
 
         // Create tasks for all service calls to run in parallel
         var tasks = eventRequests.Select(request =>
-            GetEventsAsync(httpClient, request.Url, projectionsToInit, request.ForeignIdSelectors)
+            GetEventsAsync(httpClient, request.Url, projectionsToInit, pointInTime, request.ForeignIdSelectors)
         ).ToArray();
 
         // Wait for all tasks to complete
@@ -290,6 +291,20 @@ public class ExternalDataEvent
         }
 
         return combinedResults;
+    }
+
+    /// <summary>
+    /// Gets events from multiple external services in parallel (backward compatibility overload)
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="httpClient">An HTTP client to make the service calls. Must not be null.</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="eventRequests">Array of EventRequest objects containing URLs and foreign ID selectors</param>
+    /// <returns>Combined list of ExternalDataEvent from all services</returns>
+    public async static Task<List<ExternalDataEvent>> GetMultiServiceEventsAsync<TProjection>(HttpClient httpClient, List<TProjection> projectionsToInit, params EventRequest<TProjection>[] eventRequests)
+        where TProjection : IUniquelyIdentifiable
+    {
+        return await GetMultiServiceEventsAsync(httpClient, projectionsToInit, null, eventRequests);
     }
 }
 
