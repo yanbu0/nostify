@@ -23,6 +23,10 @@
 
 ### Updates
 
+- 3.7.1
+  - **Mixed Constructor Support**: `EventRequester` now supports mixing single ID selectors (`Func<T, Guid?>`) and list ID selectors (`Func<T, List<Guid?>>`) in the same instance
+  - **EventRequester List Constructor**: Added params constructor for list selectors: `new EventRequester(url, p => p.listOfIds)`
+  - **Non-Nullable Constructor Support**: Added constructors accepting `Func<T, Guid>[]` and `Func<T, List<Guid>>[]` for stricter null handling
 - 3.7.0
   - **Enhanced Multi-Service Event Querying**: Added `GetMultiServiceEventsAsync` method for efficient parallel querying of multiple external services
   - **EventRequester Pattern**: New `EventRequester<T>` class with support for multiple foreign ID selectors per service
@@ -620,7 +624,91 @@ new EventRequester<TestProjection>(url, p => p.foreignId)
 
 // Multiple foreign ID selectors (query events for any matching ID)  
 new EventRequester<TestProjection>(url, p => p.primaryId, p => p.secondaryId, p => p.fallbackId)
+
+// List foreign ID selectors (convenient params syntax)
+new EventRequester<TestProjection>(url, p => p.listOfIds, p => p.anotherListOfIds)
+
+// Non-nullable function parameter constructors (for stricter type checking)
+new EventRequester<TestProjection>(url, new Func<TestProjection, Guid>[] { p => p.requiredId })
+new EventRequester<TestProjection>(url, new Func<TestProjection, List<Guid>>[] { p => p.requiredListOfIds })
+new EventRequester<TestProjection>(url, 
+    new Func<TestProjection, Guid>[] { p => p.requiredId },
+    new Func<TestProjection, List<Guid>>[] { p => p.requiredListOfIds })
 ```
+
+#### Mixed Constructor for Complex Relationships
+
+For projections that have both individual foreign keys and collections of foreign keys, use the mixed constructor:
+
+```csharp
+// Example projection with both single and list foreign IDs
+public class ComplexProjection : IUniquelyIdentifiable
+{
+    public Guid id { get; set; }
+    public Guid? primarySiteId { get; set; }      // Single foreign key
+    public Guid? ownerId { get; set; }            // Single foreign key
+    public List<Guid?> relatedIds { get; set; }   // Collection of foreign keys
+    public List<Guid?> departmentIds { get; set; } // Collection of foreign keys
+}
+
+// Mixed constructor combining single and list selectors
+var eventRequester = new EventRequester<ComplexProjection>(
+    url: "https://api.example.com/events",
+    singleIdSelectors: new Func<ComplexProjection, Guid?>[] {
+        p => p.primarySiteId,     // Single ID selector
+        p => p.ownerId            // Another single ID selector
+    },
+    listIdSelectors: new Func<ComplexProjection, List<Guid?>>[] {
+        p => p.relatedIds,        // List ID selector - gets all related IDs
+        p => p.departmentIds      // Another list ID selector - gets all department IDs
+    }
+);
+
+// Use with GetMultiServiceEventsAsync
+var events = await ExternalDataEvent.GetMultiServiceEventsAsync(
+    httpClient,
+    projections,
+    DateTime.Now, // Point in time (optional)
+    eventRequester
+);
+```
+
+**Benefits of Mixed Constructor:**
+- **Flexibility**: Mix both single and list selectors in the same EventRequester
+- **Clean API**: No need to manually flatten lists before creating the EventRequester
+- **Backward Compatibility**: Existing code continues to work unchanged
+- **Type Safety**: All selectors are strongly typed and validated at compile time
+
+#### Non-Nullable Constructor Support
+
+For scenarios requiring stricter null handling, use the non-nullable constructor overloads:
+
+```csharp
+// Non-nullable single ID selectors
+var singleRequester = new EventRequester<TestProjection>(
+    url: "https://api.example.com/events",
+    new Func<TestProjection, Guid>[] { p => p.requiredId, p => p.primaryId }
+);
+
+// Non-nullable list ID selectors  
+var listRequester = new EventRequester<TestProjection>(
+    url: "https://api.example.com/events",
+    new Func<TestProjection, List<Guid>>[] { p => p.requiredIds, p => p.relatedIds }
+);
+
+// Mixed non-nullable constructor
+var mixedRequester = new EventRequester<TestProjection>(
+    url: "https://api.example.com/events",
+    singleIdSelectors: new Func<TestProjection, Guid>[] { p => p.requiredId },
+    listIdSelectors: new Func<TestProjection, List<Guid>>[] { p => p.requiredIds }
+);
+```
+
+**Benefits of Non-Nullable Constructors:**
+- **Stricter Type Checking**: Ensures function parameters cannot return null
+- **Better Intent**: Clearly indicates required non-nullable ID fields
+- **Runtime Safety**: Reduces null reference exceptions in ID processing
+- **API Consistency**: Provides both nullable and non-nullable options for all scenarios
 
 #### Single Service Event Querying
 

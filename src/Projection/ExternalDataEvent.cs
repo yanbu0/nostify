@@ -277,8 +277,13 @@ public class ExternalDataEvent
 
         // Create tasks for all service calls to run in parallel
         var tasks = eventRequests.Select(request =>
-            GetEventsAsync(httpClient, request.Url, projectionsToInit, pointInTime, request.ForeignIdSelectors)
-        ).ToArray();
+        {
+            // Use the new method to get all foreign ID selectors if available, otherwise use the existing ones
+            var allSelectors = request.ListSelectors.Any() 
+                ? request.GetAllForeignIdSelectors(projectionsToInit)
+                : request.ForeignIdSelectors;
+            return GetEventsAsync(httpClient, request.Url, projectionsToInit, pointInTime, allSelectors);
+        }).ToArray();
 
         // Wait for all tasks to complete
         var results = await Task.WhenAll(tasks);
@@ -305,38 +310,5 @@ public class ExternalDataEvent
         where TProjection : IUniquelyIdentifiable
     {
         return await GetMultiServiceEventsAsync(httpClient, projectionsToInit, null, eventRequests);
-    }
-}
-
-/// <summary>
-/// Represents a request for events from an external service
-/// </summary>
-/// <typeparam name="TProjection">Type of the projection</typeparam>
-public class EventRequester<TProjection> where TProjection : IUniquelyIdentifiable
-{
-    /// <summary>
-    /// The URL of the service EventRequest endpoint
-    /// </summary>
-    public string Url { get; }
-
-    /// <summary>
-    /// Functions to get the foreign id for the aggregates required to populate one or more fields in the projection
-    /// </summary>
-    public Func<TProjection, Guid?>[] ForeignIdSelectors { get; }
-
-    /// <summary>
-    /// Constructor for EventRequester
-    /// </summary>
-    /// <param name="url">The URL of the service EventRequest endpoint. Must not be null or empty.</param>
-    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
-    public EventRequester(string url, params Func<TProjection, Guid?>[] foreignIdSelectors)
-    {
-        if (string.IsNullOrEmpty(url))
-        {
-            throw new NostifyException("URL of EventRequest endpoint is required");
-        }
-
-        Url = url;
-        ForeignIdSelectors = foreignIdSelectors ?? Array.Empty<Func<TProjection, Guid?>>();
     }
 }
