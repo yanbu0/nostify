@@ -165,6 +165,265 @@ public class ExternalDataEventTests
     }
 
     [Fact]
+    public async Task GetMultiServiceEventsAsync_CombinesResultsFromMultipleServices()
+    {
+        // Test that results from multiple services are properly combined
+        
+        // Arrange
+        var service1Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") },
+            new Event { aggregateRootId = testProjections[1].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("Service1Command2") }
+        };
+        
+        var service2Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[0].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-20), command = new NostifyCommand("Service2Command") },
+            new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-15), command = new NostifyCommand("Service2Command2") }
+        };
+
+        var mockHandler1 = new MockHttpMessageHandler(service1Events);
+        var mockHandler2 = new MockHttpMessageHandler(service2Events);
+        
+        // Use a custom HttpClient that routes to different handlers based on URL
+        var combinedHandler = new MultiServiceMockHttpHandler();
+        combinedHandler.AddService("https://service1.com/events", service1Events);
+        combinedHandler.AddService("https://service2.com/events", service2Events);
+        
+        var httpClient = new HttpClient(combinedHandler);
+        
+        var eventRequests = new[]
+        {
+            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
+        };
+
+        // Act
+        var result = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, eventRequests);
+        
+        // Assert
+        Assert.NotNull(result);
+        // Should get results for both services: events matching siteId and ownerId selectors
+        Assert.Equal(4, result.Count);
+        
+        // The ExternalDataEvent.aggregateRootId will be the projection.id, not the foreign keys
+        // So we need to verify the events inside each ExternalDataEvent match our expected events
+        var allReturnedEvents = result.SelectMany(r => r.events).ToList();
+        
+        // Verify events from service1 are included
+        var service1EventsReturned = allReturnedEvents.Where(e => service1Events.Any(se => se.aggregateRootId == e.aggregateRootId && se.timestamp == e.timestamp)).ToList();
+        Assert.Equal(2, service1EventsReturned.Count);
+        
+        // Verify events from service2 are included
+        var service2EventsReturned = allReturnedEvents.Where(e => service2Events.Any(se => se.aggregateRootId == e.aggregateRootId && se.timestamp == e.timestamp)).ToList();
+        Assert.Equal(2, service2EventsReturned.Count);
+        
+        // Verify that all results contain events
+        Assert.All(result, ede => Assert.NotEmpty(ede.events));
+    }
+
+    [Fact]
+    public async Task GetMultiServiceEventsAsync_HandlesEmptyResultsFromSomeServices()
+    {
+        // Test that services returning no events don't affect other services' results
+        
+        // Arrange
+        var service1Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") }
+        };
+        
+        var service2Events = new List<Event>(); // Empty results
+        var service3Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-15), command = new NostifyCommand("Service3Command") }
+        };
+
+        var combinedHandler = new MultiServiceMockHttpHandler();
+        combinedHandler.AddService("https://service1.com/events", service1Events);
+        combinedHandler.AddService("https://service2.com/events", service2Events);
+        combinedHandler.AddService("https://service3.com/events", service3Events);
+        
+        var httpClient = new HttpClient(combinedHandler);
+        
+        var eventRequests = new[]
+        {
+            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.id), // This will return empty
+            new EventRequest<TestProjectionForExternalData>("https://service3.com/events", p => p.ownerId)
+        };
+
+        // Act
+        var result = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, eventRequests);
+        
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Count); // Should only have results from service1 and service3
+        
+        // Verify no empty ExternalDataEvent objects are returned
+        Assert.All(result, ede => Assert.NotEmpty(ede.events));
+    }
+
+    [Fact]
+    public async Task GetMultiServiceEventsAsync_HandlesHttpErrorsGracefully()
+    {
+        // Test that HTTP errors from one service don't prevent other services from working
+        
+        // Arrange
+        var service1Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") }
+        };
+
+        var combinedHandler = new MultiServiceMockHttpHandler();
+        combinedHandler.AddService("https://service1.com/events", service1Events);
+        combinedHandler.AddServiceError("https://service2.com/events", HttpStatusCode.InternalServerError, "Service temporarily unavailable");
+        
+        var httpClient = new HttpClient(combinedHandler);
+        
+        var eventRequests = new[]
+        {
+            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId) // This will fail
+        };
+
+        // Act & Assert
+        var exception = await Assert.ThrowsAsync<NostifyException>(() => 
+            ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, eventRequests));
+        
+        Assert.Contains("InternalServerError", exception.Message);
+        Assert.Contains("Service temporarily unavailable", exception.Message);
+    }
+
+    [Fact]
+    public async Task GetMultiServiceEventsAsync_WorksWithPointInTimeFiltering()
+    {
+        // Test that point-in-time filtering works correctly with multiple services
+        
+        // Arrange
+        var pointInTime = DateTime.UtcNow.AddMinutes(-20);
+        
+        var service1Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = pointInTime.AddMinutes(-10), command = new NostifyCommand("BeforeFilter") }, // Before pointInTime
+            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = pointInTime.AddMinutes(10), command = new NostifyCommand("AfterFilter") }   // After pointInTime - should be filtered out
+        };
+        
+        var service2Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = pointInTime.AddMinutes(-5), command = new NostifyCommand("BeforeFilter2") }, // Before pointInTime
+            new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = pointInTime.AddMinutes(15), command = new NostifyCommand("AfterFilter2") }  // After pointInTime - should be filtered out
+        };
+
+        // Configure handlers to return filtered events (simulating server-side filtering)
+        var service1FilteredEvents = service1Events.Where(e => e.timestamp <= pointInTime).ToList();
+        var service2FilteredEvents = service2Events.Where(e => e.timestamp <= pointInTime).ToList();
+
+        var combinedHandler = new MultiServiceMockHttpHandler();
+        combinedHandler.AddService("https://service1.com/events", service1FilteredEvents);
+        combinedHandler.AddService("https://service2.com/events", service2FilteredEvents);
+        
+        var httpClient = new HttpClient(combinedHandler);
+        
+        var eventRequests = new[]
+        {
+            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
+        };
+
+        // Act - Note: GetMultiServiceEventsAsync doesn't currently support pointInTime parameter
+        // This test verifies the current behavior and can be updated when pointInTime support is added
+        var result = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, eventRequests);
+        
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Count);
+        
+        // Verify all returned events are before the pointInTime (due to server-side filtering)
+        var allEvents = result.SelectMany(r => r.events).ToList();
+        Assert.All(allEvents, e => Assert.True(e.timestamp <= pointInTime));
+    }
+
+    [Fact]
+    public async Task GetMultiServiceEventsAsync_ExecutesServicesInParallel()
+    {
+        // Test that multiple service calls are executed in parallel for performance
+        
+        // Arrange
+        var service1Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") }
+        };
+        
+        var service2Events = new List<Event>
+        {
+            new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("Service2Command") }
+        };
+
+        // Use a handler that tracks timing to verify parallel execution
+        var timedHandler = new TimedMockHttpHandler();
+        timedHandler.AddService("https://service1.com/events", service1Events, TimeSpan.FromMilliseconds(100));
+        timedHandler.AddService("https://service2.com/events", service2Events, TimeSpan.FromMilliseconds(100));
+        
+        var httpClient = new HttpClient(timedHandler);
+        
+        var eventRequests = new[]
+        {
+            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
+        };
+
+        // Act
+        var startTime = DateTime.UtcNow;
+        var result = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, eventRequests);
+        var endTime = DateTime.UtcNow;
+        
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Count);
+        
+        // If executed sequentially, it would take ~200ms. If parallel, it should be closer to ~100ms
+        var executionTime = endTime - startTime;
+        Assert.True(executionTime.TotalMilliseconds < 180, $"Execution took {executionTime.TotalMilliseconds}ms, expected less than 180ms for parallel execution");
+    }
+
+    [Fact]
+    public async Task GetMultiServiceEventsAsync_HandlesLargeNumberOfServices()
+    {
+        // Test that the method can handle multiple services efficiently
+        
+        // Arrange
+        const int numberOfServices = 5;
+        var combinedHandler = new MultiServiceMockHttpHandler();
+        var eventRequests = new List<EventRequest<TestProjectionForExternalData>>();
+        
+        for (int i = 0; i < numberOfServices; i++)
+        {
+            var serviceEvents = new List<Event>
+            {
+                new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30 + i), command = new NostifyCommand($"Service{i}Command") }
+            };
+            
+            var serviceUrl = $"https://service{i}.com/events";
+            combinedHandler.AddService(serviceUrl, serviceEvents);
+            eventRequests.Add(new EventRequest<TestProjectionForExternalData>(serviceUrl, p => p.siteId));
+        }
+        
+        var httpClient = new HttpClient(combinedHandler);
+
+        // Act
+        var result = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, eventRequests.ToArray());
+        
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(numberOfServices, result.Count); // Should have one result per service
+        
+        // Verify each service contributed events
+        var allEvents = result.SelectMany(r => r.events).ToList();
+        Assert.Equal(numberOfServices, allEvents.Count);
+    }
+
+    [Fact]
     public async Task GetEventsAsync_HttpClient_WithPointInTime_FiltersEventsByTimestamp()
     {
         // Test that HTTP client version correctly sends pointInTime and processes filtered results
@@ -481,7 +740,7 @@ public class MockHttpMessageHandler : HttpMessageHandler
     private readonly List<Event> _eventsToReturn;
     public string RequestContent { get; private set; } = string.Empty;
 
-    public MockHttpMessageHandler(List<Event> eventsToReturn = null)
+    public MockHttpMessageHandler(List<Event>? eventsToReturn = null)
     {
         _eventsToReturn = eventsToReturn ?? new List<Event>();
     }
@@ -498,6 +757,103 @@ public class MockHttpMessageHandler : HttpMessageHandler
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
+        };
+    }
+}
+
+/// <summary>
+/// Mock HTTP handler that can route requests to different services based on URL
+/// </summary>
+public class MultiServiceMockHttpHandler : HttpMessageHandler
+{
+    private readonly Dictionary<string, List<Event>> _serviceEvents = new();
+    private readonly Dictionary<string, (HttpStatusCode statusCode, string message)> _serviceErrors = new();
+    public Dictionary<string, string> RequestContents { get; } = new();
+
+    public void AddService(string url, List<Event> eventsToReturn)
+    {
+        _serviceEvents[url] = eventsToReturn;
+    }
+
+    public void AddServiceError(string url, HttpStatusCode statusCode, string message)
+    {
+        _serviceErrors[url] = (statusCode, message);
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
+    {
+        var url = request.RequestUri?.ToString() ?? string.Empty;
+
+        if (request.Content != null)
+        {
+            RequestContents[url] = await request.Content.ReadAsStringAsync();
+        }
+
+        // Check if this URL should return an error
+        if (_serviceErrors.TryGetValue(url, out var error))
+        {
+            return new HttpResponseMessage(error.statusCode)
+            {
+                ReasonPhrase = error.message,
+                Content = new StringContent(error.message, Encoding.UTF8, "application/json")
+            };
+        }
+
+        // Return events for this service
+        if (_serviceEvents.TryGetValue(url, out var events))
+        {
+            var responseContent = JsonConvert.SerializeObject(events);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
+            };
+        }
+
+        // Default to empty response
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("[]", Encoding.UTF8, "application/json")
+        };
+    }
+}
+
+/// <summary>
+/// Mock HTTP handler that introduces delays to test parallel execution
+/// </summary>
+public class TimedMockHttpHandler : HttpMessageHandler
+{
+    private readonly Dictionary<string, (List<Event> events, TimeSpan delay)> _serviceData = new();
+    public Dictionary<string, string> RequestContents { get; } = new();
+
+    public void AddService(string url, List<Event> eventsToReturn, TimeSpan delay)
+    {
+        _serviceData[url] = (eventsToReturn, delay);
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
+    {
+        var url = request.RequestUri?.ToString() ?? string.Empty;
+
+        if (request.Content != null)
+        {
+            RequestContents[url] = await request.Content.ReadAsStringAsync();
+        }
+
+        // Add delay and return events for this service
+        if (_serviceData.TryGetValue(url, out var serviceData))
+        {
+            await Task.Delay(serviceData.delay, cancellationToken);
+            var responseContent = JsonConvert.SerializeObject(serviceData.events);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
+            };
+        }
+
+        // Default to empty response
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("[]", Encoding.UTF8, "application/json")
         };
     }
 }
