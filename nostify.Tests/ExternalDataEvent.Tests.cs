@@ -75,14 +75,14 @@ public class ExternalDataEventTests
     public void EventRequester_Constructor_ThrowsExceptionForNullUrl()
     {
         // Arrange & Act & Assert
-        Assert.Throws<NostifyException>(() => new EventRequester<TestProjectionForExternalData>(null));
+        Assert.Throws<NostifyException>(() => new EventRequester<TestProjectionForExternalData>(null!, Array.Empty<Func<TestProjectionForExternalData, Guid?>>()));
     }
 
     [Fact]
     public void EventRequester_Constructor_ThrowsExceptionForEmptyUrl()
     {
         // Arrange & Act & Assert
-        Assert.Throws<NostifyException>(() => new EventRequester<TestProjectionForExternalData>(""));
+        Assert.Throws<NostifyException>(() => new EventRequester<TestProjectionForExternalData>("", Array.Empty<Func<TestProjectionForExternalData, Guid?>>()));
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class ExternalDataEventTests
         var url = "https://test.com/api/events";
 
         // Act
-        var eventRequest = new EventRequester<TestProjectionForExternalData>(url);
+        var eventRequest = new EventRequester<TestProjectionForExternalData>(url, Array.Empty<Func<TestProjectionForExternalData, Guid?>>());
 
         // Assert
         Assert.Equal(url, eventRequest.Url);
@@ -117,6 +117,122 @@ public class ExternalDataEventTests
         Assert.Equal(selector1, eventRequest.ForeignIdSelectors[0]);
         Assert.Equal(selector2, eventRequest.ForeignIdSelectors[1]);
         Assert.Equal(selector3, eventRequest.ForeignIdSelectors[2]);
+    }
+
+    [Fact]
+    public void EventRequester_MixedConstructor_SetsPropertiesCorrectly()
+    {
+        // Arrange
+        var url = "https://test.com/api/events";
+        Func<TestProjectionForExternalData, Guid?>[] singleSelectors = {
+            p => p.siteId,
+            p => p.ownerId
+        };
+        Func<TestProjectionForExternalData, List<Guid?>>[] listSelectors = {
+            p => new List<Guid?> { p.id, Guid.NewGuid() }
+        };
+
+        // Act
+        var eventRequest = new EventRequester<TestProjectionForExternalData>(url, singleSelectors, listSelectors);
+
+        // Assert
+        Assert.Equal(url, eventRequest.Url);
+        Assert.Equal(2, eventRequest.SingleSelectors.Length); // Two single selectors
+        Assert.Single(eventRequest.ListSelectors);   // One list selector
+        Assert.Equal(2, eventRequest.ForeignIdSelectors.Length); // Should be single selectors only initially
+    }
+
+    [Fact]
+    public void EventRequester_MixedConstructor_GetAllForeignIdSelectors_ExpandsCorrectly()
+    {
+        // Arrange
+        var url = "https://test.com/api/events";
+        var testProjections = new List<TestProjectionForExternalData>
+        {
+            new TestProjectionForExternalData { id = Guid.NewGuid(), siteId = Guid.NewGuid(), ownerId = Guid.NewGuid() }
+        };
+        
+        Func<TestProjectionForExternalData, Guid?>[] singleSelectors = {
+            p => p.siteId
+        };
+        Func<TestProjectionForExternalData, List<Guid?>>[] listSelectors = {
+            p => new List<Guid?> { p.id, p.ownerId }
+        };
+
+        // Act
+        var eventRequest = new EventRequester<TestProjectionForExternalData>(url, singleSelectors, listSelectors);
+        var allSelectors = eventRequest.GetAllForeignIdSelectors(testProjections);
+
+        // Assert
+        Assert.Equal(url, eventRequest.Url);
+        Assert.Equal(3, allSelectors.Length); // 1 single selector + 2 from list selector expansion
+    }
+
+    [Fact]
+    public void EventRequester_MixedConstructor_ThrowsExceptionForNullUrl()
+    {
+        // Arrange
+        Func<TestProjectionForExternalData, Guid?>[] singleSelectors = { p => p.siteId };
+        Func<TestProjectionForExternalData, List<Guid?>>[] listSelectors = { p => new List<Guid?> { p.id } };
+
+        // Act & Assert
+        Assert.Throws<NostifyException>(() => 
+            new EventRequester<TestProjectionForExternalData>(null!, singleSelectors, listSelectors));
+    }
+
+    [Fact]
+    public void EventRequester_ListConstructor_SetsPropertiesCorrectly()
+    {
+        // Arrange
+        var url = "https://test.com/api/events";
+        Func<TestProjectionForExternalData, List<Guid?>>[] listSelectors = {
+            p => new List<Guid?> { p.id, p.siteId },
+            p => new List<Guid?> { p.ownerId }
+        };
+
+        // Act
+        var eventRequest = new EventRequester<TestProjectionForExternalData>(url, listSelectors);
+
+        // Assert
+        Assert.Equal(url, eventRequest.Url);
+        Assert.Empty(eventRequest.SingleSelectors); // Should be empty for list-only constructor
+        Assert.Equal(2, eventRequest.ListSelectors.Length); // Two list selectors
+        Assert.Empty(eventRequest.ForeignIdSelectors); // Should be empty initially
+    }
+
+    [Fact]
+    public void EventRequester_ListConstructor_GetAllForeignIdSelectors_ExpandsCorrectly()
+    {
+        // Arrange
+        var url = "https://test.com/api/events";
+        var testProjections = new List<TestProjectionForExternalData>
+        {
+            new TestProjectionForExternalData { id = Guid.NewGuid(), siteId = Guid.NewGuid(), ownerId = Guid.NewGuid() }
+        };
+        
+        Func<TestProjectionForExternalData, List<Guid?>>[] listSelectors = {
+            p => new List<Guid?> { p.id, p.siteId }, // 2 IDs from first selector
+            p => new List<Guid?> { p.ownerId }       // 1 ID from second selector
+        };
+
+        // Act
+        var eventRequest = new EventRequester<TestProjectionForExternalData>(url, listSelectors);
+        var allSelectors = eventRequest.GetAllForeignIdSelectors(testProjections);
+
+        // Assert
+        Assert.Equal(url, eventRequest.Url);
+        Assert.Equal(3, allSelectors.Length); // Should expand to 3 individual selectors (2 + 1)
+    }
+
+    [Fact]
+    public void EventRequester_ListConstructor_ThrowsExceptionForNullUrl()
+    {
+        // Arrange
+        Func<TestProjectionForExternalData, List<Guid?>>[] listSelectors = { p => new List<Guid?> { p.id } };
+
+        // Act & Assert
+        Assert.Throws<NostifyException>(() => 
+            new EventRequester<TestProjectionForExternalData>(null!, listSelectors));
     }
 
     [Fact]
@@ -194,7 +310,7 @@ public class ExternalDataEventTests
 
         // Act & Assert
         await Assert.ThrowsAsync<NostifyException>(async () => 
-            await ExternalDataEvent.GetMultiServiceEventsAsync(null, testProjections, eventRequest));
+            await ExternalDataEvent.GetMultiServiceEventsAsync(null!, testProjections, eventRequest));
     }
 
     [Fact]

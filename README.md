@@ -23,6 +23,9 @@
 
 ### Updates
 
+- 3.7.1
+  - **Mixed Constructor Support**: `EventRequester` now supports mixing single ID selectors (`Func<T, Guid?>`) and list ID selectors (`Func<T, List<Guid?>>`) in the same instance
+  - **EventRequester List Constructor**: Added params constructor for list selectors: `new EventRequester(url, p => p.listOfIds)`
 - 3.7.0
   - **Enhanced Multi-Service Event Querying**: Added `GetMultiServiceEventsAsync` method for efficient parallel querying of multiple external services
   - **EventRequester Pattern**: New `EventRequester<T>` class with support for multiple foreign ID selectors per service
@@ -620,7 +623,53 @@ new EventRequester<TestProjection>(url, p => p.foreignId)
 
 // Multiple foreign ID selectors (query events for any matching ID)  
 new EventRequester<TestProjection>(url, p => p.primaryId, p => p.secondaryId, p => p.fallbackId)
+
+// List foreign ID selectors (convenient params syntax)
+new EventRequester<TestProjection>(url, p => p.listOfIds, p => p.anotherListOfIds)
 ```
+
+#### Mixed Constructor for Complex Relationships
+
+For projections that have both individual foreign keys and collections of foreign keys, use the mixed constructor:
+
+```csharp
+// Example projection with both single and list foreign IDs
+public class ComplexProjection : IUniquelyIdentifiable
+{
+    public Guid id { get; set; }
+    public Guid? primarySiteId { get; set; }      // Single foreign key
+    public Guid? ownerId { get; set; }            // Single foreign key
+    public List<Guid?> relatedIds { get; set; }   // Collection of foreign keys
+    public List<Guid?> departmentIds { get; set; } // Collection of foreign keys
+}
+
+// Mixed constructor combining single and list selectors
+var eventRequester = new EventRequester<ComplexProjection>(
+    url: "https://api.example.com/events",
+    singleIdSelectors: new Func<ComplexProjection, Guid?>[] {
+        p => p.primarySiteId,     // Single ID selector
+        p => p.ownerId            // Another single ID selector
+    },
+    listIdSelectors: new Func<ComplexProjection, List<Guid?>>[] {
+        p => p.relatedIds,        // List ID selector - gets all related IDs
+        p => p.departmentIds      // Another list ID selector - gets all department IDs
+    }
+);
+
+// Use with GetMultiServiceEventsAsync
+var events = await ExternalDataEvent.GetMultiServiceEventsAsync(
+    httpClient,
+    projections,
+    DateTime.Now, // Point in time (optional)
+    eventRequester
+);
+```
+
+**Benefits of Mixed Constructor:**
+- **Flexibility**: Mix both single and list selectors in the same EventRequester
+- **Clean API**: No need to manually flatten lists before creating the EventRequester
+- **Backward Compatibility**: Existing code continues to work unchanged
+- **Type Safety**: All selectors are strongly typed and validated at compile time
 
 #### Single Service Event Querying
 

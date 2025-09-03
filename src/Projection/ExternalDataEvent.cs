@@ -277,8 +277,13 @@ public class ExternalDataEvent
 
         // Create tasks for all service calls to run in parallel
         var tasks = eventRequests.Select(request =>
-            GetEventsAsync(httpClient, request.Url, projectionsToInit, pointInTime, request.ForeignIdSelectors)
-        ).ToArray();
+        {
+            // Use the new method to get all foreign ID selectors if available, otherwise use the existing ones
+            var allSelectors = request.ListSelectors.Any() 
+                ? request.GetAllForeignIdSelectors(projectionsToInit)
+                : request.ForeignIdSelectors;
+            return GetEventsAsync(httpClient, request.Url, projectionsToInit, pointInTime, allSelectors);
+        }).ToArray();
 
         // Wait for all tasks to complete
         var results = await Task.WhenAll(tasks);
@@ -338,5 +343,84 @@ public class EventRequester<TProjection> where TProjection : IUniquelyIdentifiab
 
         Url = url;
         ForeignIdSelectors = foreignIdSelectors ?? Array.Empty<Func<TProjection, Guid?>>();
+    }
+
+    /// <summary>
+    /// Constructor for EventRequester that accepts a mix of single and list foreign ID selectors
+    /// </summary>
+    /// <param name="url">The URL of the service EventRequest endpoint. Must not be null or empty.</param>
+    /// <param name="singleIdSelectors">Functions that return a single foreign id for the aggregates</param>
+    /// <param name="listIdSelectors">Functions that return a list of foreign ids for the aggregates</param>
+    public EventRequester(string url, Func<TProjection, Guid?>[] singleIdSelectors, Func<TProjection, List<Guid?>>[] listIdSelectors)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            throw new NostifyException("URL of EventRequest endpoint is required");
+        }
+
+        Url = url;
+        SingleSelectors = singleIdSelectors ?? Array.Empty<Func<TProjection, Guid?>>();
+        ListSelectors = listIdSelectors ?? Array.Empty<Func<TProjection, List<Guid?>>>();
+        
+        // We'll compute ForeignIdSelectors when needed, but for backward compatibility,
+        // we'll store the single selectors directly
+        ForeignIdSelectors = SingleSelectors;
+    }
+
+    /// <summary>
+    /// Constructor for EventRequester that accepts list foreign ID selectors
+    /// </summary>
+    /// <param name="url">The URL of the service EventRequest endpoint. Must not be null or empty.</param>
+    /// <param name="listIdSelectors">Functions that return a list of foreign ids for the aggregates</param>
+    public EventRequester(string url, params Func<TProjection, List<Guid?>>[] listIdSelectors)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            throw new NostifyException("URL of EventRequest endpoint is required");
+        }
+
+        Url = url;
+        SingleSelectors = Array.Empty<Func<TProjection, Guid?>>();
+        ListSelectors = listIdSelectors ?? Array.Empty<Func<TProjection, List<Guid?>>>();
+        
+        // For backward compatibility, ForeignIdSelectors will be empty initially
+        // They will be expanded when GetAllForeignIdSelectors is called
+        ForeignIdSelectors = Array.Empty<Func<TProjection, Guid?>>();
+    }
+
+    /// <summary>
+    /// Single ID selectors
+    /// </summary>
+    public Func<TProjection, Guid?>[] SingleSelectors { get; private set; } = Array.Empty<Func<TProjection, Guid?>>();
+
+    /// <summary>
+    /// List ID selectors for cases where we need to expand lists
+    /// </summary>
+    public Func<TProjection, List<Guid?>>[] ListSelectors { get; private set; } = Array.Empty<Func<TProjection, List<Guid?>>>();
+
+    /// <summary>
+    /// Gets all foreign ID selectors as Func&lt;TProjection, Guid?&gt;[] by expanding list selectors
+    /// </summary>
+    /// <param name="projectionsToInit">List of projections to use for expanding list selectors</param>
+    /// <returns>Array of all foreign ID selectors</returns>
+    public Func<TProjection, Guid?>[] GetAllForeignIdSelectors(List<TProjection> projectionsToInit)
+    {
+        var allSelectors = new List<Func<TProjection, Guid?>>();
+        
+        // Add single selectors directly
+        allSelectors.AddRange(SingleSelectors);
+        
+        // Transform list selectors using the same logic as TransformForeignIdSelectors
+        if (ListSelectors.Any())
+        {
+            var expandedSelectors = projectionsToInit
+                .SelectMany(p => ListSelectors.SelectMany(selector => selector(p)))
+                .Select(guid => new Func<TProjection, Guid?>(_ => guid))
+                .ToArray();
+            
+            allSelectors.AddRange(expandedSelectors);
+        }
+        
+        return allSelectors.ToArray();
     }
 }
