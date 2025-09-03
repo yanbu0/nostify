@@ -23,6 +23,13 @@
 
 ### Updates
 
+- 3.7.0
+  - **Enhanced Multi-Service Event Querying**: Added `GetMultiServiceEventsAsync` method for efficient parallel querying of multiple external services
+  - **EventRequester Pattern**: New `EventRequester<T>` class with support for multiple foreign ID selectors per service
+  - **Point-in-Time Query Support**: EventRequest endpoints now support optional DateTime path parameters for historical event queries (`/EventRequest/{pointInTime:datetime?}`)
+  - **Parallel External Data Processing**: GetMultiServiceEventsAsync executes all external service calls simultaneously for improved performance
+  - **Flexible Service Configuration**: EventRequester supports complex projection relationships with multiple foreign ID mappings
+  - **Template Updates**: All template project files updated to reference nostify 3.7.0
 - 3.6.0
   - Added `IEvent` interface for better abstraction and testability of Event objects
   - Enhanced `EventFactory` (renamed from EventBuilder) with instance-based design and optional validation
@@ -535,15 +542,33 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
 
     if (httpClient != null)
     {
-      //Get events from other services via http using the EventRequest endpoint
-      //GetEventsAsync works the same way but you pass it an HttpClient and the url of the endpoint
-      var locationEvents = await ExternalDataEvent.GetEventsAsync(httpClient,
-                    $"{Environment.GetEnvironmentVariable("LocationServiceUrl")}/api/EventRequest",
-                    projectionsToInit,
-                    p => p.locationId;
-      externalDataEvents.AddRange(locationEvents);
+      // NEW: Use GetMultiServiceEventsAsync for efficient parallel querying of multiple external services
+      // This method uses EventRequester objects to define each service endpoint and its foreign ID selector
+      var eventRequesters = new List<EventRequester<TestWithStatus>>
+      {
+        new EventRequester<TestWithStatus>(
+          $"{Environment.GetEnvironmentVariable("LocationServiceUrl")}/api/EventRequest", 
+          p => p.locationId),
+        new EventRequester<TestWithStatus>(
+          $"{Environment.GetEnvironmentVariable("StatusServiceUrl")}/api/EventRequest", 
+          p => p.statusId),
+        // Add more services as needed
+      };
 
-      //If you need to get events from multiple services add more calls to GetEventsAsync here
+      var multiServiceEvents = await ExternalDataEvent.GetMultiServiceEventsAsync(
+        httpClient, 
+        eventRequesters, 
+        projectionsToInit, 
+        pointInTime);
+      externalDataEvents.AddRange(multiServiceEvents);
+
+      // ALTERNATIVE: For single service calls, continue using GetEventsAsync
+      // var locationEvents = await ExternalDataEvent.GetEventsAsync(httpClient,
+      //              $"{Environment.GetEnvironmentVariable("LocationServiceUrl")}/api/EventRequest",
+      //              projectionsToInit,
+      //              p => p.locationId,
+      //              pointInTime);
+      // externalDataEvents.AddRange(locationEvents);
     }
     
 
@@ -555,7 +580,91 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
 
 Note the `GetExternalDataEventsAsync()` method. You must implement this such that it returns a `List<ExternalDataEvent>`. `ExternalDataEvent` contains a `Guid` proprty that points at the "base" aggregate `id` value, and a `List<Event>` property which are all of the events external to the base aggregate that need to be applied to get the projection to the current state (or point in time state if desired).
 
+#### Multi-Service Event Querying
+
+For efficient parallel querying of multiple external services, use the new `GetMultiServiceEventsAsync` method with `EventRequester` objects:
+
+```csharp
+// Create EventRequester objects for each external service
+var eventRequesters = new List<EventRequester<YourProjection>>
+{
+    new EventRequester<YourProjection>(
+        "https://service1.com/api/EventRequest", 
+        p => p.service1Id),
+    new EventRequester<YourProjection>(
+        "https://service2.com/api/EventRequest", 
+        p => p.service2Id, p => p.alternateService2Id), // Multiple foreign ID selectors
+};
+
+// Query all services in parallel
+var events = await ExternalDataEvent.GetMultiServiceEventsAsync(
+    httpClient, 
+    eventRequesters, 
+    projections, 
+    pointInTime);
+```
+
+**Benefits of GetMultiServiceEventsAsync:**
+- **Parallel Execution**: All external service calls execute simultaneously instead of sequentially
+- **Better Performance**: Significantly faster when querying multiple services
+- **Simplified Code**: Single method call instead of multiple GetEventsAsync calls
+- **Point-in-Time Support**: DateTime parameter is automatically formatted as an ISO path parameter (`/2024-01-15T10:30:00.0000000Z`)
+
+#### EventRequester Configuration
+
+The `EventRequester<T>` class supports multiple foreign ID selectors for complex projection relationships:
+
+```csharp
+// Single foreign ID selector
+new EventRequester<TestProjection>(url, p => p.foreignId)
+
+// Multiple foreign ID selectors (query events for any matching ID)  
+new EventRequester<TestProjection>(url, p => p.primaryId, p => p.secondaryId, p => p.fallbackId)
+```
+
+#### Single Service Event Querying
+
+For single external service calls, continue using the traditional `GetEventsAsync` method:
+
+```csharp
+var locationEvents = await ExternalDataEvent.GetEventsAsync(httpClient,
+    $"{Environment.GetEnvironmentVariable("LocationServiceUrl")}/api/EventRequest",
+    projectionsToInit,
+    p => p.locationId,
+    pointInTime);
+```
+
 For Events in a seperate service you must pass an HttpClient and the url of the `EventRequest` endpoint for the service. The Init function with make an http call to the endpoint to get the events. You'll probably need to authenticate and get a bearer token from your authentication service to pass along with the request in a production environment.
+
+#### EventRequest Endpoint Configuration
+
+The `EventRequest` endpoint in each nostify service automatically supports point-in-time queries via a DateTime path parameter:
+
+```csharp
+[Function(nameof(EventRequest))]
+public async Task<List<Event>> Run(
+    [HttpTrigger("post", Route = "EventRequest/{pointInTime:datetime?}")] HttpRequestData req,
+    [FromBody] List<Guid> aggregateRootIds,
+    DateTime? pointInTime,
+    FunctionContext context,
+    ILogger log)
+```
+
+**Endpoint URL Format:**
+- Current events: `POST /api/EventRequest`
+- Point-in-time events: `POST /api/EventRequest/2024-01-15T10:30:00.0000000Z`
+
+**DateTime Parameter Constraints:**
+- Must be URL-encoded for special characters
+- Recommended format: ISO 8601 (`2024-01-15T10:30:00.0000000Z`)
+- Supports nullable DateTime (`{pointInTime:datetime?}`)
+- Simple dates like `8/25/2025` require URL encoding as `8%2F25%2F2025`
+
+**Body Parameters:**
+- Content-Type: `application/json`
+- Body: Array of aggregate root IDs (`List<Guid>`)
+
+This endpoint is automatically generated in each nostify service and is used by `GetEventsAsync` and `GetMultiServiceEventsAsync` methods to retrieve events for external projections.
 
 ### Create New Projection
 
