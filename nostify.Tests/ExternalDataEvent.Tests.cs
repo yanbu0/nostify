@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -53,7 +54,7 @@ public class ExternalDataEventTests
     }
 
     [Fact]
-    public void EventRequest_Constructor_SetsPropertiesCorrectly()
+    public void EventRequester_Constructor_SetsPropertiesCorrectly()
     {
         // Arrange
         var url = "https://test.com/api/events";
@@ -61,7 +62,7 @@ public class ExternalDataEventTests
         Func<TestProjectionForExternalData, Guid?> selector2 = p => p.ownerId;
 
         // Act
-        var eventRequest = new EventRequest<TestProjectionForExternalData>(url, selector1, selector2);
+        var eventRequest = new EventRequester<TestProjectionForExternalData>(url, selector1, selector2);
 
         // Assert
         Assert.Equal(url, eventRequest.Url);
@@ -71,27 +72,27 @@ public class ExternalDataEventTests
     }
 
     [Fact]
-    public void EventRequest_Constructor_ThrowsExceptionForNullUrl()
+    public void EventRequester_Constructor_ThrowsExceptionForNullUrl()
     {
         // Arrange & Act & Assert
-        Assert.Throws<NostifyException>(() => new EventRequest<TestProjectionForExternalData>(null));
+        Assert.Throws<NostifyException>(() => new EventRequester<TestProjectionForExternalData>(null));
     }
 
     [Fact]
-    public void EventRequest_Constructor_ThrowsExceptionForEmptyUrl()
+    public void EventRequester_Constructor_ThrowsExceptionForEmptyUrl()
     {
         // Arrange & Act & Assert
-        Assert.Throws<NostifyException>(() => new EventRequest<TestProjectionForExternalData>(""));
+        Assert.Throws<NostifyException>(() => new EventRequester<TestProjectionForExternalData>(""));
     }
 
     [Fact]
-    public void EventRequest_Constructor_HandlesNoSelectors()
+    public void EventRequester_Constructor_HandlesNoSelectors()
     {
         // Arrange
         var url = "https://test.com/api/events";
 
         // Act
-        var eventRequest = new EventRequest<TestProjectionForExternalData>(url);
+        var eventRequest = new EventRequester<TestProjectionForExternalData>(url);
 
         // Assert
         Assert.Equal(url, eventRequest.Url);
@@ -154,8 +155,8 @@ public class ExternalDataEventTests
         Assert.True(methodInfoWithPointInTime.IsStatic);
         Assert.True(methodInfoWithPointInTime.IsGenericMethodDefinition);
         
-        // Verify the EventRequest constructor works as expected
-        var eventRequest = new EventRequest<TestProjectionForApiTest>($"https://localhost/LocationService/api/EventRequest",
+        // Verify the EventRequester constructor works as expected
+        var eventRequest = new EventRequester<TestProjectionForApiTest>($"https://localhost/LocationService/api/EventRequest",
             p => p.siteId,
             p => p.locationId,
             p => p.subLocationId
@@ -169,7 +170,7 @@ public class ExternalDataEventTests
     public async Task GetMultiServiceEventsAsync_ThrowsException_WhenHttpClientIsNull()
     {
         // Arrange
-        var eventRequest = new EventRequest<TestProjectionForExternalData>("https://test.com/api/events", p => p.siteId);
+        var eventRequest = new EventRequester<TestProjectionForExternalData>("https://test.com/api/events", p => p.siteId);
 
         // Act & Assert
         await Assert.ThrowsAsync<NostifyException>(async () => 
@@ -206,8 +207,8 @@ public class ExternalDataEventTests
         
         var eventRequests = new[]
         {
-            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
-            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
+            new EventRequester<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequester<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
         };
 
         // Act
@@ -260,9 +261,9 @@ public class ExternalDataEventTests
         
         var eventRequests = new[]
         {
-            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
-            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.id), // This will return empty
-            new EventRequest<TestProjectionForExternalData>("https://service3.com/events", p => p.ownerId)
+            new EventRequester<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequester<TestProjectionForExternalData>("https://service2.com/events", p => p.id), // This will return empty
+            new EventRequester<TestProjectionForExternalData>("https://service3.com/events", p => p.ownerId)
         };
 
         // Act
@@ -295,8 +296,8 @@ public class ExternalDataEventTests
         
         var eventRequests = new[]
         {
-            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
-            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId) // This will fail
+            new EventRequester<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequester<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId) // This will fail
         };
 
         // Act & Assert
@@ -339,8 +340,8 @@ public class ExternalDataEventTests
         
         var eventRequests = new[]
         {
-            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
-            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
+            new EventRequester<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequester<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
         };
 
         // Act - Note: GetMultiServiceEventsAsync doesn't currently support pointInTime parameter
@@ -362,16 +363,16 @@ public class ExternalDataEventTests
         // Test that the new pointInTime parameter is properly passed to each service call
         
         // Arrange
-        var pointInTime = DateTime.UtcNow.AddMinutes(-20);
+        var pointInTime = DateTime.SpecifyKind(DateTime.UtcNow.AddMinutes(-20), DateTimeKind.Utc);
         
         var service1Events = new List<Event>
         {
-            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = pointInTime.AddMinutes(-10), command = new NostifyCommand("Service1Event") }
+            new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.SpecifyKind(pointInTime.AddMinutes(-10), DateTimeKind.Utc), command = new NostifyCommand("Service1Event") }
         };
         
         var service2Events = new List<Event>
         {
-            new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = pointInTime.AddMinutes(-5), command = new NostifyCommand("Service2Event") }
+            new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.SpecifyKind(pointInTime.AddMinutes(-5), DateTimeKind.Utc), command = new NostifyCommand("Service2Event") }
         };
 
         var combinedHandler = new MultiServiceMockHttpHandler();
@@ -382,29 +383,26 @@ public class ExternalDataEventTests
         
         var eventRequests = new[]
         {
-            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
-            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
+            new EventRequester<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequester<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
         };
 
         // Act
         var result = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, pointInTime, eventRequests);
+        
+        // Debug: Print the URLs that were requested
+        var requestedUrls = combinedHandler.RequestContents.Keys.ToList();
+        // Console.WriteLine($"Requested URLs: {string.Join(", ", requestedUrls)}");
+        // Console.WriteLine($"Expected base URLs: https://service1.com/events, https://service2.com/events");
         
         // Assert
         Assert.NotNull(result);
         Assert.Equal(2, result.Count);
         
         // Verify that both services received requests with the pointInTime parameter
-        Assert.True(combinedHandler.RequestContents.ContainsKey("https://service1.com/events"));
-        Assert.True(combinedHandler.RequestContents.ContainsKey("https://service2.com/events"));
-        
-        // Parse the requests to verify pointInTime was included
-        var service1Request = JsonConvert.DeserializeObject<EventRequestData>(combinedHandler.RequestContents["https://service1.com/events"]);
-        var service2Request = JsonConvert.DeserializeObject<EventRequestData>(combinedHandler.RequestContents["https://service2.com/events"]);
-        
-        Assert.NotNull(service1Request);
-        Assert.NotNull(service2Request);
-        Assert.Equal(pointInTime, service1Request.PointInTime);
-        Assert.Equal(pointInTime, service2Request.PointInTime);
+        var requestKeys = combinedHandler.RequestContents.Keys.ToList();
+        Assert.True(requestKeys.Any(k => k.StartsWith("https://service1.com/events/")), "Service1 should have been called with pointInTime path parameter");
+        Assert.True(requestKeys.Any(k => k.StartsWith("https://service2.com/events/")), "Service2 should have been called with pointInTime path parameter");
         
         // Verify the events returned match our expected filtered events
         var allEvents = result.SelectMany(r => r.events).ToList();
@@ -437,8 +435,8 @@ public class ExternalDataEventTests
         
         var eventRequests = new[]
         {
-            new EventRequest<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
-            new EventRequest<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
+            new EventRequester<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
+            new EventRequester<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
         };
 
         // Act
@@ -463,7 +461,7 @@ public class ExternalDataEventTests
         // Arrange
         const int numberOfServices = 5;
         var combinedHandler = new MultiServiceMockHttpHandler();
-        var eventRequests = new List<EventRequest<TestProjectionForExternalData>>();
+        var eventRequests = new List<EventRequester<TestProjectionForExternalData>>();
         
         for (int i = 0; i < numberOfServices; i++)
         {
@@ -474,7 +472,7 @@ public class ExternalDataEventTests
             
             var serviceUrl = $"https://service{i}.com/events";
             combinedHandler.AddService(serviceUrl, serviceEvents);
-            eventRequests.Add(new EventRequest<TestProjectionForExternalData>(serviceUrl, p => p.siteId));
+            eventRequests.Add(new EventRequester<TestProjectionForExternalData>(serviceUrl, p => p.siteId));
         }
         
         var httpClient = new HttpClient(combinedHandler);
@@ -511,13 +509,6 @@ public class ExternalDataEventTests
         
         // Assert
         Assert.NotNull(result);
-        
-        // Verify the request included pointInTime
-        var requestData = JsonConvert.DeserializeObject<EventRequestData>(mockHandler.RequestContent);
-        Assert.NotNull(requestData);
-        Assert.Equal(testPointInTime, requestData.PointInTime);
-        Assert.Contains(_testProjections[0].id, requestData.ForeignIds);
-        Assert.Contains(_testProjections[1].id, requestData.ForeignIds);
 
         // Verify only events before pointInTime are returned
         var allReturnedEvents = result.SelectMany(r => r.events).ToList();
@@ -540,64 +531,10 @@ public class ExternalDataEventTests
         
         // Assert
         Assert.NotNull(result);
-        
-        // Verify the request has null pointInTime
-        var requestData = JsonConvert.DeserializeObject<EventRequestData>(mockHandler.RequestContent);
-        Assert.NotNull(requestData);
-        Assert.Null(requestData.PointInTime);
 
         // All events should be returned
         var allReturnedEvents = result.SelectMany(r => r.events).ToList();
         Assert.Equal(_testEvents.Count, allReturnedEvents.Count);
-    }
-
-    [Fact]
-    public void EventRequestData_PropertiesInitializeCorrectly()
-    {
-        // Test the new EventRequestData class
-        
-        // Arrange & Act
-        var requestData = new EventRequestData
-        {
-            ForeignIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() },
-            PointInTime = DateTime.UtcNow
-        };
-        
-        // Assert
-        Assert.NotNull(requestData.ForeignIds);
-        Assert.Equal(2, requestData.ForeignIds.Count);
-        Assert.NotNull(requestData.PointInTime);
-        
-        // Test default constructor
-        var defaultRequestData = new EventRequestData();
-        Assert.NotNull(defaultRequestData.ForeignIds);
-        Assert.Empty(defaultRequestData.ForeignIds);
-        Assert.Null(defaultRequestData.PointInTime);
-    }
-
-    [Fact]
-    public void EventRequestData_SerializesCorrectly()
-    {
-        // Test that EventRequestData serializes and deserializes correctly for HTTP requests
-        
-        // Arrange
-        var testTime = DateTime.UtcNow;
-        var testIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
-        var requestData = new EventRequestData
-        {
-            ForeignIds = testIds,
-            PointInTime = testTime
-        };
-        
-        // Act
-        var serialized = JsonConvert.SerializeObject(requestData);
-        var deserialized = JsonConvert.DeserializeObject<EventRequestData>(serialized);
-        
-        // Assert
-        Assert.NotNull(deserialized);
-        Assert.Equal(testIds.Count, deserialized.ForeignIds.Count);
-        Assert.All(testIds, id => Assert.Contains(id, deserialized.ForeignIds));
-        Assert.Equal(testTime, deserialized.PointInTime);
     }
 
     [Fact]
@@ -708,14 +645,7 @@ public class ExternalDataEventTests
         
         // Assert
         Assert.NotNull(result);
-        Assert.Empty(result);
-        
-        // Verify the request included the early pointInTime
-        var requestData = JsonConvert.DeserializeObject<EventRequestData>(mockHandler.RequestContent);
-        Assert.NotNull(requestData);
-        Assert.Equal(pointInTimeBeforeAllEvents, requestData.PointInTime);
-        Assert.Contains(_testProjections[0].id, requestData.ForeignIds);
-        Assert.Contains(_testProjections[1].id, requestData.ForeignIds);
+        Assert.Empty(result); // Should be empty since no events are before pointInTimeBeforeAllEvents
     }
 
     [Fact]
@@ -820,8 +750,33 @@ public class MockHttpMessageHandler : HttpMessageHandler
             RequestContent = await request.Content.ReadAsStringAsync();
         }
 
+        // Parse pointInTime path parameter if present
+        // Expected format: {baseUrl}/{pointInTime} where pointInTime is in ISO format
+        DateTime? pointInTime = null;
+        var uri = request.RequestUri;
+        if (uri != null)
+        {
+            var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length >= 1)
+            {
+                var lastSegment = segments[segments.Length - 1];
+                // Try to parse the last segment as a DateTime in ISO format with UTC
+                if (DateTime.TryParseExact(Uri.UnescapeDataString(lastSegment), "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedDate))
+                {
+                    pointInTime = parsedDate.ToUniversalTime();
+                }
+            }
+        }
+
+        // Filter events based on pointInTime if provided
+        var eventsToReturn = _eventsToReturn;
+        if (pointInTime.HasValue)
+        {
+            eventsToReturn = _eventsToReturn.Where(e => e.timestamp <= pointInTime.Value).ToList();
+        }
+
         // Return the configured events
-        var responseContent = JsonConvert.SerializeObject(_eventsToReturn);
+        var responseContent = JsonConvert.SerializeObject(eventsToReturn);
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
@@ -857,8 +812,40 @@ public class MultiServiceMockHttpHandler : HttpMessageHandler
             RequestContents[url] = await request.Content.ReadAsStringAsync();
         }
 
-        // Check if this URL should return an error
-        if (_serviceErrors.TryGetValue(url, out var error))
+        // Parse pointInTime path parameter if present and get base URL
+        // Expected format: {baseUrl}/{pointInTime} where pointInTime is in ISO format
+        DateTime? pointInTime = null;
+        string baseUrl = url;
+        
+        var uri = request.RequestUri;
+        if (uri != null)
+        {
+            // Try to find if the last part of the path is a datetime
+            // We'll work backwards from the full URL to find the base URL
+            var urlDecoded = Uri.UnescapeDataString(url);
+            var segments = urlDecoded.Split('/');
+            
+            if (segments.Length >= 1)
+            {
+                var lastSegment = segments[segments.Length - 1];
+                // Try to parse the last segment as a DateTime in ISO format with UTC
+                if (DateTime.TryParseExact(lastSegment, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedDate))
+                {
+                    pointInTime = parsedDate.ToUniversalTime();
+                    // Remove the pointInTime segment to get the base URL by finding the last occurrence
+                    var lastSlashIndex = url.LastIndexOf('/');
+                    if (lastSlashIndex > 0)
+                    {
+                        baseUrl = url.Substring(0, lastSlashIndex);
+                        // Decode the base URL as well
+                        baseUrl = Uri.UnescapeDataString(baseUrl);
+                    }
+                }
+            }
+        }
+
+        // Check if this base URL should return an error
+        if (_serviceErrors.TryGetValue(baseUrl, out var error))
         {
             return new HttpResponseMessage(error.statusCode)
             {
@@ -868,9 +855,24 @@ public class MultiServiceMockHttpHandler : HttpMessageHandler
         }
 
         // Return events for this service
-        if (_serviceEvents.TryGetValue(url, out var events))
+        if (_serviceEvents.TryGetValue(baseUrl, out var events))
         {
-            var responseContent = JsonConvert.SerializeObject(events);
+            var eventsToReturn = events;
+            
+            // Filter events based on pointInTime if provided
+            if (pointInTime.HasValue)
+            {
+                eventsToReturn = events.Where(e => e.timestamp <= pointInTime.Value).ToList();
+                Console.WriteLine($"Service {baseUrl}: Original events: {events.Count}, Filtered events: {eventsToReturn.Count}");
+                Console.WriteLine($"PointInTime: {pointInTime.Value:O} (Kind: {pointInTime.Value.Kind})");
+                foreach (var evt in events)
+                {
+                    Console.WriteLine($"  Event timestamp: {evt.timestamp:O} (Kind: {evt.timestamp.Kind}), AggregateRootId: {evt.aggregateRootId}");
+                    Console.WriteLine($"  Comparison: {evt.timestamp:O} <= {pointInTime.Value:O} = {evt.timestamp <= pointInTime.Value}");
+                }
+            }
+            
+            var responseContent = JsonConvert.SerializeObject(eventsToReturn);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
@@ -907,11 +909,52 @@ public class TimedMockHttpHandler : HttpMessageHandler
             RequestContents[url] = await request.Content.ReadAsStringAsync();
         }
 
+        // Parse pointInTime path parameter if present and get base URL
+        // Expected format: {baseUrl}/{pointInTime} where pointInTime is in ISO format
+        DateTime? pointInTime = null;
+        string baseUrl = url;
+        
+        var uri = request.RequestUri;
+        if (uri != null)
+        {
+            // Try to find if the last part of the path is a datetime
+            // We'll work backwards from the full URL to find the base URL
+            var urlDecoded = Uri.UnescapeDataString(url);
+            var segments = urlDecoded.Split('/');
+            
+            if (segments.Length >= 1)
+            {
+                var lastSegment = segments[segments.Length - 1];
+                // Try to parse the last segment as a DateTime in ISO format with UTC
+                if (DateTime.TryParseExact(lastSegment, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedDate))
+                {
+                    pointInTime = parsedDate.ToUniversalTime();
+                    // Remove the pointInTime segment to get the base URL by finding the last occurrence
+                    var lastSlashIndex = url.LastIndexOf('/');
+                    if (lastSlashIndex > 0)
+                    {
+                        baseUrl = url.Substring(0, lastSlashIndex);
+                        // Decode the base URL as well
+                        baseUrl = Uri.UnescapeDataString(baseUrl);
+                    }
+                }
+            }
+        }
+
         // Add delay and return events for this service
-        if (_serviceData.TryGetValue(url, out var serviceData))
+        if (_serviceData.TryGetValue(baseUrl, out var serviceData))
         {
             await Task.Delay(serviceData.delay, cancellationToken);
-            var responseContent = JsonConvert.SerializeObject(serviceData.events);
+            
+            var eventsToReturn = serviceData.events;
+            
+            // Filter events based on pointInTime if provided
+            if (pointInTime.HasValue)
+            {
+                eventsToReturn = serviceData.events.Where(e => e.timestamp <= pointInTime.Value).ToList();
+            }
+            
+            var responseContent = JsonConvert.SerializeObject(eventsToReturn);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(responseContent, Encoding.UTF8, "application/json")

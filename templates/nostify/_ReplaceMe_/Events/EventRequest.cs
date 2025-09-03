@@ -20,8 +20,9 @@ public class EventRequest
 
     [Function(nameof(EventRequest))]
     public async Task<List<Event>> Run(
-        [HttpTrigger("post", Route = "EventRequest")] HttpRequestData req,
-        [FromBody] EventRequestData requestData,
+        [HttpTrigger("post", Route = "EventRequest/{pointInTime:datetime?}")] HttpRequestData req,
+        [FromBody] List<Guid> aggregateRootIds,
+        DateTime? pointInTime,
         FunctionContext context,
         ILogger log)
     {
@@ -29,12 +30,12 @@ public class EventRequest
         
         var eventsQuery = eventStore
             .GetItemLinqQueryable<Event>()
-            .Where(x => requestData.ForeignIds.Contains(x.aggregateRootId));
+            .Where(x => aggregateRootIds.Contains(x.aggregateRootId));
 
         // Filter by pointInTime if provided
-        if (requestData.PointInTime.HasValue)
+        if (pointInTime.HasValue)
         {
-            eventsQuery = eventsQuery.Where(e => e.timestamp <= requestData.PointInTime.Value);
+            eventsQuery = eventsQuery.Where(e => e.timestamp <= pointInTime.Value);
         }
 
         List<Event> allEvents = await eventsQuery
