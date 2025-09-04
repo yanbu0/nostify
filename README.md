@@ -209,16 +209,18 @@ dotnet new nostifyProjection -ag <Base_Aggregate_Name> --projectionName <Project
 
 ### Event
 
-An `Event` captures a state change to the application.  Generally, this is caused by the user issuing a command such as "save".  When a command comes in from the front end to the endpoint, the http triggers a command handler function which validates the command, composes an `Event` and persists it to the event store.  Note that while a `Command` is always an `Event`, an `Event` is not necessarily always a `Command`.  It is possible for an `Event` to originate elsewhere, say from an IoT device for example.
+An `Event` captures a state change to the application. Generally, this is caused by the user issuing a command such as "save". When a command comes in from the front end to the endpoint, the http triggers a command handler function which validates the command, composes an `Event` and persists it to the event store. Note that while a `Command` is always an `Event`, an `Event` is not necessarily always a `Command`. It is possible for an `Event` to originate elsewhere, say from an IoT device for example.
+
+Events implement the `IEvent` interface, which provides better abstraction and testability. The EventFactory returns `IEvent` instances for consistent usage throughout the framework.
 
 In a typical scenario, the `Event` is created in the command handler using the EventFactory factory class, the `payload` is validated, and then saved to the event store:
 
 ```C#
 // Default behavior - validation enabled
-Event pe = new EventFactory().Create<TestAggregate>(TestCommand.Create, newId, newTest);
+IEvent pe = new EventFactory().Create<TestAggregate>(TestCommand.Create, newId, newTest);
 
 // Or disable validation using method chaining
-Event pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
+IEvent pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
 await _nostify.PersistEventAsync(pe);
 ```
 
@@ -230,15 +232,15 @@ Event payloads are validated by default when using EventFactory. This is done by
 
 ```C#
 // EventFactory validates by default - no need for manual validation
-Event pe = new EventFactory().Create<TestAggregate>(TestCommand.Create, newId, newTest);
+IEvent pe = new EventFactory().Create<TestAggregate>(TestCommand.Create, newId, newTest);
 await _nostify.PersistEventAsync(pe);
 
 // Or skip validation if needed
-Event pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
+IEvent pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
 await _nostify.PersistEventAsync(pe);
 
 // For events with no payload data (like delete operations)
-Event pe = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
+IEvent pe = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
 await _nostify.PersistEventAsync(pe);
 ```
 
@@ -265,11 +267,11 @@ The `CreateNullPayloadEvent` method is specifically designed for operations that
 
 ```C#
 // Typical delete operation - no payload data needed
-Event deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
+IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
 await _nostify.PersistEventAsync(deleteEvent);
 
 // With user and partition information
-Event deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId, userId, partitionKey);
+IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId, userId, partitionKey);
 await _nostify.PersistEventAsync(deleteEvent);
 ```
 
