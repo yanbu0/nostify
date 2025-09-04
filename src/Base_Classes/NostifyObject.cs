@@ -131,4 +131,63 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
             typeof(T).GetProperty(propToUpdate.Name).SetValue(this, valueToSet);
         }
     }
+
+    ///<summary>
+    ///Updates properties of Aggregate or Projection based off of a list of propertyChecks. Use when property names in payload do not match property names in T 
+    ///and T has multiple properties of the same Aggregate type.
+    ///<example>
+    ///<br/>
+    ///Example below will set the ExampleProjection.exampleName property to the value of the payload.name property if the payload id equals this.exampleId :
+    ///<code>
+    ///List&lt;PropertyCheck&gt; propertyChecks = new List&lt;PropertyCheck&gt;(
+    ///            new PropertyCheck("name", "exampleName", this.exampleId),
+    ///);
+    ///this.UpdateProperties&lt;ExampleProjection&gt;(eventToApply.payload, propertyChecks);
+    ///</code>
+    ///</example>
+    ///</summary>
+    ///<param name="payload">Must be payload from Event, name of property in payload must be set to match a property in the propertyPairs dictionary, or must match property name in T if strict is turned off</param>
+    ///<param name="propertyCheckValues">List of PropertyChecks</param>
+    void UpdateProperties<T>(object payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
+    {
+        foreach (PropertyCheck propertyCheck in propertyCheckValues)
+        {
+            List<PropertyInfo> thisNostifyObjectProps = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public).ToList();
+            JObject jObject = JObject.FromObject(payload);
+            Guid idFromPayload = (Guid)jObject["id"];
+            if (idFromPayload == propertyCheck.projectionPropertyId)
+            {
+                var x = jObject[propertyCheck.eventPropertyName];
+                if (x != null)
+                {
+                    UpdateProperty<T>(propertyCheck.projectionPropertyName, propertyCheck.eventPropertyName, jObject, thisNostifyObjectProps);
+                }
+            }
+        }
+    }
+
+}
+
+/// <summary>
+/// Contains the values needed to update an aggregate or projection when the event name is not the same as the object name 
+/// and there may be more than one property of the same type.
+/// </summary>
+public class PropertyCheck
+{
+    /// <summary>
+    /// Constructor for PropertyCheck
+    /// </summary>
+    /// <param name="eventPropertyName">source property name in IEvent</param>
+    /// <param name="projectionPropertyName">target property name in Aggregate/Projection</param>
+    /// <param name="projectionPropertyId">target property Id in Aggregate/Projection to match to IEvent ID</param>
+    public PropertyCheck(string eventPropertyName, string projectionPropertyName, Guid projectionPropertyId)
+    {
+        this.eventPropertyName = eventPropertyName;
+        this.projectionPropertyName = projectionPropertyName;
+        this.projectionPropertyId = projectionPropertyId;
+    }
+
+    public string eventPropertyName { get; set; } 
+    public string projectionPropertyName { get; set; } 
+    public Guid projectionPropertyId { get; set; }
 }
