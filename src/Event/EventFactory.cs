@@ -41,7 +41,7 @@ public class EventFactory
     /// <param name="userId">The ID of the user responsible for the event.</param>
     /// <param name="partitionKey">The ID of the partition that the aggregate to apply the event to is in.</param>
     /// <returns>A <see cref="Event"/> instance, validated if ValidatePayload property is true.</returns>
-    public IEvent Create<T>(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default) where T : NostifyObject, IAggregate
+    public IEvent Create<T>(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default) where T : class
     {
         var evt = new Event(command, aggregateRootId, payload, userId, partitionKey);
         return ValidatePayload ? evt.ValidatePayload<T>() : evt;
@@ -56,7 +56,7 @@ public class EventFactory
     /// <param name="userId">The ID of the user responsible for the event.</param>
     /// <param name="partitionKey">The ID of the partition that the aggregate to apply the event to is in.</param>
     /// <returns>A <see cref="Event"/> instance, validated if ValidatePayload property is true.</returns>
-    public IEvent Create<T>(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default) where T : NostifyObject, IAggregate
+    public IEvent Create<T>(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default) where T : class
     {
         var evt = new Event(command, payload, userId, partitionKey);
         return ValidatePayload ? evt.ValidatePayload<T>() : evt;

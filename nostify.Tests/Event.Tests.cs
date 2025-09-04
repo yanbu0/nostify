@@ -73,6 +73,82 @@ public class EventTests
         }
     }
 
+    // POCO classes for ValidatePayload tests
+    public class UserCreateCommand
+    {
+        [Required(ErrorMessage = "Username is required")]
+        [StringLength(50, ErrorMessage = "Username cannot exceed 50 characters")]
+        public string? username { get; set; }
+
+        [Required(ErrorMessage = "Email is required")]
+        [EmailAddress(ErrorMessage = "Invalid email format")]
+        public string? email { get; set; }
+
+        [RequiredFor("User_Create", ErrorMessage = "Password is required for user creation")]
+        [MinLength(8, ErrorMessage = "Password must be at least 8 characters")]
+        public string? password { get; set; }
+
+        [RequiredFor(["User_Create", "User_Update"])]
+        [Range(18, 120, ErrorMessage = "Age must be between 18 and 120")]
+        public int? age { get; set; }
+
+        [RegularExpression(@"^\+?[1-9]\d{1,14}$", ErrorMessage = "Invalid phone number format")]
+        public string? phoneNumber { get; set; }
+
+        public Guid id { get; set; }
+    }
+
+    public class ProductCommand
+    {
+        [Required(ErrorMessage = "Product name is required")]
+        public string? name { get; set; }
+
+        [RequiredFor("Product_Create", ErrorMessage = "SKU is required for product creation")]
+        [StringLength(20, MinimumLength = 3, ErrorMessage = "SKU must be between 3 and 20 characters")]
+        public string? sku { get; set; }
+
+        [RequiredFor(["Product_Create", "Product_PriceUpdate"])]
+        [Range(0.01, 999999.99, ErrorMessage = "Price must be between 0.01 and 999999.99")]
+        public decimal? price { get; set; }
+
+        [RequiredFor("Product_Create")]
+        [Range(0, int.MaxValue, ErrorMessage = "Quantity cannot be negative")]
+        public int? quantity { get; set; }
+
+        [StringLength(500, ErrorMessage = "Description cannot exceed 500 characters")]
+        public string? description { get; set; }
+
+        [RequiredFor("Product_Categorize")]
+        public string? category { get; set; }
+
+        public Guid id { get; set; }
+    }
+
+    public class OrderCommand
+    {
+        [Required(ErrorMessage = "Customer ID is required")]
+        public Guid customerId { get; set; }
+
+        [RequiredFor(["Order_Create", "Order_Update"])]
+        [MinLength(1, ErrorMessage = "Order must have at least one item")]
+        public List<string>? items { get; set; }
+
+        [RequiredFor("Order_Create")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Total amount must be positive")]
+        public decimal? totalAmount { get; set; }
+
+        [RequiredFor("Order_Ship")]
+        [RegularExpression(@"^[A-Z]{2}\d{8}$", ErrorMessage = "Tracking number must be in format AA12345678")]
+        public string? trackingNumber { get; set; }
+
+        [RequiredFor(["Order_Create", "Order_Update"], AllowEmptyStrings = false)]
+        public string? shippingAddress { get; set; }
+
+        public DateTime? orderDate { get; set; }
+
+        public Guid id { get; set; }
+    }
+
     [Fact]
     public void EventConstructor_ShouldPass_WithValidParameters()
     {
@@ -1037,6 +1113,491 @@ public class EventTests
         Assert.Equal(Guid.Empty, result.userId);
         Assert.Equal(Guid.Empty, result.partitionKey);
         Assert.Equal(aggregateRootId, result.aggregateRootId);
+    }
+
+    #endregion
+
+    #region ValidatePayload POCO Tests
+
+    [Fact]
+    public void ValidatePayload_ShouldPass_WithValidUserCreateCommand()
+    {
+        // Arrange
+        var command = new NostifyCommand("User_Create", true);
+        var userCommand = new UserCreateCommand
+        {
+            id = Guid.NewGuid(),
+            username = "testuser",
+            email = "test@example.com",
+            password = "password123",
+            age = 25,
+            phoneNumber = "+1234567890"
+        };
+        var eventToTest = new Event(command, userCommand);
+
+        // Act & Assert - Should not throw
+        var result = eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false);
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenUserCreateMissingRequiredFields()
+    {
+        // Arrange
+        var command = new NostifyCommand("User_Create", true);
+        var userCommand = new UserCreateCommand
+        {
+            id = Guid.NewGuid(),
+            // Missing username, email, password, age (all required for User_Create)
+            phoneNumber = "+1234567890"
+        };
+        var eventToTest = new Event(command, userCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Username is required", exception.Message);
+        Assert.Contains("Email is required", exception.Message);
+        Assert.Contains("Password is required for user creation", exception.Message);
+        Assert.Contains("age", exception.Message.ToLower());
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenUserCreatePasswordTooShort()
+    {
+        // Arrange
+        var command = new NostifyCommand("User_Create", true);
+        var userCommand = new UserCreateCommand
+        {
+            id = Guid.NewGuid(),
+            username = "testuser",
+            email = "test@example.com",
+            password = "short", // Too short (< 8 characters)
+            age = 25
+        };
+        var eventToTest = new Event(command, userCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Password must be at least 8 characters", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenUserCreateInvalidEmail()
+    {
+        // Arrange
+        var command = new NostifyCommand("User_Create", true);
+        var userCommand = new UserCreateCommand
+        {
+            id = Guid.NewGuid(),
+            username = "testuser",
+            email = "invalid-email", // Invalid email format
+            password = "password123",
+            age = 25
+        };
+        var eventToTest = new Event(command, userCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Invalid email format", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenUserCreateAgeOutOfRange()
+    {
+        // Arrange
+        var command = new NostifyCommand("User_Create", true);
+        var userCommand = new UserCreateCommand
+        {
+            id = Guid.NewGuid(),
+            username = "testuser",
+            email = "test@example.com",
+            password = "password123",
+            age = 15 // Below minimum age
+        };
+        var eventToTest = new Event(command, userCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Age must be between 18 and 120", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldPass_WhenUserUpdateOnlyRequiredFields()
+    {
+        // Arrange
+        var command = new NostifyCommand("User_Update", true);
+        var userCommand = new UserCreateCommand
+        {
+            id = Guid.NewGuid(),
+            username = "testuser",
+            email = "test@example.com",
+            age = 30, // Required for User_Update
+            // password not required for User_Update, phoneNumber is optional
+        };
+        var eventToTest = new Event(command, userCommand);
+
+        // Act & Assert - Should not throw
+        var result = eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false);
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldPass_WithValidProductCreateCommand()
+    {
+        // Arrange
+        var command = new NostifyCommand("Product_Create", true);
+        var productCommand = new ProductCommand
+        {
+            id = Guid.NewGuid(),
+            name = "Test Product",
+            sku = "TST001",
+            price = 29.99m,
+            quantity = 100,
+            description = "A test product"
+        };
+        var eventToTest = new Event(command, productCommand);
+
+        // Act & Assert - Should not throw
+        var result = eventToTest.ValidatePayload<ProductCommand>(throwErrorIfExtraProps: false);
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenProductCreateMissingRequiredFields()
+    {
+        // Arrange
+        var command = new NostifyCommand("Product_Create", true);
+        var productCommand = new ProductCommand
+        {
+            id = Guid.NewGuid(),
+            // Missing name, sku, price, quantity (all required for Product_Create)
+            description = "A test product"
+        };
+        var eventToTest = new Event(command, productCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<ProductCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Product name is required", exception.Message);
+        Assert.Contains("SKU is required for product creation", exception.Message);
+        Assert.Contains("price", exception.Message.ToLower());
+        Assert.Contains("quantity", exception.Message.ToLower());
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenProductCreateInvalidPrice()
+    {
+        // Arrange
+        var command = new NostifyCommand("Product_Create", true);
+        var productCommand = new ProductCommand
+        {
+            id = Guid.NewGuid(),
+            name = "Test Product",
+            sku = "TST001",
+            price = 0.00m, // Invalid price (below minimum)
+            quantity = 100
+        };
+        var eventToTest = new Event(command, productCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<ProductCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Price must be between 0.01 and 999999.99", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldPass_WhenProductPriceUpdateOnlyRequiredFields()
+    {
+        // Arrange
+        var command = new NostifyCommand("Product_PriceUpdate", true);
+        var productCommand = new ProductCommand
+        {
+            id = Guid.NewGuid(),
+            name = "Test Product",
+            price = 39.99m // Only price is required for Product_PriceUpdate
+            // sku, quantity not required for this command
+        };
+        var eventToTest = new Event(command, productCommand);
+
+        // Act & Assert - Should not throw
+        var result = eventToTest.ValidatePayload<ProductCommand>(throwErrorIfExtraProps: false);
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenProductCategorizeWithoutCategory()
+    {
+        // Arrange
+        var command = new NostifyCommand("Product_Categorize", true);
+        var productCommand = new ProductCommand
+        {
+            id = Guid.NewGuid(),
+            name = "Test Product"
+            // Missing category (required for Product_Categorize)
+        };
+        var eventToTest = new Event(command, productCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<ProductCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("category", exception.Message.ToLower());
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldPass_WithValidOrderCreateCommand()
+    {
+        // Arrange
+        var command = new NostifyCommand("Order_Create", true);
+        var orderCommand = new OrderCommand
+        {
+            id = Guid.NewGuid(),
+            customerId = Guid.NewGuid(),
+            items = new List<string> { "item1", "item2" },
+            totalAmount = 59.99m,
+            shippingAddress = "123 Main St, City, State 12345",
+            orderDate = DateTime.UtcNow
+        };
+        var eventToTest = new Event(command, orderCommand);
+
+        // Act & Assert - Should not throw
+        var result = eventToTest.ValidatePayload<OrderCommand>(throwErrorIfExtraProps: false);
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenOrderCreateEmptyItems()
+    {
+        // Arrange
+        var command = new NostifyCommand("Order_Create", true);
+        var orderCommand = new OrderCommand
+        {
+            id = Guid.NewGuid(),
+            customerId = Guid.NewGuid(),
+            items = new List<string>(), // Empty list - should fail MinLength(1)
+            totalAmount = 59.99m,
+            shippingAddress = "123 Main St, City, State 12345"
+        };
+        var eventToTest = new Event(command, orderCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<OrderCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Order must have at least one item", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenOrderShipInvalidTrackingNumber()
+    {
+        // Arrange
+        var command = new NostifyCommand("Order_Ship", true);
+        var orderCommand = new OrderCommand
+        {
+            id = Guid.NewGuid(),
+            customerId = Guid.NewGuid(),
+            trackingNumber = "INVALID123" // Invalid format - should be AA12345678
+        };
+        var eventToTest = new Event(command, orderCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<OrderCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Tracking number must be in format AA12345678", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldPass_WhenOrderShipWithValidTrackingNumber()
+    {
+        // Arrange
+        var command = new NostifyCommand("Order_Ship", true);
+        var orderCommand = new OrderCommand
+        {
+            id = Guid.NewGuid(),
+            customerId = Guid.NewGuid(),
+            trackingNumber = "AB12345678" // Valid format
+        };
+        var eventToTest = new Event(command, orderCommand);
+
+        // Act & Assert - Should not throw
+        var result = eventToTest.ValidatePayload<OrderCommand>(throwErrorIfExtraProps: false);
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenMultipleCommandsRequireSameField()
+    {
+        // Arrange - Test that both Order_Create and Order_Update require items
+        var createCommand = new NostifyCommand("Order_Create", true);
+        var updateCommand = new NostifyCommand("Order_Update", true);
+        var orderCommandWithoutItems = new OrderCommand
+        {
+            id = Guid.NewGuid(),
+            customerId = Guid.NewGuid()
+            // Missing items (required for both Order_Create and Order_Update)
+        };
+
+        var createEvent = new Event(createCommand, orderCommandWithoutItems);
+        var updateEvent = new Event(updateCommand, orderCommandWithoutItems);
+
+        // Act & Assert - Both should throw
+        var createException = Assert.Throws<NostifyValidationException>(() => 
+            createEvent.ValidatePayload<OrderCommand>(throwErrorIfExtraProps: false));
+        var updateException = Assert.Throws<NostifyValidationException>(() => 
+            updateEvent.ValidatePayload<OrderCommand>(throwErrorIfExtraProps: false));
+        
+        // Check that both mention the items property validation failure
+        Assert.Contains("items", createException.Message.ToLower());
+        Assert.Contains("items", updateException.Message.ToLower());
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenOrderCreateEmptyShippingAddress()
+    {
+        // Arrange
+        var command = new NostifyCommand("Order_Create", true);
+        var orderCommand = new OrderCommand
+        {
+            id = Guid.NewGuid(),
+            customerId = Guid.NewGuid(),
+            items = new List<string> { "item1" },
+            totalAmount = 29.99m,
+            shippingAddress = "" // Empty string - should fail AllowEmptyStrings = false
+        };
+        var eventToTest = new Event(command, orderCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<OrderCommand>(throwErrorIfExtraProps: false));
+        
+        // Check that validation failed for shippingAddress property
+        Assert.Contains("shippingaddress", exception.Message.ToLower());
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldPass_WhenOptionalFieldsAreNull()
+    {
+        // Arrange
+        var command = new NostifyCommand("Basic_Command", true);
+        var userCommand = new UserCreateCommand
+        {
+            id = Guid.NewGuid(),
+            username = "testuser",
+            email = "test@example.com"
+            // phoneNumber is optional - should be fine when null
+            // password and age not required for this command
+        };
+        var eventToTest = new Event(command, userCommand);
+
+        // Act & Assert - Should not throw
+        var result = eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false);
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenInvalidPhoneNumberFormat()
+    {
+        // Arrange
+        var command = new NostifyCommand("User_Create", true);
+        var userCommand = new UserCreateCommand
+        {
+            id = Guid.NewGuid(),
+            username = "testuser",
+            email = "test@example.com",
+            password = "password123",
+            age = 25,
+            phoneNumber = "invalid-phone" // Invalid format
+        };
+        var eventToTest = new Event(command, userCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Invalid phone number format", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldPass_WhenValidPhoneNumberFormats()
+    {
+        // Arrange & Act & Assert - Test various valid phone formats
+        var command = new NostifyCommand("User_Create", true);
+        
+        var phoneNumbers = new[] { "+1234567890", "1234567890", "+123456789012345" };
+        
+        foreach (var phoneNumber in phoneNumbers)
+        {
+            var userCommand = new UserCreateCommand
+            {
+                id = Guid.NewGuid(),
+                username = "testuser",
+                email = "test@example.com",
+                password = "password123",
+                age = 25,
+                phoneNumber = phoneNumber
+            };
+            var eventToTest = new Event(command, userCommand);
+            
+            var result = eventToTest.ValidatePayload<UserCreateCommand>(throwErrorIfExtraProps: false);
+            Assert.Equal(eventToTest, result);
+        }
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenSKUTooShort()
+    {
+        // Arrange
+        var command = new NostifyCommand("Product_Create", true);
+        var productCommand = new ProductCommand
+        {
+            id = Guid.NewGuid(),
+            name = "Test Product",
+            sku = "AB", // Too short (< 3 characters)
+            price = 29.99m,
+            quantity = 100
+        };
+        var eventToTest = new Event(command, productCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<ProductCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("SKU must be between 3 and 20 characters", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrow_WhenDescriptionTooLong()
+    {
+        // Arrange
+        var command = new NostifyCommand("Product_Create", true);
+        var longDescription = new string('a', 501); // Exceeds 500 character limit
+        var productCommand = new ProductCommand
+        {
+            id = Guid.NewGuid(),
+            name = "Test Product",
+            sku = "TST001",
+            price = 29.99m,
+            quantity = 100,
+            description = longDescription
+        };
+        var eventToTest = new Event(command, productCommand);
+
+        // Act & Assert
+        var exception = Assert.Throws<NostifyValidationException>(() => 
+            eventToTest.ValidatePayload<ProductCommand>(throwErrorIfExtraProps: false));
+        
+        Assert.Contains("Description cannot exceed 500 characters", exception.Message);
     }
 
     #endregion

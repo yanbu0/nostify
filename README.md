@@ -23,6 +23,12 @@
 
 ### Updates
 
+- 3.7.4
+  - **Bug Fix**: Fixed issue with PersistEventAsync method
+  - **Template Updates**: All template project files updated to reference nostify 3.7.4
+- 3.7.3
+  - **Enhanced ValidatePayload Testing**: Added comprehensive POCO class tests for ValidatePayload functionality with RequiredFor and validation attributes
+  - **Template Updates**: All template project files updated to reference nostify 3.7.3
 - 3.7.1
   - **Mixed Constructor Support**: `EventRequester` now supports mixing single ID selectors (`Func<T, Guid?>`) and list ID selectors (`Func<T, List<Guid?>>`) in the same instance
   - **EventRequester List Constructor**: Added params constructor for list selectors: `new EventRequester(url, p => p.listOfIds)`

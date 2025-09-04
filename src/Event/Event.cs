@@ -142,7 +142,7 @@ public class Event : IEvent
     }
 
     /// <inheritdoc />
-    public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : NostifyObject, IAggregate
+    public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : class
     {
         // Remove properties that do not exist on the Aggregate, 
         JObject cleanedPayload = RemoveNonExistentPayloadProperties<T>(throwErrorIfExtraProps, out List<ValidationResult> validationMessages) as JObject ?? throw new NullReferenceException("Payload cannot be null after removing non-existent properties.");
@@ -197,7 +197,7 @@ public class Event : IEvent
     /// </summary>
     /// <param name="errorMessageIfFound">If true, will add an error to output if any non-existent properties are found.</param>
     /// <param name="validationMessages">List of validation messages to populate with any errors found.</param>
-    private object RemoveNonExistentPayloadProperties<T>(bool errorMessageIfFound, out List<ValidationResult> validationMessages) where T : NostifyObject, IAggregate
+    private object RemoveNonExistentPayloadProperties<T>(bool errorMessageIfFound, out List<ValidationResult> validationMessages) where T : class
     {
         validationMessages = new List<ValidationResult>();
 

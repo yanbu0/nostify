@@ -87,7 +87,7 @@ public class Nostify : INostify
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
         var eventContainer = await GetEventStoreContainerAsync();
-        await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        await eventContainer.CreateItemAsync(eventToPersist as Event, eventToPersist.aggregateRootId.ToPartitionKey());
     }
 
     ///<inheritdoc />
@@ -121,7 +121,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
     {
         //Throw if not bulk container
         bulkContainer.ValidateBulkEnabled(true);
