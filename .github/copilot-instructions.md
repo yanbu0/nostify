@@ -1,13 +1,14 @@
-# nostify - Event-Sou### Template System
-- Package first: `dotnet pack` to create bin/Rele3. **Template validation**: 
-   - `dotnet pack` to create the NuGet package
-   - `dotnet new install bin/Release/nostify.3.7.4.nupkg` ### Template Installation
-```bash
-$ dotnet new install bin/Release/nostify.3.7.4.nupkg
-Success: nostify::3.7.4 installed the following templates:nstall templates
-   - Create test service: `mkdir /tmp/test && cd /tmp/test && dotnet new nostify -ag TestItem -p 7999`nostify.3.7.4.nupkg
+# nostify - Event-Sourcing Microservices Framework
+
+## Template System
+
+- Package first: `dotnet pack` to create `bin/Release/nostify.3.7.4.nupkg`
 - Install templates locally: `dotnet new install bin/Release/nostify.3.7.4.nupkg`
-- Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>` Microservices Framework
+- Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>`
+  - Example: `dotnet new nostify -ag TestItem -p 7999`
+- Template validation: After installation, verify templates are available with:
+  ```bash
+  dotnet new list | grep nostify
 
 Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
 
