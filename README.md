@@ -555,23 +555,19 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
     if (httpClient != null)
     {
       // NEW: Use GetMultiServiceEventsAsync for efficient parallel querying of multiple external services
-      // This method uses EventRequester objects to define each service endpoint and its foreign ID selector
-      var eventRequesters = new List<EventRequester<TestWithStatus>>
-      {
+      // Pass EventRequester constructors directly as parameters to leverage the params array
+      var multiServiceEvents = await ExternalDataEvent.GetMultiServiceEventsAsync(
+        httpClient, 
+        projectionsToInit,
+        pointInTime,
         new EventRequester<TestWithStatus>(
           $"{Environment.GetEnvironmentVariable("LocationServiceUrl")}/api/EventRequest", 
           p => p.locationId),
         new EventRequester<TestWithStatus>(
           $"{Environment.GetEnvironmentVariable("StatusServiceUrl")}/api/EventRequest", 
-          p => p.statusId),
+          p => p.statusId)
         // Add more services as needed
-      };
-
-      var multiServiceEvents = await ExternalDataEvent.GetMultiServiceEventsAsync(
-        httpClient, 
-        eventRequesters, 
-        projectionsToInit, 
-        pointInTime);
+      );
       externalDataEvents.AddRange(multiServiceEvents);
 
       // ALTERNATIVE: For single service calls, continue using GetEventsAsync
@@ -597,23 +593,18 @@ Note the `GetExternalDataEventsAsync()` method. You must implement this such tha
 For efficient parallel querying of multiple external services, use the new `GetMultiServiceEventsAsync` method with `EventRequester` objects:
 
 ```csharp
-// Create EventRequester objects for each external service
-var eventRequesters = new List<EventRequester<YourProjection>>
-{
+// Query all services in parallel - EventRequester constructors passed directly as parameters
+var events = await ExternalDataEvent.GetMultiServiceEventsAsync(
+    httpClient, 
+    projections,
+    pointInTime,
     new EventRequester<YourProjection>(
         "https://service1.com/api/EventRequest", 
         p => p.service1Id),
     new EventRequester<YourProjection>(
         "https://service2.com/api/EventRequest", 
-        p => p.service2Id, p => p.alternateService2Id), // Multiple foreign ID selectors
-};
-
-// Query all services in parallel
-var events = await ExternalDataEvent.GetMultiServiceEventsAsync(
-    httpClient, 
-    eventRequesters, 
-    projections, 
-    pointInTime);
+        p => p.service2Id, p => p.alternateService2Id) // Multiple foreign ID selectors
+);
 ```
 
 **Benefits of GetMultiServiceEventsAsync:**
