@@ -23,6 +23,10 @@
 
 ### Updates
 
+- 3.8.0
+  - **Enhanced UpdateProperties using PropertyCheck class**: Added new `UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues)` overload for conditional property mapping based on ID matching, used in `Apply` when a projection has multiple references to external aggregates of the same type.
+  - **Comprehensive PropertyCheck Testing**: Added 14+ test scenarios including shared ID handling, edge cases, and complex multi-property updates
+  - **Template Updates**: All template project files updated to reference nostify 3.8.0
 - 3.7.4
   - **Bug Fix**: Fixed issue with PersistEventAsync method
   - **Template Updates**: All template project files updated to reference nostify 3.7.4
