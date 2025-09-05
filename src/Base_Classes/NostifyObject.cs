@@ -131,4 +131,73 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
             typeof(T).GetProperty(propToUpdate.Name).SetValue(this, valueToSet);
         }
     }
+
+    ///<summary>
+    ///Updates properties of an Aggregate or Projection using conditional property mapping based on ID matching. 
+    ///This method is designed for scenarios where a projection has multiple properties of the same type (e.g., multiple user IDs)
+    ///and you need to selectively update only the properties associated with a specific aggregate root ID.
+    ///For each PropertyCheck, if the eventAggregateRootId matches the projectionIdPropertyValue,
+    ///the method will update the target projection property with the value from the corresponding event payload property.
+    ///<example>
+    ///<br/>
+    ///Example: A projection with multiple user properties where you want to update
+    ///only the properties associated with the user whose ID matches the event's aggregate root ID:
+    ///<code>
+    ///List&lt;PropertyCheck&gt; propertyChecks = new List&lt;PropertyCheck&gt;
+    ///{
+    ///    new PropertyCheck(this.primaryUserId, "name", "primaryUserName"),
+    ///    new PropertyCheck(this.primaryUserId, "email", "primaryUserEmail"),
+    ///    new PropertyCheck(this.secondaryUserId, "name", "secondaryUserName"),
+    ///    new PropertyCheck(this.secondaryUserId, "email", "secondaryUserEmail")
+    ///};
+    ///this.UpdateProperties&lt;ExampleProjection&gt;(eventToApply.aggregateRootId, eventToApply.payload, propertyChecks);
+    ///</code>
+    ///If eventToApply.aggregateRootId matches this.primaryUserId, only primaryUserName and primaryUserEmail will be updated.
+    ///</example>
+    ///</summary>
+    /// <param name="eventAggregateRootId">The aggregate root ID from the event to match against PropertyCheck ID values</param>
+    ///<param name="payload">The event payload containing the property values to update with</param>
+    ///<param name="propertyCheckValues">List of PropertyCheck objects defining the conditional mapping rules</param>
+    public void UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
+    {
+        List<PropertyInfo> thisNostifyObjectProps = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public).ToList();
+        JObject jObject = JObject.FromObject(payload);
+
+        foreach (PropertyCheck propertyCheck in propertyCheckValues)
+        {
+            if (eventAggregateRootId == propertyCheck.projectionIdPropertyValue)
+            {
+                JToken? jt = jObject[propertyCheck.eventPropertyName];
+                if (jt != null)
+                {
+                    UpdateProperty<T>(propertyCheck.projectionPropertyName, propertyCheck.eventPropertyName, jObject, thisNostifyObjectProps);
+                }
+            }
+        }
+    }
+
+}
+
+/// <summary>
+/// Contains the values needed to update an aggregate or projection when the event name is not the same as the object name 
+/// and there may be more than one property of the same type.
+/// </summary>
+public class PropertyCheck
+{
+    /// <summary>
+    /// Constructor for PropertyCheck. Must be instantiated inside the Projection during Apply to get the correct projectionIdPropertyValue.
+    /// </summary>
+    /// <param name="projectionIdPropertyValue">The Guid ID value to match against the IEvent aggregateRootId</param>
+    /// <param name="eventPropertyName">Source property name in IEvent payload</param>
+    /// <param name="projectionPropertyName">Target property name in Aggregate/Projection</param>
+    public PropertyCheck(Guid projectionIdPropertyValue, string eventPropertyName, string projectionPropertyName)
+    {
+        this.eventPropertyName = eventPropertyName;
+        this.projectionPropertyName = projectionPropertyName;
+        this.projectionIdPropertyValue = projectionIdPropertyValue;
+    }
+
+    public string eventPropertyName { get; set; } 
+    public string projectionPropertyName { get; set; } 
+    public Guid projectionIdPropertyValue { get; set; }
 }
