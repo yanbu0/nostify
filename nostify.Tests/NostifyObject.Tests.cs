@@ -481,12 +481,12 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "name", "primaryUserName"),
-            new PropertyCheck("primaryUserId", "email", "primaryUserEmail"),
-            new PropertyCheck("secondaryUserId", "name", "secondaryUserName"),
-            new PropertyCheck("secondaryUserId", "email", "secondaryUserEmail"),
-            new PropertyCheck("managerUserId", "name", "managerUserName"),
-            new PropertyCheck("managerUserId", "email", "managerUserEmail")
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "email", "secondaryUserEmail"),
+            new PropertyCheck(projection.managerUserId!.Value, "name", "managerUserName"),
+            new PropertyCheck(projection.managerUserId!.Value, "email", "managerUserEmail")
         };
 
         // Act - Update primary user (matching primaryUserId)
@@ -522,12 +522,12 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "name", "primaryUserName"),
-            new PropertyCheck("primaryUserId", "email", "primaryUserEmail"),
-            new PropertyCheck("secondaryUserId", "name", "secondaryUserName"),
-            new PropertyCheck("secondaryUserId", "email", "secondaryUserEmail"),
-            new PropertyCheck("managerUserId", "name", "managerUserName"),
-            new PropertyCheck("managerUserId", "email", "managerUserEmail")
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "email", "secondaryUserEmail"),
+            new PropertyCheck(projection.managerUserId!.Value, "name", "managerUserName"),
+            new PropertyCheck(projection.managerUserId!.Value, "email", "managerUserEmail")
         };
 
         // Act - Update secondary user (matching secondaryUserId)
@@ -563,12 +563,12 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "name", "primaryUserName"),
-            new PropertyCheck("primaryUserId", "email", "primaryUserEmail"),
-            new PropertyCheck("secondaryUserId", "name", "secondaryUserName"),
-            new PropertyCheck("secondaryUserId", "email", "secondaryUserEmail"),
-            new PropertyCheck("managerUserId", "name", "managerUserName"),
-            new PropertyCheck("managerUserId", "email", "managerUserEmail")
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "email", "secondaryUserEmail"),
+            new PropertyCheck(projection.managerUserId!.Value, "name", "managerUserName"),
+            new PropertyCheck(projection.managerUserId!.Value, "email", "managerUserEmail")
         };
 
         // Act - Update manager user (matching managerUserId)
@@ -606,10 +606,10 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "name", "primaryUserName"),
-            new PropertyCheck("primaryUserId", "email", "primaryUserEmail"),
-            new PropertyCheck("secondaryUserId", "name", "secondaryUserName"),
-            new PropertyCheck("secondaryUserId", "email", "secondaryUserEmail")
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "email", "secondaryUserEmail")
         };
 
         // Act - Use a random Guid that doesn't match any of the user IDs
@@ -641,8 +641,8 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "name", "primaryUserName"),
-            new PropertyCheck("primaryUserId", "email", "primaryUserEmail")
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail")
         };
 
         // Act
@@ -670,8 +670,8 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "name", "primaryUserName"),
-            new PropertyCheck("primaryUserId", "email", "primaryUserEmail")
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail")
         };
 
         // Act
@@ -683,7 +683,7 @@ public class NostifyObjectPropertyCheckTests
     }
 
     [Fact]
-    public void UpdateProperties_WithPropertyCheck_ShouldIgnorePropertyChecksWithNonExistentIdProperty()
+    public void UpdateProperties_WithPropertyCheck_ShouldIgnorePropertyChecksWithNonMatchingIdValue()
     {
         // Arrange
         var projection = new ComplexProjection
@@ -699,25 +699,25 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("nonExistentIdProperty", "name", "primaryUserName"), // Invalid ID property
-            new PropertyCheck("primaryUserId", "email", "primaryUserEmail") // Valid property check
+            new PropertyCheck(Guid.NewGuid(), "name", "primaryUserName"), // Random Guid that won't match
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail") // Valid property check
         };
 
         // Act
         projection.CallUpdateProperties(projection.primaryUserId!.Value, userUpdatePayload, propertyChecks);
 
         // Assert - Only the valid property check should work
-        Assert.Null(projection.primaryUserName); // Should not be updated due to invalid ID property
+        Assert.Null(projection.primaryUserName); // Should not be updated due to non-matching ID
         Assert.Equal("test@example.com", projection.primaryUserEmail); // Should be updated
     }
 
     [Fact]
-    public void UpdateProperties_WithPropertyCheck_ShouldHandleNullIdValues()
+    public void UpdateProperties_WithPropertyCheck_ShouldHandleEmptyGuidValues()
     {
         // Arrange
         var projection = new ComplexProjection
         {
-            primaryUserId = null, // Null ID
+            primaryUserId = Guid.Empty, // Empty Guid
             secondaryUserId = Guid.NewGuid()
         };
 
@@ -729,16 +729,16 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "name", "primaryUserName"),
-            new PropertyCheck("secondaryUserId", "name", "secondaryUserName")
+            new PropertyCheck(Guid.Empty, "name", "primaryUserName"), // Using Guid.Empty to match primaryUserId
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName")
         };
 
-        // Act - Try to match against the null primaryUserId
+        // Act - Try to match against Guid.Empty
         projection.CallUpdateProperties(Guid.Empty, userUpdatePayload, propertyChecks);
 
-        // Assert - No properties should be updated since Guid.Empty doesn't match null
-        Assert.Null(projection.primaryUserName);
-        Assert.Null(projection.secondaryUserName);
+        // Assert - The Empty Guid should match and update the property
+        Assert.Equal("Test User", projection.primaryUserName);
+        Assert.Null(projection.secondaryUserName); // Should remain null since we're not matching secondary
     }
 
     [Fact]
@@ -783,9 +783,9 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "department", "department"),
-            new PropertyCheck("primaryUserId", "lastUpdated", "lastUpdated"),
-            new PropertyCheck("primaryUserId", "isActive", "isActive")
+            new PropertyCheck(projection.primaryUserId!.Value, "department", "department"),
+            new PropertyCheck(projection.primaryUserId!.Value, "lastUpdated", "lastUpdated"),
+            new PropertyCheck(projection.primaryUserId!.Value, "isActive", "isActive")
         };
 
         // Act
@@ -801,10 +801,11 @@ public class NostifyObjectPropertyCheckTests
     public void PropertyCheck_Constructor_ShouldSetPropertiesCorrectly()
     {
         // Arrange & Act
-        var propertyCheck = new PropertyCheck("idPropertyName", "sourceProperty", "targetProperty");
+        var testGuid = Guid.NewGuid();
+        var propertyCheck = new PropertyCheck(testGuid, "sourceProperty", "targetProperty");
 
         // Assert
-        Assert.Equal("idPropertyName", propertyCheck.projectionIdPropertyName);
+        Assert.Equal(testGuid, propertyCheck.projectionIdPropertyValue);
         Assert.Equal("sourceProperty", propertyCheck.eventPropertyName);
         Assert.Equal("targetProperty", propertyCheck.projectionPropertyName);
     }
@@ -826,12 +827,12 @@ public class NostifyObjectPropertyCheckTests
 
         var propertyChecks = new List<PropertyCheck>
         {
-            new PropertyCheck("primaryUserId", "name", "primaryUserName"),
-            new PropertyCheck("primaryUserId", "email", "primaryUserEmail"),
-            new PropertyCheck("secondaryUserId", "name", "secondaryUserName"),
-            new PropertyCheck("secondaryUserId", "email", "secondaryUserEmail"),
-            new PropertyCheck("managerUserId", "name", "managerUserName"),
-            new PropertyCheck("managerUserId", "email", "managerUserEmail")
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "email", "secondaryUserEmail"),
+            new PropertyCheck(projection.managerUserId!.Value, "name", "managerUserName"),
+            new PropertyCheck(projection.managerUserId!.Value, "email", "managerUserEmail")
         };
 
         // Act - Apply multiple updates
@@ -846,5 +847,100 @@ public class NostifyObjectPropertyCheckTests
         Assert.Equal("secondary@test.com", projection.secondaryUserEmail);
         Assert.Equal("Manager User", projection.managerUserName);
         Assert.Equal("manager@test.com", projection.managerUserEmail);
+    }
+
+    [Fact]
+    public void UpdateProperties_WithPropertyCheck_ShouldUpdateMultiplePropertiesWhenIdsAreTheSame()
+    {
+        // Arrange - Scenario where primaryUserId and managerUserId are the same person
+        var sharedUserId = Guid.NewGuid();
+        var projection = new ComplexProjection
+        {
+            primaryUserId = sharedUserId,
+            secondaryUserId = Guid.NewGuid(),
+            managerUserId = sharedUserId // Same as primary user - person wearing multiple hats
+        };
+
+        var userUpdatePayload = new
+        {
+            name = "John Smith-Manager",
+            email = "john.smith@example.com"
+        };
+
+        var propertyChecks = new List<PropertyCheck>
+        {
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "email", "secondaryUserEmail"),
+            new PropertyCheck(projection.managerUserId!.Value, "name", "managerUserName"),
+            new PropertyCheck(projection.managerUserId!.Value, "email", "managerUserEmail")
+        };
+
+        // Act - Update using the shared user ID
+        projection.CallUpdateProperties(sharedUserId, userUpdatePayload, propertyChecks);
+
+        // Assert - Both primary and manager properties should be updated since they share the same ID
+        Assert.Equal("John Smith-Manager", projection.primaryUserName);
+        Assert.Equal("john.smith@example.com", projection.primaryUserEmail);
+        Assert.Equal("John Smith-Manager", projection.managerUserName);
+        Assert.Equal("john.smith@example.com", projection.managerUserEmail);
+        
+        // Secondary user properties should remain null since they have a different ID
+        Assert.Null(projection.secondaryUserName);
+        Assert.Null(projection.secondaryUserEmail);
+    }
+
+    [Fact]
+    public void UpdateProperties_WithPropertyCheck_ShouldUpdateAllMatchingPropertiesWithSharedId()
+    {
+        // Arrange - Complex scenario where multiple roles share IDs
+        var adminUserId = Guid.NewGuid();
+        var regularUserId = Guid.NewGuid();
+        
+        var projection = new ComplexProjection
+        {
+            primaryUserId = adminUserId,    // Admin user
+            secondaryUserId = regularUserId, // Different user
+            managerUserId = adminUserId     // Same as primary (admin is also manager)
+        };
+
+        var adminUserPayload = new
+        {
+            name = "Admin User",
+            email = "admin@company.com"
+        };
+
+        var regularUserPayload = new
+        {
+            name = "Regular User", 
+            email = "regular@company.com"
+        };
+
+        var propertyChecks = new List<PropertyCheck>
+        {
+            new PropertyCheck(projection.primaryUserId!.Value, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId!.Value, "email", "primaryUserEmail"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName"),
+            new PropertyCheck(projection.secondaryUserId!.Value, "email", "secondaryUserEmail"),
+            new PropertyCheck(projection.managerUserId!.Value, "name", "managerUserName"),
+            new PropertyCheck(projection.managerUserId!.Value, "email", "managerUserEmail")
+        };
+
+        // Act - First update admin user (affects both primary and manager)
+        projection.CallUpdateProperties(adminUserId, adminUserPayload, propertyChecks);
+        
+        // Then update regular user (affects only secondary)
+        projection.CallUpdateProperties(regularUserId, regularUserPayload, propertyChecks);
+
+        // Assert - Admin data should appear in both primary and manager properties
+        Assert.Equal("Admin User", projection.primaryUserName);
+        Assert.Equal("admin@company.com", projection.primaryUserEmail);
+        Assert.Equal("Admin User", projection.managerUserName);
+        Assert.Equal("admin@company.com", projection.managerUserEmail);
+        
+        // Regular user data should appear only in secondary properties
+        Assert.Equal("Regular User", projection.secondaryUserName);
+        Assert.Equal("regular@company.com", projection.secondaryUserEmail);
     }
 }
