@@ -160,7 +160,6 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="propertyCheckValues">List of PropertyCheck objects defining the conditional mapping rules</param>
     public void UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
     {
-        
         List<PropertyInfo> thisNostifyObjectProps = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public).ToList();
         JObject jObject = JObject.FromObject(payload);
 
