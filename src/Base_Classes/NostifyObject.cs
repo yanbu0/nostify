@@ -133,32 +133,43 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     }
 
     ///<summary>
-    ///Updates properties of Aggregate or Projection based off of a list of propertyChecks. Use when property names in payload do not match property names in T 
-    ///and T has multiple properties of the same Aggregate type.
+    ///Updates properties of an Aggregate or Projection using conditional property mapping based on ID matching. 
+    ///This method is designed for scenarios where a projection has multiple properties of the same type (e.g., multiple user IDs)
+    ///and you need to selectively update only the properties associated with a specific aggregate root ID.
+    ///For each PropertyCheck, if the eventAggregateRootId matches the value of the specified projection ID property,
+    ///the method will update the target projection property with the value from the corresponding event payload property.
     ///<example>
     ///<br/>
-    ///Example below will set the ExampleProjection.exampleName property to the value of the payload.name property if the payload id equals this.exampleId :
+    ///Example: A projection with multiple user properties (primaryUserId, secondaryUserId) where you want to update
+    ///only the properties associated with the user whose ID matches the event's aggregate root ID:
     ///<code>
-    ///List&lt;PropertyCheck&gt; propertyChecks = new List&lt;PropertyCheck&gt;(
-    ///            new PropertyCheck("name", "exampleName", this.exampleId),
-    ///);
-    ///this.UpdateProperties&lt;ExampleProjection&gt;(eventToApply.payload, propertyChecks);
+    ///List&lt;PropertyCheck&gt; propertyChecks = new List&lt;PropertyCheck&gt;
+    ///{
+    ///    new PropertyCheck("primaryUserId", "name", "primaryUserName"),
+    ///    new PropertyCheck("primaryUserId", "email", "primaryUserEmail"),
+    ///    new PropertyCheck("secondaryUserId", "name", "secondaryUserName"),
+    ///    new PropertyCheck("secondaryUserId", "email", "secondaryUserEmail")
+    ///};
+    ///this.UpdateProperties&lt;ExampleProjection&gt;(eventToApply.aggregateRootId, eventToApply.payload, propertyChecks);
     ///</code>
+    ///If eventToApply.aggregateRootId matches this.primaryUserId, only primaryUserName and primaryUserEmail will be updated.
     ///</example>
     ///</summary>
-    ///<param name="payload">Must be payload from Event, name of property in payload must be set to match a property in the propertyPairs dictionary, or must match property name in T if strict is turned off</param>
-    ///<param name="propertyCheckValues">List of PropertyChecks</param>
-    void UpdateProperties<T>(object payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
+    /// <param name="eventAggregateRootId">The aggregate root ID from the event to match against projection ID properties</param>
+    ///<param name="payload">The event payload containing the property values to update with</param>
+    ///<param name="propertyCheckValues">List of PropertyCheck objects defining the conditional mapping rules</param>
+    public void UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
     {
+        
+        List<PropertyInfo> thisNostifyObjectProps = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public).ToList();
+        JObject jObject = JObject.FromObject(payload);
+
         foreach (PropertyCheck propertyCheck in propertyCheckValues)
         {
-            List<PropertyInfo> thisNostifyObjectProps = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public).ToList();
-            JObject jObject = JObject.FromObject(payload);
-            Guid idFromPayload = (Guid)jObject["id"];
-            if (idFromPayload == propertyCheck.projectionPropertyId)
+            if (eventAggregateRootId == this.GetType().GetProperty(propertyCheck.projectionIdPropertyName)?.GetValue(this, null) as Guid?)
             {
-                var x = jObject[propertyCheck.eventPropertyName];
-                if (x != null)
+                JToken? jt = jObject[propertyCheck.eventPropertyName];
+                if (jt != null)
                 {
                     UpdateProperty<T>(propertyCheck.projectionPropertyName, propertyCheck.eventPropertyName, jObject, thisNostifyObjectProps);
                 }
@@ -177,17 +188,17 @@ public class PropertyCheck
     /// <summary>
     /// Constructor for PropertyCheck
     /// </summary>
-    /// <param name="eventPropertyName">source property name in IEvent</param>
-    /// <param name="projectionPropertyName">target property name in Aggregate/Projection</param>
-    /// <param name="projectionPropertyId">target property Id in Aggregate/Projection to match to IEvent ID</param>
-    public PropertyCheck(string eventPropertyName, string projectionPropertyName, Guid projectionPropertyId)
+    /// <param name="projectionIdPropertyName">Target property Id in Aggregate/Projection to match to IEvent aggregateRootId</param>
+    /// <param name="eventPropertyName">Source property name in IEvent payload</param>
+    /// <param name="projectionPropertyName">Target property name in Aggregate/Projection</param>
+    public PropertyCheck(string projectionIdPropertyName, string eventPropertyName, string projectionPropertyName)
     {
         this.eventPropertyName = eventPropertyName;
         this.projectionPropertyName = projectionPropertyName;
-        this.projectionPropertyId = projectionPropertyId;
+        this.projectionIdPropertyName = projectionIdPropertyName;
     }
 
     public string eventPropertyName { get; set; } 
     public string projectionPropertyName { get; set; } 
-    public Guid projectionPropertyId { get; set; }
+    public string projectionIdPropertyName { get; set; }
 }
