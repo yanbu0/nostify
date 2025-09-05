@@ -185,7 +185,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
 public class PropertyCheck
 {
     /// <summary>
-    /// Constructor for PropertyCheck
+    /// Constructor for PropertyCheck. Must be instantiated inside the Projection during Apply to get the correct projectionIdPropertyValue.
     /// </summary>
     /// <param name="projectionIdPropertyValue">The Guid ID value to match against the IEvent aggregateRootId</param>
     /// <param name="eventPropertyName">Source property name in IEvent payload</param>
