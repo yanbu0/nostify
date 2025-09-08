@@ -83,11 +83,7 @@
 
 ### Coming Soon
 
-- Improved/Updated Documentation
-- Better test coverage
-- ValidationException middleware
-- Bump example repo up to 3.6
-- Better support for non-command events
+- Better support for non-command events (4.0)
 
 ## Getting Started
 
