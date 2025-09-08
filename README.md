@@ -86,7 +86,7 @@
 - Improved/Updated Documentation
 - Better test coverage
 - ValidationException middleware
-- Bump example repo up to 3.6
+- Bump example repo up to 3.8
 - Better support for non-command events
 
 ## Getting Started
