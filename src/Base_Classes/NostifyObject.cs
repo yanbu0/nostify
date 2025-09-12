@@ -165,7 +165,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
 
         foreach (PropertyCheck propertyCheck in propertyCheckValues)
         {
-            if (eventAggregateRootId == propertyCheck.projectionIdPropertyValue)
+            if (!propertyCheck.projectionIdPropertyValue.HasValue || eventAggregateRootId == propertyCheck.projectionIdPropertyValue.Value)
             {
                 JToken? jt = jObject[propertyCheck.eventPropertyName];
                 if (jt != null)
@@ -190,7 +190,7 @@ public class PropertyCheck
     /// <param name="projectionIdPropertyValue">The Guid ID value to match against the IEvent aggregateRootId</param>
     /// <param name="eventPropertyName">Source property name in IEvent payload</param>
     /// <param name="projectionPropertyName">Target property name in Aggregate/Projection</param>
-    public PropertyCheck(Guid projectionIdPropertyValue, string eventPropertyName, string projectionPropertyName)
+    public PropertyCheck(Guid? projectionIdPropertyValue, string eventPropertyName, string projectionPropertyName)
     {
         this.eventPropertyName = eventPropertyName;
         this.projectionPropertyName = projectionPropertyName;
@@ -199,5 +199,5 @@ public class PropertyCheck
 
     public string eventPropertyName { get; set; } 
     public string projectionPropertyName { get; set; } 
-    public Guid projectionIdPropertyValue { get; set; }
+    public Guid? projectionIdPropertyValue { get; set; }
 }
