@@ -943,4 +943,72 @@ public class NostifyObjectPropertyCheckTests
         Assert.Equal("Regular User", projection.secondaryUserName);
         Assert.Equal("regular@company.com", projection.secondaryUserEmail);
     }
+
+    [Fact]
+    public void UpdateProperties_WithPropertyCheck_ShouldUpdateWhenProjectionIdPropertyValueIsNull()
+    {
+        // Arrange
+        var projection = new ComplexProjection
+        {
+            primaryUserId = Guid.NewGuid(),
+            secondaryUserId = Guid.NewGuid()
+        };
+
+        var userUpdatePayload = new
+        {
+            name = "Test User",
+            email = "test@example.com"
+        };
+
+        var propertyChecks = new List<PropertyCheck>
+        {
+            new PropertyCheck(null, "name", "primaryUserName"), // null projectionIdPropertyValue
+            new PropertyCheck(null, "email", "primaryUserEmail"), // null projectionIdPropertyValue
+            new PropertyCheck(projection.secondaryUserId!.Value, "name", "secondaryUserName") // valid ID
+        };
+
+        // Act - Use a random Guid that doesn't match secondaryUserId
+        var randomGuid = Guid.NewGuid();
+        projection.CallUpdateProperties(randomGuid, userUpdatePayload, propertyChecks);
+
+        // Assert - Properties with null projectionIdPropertyValue should be updated
+        Assert.Equal("Test User", projection.primaryUserName);
+        Assert.Equal("test@example.com", projection.primaryUserEmail);
+        
+        // Property with matching ID should not be updated since randomGuid doesn't match
+        Assert.Null(projection.secondaryUserName);
+    }
+
+    [Fact]
+    public void UpdateProperties_WithPropertyCheck_ShouldSetPropertyToNullWhenPayloadValueIsNull()
+    {
+        // Arrange
+        var projection = new ComplexProjection
+        {
+            primaryUserId = Guid.NewGuid(),
+            primaryUserName = "Existing Name",
+            primaryUserEmail = "existing@example.com"
+        };
+
+        // Create payload with null values using JObject
+        var nullUpdatePayload = new JObject
+        {
+            ["name"] = null,
+            ["email"] = null
+        };
+
+        var propertyChecks = new List<PropertyCheck>
+        {
+            new PropertyCheck(null, "name", "primaryUserName"), // null projectionIdPropertyValue
+            new PropertyCheck(null, "email", "primaryUserEmail") // null projectionIdPropertyValue
+        };
+
+        // Act
+        var randomGuid = Guid.NewGuid();
+        projection.CallUpdateProperties(randomGuid, nullUpdatePayload, propertyChecks);
+
+        // Assert - Properties should be set to null
+        Assert.Null(projection.primaryUserName);
+        Assert.Null(projection.primaryUserEmail);
+    }
 }

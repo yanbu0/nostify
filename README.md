@@ -23,6 +23,9 @@
 
 ### Updates
 
+- 3.8.1
+  - **Bug Fix**: Fixed issue with null values in PropertyCheck when projectionIdPropertyValue is null
+  - **Template Updates**: All template project files updated to reference nostify 3.8.1
 - 3.8.0
   - **Enhanced UpdateProperties using PropertyCheck class**: Added new `UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues)` overload for conditional property mapping based on ID matching, used in `Apply` when a projection has multiple references to external aggregates of the same type.
   - **Comprehensive PropertyCheck Testing**: Added 14+ test scenarios including shared ID handling, edge cases, and complex multi-property updates
@@ -83,11 +86,7 @@
 
 ### Coming Soon
 
-- Improved/Updated Documentation
-- Better test coverage
-- ValidationException middleware
-- Bump example repo up to 3.6
-- Better support for non-command events
+- Better support for non-command events (4.0)
 
 ## Getting Started
 

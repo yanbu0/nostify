@@ -2,8 +2,8 @@
 
 ## Template System
 
-- Package first: `dotnet pack` to create `bin/Release/nostify.3.7.4.nupkg`
-- Install templates locally: `dotnet new install bin/Release/nostify.3.7.4.nupkg`
+- Package first: `dotnet pack` to create `bin/Release/nostify.3.8.1.nupkg`
+- Install templates locally: `dotnet new install bin/Release/nostify.3.8.1.nupkg`
 - Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>`
   - Example: `dotnet new nostify -ag TestItem -p 7999`
 - Template validation: After installation, verify templates are available with:
@@ -30,8 +30,8 @@ Always reference these instructions first and fallback to search or bash command
 - Use `dotnet format` to fix whitespace formatting issues before committing
 
 ### Template System
-- Package first: `dotnet pack` to create bin/Release/nostify.3.7.3.nupkg
-- Install templates locally: `dotnet new install bin/Release/nostify.3.7.3.nupkg`
+- Package first: `dotnet pack` to create bin/Release/nostify.3.8.1.nupkg
+- Install templates locally: `dotnet new install bin/Release/nostify.3.8.1.nupkg`
 - Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>`
   - This creates a complete Azure Functions project with CQRS/Event Sourcing pattern
   - Example: `dotnet new nostify -ag InventoryItem -p 7072`
@@ -98,12 +98,22 @@ After making changes to the nostify library, validate by:
 2. **Test validation**: All 78 tests pass in `dotnet test nostify.Tests/`
 3. **Template validation**: 
    - `dotnet pack` to create the NuGet package
-   - `dotnet new install bin/Release/nostify.3.7.3.nupkg` to install templates
+   - `dotnet new install bin/Release/nostify.3.8.1.nupkg` to install templates
    - Create test service: `mkdir /tmp/test && cd /tmp/test && dotnet new nostify -ag TestItem -p 7999`
    - `cd TestItem && dotnet restore && dotnet build` -- should succeed with warnings but no errors
 4. **Integration validation**: Start Cosmos DB emulator and Kafka, run generated service with `func start`
    - Note: Azure Functions Core Tools required for running services locally
    - Generated services include complete Azure Functions runtime with HTTP triggers
+
+## Documentation Guidelines
+
+### Version Update List Management
+- **NEVER overwrite or remove existing version entries** in README.md update list unless explicitly instructed to do so
+- When adding new version entries, **always preserve all previous version information**
+- Version entries should be added at the top of the list, pushing older versions down
+- Each version should maintain its complete feature/bug fix descriptions
+- Only modify version entries when explicitly requested for corrections
+- **MANDATORY**: For each version bump, a new bullet point must be added to the update list documenting the changes
 
 ## Key Architecture Concepts
 
@@ -231,8 +241,8 @@ Passed!  - Failed:     0, Passed:    78, Skipped:     0, Total:    78, Duration:
 
 ### Template Installation
 ```bash
-$ dotnet new install bin/Release/nostify.3.7.3.nupkg
-Success: nostify::3.7.3 installed the following templates:
+$ dotnet new install bin/Release/nostify.3.8.1.nupkg
+Success: nostify::3.8.1 installed the following templates:
 Template Name       Short Name         Language  Tags              
 ------------------  -----------------  --------  ------------------
 Nostify Aggregate   nostifyAggregate             Azure/Microservice
