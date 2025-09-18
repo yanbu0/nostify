@@ -52,7 +52,7 @@ public class ExternalDataEvent
     }
 
     /// <summary>
-    /// Helper method to transform foreign ID selectors into an array of Func<TProjection, Guid?>
+    /// Helper method to transform foreign ID selectors into an array of Func&lt;TProjection, Guid?&gt;.
     /// </summary>
     /// <typeparam name="TProjection">Type of the projection</typeparam>
     /// <param name="projectionsToInit">List of projections to initialize</param>
@@ -64,8 +64,8 @@ public class ExternalDataEvent
         where TProjection : IUniquelyIdentifiable
     {
         return projectionsToInit
-            .SelectMany(p => foreignIdSelectorsList.SelectMany(selector => selector(p)))
-            .Select(guid => new Func<TProjection, Guid?>(_ => guid))
+            .SelectMany(p => foreignIdSelectorsList.SelectMany(selector => selector(p)), (p, guidList) => new ProjectionToEventGuid<TProjection>(p, guidList))
+            .Select(x => new Func<TProjection, Guid?>(p => { return p.id == x.projection.id ? x.guid : null; }))
             .ToArray();
     }
 
@@ -106,6 +106,7 @@ public class ExternalDataEvent
             where foreignId.HasValue
             select foreignId!.Value;
 
+        foreignIds = foreignIds.Distinct().ToList();
         var eventsQuery = eventStore
             .GetItemLinqQueryable<Event>()
             .Where(e => foreignIds.Contains(e.aggregateRootId));
@@ -131,7 +132,7 @@ public class ExternalDataEvent
             select new ExternalDataEvent(p.id, eventList)
         ).ToList();
 
-        return result;
+        return result; 
     }
 
     /// <summary>
@@ -310,4 +311,15 @@ public class ExternalDataEvent
     {
         return await GetMultiServiceEventsAsync(httpClient, projectionsToInit, null, eventRequests);
     }
+}
+
+class ProjectionToEventGuid<TProjection>
+{
+    public ProjectionToEventGuid(TProjection p, Guid? guid)
+    {
+        this.projection = p;
+        this.guid = guid;
+    }
+    public TProjection projection  { get; set; }
+    public Guid? guid { get; set; }
 }
