@@ -52,4 +52,14 @@ public class NostifyKafkaTriggerEvent
     {
         return JsonConvert.DeserializeObject<Event>(Value);
     }
+
+    ///<summary>
+    ///Converts string value of the Value to an IEvent.
+    ///</summary>
+    /// <returns>The deserialized IEvent object from the Kafka message Value.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if deserialization fails.</exception>
+    public IEvent GetIEvent()
+    {
+        return JsonConvert.DeserializeObject<IEvent>(Value) ?? throw new InvalidOperationException("Failed to deserialize Event from Kafka message Value.");
+    }
 }
