@@ -19,6 +19,51 @@
 
 - Multi-tenant by default, ideal for SaaS applications
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Current Status](#current-status)
+  - [Updates](#updates)
+  - [Coming Soon](#coming-soon)
+- [Getting Started](#getting-started)
+- [Architecture](#architecture)
+- [Why????](#why)
+- [Concepts](#concepts)
+  - [Service](#service)
+  - [Aggregate](#aggregate)
+  - [Projection](#projection)
+  - [Event](#event)
+  - [Command](#command)
+  - [Saga](#saga)
+- [Setup](#setup)
+- [Basic Tasks](#basic-tasks)
+  - [Initializing Current State Container](#initializing-current-state-container)
+  - [Querying](#querying)
+  - [Create New Aggregate](#create-new-aggregate)
+  - [Update Aggregate](#update-aggregate)
+  - [Delete Aggregate](#delete-aggregate)
+  - [Create New Projection Container](#create-new-projection-container)
+  - [Create New Projection](#create-new-projection)
+  - [Update Projection](#update-projection)
+  - [Delete Projection](#delete-projection)
+  - [Event Handlers](#event-handlers)
+- [Advanced Features](#advanced-features)
+  - [Error Handling and Undeliverable Events](#error-handling-and-undeliverable-events)
+  - [Bulk Operations and Performance](#bulk-operations-and-performance)
+  - [Advanced Querying and Cosmos Extensions](#advanced-querying-and-cosmos-extensions)
+  - [Testing Utilities](#testing-utilities)
+  - [Projection Initialization and External Data](#projection-initialization-and-external-data)
+  - [Rehydration and Point-in-Time Queries](#rehydration-and-point-in-time-queries)
+  - [Saga Pattern Implementation](#saga-pattern-implementation)
+  - [Container Management](#container-management)
+  - [Validation System](#validation-system)
+- [Performance Considerations](#performance-considerations)
+  - [Bulk Operations](#bulk-operations)
+  - [Query Optimization](#query-optimization)
+  - [Memory Management](#memory-management)
+  - [Event Store Optimization](#event-store-optimization)
+
 ## Current Status
 
 ### Updates
