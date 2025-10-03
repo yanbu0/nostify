@@ -19,6 +19,51 @@
 
 - Multi-tenant by default, ideal for SaaS applications
 
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Features](#features)
+3. [Current Status](#current-status)
+   - 3.1 [Updates](#updates)
+   - 3.2 [Coming Soon](#coming-soon)
+4. [Getting Started](#getting-started)
+5. [Architecture](#architecture)
+6. [Why????](#why)
+7. [Concepts](#concepts)
+   - 7.1 [Service](#service)
+   - 7.2 [Aggregate](#aggregate)
+   - 7.3 [Projection](#projection)
+   - 7.4 [Event](#event)
+   - 7.5 [Command](#command)
+   - 7.6 [Saga](#saga)
+8. [Setup](#setup)
+9. [Basic Tasks](#basic-tasks)
+   - 9.1 [Initializing Current State Container](#initializing-current-state-container)
+   - 9.2 [Querying](#querying)
+   - 9.3 [Create New Aggregate](#create-new-aggregate)
+   - 9.4 [Update Aggregate](#update-aggregate)
+   - 9.5 [Delete Aggregate](#delete-aggregate)
+   - 9.6 [Create New Projection Container](#create-new-projection-container)
+   - 9.7 [Create New Projection](#create-new-projection)
+   - 9.8 [Update Projection](#update-projection)
+   - 9.9 [Delete Projection](#delete-projection)
+   - 9.10 [Event Handlers](#event-handlers)
+10. [Advanced Features](#advanced-features)
+    - 10.1 [Error Handling and Undeliverable Events](#error-handling-and-undeliverable-events)
+    - 10.2 [Bulk Operations and Performance](#bulk-operations-and-performance)
+    - 10.3 [Advanced Querying and Cosmos Extensions](#advanced-querying-and-cosmos-extensions)
+    - 10.4 [Testing Utilities](#testing-utilities)
+    - 10.5 [Projection Initialization and External Data](#projection-initialization-and-external-data)
+    - 10.6 [Rehydration and Point-in-Time Queries](#rehydration-and-point-in-time-queries)
+    - 10.7 [Saga Pattern Implementation](#saga-pattern-implementation)
+    - 10.8 [Container Management](#container-management)
+    - 10.9 [Validation System](#validation-system)
+11. [Performance Considerations](#performance-considerations)
+    - 11.1 [Bulk Operations](#bulk-operations)
+    - 11.2 [Query Optimization](#query-optimization)
+    - 11.3 [Memory Management](#memory-management)
+    - 11.4 [Event Store Optimization](#event-store-optimization)
+
 ## Current Status
 
 ### Updates
