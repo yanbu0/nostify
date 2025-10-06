@@ -378,13 +378,10 @@ public class Nostify : INostify
     ///<inheritdoc />
     public async Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new()
     {
-        Container containerToRebuild = await GetCurrentStateContainerAsync<T>();
+        Container bulkContainer = await GetBulkCurrentStateContainerAsync<T>(partitionKeyPath);
 
-        //Store data needed for re-creating container
-        string containerName = containerToRebuild.Id;
-
-        //Remove container to delete all bad data and start from scratch
-        ContainerResponse resp = await containerToRebuild.DeleteContainerAsync();
+        //Remove all items using bulk delete to start from scratch
+        await bulkContainer.DeleteAllBulkAsync<T>();
 
         List<T> rehydratedAggregates = new List<T>();
 
@@ -416,14 +413,11 @@ public class Nostify : INostify
             i = i + GET_THIS_MANY;
         }
 
-        //Recreate container
-        Container rebuiltContainer = await GetContainerAsync(containerName, true, partitionKeyPath);
-
-        //Save
+        //Save using bulk operations
         List<Task> saveTasks = new List<Task>();
         rehydratedAggregates.ForEach(agg =>
         {
-            saveTasks.Add(rebuiltContainer.UpsertItemAsync<T>(agg));
+            saveTasks.Add(bulkContainer.UpsertItemAsync<T>(agg));
         });
         await Task.WhenAll(saveTasks);
     }
