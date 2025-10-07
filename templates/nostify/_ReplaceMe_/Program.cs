@@ -3,8 +3,6 @@ using Microsoft.Extensions.Hosting;
 using nostify;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Azure.Functions.Worker;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Azure.Core.Serialization;
 using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json;
@@ -73,11 +71,7 @@ internal static class WorkerConfigurationExtensions
     {
         builder.Services.Configure<WorkerOptions>(workerOptions =>
         {
-            var settings = NewtonsoftJsonObjectSerializer.CreateJsonSerializerSettings();
-            settings.ContractResolver = new CamelCasePropertyNamesContractResolver();
-            settings.NullValueHandling = NullValueHandling.Ignore;
-
-            workerOptions.Serializer = new NewtonsoftJsonObjectSerializer(settings);
+            workerOptions.Serializer = new NewtonsoftJsonObjectSerializer(SerializationSettings.NostifyDefault);
         });
 
         return builder;

@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>3.9.0-rc</Version>
+    <Version>3.9.0-rc2</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -22,6 +22,7 @@
     <PackageReference Include="JsonDiffPatch.Net" Version="2.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" /> <!-- Don't update this to 2.3.0 or IEndpointFeature will not resolve, Microsoft messed something up -->
+    <PackageReference Include="Microsoft.Azure.Core.NewtonsoftJson" Version="2.0.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.48.1" />
     <None Include="LICENSE.txt" Pack="true" PackagePath="$(PackageLicenseFile)" />
     <None Include="README.md" Pack="true" PackagePath="\" />

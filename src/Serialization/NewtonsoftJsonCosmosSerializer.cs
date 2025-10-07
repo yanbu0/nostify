@@ -11,39 +11,6 @@ namespace nostify;
 /// </summary>
 public class NewtonsoftJsonCosmosSerializer : CosmosSerializer
 {
-    private class InterfaceConverter<TInterface, TConcrete> : JsonConverter where TConcrete : TInterface
-    {
-        public override bool CanConvert(Type objectType)
-        {
-            return objectType == typeof(TInterface);
-        }
-
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-        {
-            // You need to implement logic here to determine the concrete type
-            // For example, you might read a specific property from the JSON
-            // to decide which concrete class to instantiate.
-            // For simplicity, this example always deserializes to TConcrete.
-            return serializer.Deserialize<TConcrete>(reader);
-        }
-
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-        {
-            serializer.Serialize(writer, value, typeof(TConcrete));
-        }
-    }
-
-    // Shared settings used to create per-call JsonSerializer instances. Creating a serializer per-call
-    // avoids concurrent access issues since JsonSerializer is not guaranteed to be thread-safe.
-    private static readonly JsonSerializerSettings s_serializerSettings = new JsonSerializerSettings
-    {
-        Converters = new JsonConverter[]
-        {
-            new InterfaceConverter<IEvent, Event>(),
-            new InterfaceConverter<ISaga, Saga>(),
-            new InterfaceConverter<ISagaStep, SagaStep>()
-        }
-    };
 
     /// <summary>
     /// Deserializes an object of type <typeparamref name="T"/> from the provided <see cref="Stream"/> using Newtonsoft.Json.
@@ -69,7 +36,7 @@ public class NewtonsoftJsonCosmosSerializer : CosmosSerializer
             stream.Position = 0;
         }
 
-        var serializer = JsonSerializer.Create(s_serializerSettings);
+        var serializer = JsonSerializer.Create(SerializationSettings.NostifyDefault);
 
         using var streamReader = new StreamReader(stream);
         using var jsonTextReader = new JsonTextReader(streamReader);
@@ -93,7 +60,7 @@ public class NewtonsoftJsonCosmosSerializer : CosmosSerializer
         using var streamWriter = new StreamWriter(stream, utf8NoBom, leaveOpen: true);
         using var jsonTextWriter = new JsonTextWriter(streamWriter) { CloseOutput = false };
 
-        var serializer = JsonSerializer.Create(s_serializerSettings);
+        var serializer = JsonSerializer.Create(SerializationSettings.NostifyDefault);
         serializer.Serialize(jsonTextWriter, input);
         jsonTextWriter.Flush();
 

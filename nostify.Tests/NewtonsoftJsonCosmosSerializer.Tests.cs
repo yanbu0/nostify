@@ -101,6 +101,54 @@ public class NewtonsoftJsonCosmosSerializerTests
     }
 
     [Fact]
+    public void SerializeDeserialize_ISaga_RoundTrip_Succeeds()
+    {
+        // Arrange - Create an ISaga using Saga constructor
+        var triggerEvent = new Event { aggregateRootId = Guid.NewGuid(), command = new NostifyCommand("TriggerCommand") };
+        var rollbackEvent = new Event { aggregateRootId = Guid.NewGuid(), command = new NostifyCommand("RollbackCommand") };
+        var step = new SagaStep(1, triggerEvent, rollbackEvent);
+        ISaga originalSaga = new Saga("TestSaga", new List<SagaStep> { step });
+
+        // Act
+        var stream = _serializer.ToStream(originalSaga);
+        var deserializedSaga = _serializer.FromStream<ISaga>(stream);
+
+        // Assert
+        Assert.NotNull(deserializedSaga);
+        Assert.Equal(originalSaga.id, deserializedSaga.id);
+        Assert.Equal(originalSaga.name, deserializedSaga.name);
+        Assert.Equal(originalSaga.status, deserializedSaga.status);
+        Assert.Equal(originalSaga.createdOn, deserializedSaga.createdOn);
+        Assert.Single(deserializedSaga.steps);
+        Assert.Equal(step.order, deserializedSaga.steps[0].order);
+        Assert.Equal(step.status, deserializedSaga.steps[0].status);
+        Assert.Equal(step.stepEvent.id, deserializedSaga.steps[0].stepEvent.id);
+        Assert.Equal(step.rollbackEvent?.id, deserializedSaga.steps[0].rollbackEvent?.id);
+    }
+
+    [Fact]
+    public void SerializeDeserialize_ISagaStep_RoundTrip_Succeeds()
+    {
+        // Arrange - Create an ISagaStep using SagaStep constructor
+        var triggerEvent = new Event { aggregateRootId = Guid.NewGuid(), command = new NostifyCommand("TriggerCommand") };
+        var rollbackEvent = new Event { aggregateRootId = Guid.NewGuid(), command = new NostifyCommand("RollbackCommand") };
+        ISagaStep originalStep = new SagaStep(1, triggerEvent, rollbackEvent);
+
+        // Act
+        var stream = _serializer.ToStream(originalStep);
+        var deserializedStep = _serializer.FromStream<ISagaStep>(stream);
+
+        // Assert
+        Assert.NotNull(deserializedStep);
+        Assert.Equal(originalStep.order, deserializedStep.order);
+        Assert.Equal(originalStep.status, deserializedStep.status);
+        Assert.NotNull(deserializedStep.stepEvent);
+        Assert.NotNull(deserializedStep.rollbackEvent);
+        Assert.Equal(triggerEvent.id, deserializedStep.stepEvent.id);
+        Assert.Equal(rollbackEvent.id, deserializedStep.rollbackEvent.id);
+    }
+
+    [Fact]
     public void FromStream_EmptyStream_ReturnsDefault()
     {
         // Arrange

@@ -60,6 +60,6 @@ public class NostifyKafkaTriggerEvent
     /// <exception cref="InvalidOperationException">Thrown if deserialization fails.</exception>
     public IEvent GetIEvent()
     {
-        return JsonConvert.DeserializeObject<IEvent>(Value) ?? throw new InvalidOperationException("Failed to deserialize Event from Kafka message Value.");
+        return JsonConvert.DeserializeObject<IEvent>(Value, SerializationSettings.NostifyDefault) ?? throw new InvalidOperationException("Failed to deserialize Event from Kafka message Value.");
     }
 }
