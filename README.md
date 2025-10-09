@@ -68,10 +68,15 @@
 
 ### Updates
 
-- 3.8.3
+- 3.10.0
   - **Azure Event Hubs Support**: Added `WithEventHubs()` method to enable using Azure Event Hubs as an alternative to Kafka for event messaging
   - Event Hubs uses the Kafka protocol internally, maintaining full compatibility with existing Event handlers
   - Added comprehensive tests for Event Hubs configuration and fluent API chaining
+- 3.9.0
+  - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
+  - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
+  - **Improved Serialization**: Better handling of polymorphic types and interfaces in Cosmos DB operations
+  - **Event Interface Usage**: Converted codebase to use `IEvent` interface instead of concrete `Event` class for better testability and abstraction
 - 3.8.2
   - **Patch**: Updated templates and documentation to reference nostify 3.8.2
   - **Tests**: Added comprehensive unit tests for TransformForeignIdSelectors helper (ensures correct behavior for list selectors, nulls, duplicates, and mapping edge cases)

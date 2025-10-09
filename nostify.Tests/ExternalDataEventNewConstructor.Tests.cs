@@ -46,7 +46,7 @@ public class ExternalDataEventNewConstructorTests
         // Test the new non-nullable single Guid constructor
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") },
             new Event { aggregateRootId = _testProjections[1].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("Service1Command2") }
@@ -79,7 +79,7 @@ public class ExternalDataEventNewConstructorTests
         // Test the new non-nullable list Guid constructor
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjectionsWithLists[0].relatedIds[0], timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("RelatedEvent1") },
             new Event { aggregateRootId = _testProjectionsWithLists[0].relatedIds[1], timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("RelatedEvent2") },
@@ -116,7 +116,7 @@ public class ExternalDataEventNewConstructorTests
         // Test the new mixed non-nullable constructor (single + list)
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjectionsWithLists[0].siteId, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("SiteEvent1") },
             new Event { aggregateRootId = _testProjectionsWithLists[1].siteId, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("SiteEvent2") },
@@ -154,12 +154,12 @@ public class ExternalDataEventNewConstructorTests
         // Test mixing different constructor types in a single query
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Event") }
         };
         
-        var service2Events = new List<Event>
+        var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[1].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("Service2Event") }
         };
@@ -195,18 +195,18 @@ public class ExternalDataEventNewConstructorTests
         // Test complex scenario with multiple constructor types and selectors mixed together
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1SingleEvent") }
         };
         
-        var service2Events = new List<Event>
+        var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[0].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-35), command = new NostifyCommand("Service2MultiSingleEvent1") },
             new Event { aggregateRootId = _testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-32), command = new NostifyCommand("Service2MultiSingleEvent2") }
         };
         
-        var service3Events = new List<Event>
+        var service3Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[0].id, timestamp = DateTime.UtcNow.AddMinutes(-28), command = new NostifyCommand("Service3MixedEvent") }
         };
@@ -248,13 +248,13 @@ public class ExternalDataEventNewConstructorTests
         // Arrange
         var pointInTime = DateTime.UtcNow.AddMinutes(-22);
         
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("BeforeFilter") }, // Before pointInTime
             new Event { aggregateRootId = _testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-10), command = new NostifyCommand("AfterFilter") }   // After pointInTime
         };
         
-        var service2Events = new List<Event>
+        var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjectionsWithLists[0].relatedIds[0], timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("BeforeFilterList") }, // Before pointInTime
             new Event { aggregateRootId = _testProjectionsWithLists[0].relatedIds[1], timestamp = DateTime.UtcNow.AddMinutes(-15), command = new NostifyCommand("AfterFilterList") }   // After pointInTime
@@ -302,12 +302,12 @@ public class ExternalDataEventNewConstructorTests
         // Test that all different constructor types can be used together in the same query
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("OriginalNullable") }
         };
         
-        var service2Events = new List<Event>
+        var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = _testProjections[0].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("NewNonNullable") }
         };
