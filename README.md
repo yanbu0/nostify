@@ -68,6 +68,10 @@
 
 ### Updates
 
+- 3.8.3
+  - **Azure Event Hubs Support**: Added `WithEventHubs()` method to enable using Azure Event Hubs as an alternative to Kafka for event messaging
+  - Event Hubs uses the Kafka protocol internally, maintaining full compatibility with existing Event handlers
+  - Added comprehensive tests for Event Hubs configuration and fluent API chaining
 - 3.8.2
   - **Patch**: Updated templates and documentation to reference nostify 3.8.2
   - **Tests**: Added comprehensive unit tests for TransformForeignIdSelectors helper (ensures correct behavior for list selectors, nulls, duplicates, and mapping edge cases)
@@ -426,6 +430,32 @@ public  class  Program
   }
 }
 ```
+
+#### Using Azure Event Hubs
+
+Azure Event Hubs can be used instead of Kafka for event messaging. Simply use `WithEventHubs()` instead of `WithKafka()` and provide an Event Hubs connection string:
+
+```csharp
+var eventHubsConnectionString = config.GetValue<string>("EventHubsConnectionString");
+
+var nostify = NostifyFactory.WithCosmos(
+                            cosmosApiKey: apiKey,
+                            cosmosDbName: dbName,
+                            cosmosEndpointUri: endPoint,
+                            createContainers: autoCreateContainers,
+                            containerThroughput: defaultThroughput,
+                            useGatewayConnection: useGatewayConnection)
+                        .WithEventHubs(eventHubsConnectionString)
+                        .WithHttp(httpClientFactory)
+                        .Build<InventoryItem>(verboseNostifyBuild);
+```
+
+The Event Hubs connection string should be in the format:
+```
+Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<keyname>;SharedAccessKey=<key>
+```
+
+Event Hubs uses the Kafka protocol internally, so the same Event handlers and publishing mechanisms work seamlessly.
 
 By default, the template will contain the single Aggregate specified. In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out. The AggregateCommand base class contains default implementations for Create, Update, and Delete. The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name. Note that `UpdateProperties<T>()` uses reflection, so extremely high performance may require writing code to directly handle the updates for your Aggregate's specific properties.
 
