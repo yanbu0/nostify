@@ -461,6 +461,106 @@ public class NostifyFactoryTests
         Assert.Null(config.producerConfig.SaslMechanism);
         Assert.Null(config.producerConfig.ApiVersionRequest);
     }
+
+    [Fact]
+    public void WithEventHubs_ShouldConfigureEventHubsSettings()
+    {
+        // Arrange
+        var connectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+
+        // Act
+        var config = NostifyFactory.WithEventHubs(connectionString);
+
+        // Assert
+        Assert.NotNull(config);
+        Assert.Equal("test-namespace.servicebus.windows.net:9093", config.kafkaUrl);
+        Assert.Equal("test-namespace.servicebus.windows.net:9093", config.producerConfig.BootstrapServers);
+        Assert.Equal("$ConnectionString", config.producerConfig.SaslUsername);
+        Assert.Equal(connectionString, config.producerConfig.SaslPassword);
+        Assert.Equal(SecurityProtocol.SaslSsl, config.producerConfig.SecurityProtocol);
+        Assert.Equal(SaslMechanism.Plain, config.producerConfig.SaslMechanism);
+        Assert.Contains("Nostify-", config.producerConfig.ClientId);
+    }
+
+    [Fact]
+    public void WithEventHubs_ExtensionMethod_ShouldChainCorrectly()
+    {
+        // Arrange
+        var existingConfig = new NostifyConfig();
+        var connectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+
+        // Act
+        var config = existingConfig.WithEventHubs(connectionString);
+
+        // Assert
+        Assert.Same(existingConfig, config);
+        Assert.Equal("test-namespace.servicebus.windows.net:9093", config.kafkaUrl);
+    }
+
+    [Fact]
+    public void WithEventHubs_GeneratedClientId_ShouldBeUnique()
+    {
+        // Arrange
+        var connectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+        var dbName = "test-db";
+
+        // Act
+        var config1 = NostifyFactory.WithCosmos("key", dbName, "uri").WithEventHubs(connectionString);
+        var config2 = NostifyFactory.WithCosmos("key", dbName, "uri").WithEventHubs(connectionString);
+
+        // Assert
+        Assert.NotEqual(config1.producerConfig.ClientId, config2.producerConfig.ClientId);
+        Assert.Contains($"Nostify-{dbName}-", config1.producerConfig.ClientId);
+        Assert.Contains($"Nostify-{dbName}-", config2.producerConfig.ClientId);
+    }
+
+    [Fact]
+    public void FluentApi_WithEventHubs_ShouldChainCorrectly()
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.com:443/";
+        var eventHubsConnectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+        var mockHttpClientFactory = new Mock<IHttpClientFactory>();
+
+        // Act
+        var config = NostifyFactory
+            .WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, true, 1000)
+            .WithEventHubs(eventHubsConnectionString)
+            .WithHttp(mockHttpClientFactory.Object);
+
+        // Assert
+        Assert.NotNull(config);
+        Assert.Equal(cosmosApiKey, config.cosmosApiKey);
+        Assert.Equal(cosmosDbName, config.cosmosDbName);
+        Assert.Equal(cosmosEndpointUri, config.cosmosEndpointUri);
+        Assert.True(config.createContainers);
+        Assert.Equal(1000, config.containerThroughput);
+        Assert.Equal("test-namespace.servicebus.windows.net:9093", config.kafkaUrl);
+        Assert.Equal(mockHttpClientFactory.Object, config.httpClientFactory);
+    }
+
+    [Fact]
+    public void Build_WithEventHubs_ShouldCreateNostifyInstance()
+    {
+        // Arrange
+        var connectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+        var config = NostifyFactory
+            .WithCosmos("test-key", "test-db", "https://test.documents.azure.com:443/")
+            .WithEventHubs(connectionString)
+            .WithHttp(new Mock<IHttpClientFactory>().Object);
+
+        // Act
+        var nostify = config.Build();
+
+        // Assert
+        Assert.NotNull(nostify);
+        Assert.IsAssignableFrom<INostify>(nostify);
+        Assert.NotNull(nostify.Repository);
+        Assert.NotNull(nostify.KafkaProducer);
+        Assert.Equal("test-namespace.servicebus.windows.net:9093", nostify.KafkaUrl);
+    }
 }
 
 // Test aggregate for generic Build method testing

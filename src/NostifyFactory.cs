@@ -161,6 +161,42 @@ public static class NostifyFactory
     }
 
     /// <summary>
+    /// Creates a new instance of Nostify using Azure Event Hubs.
+    /// </summary>
+    public static NostifyConfig WithEventHubs(string eventHubsConnectionString)
+    {
+        NostifyConfig config = new NostifyConfig();
+        return config.WithEventHubs(eventHubsConnectionString);
+    }
+
+    /// <summary>
+    /// Creates a new instance of Nostify using Azure Event Hubs.
+    /// </summary>
+    public static NostifyConfig WithEventHubs(this NostifyConfig config, string eventHubsConnectionString)
+    {
+        // Parse Event Hubs connection string to extract namespace
+        var connectionStringParts = eventHubsConnectionString.Split(';');
+        string endpoint = connectionStringParts.FirstOrDefault(p => p.StartsWith("Endpoint="))?.Replace("Endpoint=sb://", "").Replace("/", "") ?? "";
+        
+        // Add port 9093 for Kafka protocol
+        if (!endpoint.Contains(":"))
+        {
+            endpoint = $"{endpoint}:9093";
+        }
+
+        // Configure for Event Hubs using Kafka protocol
+        config.kafkaUrl = endpoint;
+        config.producerConfig.BootstrapServers = endpoint;
+        config.producerConfig.ClientId = $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}";
+        config.producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
+        config.producerConfig.SaslMechanism = SaslMechanism.Plain;
+        config.producerConfig.SaslUsername = "$ConnectionString";
+        config.producerConfig.SaslPassword = eventHubsConnectionString;
+
+        return config;
+    }
+
+    /// <summary>
     /// Creates a new instance of Nostify using an IHttpClientFactory for making HTTP requests internal to Nostify, such as Projection init methods.
     /// You should use the DI injected HttpClient in your own services.
     /// </summary>
