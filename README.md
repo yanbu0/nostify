@@ -462,6 +462,35 @@ Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<keyname>;
 
 Event Hubs uses the Kafka protocol internally, so the same Event handlers and publishing mechanisms work seamlessly.
 
+##### Auto-Creating Event Hubs (Topics)
+
+When using `Build<T>()`, the framework can automatically create Event Hubs (topics) for all your commands. For Event Hubs, you need to provide Azure credentials:
+
+```csharp
+var nostify = NostifyFactory
+    .WithCosmos(apiKey, dbName, endPoint, autoCreateContainers, defaultThroughput)
+    .WithEventHubs(eventHubsConnectionString)
+    .WithEventHubsManagement(
+        subscriptionId: azureSubscriptionId,
+        resourceGroup: azureResourceGroup,
+        tenantId: azureTenantId,
+        clientId: azureClientId,
+        clientSecret: azureClientSecret)
+    .WithHttp(httpClientFactory)
+    .Build<InventoryItem>(verbose: true);
+```
+
+The Azure credentials (Service Principal) require the following permissions:
+- **Azure Event Hubs Data Owner** role on the Event Hubs namespace
+
+If you don't provide Azure credentials with `WithEventHubsManagement()`, the `Build<T>()` method will skip auto-creation and you'll need to create Event Hubs manually via:
+- Azure Portal
+- Azure CLI
+- ARM templates
+- Terraform or other IaC tools
+
+For Kafka, topic auto-creation works without additional configuration as it uses the Kafka AdminClient.
+
 By default, the template will contain the single Aggregate specified. In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out. The AggregateCommand base class contains default implementations for Create, Update, and Delete. The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name. Note that `UpdateProperties<T>()` uses reflection, so extremely high performance may require writing code to directly handle the updates for your Aggregate's specific properties.
 
 ```C#

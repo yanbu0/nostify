@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
+using System.Threading.Tasks;
+using Azure.Identity;
+using Azure.ResourceManager;
+using Azure.ResourceManager.EventHubs;
+using Azure.ResourceManager.EventHubs.Models;
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
 
@@ -78,6 +83,61 @@ public class NostifyConfig
     /// </summary>
     public IHttpClientFactory? httpClientFactory { get; set; } = null;
 
+    /// <summary>
+    /// The type of messaging system being used (Kafka or EventHubs)
+    /// </summary>
+    internal MessagingType messagingType { get; set; } = MessagingType.Kafka;
+
+    /// <summary>
+    /// The Event Hubs connection string (for Event Hubs messaging type)
+    /// </summary>
+    public string eventHubsConnectionString { get; set; }
+
+    /// <summary>
+    /// The Event Hubs namespace name (for Event Hubs topic creation)
+    /// </summary>
+    public string eventHubsNamespace { get; set; }
+
+    /// <summary>
+    /// The Azure subscription ID (for Event Hubs topic creation)
+    /// </summary>
+    public string azureSubscriptionId { get; set; }
+
+    /// <summary>
+    /// The Azure resource group name (for Event Hubs topic creation)
+    /// </summary>
+    public string azureResourceGroup { get; set; }
+
+    /// <summary>
+    /// The Azure tenant ID (for Event Hubs topic creation)
+    /// </summary>
+    public string azureTenantId { get; set; }
+
+    /// <summary>
+    /// The Azure client ID (for Event Hubs topic creation)
+    /// </summary>
+    public string azureClientId { get; set; }
+
+    /// <summary>
+    /// The Azure client secret (for Event Hubs topic creation)
+    /// </summary>
+    public string azureClientSecret { get; set; }
+}
+
+/// <summary>
+/// Messaging system type
+/// </summary>
+internal enum MessagingType
+{
+    /// <summary>
+    /// Apache Kafka
+    /// </summary>
+    Kafka,
+    
+    /// <summary>
+    /// Azure Event Hubs
+    /// </summary>
+    EventHubs
 }
 
 ///<summary>
@@ -123,6 +183,7 @@ public static class NostifyFactory
     public static NostifyConfig WithKafka(this NostifyConfig config, ProducerConfig producerConfig)
     {
         config.producerConfig = producerConfig;
+        config.messagingType = MessagingType.Kafka;
         return config;
     }
 
@@ -146,6 +207,7 @@ public static class NostifyFactory
         config.producerConfig.BootstrapServers = kafkaUrl;
         config.producerConfig.ClientId = $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}";
         config.producerConfig.AllowAutoCreateTopics = true;
+        config.messagingType = MessagingType.Kafka;
 
         bool isDeployed = !string.IsNullOrWhiteSpace(config.kafkaUserName) && !string.IsNullOrWhiteSpace(config.kafkaPassword);
         if (isDeployed)
@@ -192,7 +254,36 @@ public static class NostifyFactory
         config.producerConfig.SaslMechanism = SaslMechanism.Plain;
         config.producerConfig.SaslUsername = "$ConnectionString";
         config.producerConfig.SaslPassword = eventHubsConnectionString;
+        config.messagingType = MessagingType.EventHubs;
+        config.eventHubsConnectionString = eventHubsConnectionString;
 
+        // Extract namespace from endpoint (remove port if present)
+        config.eventHubsNamespace = endpoint.Contains(":") ? endpoint.Substring(0, endpoint.IndexOf(":")) : endpoint;
+        if (config.eventHubsNamespace.EndsWith(".servicebus.windows.net"))
+        {
+            config.eventHubsNamespace = config.eventHubsNamespace.Substring(0, config.eventHubsNamespace.IndexOf("."));
+        }
+
+        return config;
+    }
+
+    /// <summary>
+    /// Adds Azure credentials for Event Hubs topic creation. Only needed if using Build&lt;T&gt; to auto-create topics.
+    /// </summary>
+    /// <param name="config">The Nostify configuration</param>
+    /// <param name="subscriptionId">Azure subscription ID</param>
+    /// <param name="resourceGroup">Azure resource group name</param>
+    /// <param name="tenantId">Azure tenant ID</param>
+    /// <param name="clientId">Azure client ID (Service Principal)</param>
+    /// <param name="clientSecret">Azure client secret</param>
+    /// <returns>The configuration for method chaining</returns>
+    public static NostifyConfig WithEventHubsManagement(this NostifyConfig config, string subscriptionId, string resourceGroup, string tenantId, string clientId, string clientSecret)
+    {
+        config.azureSubscriptionId = subscriptionId;
+        config.azureResourceGroup = resourceGroup;
+        config.azureTenantId = tenantId;
+        config.azureClientId = clientId;
+        config.azureClientSecret = clientSecret;
         return config;
     }
 
@@ -236,23 +327,17 @@ public static class NostifyFactory
 
 
     /// <summary>
-    /// Builds the Nostify instance. Will autocreate topics in Kafka for each NostifyCommand found in the assembly of T.
+    /// Builds the Nostify instance. Will autocreate topics in Kafka or Event Hubs for each NostifyCommand found in the assembly of T.
     /// </summary>
     /// <param name="config">The Nostify configuration settings.</param>
     /// <param name="verbose">If true, will write to console the steps taken to create the containers and topics</param>
     public static INostify Build<T>(this NostifyConfig config, bool verbose = false) where T : IAggregate
     {
-
-        //Create Confluent admin client
-        if (verbose) Console.WriteLine("Building Admin Client");
-        var adminClientConfig = new AdminClientConfig(config.producerConfig);
-        var adminClient = new AdminClientBuilder(adminClientConfig).Build();
-        if (verbose) Console.WriteLine("Admin Client built");
-
         //Find all NostifyCommand instances in this assembly of T and create a topic for each
         var assembly = typeof(T).Assembly;
         var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
         if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
+        
         //Get any static properties of each commandType that inherit type NostifyCommand        
         var commandProperties = commandTypes
             .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -260,25 +345,21 @@ public static class NostifyFactory
 
         if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");
 
-        List<TopicSpecification> topics = new List<TopicSpecification>();
+        List<string> topicNames = new List<string>();
         foreach (var commandType in commandProperties)
         {
             //Get the name property value of the commandType
             var topic = commandType.GetValue(null).GetType().GetProperty("name").GetValue(commandType.GetValue(null)).ToString();
-            var topicSpec = new TopicSpecification { Name = topic, NumPartitions = 6 };
-            topics.Add(topicSpec);
+            topicNames.Add(topic);
         }
-        //Filter topics to only create new topics
-        var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-        topics = topics.Where(t => !existingTopics.Any(et => et.Topic == t.Name)).ToList();
-        if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
 
-        //Create any new topics needed
-        if (topics.Count > 0)
+        if (config.messagingType == MessagingType.Kafka)
         {
-            adminClient.CreateTopicsAsync(topics).Wait();
-            var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-            if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+            CreateKafkaTopics(config, topicNames, verbose);
+        }
+        else if (config.messagingType == MessagingType.EventHubs)
+        {
+            CreateEventHubs(config, topicNames, verbose);
         }
 
         var nostify = Build(config);
@@ -290,5 +371,117 @@ public static class NostifyFactory
         }
 
         return nostify;
+    }
+
+    private static void CreateKafkaTopics(NostifyConfig config, List<string> topicNames, bool verbose)
+    {
+        //Create Confluent admin client
+        if (verbose) Console.WriteLine("Building Kafka Admin Client");
+        var adminClientConfig = new AdminClientConfig(config.producerConfig);
+        var adminClient = new AdminClientBuilder(adminClientConfig).Build();
+        if (verbose) Console.WriteLine("Kafka Admin Client built");
+
+        List<TopicSpecification> topics = new List<TopicSpecification>();
+        foreach (var topic in topicNames)
+        {
+            var topicSpec = new TopicSpecification { Name = topic, NumPartitions = 6 };
+            topics.Add(topicSpec);
+        }
+        
+        //Filter topics to only create new topics
+        var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+        topics = topics.Where(t => !existingTopics.Any(et => et.Topic == t.Name)).ToList();
+        if (verbose) Console.WriteLine($"Creating Kafka topics: {string.Join(", ", topics.Select(t => t.Name))}");
+
+        //Create any new topics needed
+        if (topics.Count > 0)
+        {
+            adminClient.CreateTopicsAsync(topics).Wait();
+            var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+            if (verbose) Console.WriteLine($"Current Kafka topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+        }
+        else
+        {
+            if (verbose) Console.WriteLine("All Kafka topics already exist");
+        }
+    }
+
+    private static void CreateEventHubs(NostifyConfig config, List<string> topicNames, bool verbose)
+    {
+        // Check if Azure credentials are provided
+        if (string.IsNullOrWhiteSpace(config.azureSubscriptionId) ||
+            string.IsNullOrWhiteSpace(config.azureResourceGroup) ||
+            string.IsNullOrWhiteSpace(config.azureTenantId) ||
+            string.IsNullOrWhiteSpace(config.azureClientId) ||
+            string.IsNullOrWhiteSpace(config.azureClientSecret) ||
+            string.IsNullOrWhiteSpace(config.eventHubsNamespace))
+        {
+            if (verbose)
+            {
+                Console.WriteLine("Event Hubs topic creation skipped: Azure credentials not provided.");
+                Console.WriteLine("To auto-create Event Hubs, call .WithEventHubsManagement() with Azure credentials.");
+                Console.WriteLine($"Topics needed: {string.Join(", ", topicNames)}");
+            }
+            return;
+        }
+
+        if (verbose) Console.WriteLine("Building Azure Event Hubs Admin Client");
+
+        try
+        {
+            // Create Azure credential
+            var credential = new ClientSecretCredential(
+                config.azureTenantId,
+                config.azureClientId,
+                config.azureClientSecret);
+
+            // Create ARM client
+            var armClient = new ArmClient(credential);
+            var subscription = armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{config.azureSubscriptionId}"));
+            
+            // Get the Event Hubs namespace
+            var resourceGroupResource = subscription.GetResourceGroup(config.azureResourceGroup).Value;
+            var eventHubsNamespaceCollection = resourceGroupResource.GetEventHubsNamespaces();
+            var namespaceResource = eventHubsNamespaceCollection.Get(config.eventHubsNamespace).Value;
+
+            if (verbose) Console.WriteLine($"Connected to Event Hubs namespace: {config.eventHubsNamespace}");
+
+            // Get existing Event Hubs
+            var existingEventHubs = namespaceResource.GetEventHubs().Select(eh => eh.Data.Name).ToList();
+            var eventHubsToCreate = topicNames.Where(t => !existingEventHubs.Contains(t)).ToList();
+
+            if (verbose) Console.WriteLine($"Creating Event Hubs: {string.Join(", ", eventHubsToCreate)}");
+
+            // Create Event Hubs
+            foreach (var eventHubName in eventHubsToCreate)
+            {
+                var eventHubData = new EventHubData()
+                {
+                    PartitionCount = 6, // Match Kafka default partition count
+                    MessageRetentionInDays = 7 // Default retention
+                };
+
+                var createOperation = namespaceResource.GetEventHubs().CreateOrUpdate(
+                    Azure.WaitUntil.Completed,
+                    eventHubName,
+                    eventHubData);
+
+                if (verbose) Console.WriteLine($"Created Event Hub: {eventHubName}");
+            }
+
+            if (eventHubsToCreate.Count == 0)
+            {
+                if (verbose) Console.WriteLine("All Event Hubs already exist");
+            }
+        }
+        catch (Exception ex)
+        {
+            if (verbose)
+            {
+                Console.WriteLine($"Error creating Event Hubs: {ex.Message}");
+                Console.WriteLine("Event Hubs must be created manually or with valid Azure credentials.");
+            }
+            throw new InvalidOperationException($"Failed to create Event Hubs. Ensure Azure credentials are correct and the service principal has appropriate permissions. Error: {ex.Message}", ex);
+        }
     }
 }
