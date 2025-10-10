@@ -61,7 +61,7 @@ public class NostifyConfig
     /// <summary>
     /// The configuration settings for the Kafka producer.
     /// </summary>
-    public ProducerConfig producerConfig = new ProducerConfig();
+    public List<KeyValuePair<string, string>> producerConfig { get; set; } = new List<KeyValuePair<string, string>>();
 
     /// <summary>
     /// If true, create database and Aggregate/Projection containers
@@ -116,12 +116,12 @@ public class NostifyConfig
     /// <summary>
     /// The Azure client ID (for Event Hubs topic creation)
     /// </summary>
-    public string azureClientId { get; set; }
+    public string? azureClientId { get; set; }
 
     /// <summary>
     /// The Azure client secret (for Event Hubs topic creation)
     /// </summary>
-    public string azureClientSecret { get; set; }
+    public string? azureClientSecret { get; set; }
 }
 
 /// <summary>
@@ -182,7 +182,7 @@ public static class NostifyFactory
     /// </summary>
     public static NostifyConfig WithKafka(this NostifyConfig config, ProducerConfig producerConfig)
     {
-        config.producerConfig = producerConfig;
+    config.producerConfig = producerConfig.Select(kvp => new KeyValuePair<string, string>(kvp.Key, kvp.Value ?? string.Empty)).ToList();
         config.messagingType = MessagingType.Kafka;
         return config;
     }
@@ -204,20 +204,25 @@ public static class NostifyFactory
         config.kafkaUrl = kafkaUrl;
         config.kafkaUserName = kafkaUserName;
         config.kafkaPassword = kafkaPassword;
-        config.producerConfig.BootstrapServers = kafkaUrl;
-        config.producerConfig.ClientId = $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}";
-        config.producerConfig.AllowAutoCreateTopics = true;
+        var producerConfig = new List<KeyValuePair<string, string>>
+        {
+            new("bootstrap.servers", kafkaUrl),
+            new("client.id", $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}"),
+            new("allow.auto.create.topics", "true")
+        };
         config.messagingType = MessagingType.Kafka;
 
         bool isDeployed = !string.IsNullOrWhiteSpace(config.kafkaUserName) && !string.IsNullOrWhiteSpace(config.kafkaPassword);
         if (isDeployed)
         {
-            config.producerConfig.SaslUsername = config.kafkaUserName;
-            config.producerConfig.SaslPassword = config.kafkaPassword;
-            config.producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
-            config.producerConfig.SaslMechanism = SaslMechanism.Plain;
-            config.producerConfig.ApiVersionRequest = true;
+            producerConfig.Add(new("sasl.username", config.kafkaUserName));
+            producerConfig.Add(new("sasl.password", config.kafkaPassword));
+            producerConfig.Add(new("security.protocol", "SASL_SSL"));
+            producerConfig.Add(new("sasl.mechanism", SaslMechanism.Plain.ToString().ToUpper()));
+            producerConfig.Add(new("api.version.request", "true"));
         }
+
+        config.producerConfig = producerConfig;
 
         return config;
     }
@@ -248,14 +253,20 @@ public static class NostifyFactory
 
         // Configure for Event Hubs using Kafka protocol
         config.kafkaUrl = endpoint;
-        config.producerConfig.BootstrapServers = endpoint;
-        config.producerConfig.ClientId = $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}";
-        config.producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
-        config.producerConfig.SaslMechanism = SaslMechanism.Plain;
-        config.producerConfig.SaslUsername = "$ConnectionString";
-        config.producerConfig.SaslPassword = eventHubsConnectionString;
-        config.messagingType = MessagingType.EventHubs;
         config.eventHubsConnectionString = eventHubsConnectionString;
+        var producerConfigList = new List<KeyValuePair<string, string>>
+        {
+            new("bootstrap.servers", endpoint),
+            new("security.protocol", "SASL_SSL"),
+            new("sasl.mechanism", "PLAIN"),
+            new("client.id", $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}"),
+            new("sasl.username", "$ConnectionString"),
+            new("sasl.password", eventHubsConnectionString),
+            new("allow.auto.create.topics", "true"),
+            new("api.version.request", "true")
+        };
+        config.producerConfig = producerConfigList;
+        config.messagingType = MessagingType.EventHubs;
 
         // Extract namespace from endpoint (remove port if present)
         config.eventHubsNamespace = endpoint.Contains(":") ? endpoint.Substring(0, endpoint.IndexOf(":")) : endpoint;
@@ -277,7 +288,7 @@ public static class NostifyFactory
     /// <param name="clientId">Azure client ID (Service Principal)</param>
     /// <param name="clientSecret">Azure client secret</param>
     /// <returns>The configuration for method chaining</returns>
-    public static NostifyConfig WithEventHubsManagement(this NostifyConfig config, string subscriptionId, string resourceGroup, string tenantId, string clientId, string clientSecret)
+    public static NostifyConfig WithEventHubsManagement(this NostifyConfig config, string subscriptionId, string resourceGroup, string tenantId, string? clientId = null, string? clientSecret = null)
     {
         config.azureSubscriptionId = subscriptionId;
         config.azureResourceGroup = resourceGroup;
@@ -312,7 +323,12 @@ public static class NostifyFactory
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
         var DefaultTenantId = config.defaultTenantId;
         var KafkaUrl = config.kafkaUrl;
-        var KafkaProducer = new ProducerBuilder<string, string>(config.producerConfig).Build();
+        var producerConfigDictionary = new Dictionary<string, string>();
+        foreach (var kvp in config.producerConfig)
+        {
+            producerConfigDictionary[kvp.Key] = kvp.Value;
+        }
+    var KafkaProducer = new ProducerBuilder<string, string>(producerConfigDictionary).Build();
         var HttpClientFactory = config.httpClientFactory;
 
         return new Nostify(
@@ -377,7 +393,12 @@ public static class NostifyFactory
     {
         //Create Confluent admin client
         if (verbose) Console.WriteLine("Building Kafka Admin Client");
-        var adminClientConfig = new AdminClientConfig(config.producerConfig);
+        var adminClientDictionary = new Dictionary<string, string>();
+        foreach (var kvp in config.producerConfig)
+        {
+            adminClientDictionary[kvp.Key] = kvp.Value;
+        }
+        var adminClientConfig = new AdminClientConfig(adminClientDictionary);
         var adminClient = new AdminClientBuilder(adminClientConfig).Build();
         if (verbose) Console.WriteLine("Kafka Admin Client built");
 
@@ -408,18 +429,15 @@ public static class NostifyFactory
 
     private static void CreateEventHubs(NostifyConfig config, List<string> topicNames, bool verbose)
     {
-        // Check if Azure credentials are provided
+        // Check if required Azure details are provided
         if (string.IsNullOrWhiteSpace(config.azureSubscriptionId) ||
             string.IsNullOrWhiteSpace(config.azureResourceGroup) ||
-            string.IsNullOrWhiteSpace(config.azureTenantId) ||
-            string.IsNullOrWhiteSpace(config.azureClientId) ||
-            string.IsNullOrWhiteSpace(config.azureClientSecret) ||
             string.IsNullOrWhiteSpace(config.eventHubsNamespace))
         {
             if (verbose)
             {
-                Console.WriteLine("Event Hubs topic creation skipped: Azure credentials not provided.");
-                Console.WriteLine("To auto-create Event Hubs, call .WithEventHubsManagement() with Azure credentials.");
+                Console.WriteLine("Event Hubs topic creation skipped: Azure subscription, resource group, and namespace are required.");
+                Console.WriteLine("To auto-create Event Hubs, ensure subscription/resource group/namespace are provided via .WithEventHubsManagement().");
                 Console.WriteLine($"Topics needed: {string.Join(", ", topicNames)}");
             }
             return;
@@ -430,10 +448,43 @@ public static class NostifyFactory
         try
         {
             // Create Azure credential
-            var credential = new ClientSecretCredential(
-                config.azureTenantId,
-                config.azureClientId,
-                config.azureClientSecret);
+            Azure.Core.TokenCredential credential;
+            bool usingDefaultCredential = string.IsNullOrWhiteSpace(config.azureClientId) ||
+                                          string.IsNullOrWhiteSpace(config.azureClientSecret) ||
+                                          string.IsNullOrWhiteSpace(config.azureTenantId);
+
+            if (usingDefaultCredential)
+            {
+                var credentialOptions = new DefaultAzureCredentialOptions();
+
+                if (!string.IsNullOrWhiteSpace(config.azureTenantId))
+                {
+                    credentialOptions.SharedTokenCacheTenantId = config.azureTenantId;
+                    credentialOptions.VisualStudioTenantId = config.azureTenantId;
+                    credentialOptions.VisualStudioCodeTenantId = config.azureTenantId;
+                    credentialOptions.InteractiveBrowserTenantId = config.azureTenantId;
+                    credentialOptions.ExcludeSharedTokenCacheCredential = false;
+                }
+
+                credential = new DefaultAzureCredential(credentialOptions);
+
+                if (verbose)
+                {
+                    Console.WriteLine("Using DefaultAzureCredential for Event Hubs management (client ID not provided).");
+                }
+            }
+            else
+            {
+                credential = new ClientSecretCredential(
+                    config.azureTenantId,
+                    config.azureClientId,
+                    config.azureClientSecret);
+
+                if (verbose)
+                {
+                    Console.WriteLine("Using ClientSecretCredential for Event Hubs management.");
+                }
+            }
 
             // Create ARM client
             var armClient = new ArmClient(credential);
@@ -457,8 +508,7 @@ public static class NostifyFactory
             {
                 var eventHubData = new EventHubData()
                 {
-                    PartitionCount = 6, // Match Kafka default partition count
-                    MessageRetentionInDays = 7 // Default retention
+                    PartitionCount = 6 // Match Kafka default partition count
                 };
 
                 var createOperation = namespaceResource.GetEventHubs().CreateOrUpdate(

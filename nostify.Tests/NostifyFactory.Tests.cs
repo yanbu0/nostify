@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net.Http;
 using Xunit;
 using nostify;
@@ -9,6 +10,24 @@ namespace nostify.Tests;
 
 public class NostifyFactoryTests
 {
+    private static string? GetProducerConfigValue(NostifyConfig config, string key)
+    {
+        return config.producerConfig
+            .LastOrDefault(kvp => string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+            .Value;
+    }
+
+    private static bool? GetProducerConfigBoolValue(NostifyConfig config, string key)
+    {
+        var value = GetProducerConfigValue(config, key);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return bool.TryParse(value, out var result) ? result : null;
+    }
+
     [Fact]
     public void WithCosmos_ShouldCreateConfigWithCosmosSettings()
     {
@@ -93,7 +112,8 @@ public class NostifyFactoryTests
 
         // Assert
         Assert.NotNull(config);
-        Assert.Equal(producerConfig, config.producerConfig);
+        Assert.Equal("localhost:9092", GetProducerConfigValue(config, "bootstrap.servers"));
+        Assert.Equal("test-client", GetProducerConfigValue(config, "client.id"));
     }
 
     [Fact]
@@ -110,9 +130,9 @@ public class NostifyFactoryTests
         Assert.Equal(kafkaUrl, config.kafkaUrl);
         Assert.Null(config.kafkaUserName);
         Assert.Null(config.kafkaPassword);
-        Assert.Equal(kafkaUrl, config.producerConfig.BootstrapServers);
-        Assert.True(config.producerConfig.AllowAutoCreateTopics);
-        Assert.Contains("Nostify-", config.producerConfig.ClientId);
+        Assert.Equal(kafkaUrl, GetProducerConfigValue(config, "bootstrap.servers"));
+        Assert.True(GetProducerConfigBoolValue(config, "allow.auto.create.topics").GetValueOrDefault());
+        Assert.Contains("Nostify-", GetProducerConfigValue(config, "client.id"));
     }
 
     [Fact]
@@ -130,11 +150,11 @@ public class NostifyFactoryTests
         Assert.Equal(kafkaUrl, config.kafkaUrl);
         Assert.Equal(userName, config.kafkaUserName);
         Assert.Equal(password, config.kafkaPassword);
-        Assert.Equal(userName, config.producerConfig.SaslUsername);
-        Assert.Equal(password, config.producerConfig.SaslPassword);
-        Assert.Equal(SecurityProtocol.SaslSsl, config.producerConfig.SecurityProtocol);
-        Assert.Equal(SaslMechanism.Plain, config.producerConfig.SaslMechanism);
-        Assert.True(config.producerConfig.ApiVersionRequest);
+        Assert.Equal(userName, GetProducerConfigValue(config, "sasl.username"));
+        Assert.Equal(password, GetProducerConfigValue(config, "sasl.password"));
+        Assert.Equal("SASL_SSL", GetProducerConfigValue(config, "security.protocol"));
+        Assert.Equal("PLAIN", GetProducerConfigValue(config, "sasl.mechanism"));
+    Assert.True(GetProducerConfigBoolValue(config, "api.version.request").GetValueOrDefault());
     }
 
     [Fact]
@@ -147,10 +167,10 @@ public class NostifyFactoryTests
         var config = NostifyFactory.WithKafka(kafkaUrl);
 
         // Assert
-        Assert.Null(config.producerConfig.SaslUsername);
-        Assert.Null(config.producerConfig.SaslPassword);
-        Assert.Null(config.producerConfig.SecurityProtocol);
-        Assert.Null(config.producerConfig.SaslMechanism);
+        Assert.Null(GetProducerConfigValue(config, "sasl.username"));
+        Assert.Null(GetProducerConfigValue(config, "sasl.password"));
+        Assert.Null(GetProducerConfigValue(config, "security.protocol"));
+        Assert.Null(GetProducerConfigValue(config, "sasl.mechanism"));
     }
 
     [Fact]
@@ -298,9 +318,11 @@ public class NostifyFactoryTests
         var config2 = NostifyFactory.WithCosmos("key", dbName, "uri").WithKafka(kafkaUrl);
 
         // Assert
-        Assert.NotEqual(config1.producerConfig.ClientId, config2.producerConfig.ClientId);
-        Assert.Contains($"Nostify-{dbName}-", config1.producerConfig.ClientId);
-        Assert.Contains($"Nostify-{dbName}-", config2.producerConfig.ClientId);
+    var clientId1 = GetProducerConfigValue(config1, "client.id");
+    var clientId2 = GetProducerConfigValue(config2, "client.id");
+    Assert.NotEqual(clientId1, clientId2);
+    Assert.Contains($"Nostify-{dbName}-", clientId1);
+    Assert.Contains($"Nostify-{dbName}-", clientId2);
     }
 
     [Fact]
@@ -313,7 +335,7 @@ public class NostifyFactoryTests
         var config = NostifyFactory.WithKafka(kafkaUrl);
 
         // Assert
-        Assert.True(config.producerConfig.AllowAutoCreateTopics);
+    Assert.True(GetProducerConfigBoolValue(config, "allow.auto.create.topics").GetValueOrDefault());
     }
 
     [Fact]
@@ -349,8 +371,8 @@ public class NostifyFactoryTests
         Assert.Equal("https://test.documents.azure.com:443/", config.cosmosEndpointUri);
         Assert.Equal("localhost:9092", config.kafkaUrl);
         Assert.NotNull(config.httpClientFactory);
-        Assert.NotNull(config.producerConfig);
-        Assert.True(config.producerConfig.AllowAutoCreateTopics);
+    Assert.NotNull(config.producerConfig);
+    Assert.True(GetProducerConfigBoolValue(config, "allow.auto.create.topics").GetValueOrDefault());
     }
 
     [Fact]
@@ -365,8 +387,8 @@ public class NostifyFactoryTests
         // Assert
         Assert.Equal("", config.kafkaUserName);
         Assert.Equal("", config.kafkaPassword);
-        Assert.Null(config.producerConfig.SaslUsername);
-        Assert.Null(config.producerConfig.SecurityProtocol);
+    Assert.Null(GetProducerConfigValue(config, "sasl.username"));
+    Assert.Null(GetProducerConfigValue(config, "security.protocol"));
     }
 
     [Fact]
@@ -381,8 +403,8 @@ public class NostifyFactoryTests
         // Assert
         Assert.Equal("   ", config.kafkaUserName);
         Assert.Equal("   ", config.kafkaPassword);
-        Assert.Null(config.producerConfig.SaslUsername);
-        Assert.Null(config.producerConfig.SecurityProtocol);
+    Assert.Null(GetProducerConfigValue(config, "sasl.username"));
+    Assert.Null(GetProducerConfigValue(config, "security.protocol"));
     }
 
     [Fact]
@@ -392,8 +414,8 @@ public class NostifyFactoryTests
         var config = new NostifyConfig();
 
         // Assert
-        Assert.NotNull(config.producerConfig);
-        Assert.IsType<ProducerConfig>(config.producerConfig);
+    Assert.NotNull(config.producerConfig);
+    Assert.IsType<List<KeyValuePair<string, string>>>(config.producerConfig);
     }
 
     [Fact]
@@ -438,7 +460,7 @@ public class NostifyFactoryTests
         var config = NostifyFactory.WithKafka(kafkaUrl, userName, password);
 
         // Assert
-        Assert.True(config.producerConfig.ApiVersionRequest);
+    Assert.True(GetProducerConfigBoolValue(config, "api.version.request").GetValueOrDefault());
     }
 
     [Theory]
@@ -455,11 +477,11 @@ public class NostifyFactoryTests
         // Assert
         Assert.Equal(credential, config.kafkaUserName);
         Assert.Equal(credential, config.kafkaPassword);
-        Assert.Null(config.producerConfig.SaslUsername);
-        Assert.Null(config.producerConfig.SaslPassword);
-        Assert.Null(config.producerConfig.SecurityProtocol);
-        Assert.Null(config.producerConfig.SaslMechanism);
-        Assert.Null(config.producerConfig.ApiVersionRequest);
+    Assert.Null(GetProducerConfigValue(config, "sasl.username"));
+    Assert.Null(GetProducerConfigValue(config, "sasl.password"));
+    Assert.Null(GetProducerConfigValue(config, "security.protocol"));
+    Assert.Null(GetProducerConfigValue(config, "sasl.mechanism"));
+    Assert.Null(GetProducerConfigValue(config, "api.version.request"));
     }
 
     [Fact]
@@ -474,12 +496,12 @@ public class NostifyFactoryTests
         // Assert
         Assert.NotNull(config);
         Assert.Equal("test-namespace.servicebus.windows.net:9093", config.kafkaUrl);
-        Assert.Equal("test-namespace.servicebus.windows.net:9093", config.producerConfig.BootstrapServers);
-        Assert.Equal("$ConnectionString", config.producerConfig.SaslUsername);
-        Assert.Equal(connectionString, config.producerConfig.SaslPassword);
-        Assert.Equal(SecurityProtocol.SaslSsl, config.producerConfig.SecurityProtocol);
-        Assert.Equal(SaslMechanism.Plain, config.producerConfig.SaslMechanism);
-        Assert.Contains("Nostify-", config.producerConfig.ClientId);
+    Assert.Equal("test-namespace.servicebus.windows.net:9093", GetProducerConfigValue(config, "bootstrap.servers"));
+    Assert.Equal("$ConnectionString", GetProducerConfigValue(config, "sasl.username"));
+    Assert.Equal(connectionString, GetProducerConfigValue(config, "sasl.password"));
+    Assert.Equal("SASL_SSL", GetProducerConfigValue(config, "security.protocol"));
+    Assert.Equal("PLAIN", GetProducerConfigValue(config, "sasl.mechanism"));
+    Assert.Contains("Nostify-", GetProducerConfigValue(config, "client.id"));
     }
 
     [Fact]
@@ -509,9 +531,11 @@ public class NostifyFactoryTests
         var config2 = NostifyFactory.WithCosmos("key", dbName, "uri").WithEventHubs(connectionString);
 
         // Assert
-        Assert.NotEqual(config1.producerConfig.ClientId, config2.producerConfig.ClientId);
-        Assert.Contains($"Nostify-{dbName}-", config1.producerConfig.ClientId);
-        Assert.Contains($"Nostify-{dbName}-", config2.producerConfig.ClientId);
+    var clientId1 = GetProducerConfigValue(config1, "client.id");
+    var clientId2 = GetProducerConfigValue(config2, "client.id");
+    Assert.NotEqual(clientId1, clientId2);
+    Assert.Contains($"Nostify-{dbName}-", clientId1);
+    Assert.Contains($"Nostify-{dbName}-", clientId2);
     }
 
     [Fact]

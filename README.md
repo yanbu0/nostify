@@ -72,6 +72,7 @@
   - **Azure Event Hubs Support**: Added `WithEventHubs()` method to enable using Azure Event Hubs as an alternative to Kafka for event messaging
   - Event Hubs uses the Kafka protocol internally, maintaining full compatibility with existing Event handlers
   - Added comprehensive tests for Event Hubs configuration and fluent API chaining
+  - **Event Hubs Management Improvements**: `CreateEventHubs` now falls back to `DefaultAzureCredential` when no client ID/secret are supplied, making it easier to bootstrap with managed identity or developer credentials
 - 3.9.0
   - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
   - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
