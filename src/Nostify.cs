@@ -87,7 +87,7 @@ public class Nostify : INostify
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
         var eventContainer = await GetEventStoreContainerAsync();
-        await eventContainer.CreateItemAsync(eventToPersist as Event, eventToPersist.aggregateRootId.ToPartitionKey());
+        await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
     }
 
     ///<inheritdoc />
@@ -103,7 +103,7 @@ public class Nostify : INostify
     {
         if (peList != null)
         {
-            foreach (Event pe in peList)
+            foreach (IEvent pe in peList)
             {
                 string topic = pe.command.name;
                 var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) });
@@ -154,7 +154,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
     {
         return await MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate.Select(p => p.id).ToList(), batchSize);
     }
@@ -165,7 +165,7 @@ public class Nostify : INostify
         //Throw if not bulk container
         bulkContainer.ValidateBulkEnabled(true);
 
-        List<Event> eventList = events.Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e).GetEvent()).ToList();
+        List<IEvent> eventList = events.Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e).GetIEvent()).ToList();
         List<Guid> partitionKeys = eventList.Select(e => e.partitionKey).Distinct().ToList();
 
         List<Task> tasks = new List<Task>();
@@ -174,7 +174,7 @@ public class Nostify : INostify
         //For each partition, create a list of tasks to apply and persist the events based off the list of ids in the property specified
         partitionKeys.ForEach(pk =>
         {
-            List<Event> partitionEvents = eventList.Where(e => e.partitionKey == pk).ToList();
+            List<IEvent> partitionEvents = eventList.Where(e => e.partitionKey == pk).ToList();
             partitionEvents.ForEach(pe =>
             {
                 //Set up vars for both list and single id properties
@@ -303,7 +303,7 @@ public class Nostify : INostify
         var eventContainer = await GetEventStoreContainerAsync();
 
         T rehyd = new T();
-        List<Event> peList = await eventContainer.GetItemLinqQueryable<Event>()
+        List<IEvent> peList = await eventContainer.GetItemLinqQueryable<IEvent>()
             .Where(pe => pe.aggregateRootId == id
                 && (!untilDate.HasValue || pe.timestamp <= untilDate)
             )
@@ -323,7 +323,7 @@ public class Nostify : INostify
         var eventContainer = await GetEventStoreContainerAsync();
 
         P rehydratedProjection = new P();
-        List<Event> eventList = await eventContainer.GetItemLinqQueryable<Event>()
+        List<IEvent> eventList = await eventContainer.GetItemLinqQueryable<IEvent>()
             .Where(e => e.aggregateRootId == id)
             .ReadAllAsync();
 
@@ -387,7 +387,7 @@ public class Nostify : INostify
 
         Container eventStore = await GetEventStoreContainerAsync();
         //Get list of distinct aggregate root ids
-        List<Guid> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<Event>()
+        List<Guid> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<IEvent>()
             .Select(pe => pe.aggregateRootId)
             .Distinct()
             .ReadAllAsync();
@@ -402,7 +402,7 @@ public class Nostify : INostify
             int rangeNum = (i + GET_THIS_MANY >= endOfRange) ? endOfRange - 1 : i + GET_THIS_MANY;
             var aggRange = uniqueAggregateRootIds.GetRange(i, rangeNum);
 
-            var peList = await eventStore.GetItemLinqQueryable<Event>()
+            var peList = await eventStore.GetItemLinqQueryable<IEvent>()
                 .Where(pe => aggRange.Contains(pe.aggregateRootId))
                 .ReadAllAsync();
 
@@ -429,7 +429,7 @@ public class Nostify : INostify
     ///The projection state rehydrated to the extent of the events fed into it.
     ///</returns>
     ///<param name="peList">The event stream for the aggregate to be rehydrated</param>
-    private T Rehydrate<T>(List<Event> peList) where T : NostifyObject, new()
+    private T Rehydrate<T>(List<IEvent> peList) where T : NostifyObject, new()
     {
         T rehyd = new T();
         foreach (var pe in peList)

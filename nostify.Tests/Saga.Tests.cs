@@ -5,7 +5,7 @@ using Moq;
 using nostify;
 using Xunit;
 using Microsoft.Azure.Cosmos;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 namespace nostify.Tests
 {
@@ -31,7 +31,7 @@ namespace nostify.Tests
             return step;
         }
 
-        private Event CreateEventMock()
+        private IEvent CreateEventMock()
         {
             var eventMock = new Mock<Event>();
             eventMock.SetupAllProperties();
@@ -258,8 +258,8 @@ namespace nostify.Tests
             var saga = new Saga("TestSaga", new List<SagaStep> { step });
 
             // Act
-            var json = JsonSerializer.Serialize(saga);
-            var deserialized = JsonSerializer.Deserialize<Saga>(json);
+            var json = JsonConvert.SerializeObject(saga);
+            var deserialized = JsonConvert.DeserializeObject<Saga>(json);
 
             // Assert
             Assert.NotNull(deserialized);

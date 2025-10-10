@@ -11,9 +11,9 @@ public class SagaStep : ISagaStep
     /// <inheritdoc/>
     public int order { get; set; } = 0;
     /// <inheritdoc/>
-    public Event stepEvent { get; set; }
+    public IEvent stepEvent { get; set; }
     /// <inheritdoc/>
-    public Event? rollbackEvent { get; set; }
+    public IEvent? rollbackEvent { get; set; }
     /// <inheritdoc/>
     public SagaStepStatus status { get; set; }
     /// <inheritdoc/>
@@ -53,7 +53,7 @@ public class SagaStep : ISagaStep
     /// <summary>
     /// Initializes a new instance of the <see cref="SagaStep"/> class.
     /// </summary>
-    public SagaStep(int order, Event stepEvent, Event? rollbackEvent = null)
+    public SagaStep(int order, IEvent stepEvent, IEvent? rollbackEvent = null)
     {
         this.order = order;
         this.stepEvent = stepEvent;

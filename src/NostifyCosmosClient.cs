@@ -190,7 +190,8 @@ namespace nostify
             {
                 AllowBulkExecution = allowBulk,
                 ConnectionMode = useGatewayConnection ? ConnectionMode.Gateway : ConnectionMode.Direct,
-                HttpClientFactory = () => new HttpClient(handler, disposeHandler: false)
+                HttpClientFactory = () => new HttpClient(handler, disposeHandler: false),
+                Serializer = new NewtonsoftJsonCosmosSerializer(), // Use custom serializer
             };
 
             if (_cosmosClient == null && !allowBulk)

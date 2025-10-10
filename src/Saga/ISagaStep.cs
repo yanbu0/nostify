@@ -16,12 +16,12 @@ public interface ISagaStep
     /// <summary>
     /// Gets or sets the event that will be published during this step in the saga process.
     /// </summary>
-    Event stepEvent { get; set; }
+    IEvent stepEvent { get; set; }
 
     /// <summary>
     /// Gets or sets the event that will be published during the rollback of this step in the saga process.
     /// </summary>
-    Event? rollbackEvent { get; set; }
+    IEvent? rollbackEvent { get; set; }
 
     /// <summary>
     /// Gets or sets the status of the step in the saga process.

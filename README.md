@@ -68,6 +68,16 @@
 
 ### Updates
 
+- 3.10.0
+  - **Azure Event Hubs Support**: Added `WithEventHubs()` method to enable using Azure Event Hubs as an alternative to Kafka for event messaging
+  - Event Hubs uses the Kafka protocol internally, maintaining full compatibility with existing Event handlers
+  - Added comprehensive tests for Event Hubs configuration and fluent API chaining
+  - **Event Hubs Management Improvements**: `CreateEventHubs` now falls back to `DefaultAzureCredential` when no client ID/secret are supplied, making it easier to bootstrap with managed identity or developer credentials
+- 3.9.0
+  - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
+  - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
+  - **Improved Serialization**: Better handling of polymorphic types and interfaces in Cosmos DB operations
+  - **Event Interface Usage**: Converted codebase to use `IEvent` interface instead of concrete `Event` class for better testability and abstraction
 - 3.8.2
   - **Patch**: Updated templates and documentation to reference nostify 3.8.2
   - **Tests**: Added comprehensive unit tests for TransformForeignIdSelectors helper (ensures correct behavior for list selectors, nulls, duplicates, and mapping edge cases)
@@ -426,6 +436,61 @@ public  class  Program
   }
 }
 ```
+
+#### Using Azure Event Hubs
+
+Azure Event Hubs can be used instead of Kafka for event messaging. Simply use `WithEventHubs()` instead of `WithKafka()` and provide an Event Hubs connection string:
+
+```csharp
+var eventHubsConnectionString = config.GetValue<string>("EventHubsConnectionString");
+
+var nostify = NostifyFactory.WithCosmos(
+                            cosmosApiKey: apiKey,
+                            cosmosDbName: dbName,
+                            cosmosEndpointUri: endPoint,
+                            createContainers: autoCreateContainers,
+                            containerThroughput: defaultThroughput,
+                            useGatewayConnection: useGatewayConnection)
+                        .WithEventHubs(eventHubsConnectionString)
+                        .WithHttp(httpClientFactory)
+                        .Build<InventoryItem>(verboseNostifyBuild);
+```
+
+The Event Hubs connection string should be in the format:
+```
+Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<keyname>;SharedAccessKey=<key>
+```
+
+Event Hubs uses the Kafka protocol internally, so the same Event handlers and publishing mechanisms work seamlessly.
+
+##### Auto-Creating Event Hubs (Topics)
+
+When using `Build<T>()`, the framework can automatically create Event Hubs (topics) for all your commands. For Event Hubs, you need to provide Azure credentials:
+
+```csharp
+var nostify = NostifyFactory
+    .WithCosmos(apiKey, dbName, endPoint, autoCreateContainers, defaultThroughput)
+    .WithEventHubs(eventHubsConnectionString)
+    .WithEventHubsManagement(
+        subscriptionId: azureSubscriptionId,
+        resourceGroup: azureResourceGroup,
+        tenantId: azureTenantId,
+        clientId: azureClientId,
+        clientSecret: azureClientSecret)
+    .WithHttp(httpClientFactory)
+    .Build<InventoryItem>(verbose: true);
+```
+
+The Azure credentials (Service Principal) require the following permissions:
+- **Azure Event Hubs Data Owner** role on the Event Hubs namespace
+
+If you don't provide Azure credentials with `WithEventHubsManagement()`, the `Build<T>()` method will skip auto-creation and you'll need to create Event Hubs manually via:
+- Azure Portal
+- Azure CLI
+- ARM templates
+- Terraform or other IaC tools
+
+For Kafka, topic auto-creation works without additional configuration as it uses the Kafka AdminClient.
 
 By default, the template will contain the single Aggregate specified. In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out. The AggregateCommand base class contains default implementations for Create, Update, and Delete. The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name. Note that `UpdateProperties<T>()` uses reflection, so extremely high performance may require writing code to directly handle the updates for your Aggregate's specific properties.
 
