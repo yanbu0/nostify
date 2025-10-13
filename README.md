@@ -27,7 +27,7 @@
   - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
   - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
   - **Improved Serialization**: Better handling of polymorphic types and interfaces in Cosmos DB operations
-  - **Event Interface Usage**: Converted codebase to use `IEvent` interface instead of concrete `Event` class for better testability and abstraction
+  - **Event Interface Usage**: Converted last bits of codebase to use `IEvent` interface instead of concrete `Event` class for better testability and abstraction
 - 3.8.2
   - **Patch**: Updated templates and documentation to reference nostify 3.8.2
   - **Tests**: Added comprehensive unit tests for TransformForeignIdSelectors helper (ensures correct behavior for list selectors, nulls, duplicates, and mapping edge cases)
