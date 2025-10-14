@@ -358,7 +358,7 @@ public class TestCommand : NostifyCommand
 The commands may then be handled in the `Apply()` method:
 
 ```C#
-public override void Apply(Event eventToApply)
+public override void Apply(IEvent eventToApply)
 {
     if (eventToApply.command == TestCommand.Create || eventToApply.command == TestCommand.Update)
     {
@@ -443,7 +443,7 @@ public  class  Test : NostifyObject, IAggregate
   public  static  string  aggregateType => "Test";
 
 
-  public  override  void  Apply(Event  eventToApply)
+  public  override  void  Apply(IEvent  eventToApply)
   {
     if (eventToApply.command == TestCommand.Create || eventToApply.command == TestCommand.Update)
     {
@@ -563,7 +563,7 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
   public string? testType { get; set; }
 
 
-  public override void Apply(Event eventToApply)
+  public override void Apply(IEvent eventToApply)
   {
       //Should update the command tree below to not use string matching
       if (eventToApply.command.name.Equals("Create_Test") || eventToApply.command.name.Equals("Update_Test"))
