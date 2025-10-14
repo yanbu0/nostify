@@ -13,7 +13,7 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     public static string aggregateType => "_ReplaceMe_";
     public static string currentStateContainerName => $"{aggregateType}CurrentState";
 
-    public override void Apply(Event eventToApply)
+    public override void Apply(IEvent eventToApply)
     {
         if (eventToApply.command == _ReplaceMe_Command.BulkCreate || eventToApply.command == _ReplaceMe_Command.Create || eventToApply.command == _ReplaceMe_Command.Update)
         {
