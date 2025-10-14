@@ -139,7 +139,7 @@ public class Saga : ISaga
     }
 
     /// <inheritdoc/>
-    public void AddStep(Event stepEvent, Event? rollbackEvent = null)
+    public void AddStep(IEvent stepEvent, IEvent? rollbackEvent = null)
     {
         // Find next highest order
         int nextOrder = steps.Count == 0 ? 1 : steps.Max(x => x.order) + 1;

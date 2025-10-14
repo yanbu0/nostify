@@ -85,7 +85,7 @@ public interface INostify
     /// <param name="batchSize">Optional. Number of projections to update in a batch. Default is 100.</param>
     /// <typeparam name="P">The type of the Nostify object.</typeparam>
     /// <returns>The nostify objects after Events are Applied</returns>
-    public Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new();
+    public Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new();
 
     ///<summary>
     ///Applies and persists a bulk array of events from Kafka to the specified container.

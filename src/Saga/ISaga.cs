@@ -100,7 +100,7 @@ public interface ISaga
     /// </summary>
     /// <param name="stepEvent">The event representing the step.</param>
     /// <param name="rollbackEvent">The event representing the rollback step (optional).</param>
-    void AddStep(Event stepEvent, Event? rollbackEvent = null);
+    void AddStep(IEvent stepEvent, IEvent? rollbackEvent = null);
 
     /// <summary>
     /// Starts the saga execution.
