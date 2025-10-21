@@ -270,7 +270,7 @@ public static class NostifyFactory
         }
         //Filter topics to only create new topics
         var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-        topics = topics.Where(t => !existingTopics.Any(et => et.Topic == t.Name)).ToList();
+        topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
         if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
 
         //Create any new topics needed
