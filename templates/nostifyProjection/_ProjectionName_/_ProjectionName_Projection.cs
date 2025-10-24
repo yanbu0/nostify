@@ -30,6 +30,14 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     public string externalAggregateExample1Name { get; set; }
     public Guid externalAggregateExample2Id { get; set; }
     public string externalAggregateExample2Name { get; set; }
+    public Guid externalAggregateExample3Id { get; set; }
+    public string externalAggregateExample3Name { get; set; }
+    public Guid externalAggregateExample4Id { get; set; }
+    public string externalAggregateExample4Name { get; set; }
+    public Guid externalAggregateExample5Id { get; set; }
+    public string externalAggregateExample5Name { get; set; }
+    public Guid externalAggregateExample6Id { get; set; }
+    public string externalAggregateExample6Name { get; set; }
 
 
     //**********************************************************************************************
@@ -67,6 +75,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
         if (httpClient != null)
         {
             //An EventRequest endpoint is created by the template in every service
+            //For a single external Aggregate, you can create one ExternalDataEvent object
             var externalEventsFromExternalService = await ExternalDataEvent.GetEventsAsync(httpClient,
                 "https://externalDataExampleUrl/api/EventRequest",
                 projectionsToInit,
@@ -75,14 +84,23 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
             externalDataEvents.AddRange(externalEventsFromExternalService);
 
             //If this Projection has more than one external Aggregate to get data from, create more queries, 
-            //its OK to create multiple ExternalDataEvent objects for the same Projection, all of the Events get flattened into one list
-            //in the InitAsync method
-            var externalEventsFromSecondExternalService = await ExternalDataEvent.GetEventsAsync(httpClient,
-                "https://externalDataExampleUrl2/api/EventRequest",
-                projectionsToInit,
-                p => p.externalAggregateExample2Id
-            );
-            externalDataEvents.AddRange(externalEventsFromSecondExternalService);
+            //use the GetMultiServiceEventsAsync method to combine multiple requests into one call
+            //the queries will run in parallel for efficiency
+            var events = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient,
+                    projectionsToInit,
+                    new EventRequester<_ProjectionName_>($"http://service1/api/EventRequest",
+                        p => p.externalAggregateExample2Id,
+                        p => p.externalAggregateExample3Id,
+                        p => p.externalAggregateExample4Id
+                    ),
+                    new EventRequester<_ProjectionName_>($"http://service2/api/EventRequest",
+                        p => p.externalAggregateExample5Id
+                    ),
+                    new EventRequester<_ProjectionName_>($"http://service3/api/EventRequest",
+                        p => p.externalAggregateExample6Id
+                    )
+                );
+                externalDataEvents.AddRange(events);
         }
 
         return externalDataEvents;
