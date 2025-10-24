@@ -36,7 +36,7 @@ public class On_ReplaceMe_BulkCreated
     {
         try
         {
-            Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();    
+            Container currentStateContainer = await _nostify.GetBulkCurrentStateContainerAsync<_ReplaceMe_>();    
             await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<_ReplaceMe_>(events);                         
         }
         catch (Exception e)
