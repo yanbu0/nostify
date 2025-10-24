@@ -18,7 +18,17 @@ public class On_ReplaceMe_Deleted
     }
 
     [Function(nameof(On_ReplaceMe_Deleted))]
-    public async Task Run([KafkaTrigger("BrokerList",
+    public async Task Run([
+#if (eventHubs)
+                KafkaTrigger("BrokerList",
+                "Delete__ReplaceMe_",
+                Username = "$ConnectionString",
+                Password = "EventHubConnectionString",
+                Protocol = BrokerProtocol.SaslSsl,
+                AuthenticationMode = BrokerAuthenticationMode.Plain,
+                ConsumerGroup = "_ReplaceMe_")
+#else
+                KafkaTrigger("BrokerList",
                 "Delete__ReplaceMe_",
 //-:cnd:noEmit
                 #if DEBUG
@@ -31,7 +41,9 @@ public class On_ReplaceMe_Deleted
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ReplaceMe_")
+#endif
+                ] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();

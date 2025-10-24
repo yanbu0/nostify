@@ -17,7 +17,18 @@ public class On_ReplaceMe_BulkCreated
     }
 
     [Function(nameof(On_ReplaceMe_BulkCreated))]
-    public async Task Run([KafkaTrigger("BrokerList",
+    public async Task Run([
+#if (eventHubs)
+                KafkaTrigger("BrokerList",
+                "BulkCreate__ReplaceMe_",
+                ConsumerGroup = "_ReplaceMe_",
+                Username = "$ConnectionString",
+                Password = "EventHubConnectionString",
+                Protocol = BrokerProtocol.SaslSsl,
+                AuthenticationMode = BrokerAuthenticationMode.Plain,
+                IsBatched = true)
+#else
+                KafkaTrigger("BrokerList",
                 "BulkCreate__ReplaceMe_",
                 ConsumerGroup = "_ReplaceMe_",
 //-:cnd:noEmit
@@ -31,7 +42,9 @@ public class On_ReplaceMe_BulkCreated
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                IsBatched = true)] string[] events,
+                IsBatched = true)
+#endif
+                ] string[] events,
         ILogger log)
     {
         try

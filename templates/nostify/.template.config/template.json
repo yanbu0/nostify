@@ -27,6 +27,14 @@
             "replaces":"<YourConnectionStringHere>",
             "description": "The connection string or setting variable",
             "defaultValue": "CosmosEmulatorConnectionString"
+        },
+        "eventHubs": {
+            "type": "parameter",
+            "dataType": "bool",
+            "isRequired": false,
+            "defaultValue": "false",
+            "description": "Use EventHubs instead of Kafka for messaging",
+            "shortName": "eh"
         }
     }
   }

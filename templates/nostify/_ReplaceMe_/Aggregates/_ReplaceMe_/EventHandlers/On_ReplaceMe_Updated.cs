@@ -17,7 +17,17 @@ public class On_ReplaceMe_Updated
     }
 
     [Function(nameof(On_ReplaceMe_Updated))]
-    public async Task Run([KafkaTrigger("BrokerList",
+    public async Task Run([
+#if (eventHubs)
+                KafkaTrigger("BrokerList",
+                "Update__ReplaceMe_",
+                Username = "$ConnectionString",
+                Password = "EventHubConnectionString",
+                Protocol = BrokerProtocol.SaslSsl,
+                AuthenticationMode = BrokerAuthenticationMode.Plain,
+                ConsumerGroup = "_ReplaceMe_")
+#else
+                KafkaTrigger("BrokerList",
                 "Update__ReplaceMe_",
 //-:cnd:noEmit
                 #if DEBUG
@@ -30,7 +40,9 @@ public class On_ReplaceMe_Updated
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
+                ConsumerGroup = "_ReplaceMe_")
+#endif
+                ] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
         Event? newEvent = triggerEvent.GetEvent();

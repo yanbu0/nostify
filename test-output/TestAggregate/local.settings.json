@@ -1,0 +1,23 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "CosmosConnectionString": "AccountEndpoint=https://localhost:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "FUNCTIONS_V2_COMPATIBILITY_MODE": true,
+    "BrokerList":"localhost:54165",
+    "KafkaApiKey":"API_KEY_GOES_HERE",
+    "KafkaApiSecret":"API_SECRET_GOES_HERE",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "CosmosApiKey":"C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+    "CosmosDbName":"TestAggregate_DB",
+    "CosmosEndPoint":"https://localhost:8081",
+    "ASPNETCORE_ENVIRONMENT":"Development",
+    "AzureSignalRConnectionString":"Endpoint=http://localhost;Port=8888;AccessKey=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGH;Version=1.0;",
+    "AutoCreateContainers":true,
+    "DefaultContainerThroughput":-1,
+    "VerboseNostifyBuild":true
+  },
+  "Host": {
+    "CORS": "*"
+  }
+}
