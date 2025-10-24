@@ -70,7 +70,8 @@
 
 - 4.0.0
   - **Azure Event Hubs Support**: Added `WithEventHubs()` method to enable using Azure Event Hubs as an alternative to Kafka for event messaging
-  - Event Hubs uses the Kafka protocol internally, maintaining full compatibility with existing Event handlers
+  - Can choose which messaging system to use by simply calling `.WithKafka()` or `.WithEventHubs()` during startup
+  - Templates now have a flag `--eventhHubs true` or `-eh true` and will set things up for you. Default or false means to use Kafka.
   - Added comprehensive tests for Event Hubs configuration and fluent API chaining
 - 3.9.0
   - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
