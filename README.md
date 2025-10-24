@@ -68,11 +68,10 @@
 
 ### Updates
 
-- 3.10.0
+- 4.0.0
   - **Azure Event Hubs Support**: Added `WithEventHubs()` method to enable using Azure Event Hubs as an alternative to Kafka for event messaging
   - Event Hubs uses the Kafka protocol internally, maintaining full compatibility with existing Event handlers
   - Added comprehensive tests for Event Hubs configuration and fluent API chaining
-  - **Event Hubs Management Improvements**: `CreateEventHubs` now falls back to `DefaultAzureCredential` when no client ID/secret are supplied, making it easier to bootstrap with managed identity or developer credentials
 - 3.9.0
   - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
   - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
@@ -88,63 +87,12 @@
   - **Enhanced UpdateProperties using PropertyCheck class**: Added new `UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues)` overload for conditional property mapping based on ID matching, used in `Apply` when a projection has multiple references to external aggregates of the same type.
   - **PropertyCheck Testing**: Added 14+ test scenarios including shared ID handling, edge cases, and complex multi-property updates
   - **Template Updates**: All template project files updated to reference nostify 3.8.0
-- 3.7.4
-  - **Bug Fix**: Fixed issue with PersistEventAsync method
-  - **Template Updates**: All template project files updated to reference nostify 3.7.4
-- 3.7.3
-  - **Enhanced ValidatePayload Testing**: Added comprehensive POCO class tests for ValidatePayload functionality with RequiredFor and validation attributes
-  - **Template Updates**: All template project files updated to reference nostify 3.7.3
-- 3.7.1
-  - **Mixed Constructor Support**: `EventRequester` now supports mixing single ID selectors (`Func<T, Guid?>`) and list ID selectors (`Func<T, List<Guid?>>`) in the same instance
-  - **EventRequester List Constructor**: Added params constructor for list selectors: `new EventRequester(url, p => p.listOfIds)`
-  - **Non-Nullable Constructor Support**: Added constructors accepting `Func<T, Guid>[]` and `Func<T, List<Guid>>[]` for stricter null handling
-- 3.7.0
-  - **Enhanced Multi-Service Event Querying**: Added `GetMultiServiceEventsAsync` method for efficient parallel querying of multiple external services
-  - **EventRequester Pattern**: New `EventRequester<T>` class with support for multiple foreign ID selectors per service
-  - **Point-in-Time Query Support**: EventRequest endpoints now support optional DateTime path parameters for historical event queries (`/EventRequest/{pointInTime:datetime?}`)
-  - **Parallel External Data Processing**: GetMultiServiceEventsAsync executes all external service calls simultaneously for improved performance
-  - **Flexible Service Configuration**: EventRequester supports complex projection relationships with multiple foreign ID mappings
-  - **Template Updates**: All template project files updated to reference nostify 3.7.0
-- 3.6.0
-  - Added `IEvent` interface for better abstraction and testability of Event objects
-  - Enhanced `EventFactory` (renamed from EventBuilder) with instance-based design and optional validation
-  - Added `CreateNullPayloadEvent()` method to EventFactory for operations without payload data (e.g., delete operations)
-  - Updated all templates to use `new EventFactory().Create<T>()` instead of direct Event instantiation for consistency
-  - Templates now reference nostify 3.6.0 across all project types (nostify, nostifyAggregate, nostifyProjection)
-- 3.5.0
-  - Added comprehensive payload validation system with `ValidatePayload<T>()` method on Events
-  - Introduced `RequiredForAttribute` to specify command-specific property validation requirements
-  - Enhanced Event class with validation capabilities for aggregate properties
-- 3.4.4
-  - Updated service template to use Newtonsoft.Json explicitly by default, System.Text.Json is a hot mess
-  - Updated Projection template to use GetEventsAsync
-- 3.4.3
-  - Updated service template to use latest factory method
-- 3.4.2
-  - Fixed template connection string error
-- 3.4.0
-  - Added `MultiApplyAndPersistAsync<P>` methods in `Nostify` and container extensions to allow applying and saving the results of an `Event` across multiple Projections. This is useful when you have a large number of Projections in a container that will be updated simultaneously by a single event. Incorporates multi-threaded, batch processing and retries for larger amounts of data.
-  - Changed template return types to base object type
-  - Cleaned up tests
-- 3.3.1
-  - Updated templates to emit conditional compliation commands in templates
-- 3.3.0
-  - Added overload to GetEventsAsync to accept a `params Func<TProjection, List<Guid?>>[]` foreignIdSelectorsList so you can now get id properties inside lists of child objects
-- 3.2.0
-  - Added support for Saga orchestration
-- 3.1.1
-  - Improved details available in errors published to Kafka
-  - Aggregate template updated with ability to set namespace properly
-- 3.0.0 Released
-  - Improved inheritance, now simpler to build Projections
-  - Consistent, easier way to init Projection Containers, can call from `INostify` rather than a static class
-  - No more `ProjectionBaseClass<P>` abstract class, Projections now only have to implement `NostifyObject` and `IProjection`, making it easy to
-  create a base class for both the root Aggregate and Projections of it containing common properties and methods.
-  - Templates updated to use 3.0.0 compatible code, remove `OkResult()`, add base class by default
 
 ### Coming Soon
 
 - Better support for non-command events (4.0)
+- Event Hubs support
+
 
 ## Getting Started
 
