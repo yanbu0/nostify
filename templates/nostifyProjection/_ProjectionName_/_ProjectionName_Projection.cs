@@ -88,15 +88,15 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
             //the queries will run in parallel for efficiency
             var events = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient,
                     projectionsToInit,
-                    new EventRequester<_ProjectionName_>($"http://service1/api/EventRequest",
+                    new EventRequester<_ProjectionName_>($"https://service1/api/EventRequest",
                         p => p.externalAggregateExample2Id,
                         p => p.externalAggregateExample3Id,
                         p => p.externalAggregateExample4Id
                     ),
-                    new EventRequester<_ProjectionName_>($"http://service2/api/EventRequest",
+                    new EventRequester<_ProjectionName_>($"https://service2/api/EventRequest",
                         p => p.externalAggregateExample5Id
                     ),
-                    new EventRequester<_ProjectionName_>($"http://service3/api/EventRequest",
+                    new EventRequester<_ProjectionName_>($"https://service3/api/EventRequest",
                         p => p.externalAggregateExample6Id
                     )
                 );
