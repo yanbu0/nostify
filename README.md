@@ -69,8 +69,7 @@
 ### Updates
 
 - 4.0.0
-  - **Azure Event Hubs Support**: Added `WithEventHubs()` method to enable using Azure Event Hubs as an alternative to Kafka for event messaging
-  - Can choose which messaging system to use by simply calling `.WithKafka()` or `.WithEventHubs()` during startup
+  - **Azure Event Hubs Support**: Added `WithEventHubs()` method to use during startup to enable using Azure Event Hubs as an alternative to Kafka for event messaging
   - Templates now have a flag `--eventhHubs true` or `-eh true` and will set things up for you. Default or false means to use Kafka.
   - Added comprehensive tests for Event Hubs configuration and fluent API chaining
 - 3.9.0
