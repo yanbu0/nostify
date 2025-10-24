@@ -172,7 +172,7 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Azure Event Hubs.
     /// </summary>
-    public static NostifyConfig WithEventHubs(this NostifyConfig config, string eventHubsConnectionString)
+    public static NostifyConfig WithEventHubs(this NostifyConfig config, string eventHubsConnectionString, bool diagnosticLogging = false)
     {
         // Parse Event Hubs connection string to extract namespace
         var connectionStringParts = eventHubsConnectionString.Split(';');
@@ -192,6 +192,10 @@ public static class NostifyFactory
         config.producerConfig.SaslMechanism = SaslMechanism.Plain;
         config.producerConfig.SaslUsername = "$ConnectionString";
         config.producerConfig.SaslPassword = eventHubsConnectionString;
+        if (diagnosticLogging)
+        {
+            config.producerConfig.Debug = "security,broker,protocol"; // Enable specific debug logging
+        }
 
         return config;
     }

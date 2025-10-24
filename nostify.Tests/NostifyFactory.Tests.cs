@@ -596,52 +596,10 @@ public class NostifyFactoryTests
         var config = NostifyFactory.WithEventHubs(connectionString);
 
         // Assert
-        Assert.Equal("my-eventhubs-namespace", config.eventHubsNamespace);
-        Assert.Equal(connectionString, config.eventHubsConnectionString);
+        Assert.Equal("my-eventhubs-namespace.servicebus.windows.net:9093", config.kafkaUrl);
+        Assert.Equal(connectionString, config.producerConfig.SaslPassword);
     }
 
-    [Fact]
-    public void WithEventHubsManagement_ShouldSetAzureCredentials()
-    {
-        // Arrange
-        var config = new NostifyConfig();
-        var subscriptionId = "sub-123";
-        var resourceGroup = "rg-test";
-        var tenantId = "tenant-456";
-        var clientId = "client-789";
-        var clientSecret = "secret-abc";
-
-        // Act
-        var result = config.WithEventHubsManagement(subscriptionId, resourceGroup, tenantId, clientId, clientSecret);
-
-        // Assert
-        Assert.Same(config, result);
-        Assert.Equal(subscriptionId, config.azureSubscriptionId);
-        Assert.Equal(resourceGroup, config.azureResourceGroup);
-        Assert.Equal(tenantId, config.azureTenantId);
-        Assert.Equal(clientId, config.azureClientId);
-        Assert.Equal(clientSecret, config.azureClientSecret);
-    }
-
-    [Fact]
-    public void FluentApi_WithEventHubsAndManagement_ShouldChainCorrectly()
-    {
-        // Arrange
-        var eventHubsConnectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
-
-        // Act
-        var config = NostifyFactory
-            .WithCosmos("key", "db", "https://test.documents.azure.com:443/")
-            .WithEventHubs(eventHubsConnectionString)
-            .WithEventHubsManagement("sub-123", "rg-test", "tenant-456", "client-789", "secret-abc")
-            .WithHttp(new Mock<IHttpClientFactory>().Object);
-
-        // Assert
-        Assert.NotNull(config);
-        Assert.Equal("test-namespace", config.eventHubsNamespace);
-        Assert.Equal("sub-123", config.azureSubscriptionId);
-        Assert.Equal("rg-test", config.azureResourceGroup);
-    }
 }
 
 
