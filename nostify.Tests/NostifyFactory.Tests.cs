@@ -152,7 +152,7 @@ public class NostifyFactoryTests
         Assert.Equal(password, config.kafkaPassword);
         Assert.Equal(userName, GetProducerConfigValue(config, "sasl.username"));
         Assert.Equal(password, GetProducerConfigValue(config, "sasl.password"));
-        Assert.Equal("SASL_SSL", GetProducerConfigValue(config, "security.protocol"));
+        Assert.Equal("sasl_ssl", GetProducerConfigValue(config, "security.protocol"));
         Assert.Equal("PLAIN", GetProducerConfigValue(config, "sasl.mechanism"));
     Assert.True(GetProducerConfigBoolValue(config, "api.version.request").GetValueOrDefault());
     }
@@ -414,8 +414,8 @@ public class NostifyFactoryTests
         var config = new NostifyConfig();
 
         // Assert
-    Assert.NotNull(config.producerConfig);
-    Assert.IsType<List<KeyValuePair<string, string>>>(config.producerConfig);
+        Assert.NotNull(config.producerConfig);
+        Assert.IsType<ProducerConfig>(config.producerConfig);
     }
 
     [Fact]
@@ -499,7 +499,7 @@ public class NostifyFactoryTests
     Assert.Equal("test-namespace.servicebus.windows.net:9093", GetProducerConfigValue(config, "bootstrap.servers"));
     Assert.Equal("$ConnectionString", GetProducerConfigValue(config, "sasl.username"));
     Assert.Equal(connectionString, GetProducerConfigValue(config, "sasl.password"));
-    Assert.Equal("SASL_SSL", GetProducerConfigValue(config, "security.protocol"));
+    Assert.Equal("sasl_ssl", GetProducerConfigValue(config, "security.protocol"));
     Assert.Equal("PLAIN", GetProducerConfigValue(config, "sasl.mechanism"));
     Assert.Contains("Nostify-", GetProducerConfigValue(config, "client.id"));
     }
