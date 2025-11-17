@@ -24,18 +24,12 @@ public class Create_ReplaceMe_
     [Function(nameof(Create_ReplaceMe_))]
     public async Task<Guid> Run(
         [HttpTrigger("post", Route = "_ReplaceMe_")] HttpRequestData req,
+        FunctionContext context,
         ILogger log)
     {
-        dynamic new_ReplaceMe_ = await req.Body.ReadFromRequestBodyAsync(true);
-
-        //Need new id for aggregate root since its new
-        Guid newId = Guid.NewGuid();
-        new_ReplaceMe_.id = newId;
-        
-        IEvent pe = new EventFactory().Create<_ReplaceMe_>(_ReplaceMe_Command.Create, newId, new_ReplaceMe_);
-        await _nostify.PersistEventAsync(pe);
-
-        return newId;
+        Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
+        Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
+        return await _nostify.HandlePost<_ReplaceMe_>(_ReplaceMe_Command.Create, req, userId, tenantId);
     }
 }
 

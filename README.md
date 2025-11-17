@@ -72,6 +72,11 @@
   - **Azure Event Hubs Support**: Added `WithEventHubs()` method to use during startup to enable using Azure Event Hubs as an alternative to Kafka for event messaging
   - Templates now have a flag `--eventhHubs true` or `-eh true` and will set things up for you. Default or false means to use Kafka.
   - Added comprehensive tests for Event Hubs configuration and fluent API chaining
+  - **Default Command Handler Extensions**: New extension methods for common CRUD operations in Azure Functions
+  - `HandlePost<T>()` - Creates new aggregate roots with auto-generated GUIDs
+  - `HandlePatch<T>()` - Updates existing aggregate roots from request body
+  - `HandleDelete<T>()` - Deletes aggregate roots by ID (no request body required)
+  - Simplifies Azure Function HTTP trigger implementations with consistent patterns
 - 3.9.0
   - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
   - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
