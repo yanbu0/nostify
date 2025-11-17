@@ -1,0 +1,99 @@
+
+using System;
+using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using nostify;
+
+/// <summary>
+/// Provides extension methods for handling common CRUD operations in Azure Functions with event sourcing.
+/// </summary>
+public static class DefaultCommandHandlerExtensions
+{
+    /// <summary>
+    /// Handles PATCH operations for aggregate roots by creating and persisting events from request data.
+    /// </summary>
+    /// <typeparam name="T">The aggregate type that implements IAggregate</typeparam>
+    /// <param name="nostify">The Nostify instance for event persistence</param>
+    /// <param name="command">The command to execute</param>
+    /// <param name="req">The HTTP request containing the patch data</param>
+    /// <param name="context">The Azure Functions execution context</param>
+    /// <param name="userId">Optional user identifier for the operation</param>
+    /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <returns>The GUID of the aggregate root that was patched</returns>
+    /// <exception cref="ArgumentException">Thrown when the provided ID is invalid</exception>
+    public async static Task<Guid> HandlePatch<T>(this Nostify nostify, NostifyCommand command, HttpRequestData req, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    {
+        // Read the patch object from the request body
+        dynamic patchObj = await req.Body.ReadFromRequestBodyAsync();
+        // Try to get the aggregate root ID from the binding data or the patch object
+        context.BindingContext.BindingData.TryGetValue("id", out string idStr);
+        string unparsedGuid = idStr ?? patchObj.id.ToString();
+        if (!Guid.TryParse(unparsedGuid, out Guid aggRootId))
+        {
+            throw new ArgumentException($"Invalid id: {unparsedGuid}");
+        }
+        // Create and persist the event using the EventFactory, with validation enabled
+        IEvent pe = new EventFactory().Create<T>(command, aggRootId, patchObj, userId, partitionKey);
+        await nostify.PersistEventAsync(pe);
+
+        return aggRootId;
+    }
+
+    /// <summary>
+    /// Handles POST operations for aggregate roots by creating and persisting events from request data.
+    /// </summary>
+    /// <typeparam name="T">The aggregate type that implements IAggregate</typeparam>
+    /// <param name="nostify">The Nostify instance for event persistence</param>
+    /// <param name="command">The command to execute</param>
+    /// <param name="req">The HTTP request containing the post data</param>
+    /// <param name="userId">Optional user identifier for the operation</param>
+    /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <returns>The GUID of the aggregate root that was created</returns>
+    public async static Task<Guid> HandlePost<T>(this Nostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    {
+        // Read the post object from the request body
+        dynamic postObj = await req.Body.ReadFromRequestBodyAsync();
+        
+        // Try to get the aggregate root ID from the binding data, the post object, or generate a new one
+        Guid aggRootId = Guid.NewGuid();
+        postObj.id = aggRootId; // Ensure the post object has an ID property set to the new GUID
+        
+        // Create and persist the event using the EventFactory, with validation enabled
+        IEvent pe = new EventFactory().Create<T>(command, aggRootId, postObj, userId, partitionKey);
+        await nostify.PersistEventAsync(pe);
+
+        return aggRootId;
+    }
+
+    /// <summary>
+    /// Handles DELETE operations for aggregate roots by creating and persisting delete events.
+    /// </summary>
+    /// <typeparam name="T">The aggregate type that implements IAggregate</typeparam>
+    /// <param name="nostify">The Nostify instance for event persistence</param>
+    /// <param name="command">The command to execute</param>
+    /// <param name="context">The Azure Functions execution context</param>
+    /// <param name="userId">Optional user identifier for the operation</param>
+    /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <returns>The GUID of the aggregate root that was deleted</returns>
+    /// <exception cref="ArgumentException">Thrown when the provided ID is invalid or missing</exception>
+    public async static Task<Guid> HandleDelete<T>(this Nostify nostify, NostifyCommand command, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    {
+        // Try to get the aggregate root ID from the binding data
+        if (!context.BindingContext.BindingData.TryGetValue("id", out string idStr))
+        {
+            throw new ArgumentException("No id provided in route");
+        }
+        
+        if (!Guid.TryParse(idStr, out Guid aggRootId))
+        {
+            throw new ArgumentException($"Invalid id: {idStr}");
+        }
+
+        // Create and persist the event using the EventFactory
+        IEvent pe = new EventFactory().CreateNullPayloadEvent(command, aggRootId, userId, partitionKey);
+        await nostify.PersistEventAsync(pe);
+
+        return aggRootId;
+    }
+}

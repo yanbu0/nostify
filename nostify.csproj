@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>4.0.0-rc3</Version>
+    <Version>4.0.0-rc4</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -20,7 +20,7 @@
   <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.13.1" />
     <PackageReference Include="Azure.ResourceManager.EventHubs" Version="1.1.0" />
-    <PackageReference Include="Confluent.Kafka" Version="2.10.0" />
+    <PackageReference Include="Confluent.Kafka" Version="2.12.0" />
     <PackageReference Include="JsonDiffPatch.Net" Version="2.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" /> <!-- Don't update this to 2.3.0 or IEndpointFeature will not resolve, Microsoft messed something up -->

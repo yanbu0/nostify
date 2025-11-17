@@ -103,13 +103,26 @@ public class Nostify : INostify
     {
         if (peList != null)
         {
+            List<Task> publishTasks = new List<Task>();
             foreach (IEvent pe in peList)
             {
                 string topic = pe.command.name;
-                var result = await KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) });
-
-                if (showOutput) Console.WriteLine($"Event published to topic {topic} with key {result.Key} and value {result.Value}");
+                publishTasks.Add(KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) }));
             }
+            await Task.WhenAll(publishTasks).ContinueWith(result =>
+                {
+                    if (showOutput)
+                    {                        
+                        if (result.IsCompletedSuccessfully)
+                        {
+                            Console.WriteLine($"Event published to topic(s) {peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}")}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Failed to publish event to topic(s) {peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}")} || Expception: {result.Exception?.Message}");
+                        }
+                    }
+                });
         }
     }
 

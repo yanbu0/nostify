@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
+using System.Threading.Tasks;
+using Castle.Components.DictionaryAdapter.Xml;
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
+using Newtonsoft.Json;
 
 namespace nostify;
 
@@ -246,53 +249,65 @@ public static class NostifyFactory
     /// <param name="verbose">If true, will write to console the steps taken to create the containers and topics</param>
     public static INostify Build<T>(this NostifyConfig config, bool verbose = false) where T : IAggregate
     {
-
-        //Create Confluent admin client
-        if (verbose) Console.WriteLine("Building Admin Client");
-        var adminClientConfig = new AdminClientConfig(config.producerConfig);
-        var adminClient = new AdminClientBuilder(adminClientConfig).Build();
-        if (verbose) Console.WriteLine("Admin Client built");
-
-        //Find all NostifyCommand instances in this assembly of T and create a topic for each
-        var assembly = typeof(T).Assembly;
-        var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
-        if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
-        //Get any static properties of each commandType that inherit type NostifyCommand        
-        var commandProperties = commandTypes
-            .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
-            .Where(p => p.FieldType.IsSubclassOf(typeof(NostifyCommand))));
-
-        if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");
-
-        List<TopicSpecification> topics = new List<TopicSpecification>();
-        foreach (var commandType in commandProperties)
+        try
         {
-            //Get the name property value of the commandType
-            var topic = commandType.GetValue(null).GetType().GetProperty("name").GetValue(commandType.GetValue(null)).ToString();
-            var topicSpec = new TopicSpecification { Name = topic, NumPartitions = 6 };
-            topics.Add(topicSpec);
-        }
-        //Filter topics to only create new topics
-        var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-        topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
-        if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
+            //Create Confluent admin client
+            if (verbose) Console.WriteLine("Building Admin Client");
+            var adminClientConfig = new AdminClientConfig(config.producerConfig);
+            var adminClient = new AdminClientBuilder(adminClientConfig).Build();
+            if (verbose) Console.WriteLine("Admin Client built");
 
-        //Create any new topics needed
-        if (topics.Count > 0)
+            //Find all NostifyCommand instances in this assembly of T and create a topic for each
+            var assembly = typeof(T).Assembly;
+            var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
+            if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
+            //Get any static properties of each commandType that inherit type NostifyCommand        
+            var commandProperties = commandTypes
+                .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(p => p.FieldType.IsSubclassOf(typeof(NostifyCommand))));
+
+            if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");
+
+            List<TopicSpecification> topics = new List<TopicSpecification>();
+            foreach (var commandType in commandProperties)
+            {
+                //Get the name property value of the commandType
+                var topic = commandType.GetValue(null).GetType().GetProperty("name").GetValue(commandType.GetValue(null)).ToString();
+                var topicSpec = new TopicSpecification {
+                    Name = topic,
+                    NumPartitions = 6
+                };
+                topics.Add(topicSpec);
+            }
+            //Filter topics to only create new topics
+            var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+            if (verbose) Console.WriteLine($"Existing topics: {string.Join(", ", existingTopics.Select(t => t.Topic))}");
+            topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
+            if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
+
+            //Create any new topics needed
+            if (topics.Count > 0)
+            {
+                adminClient.CreateTopicsAsync(topics).Wait();
+                var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+                if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+            }
+
+            var nostify = Build(config);
+
+            if (verbose) Console.WriteLine($"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}");
+            if (config.createContainers)
+            {
+                nostify.CreateContainersAsync<T>(false, config.containerThroughput, verbose).Wait();
+            }
+
+            return nostify;
+        }
+        catch (Exception ex)
         {
-            adminClient.CreateTopicsAsync(topics).Wait();
-            var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-            if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+            Console.WriteLine("Error building Nostify with autocreate topics: " + ex.Message + " " + ex.InnerException?.Message);
+            throw new NostifyException("Error building Nostify with autocreate topics " + ex.Message + " " + ex.InnerException?.Message);
         }
-
-        var nostify = Build(config);
-
-        if (verbose) Console.WriteLine($"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}");
-        if (config.createContainers)
-        {
-            nostify.CreateContainersAsync<T>(false, config.containerThroughput, verbose).Wait();
-        }
-
-        return nostify;
+        
     }
 }
