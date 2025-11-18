@@ -51,7 +51,7 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <returns>The GUID of the aggregate root that was patched</returns>
-    public async static Task<Guid> HandlePatch<T>(this INostify nostify, NostifyCommand command, dynamic patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandlePatch<T>(this INostify nostify, NostifyCommand command, object patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
     {
         // Create and persist the event using the EventFactory, with validation enabled
         IEvent pe = new EventFactory().Create<T>(command, aggregateRootId, patchObj, userId, partitionKey);
@@ -88,15 +88,15 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <returns>The GUID of the aggregate root that was created</returns>
-    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, dynamic postObj, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
     {
-        
+        dynamic dynamicPostObj = postObj as dynamic;
         // Try to get the aggregate root ID from the binding data, the post object, or generate a new one
         Guid aggRootId = Guid.NewGuid();
-        postObj.id = aggRootId; // Ensure the post object has an ID property set to the new GUID
+        dynamicPostObj.id = aggRootId; // Ensure the post object has an ID property set to the new GUID
         
         // Create and persist the event using the EventFactory, with validation enabled
-        IEvent pe = new EventFactory().Create<T>(command, aggRootId, postObj, userId, partitionKey);
+        IEvent pe = new EventFactory().Create<T>(command, aggRootId, dynamicPostObj, userId, partitionKey);
         await nostify.PersistEventAsync(pe);
 
         return aggRootId;
