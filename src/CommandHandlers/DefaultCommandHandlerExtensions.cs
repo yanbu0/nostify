@@ -61,24 +61,6 @@ public static class DefaultCommandHandlerExtensions
     }
 
     /// <summary>
-    /// Handles POST operations for aggregate roots by creating and persisting events from request data.
-    /// </summary>
-    /// <typeparam name="T">The aggregate type that implements IAggregate</typeparam>
-    /// <param name="nostify">The Nostify instance for event persistence</param>
-    /// <param name="command">The command to execute</param>
-    /// <param name="req">The HTTP request containing the post data</param>
-    /// <param name="userId">Optional user identifier for the operation</param>
-    /// <param name="partitionKey">Optional tenant identifier for the operation</param>
-    /// <returns>The GUID of the aggregate root that was created</returns>
-    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
-    {
-        // Read the post object from the request body
-        object postObj = await req.Body.ReadFromRequestBodyAsync();
-        
-        return await nostify.HandlePost<T>(command, postObj, userId, partitionKey);
-    }
-
-    /// <summary>
     /// Handles POST operations for aggregate roots by creating and persisting events from provided data.
     /// </summary>
     /// <typeparam name="T">The aggregate type that implements IAggregate</typeparam>
