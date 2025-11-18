@@ -91,7 +91,6 @@ public static class DefaultCommandHandlerExtensions
     public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
     {
         dynamic dynamicPostObj = postObj as dynamic;
-        // Try to get the aggregate root ID from the binding data, the post object, or generate a new one
         Guid aggRootId = Guid.NewGuid();
         dynamicPostObj.id = aggRootId; // Ensure the post object has an ID property set to the new GUID
         
