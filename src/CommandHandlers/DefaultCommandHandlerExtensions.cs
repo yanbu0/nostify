@@ -69,8 +69,9 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="req">The HTTP request containing the post data</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <param name="partitionKeyName"></param>
     /// <returns>The GUID of the aggregate root that was created</returns>
-    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
         // Read the post object from the request body
         object postObj = await req.Body.ReadFromRequestBodyAsync(true);
@@ -87,12 +88,16 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="postObj">The post data object</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <param name="partitionKeyName"></param>
     /// <returns>The GUID of the aggregate root that was created</returns>
-    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
         dynamic dynamicPostObj = postObj as dynamic;
         Guid aggRootId = Guid.NewGuid();
         dynamicPostObj.id = aggRootId; // Ensure the post object has an ID property set to the new GUID
+
+        // Also ensure the partitionKey is set if it's not provided
+        dynamicPostObj[partitionKeyName] = partitionKey;
         
         // Create and persist the event using the EventFactory, with validation enabled
         IEvent pe = new EventFactory().Create<T>(command, aggRootId, dynamicPostObj, userId, partitionKey);
