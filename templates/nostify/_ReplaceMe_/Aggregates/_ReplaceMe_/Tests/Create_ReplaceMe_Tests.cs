@@ -1,12 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Moq;
-using System.Threading.Tasks;
 using Xunit;
 using nostify;
-using System.Net.Http;
-using Microsoft.AspNetCore.Mvc;
-using System;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.Functions.Worker;
 
 namespace _ReplaceMe__Service.Tests;
 
@@ -17,6 +14,7 @@ public class Create__ReplaceMe__Command_Should
     private Mock<HttpClient> _httpClientMock;
     private Mock<ILogger> _loggerMock;
     private Mock<HttpRequestData> _httpReqMock;
+    private Mock<FunctionContext> _functionContextMock;
 
     public Create__ReplaceMe__Command_Should()
     {
@@ -25,6 +23,7 @@ public class Create__ReplaceMe__Command_Should
         _func = new Create_ReplaceMe_(_httpClientMock.Object, _nostifyMock.Object);
         _loggerMock = new Mock<ILogger>();
         _httpReqMock = new Mock<HttpRequestData>();
+        _functionContextMock = new Mock<FunctionContext>();
     }
 
     [Fact]
@@ -35,7 +34,7 @@ public class Create__ReplaceMe__Command_Should
         HttpRequestData testReq = MockHttpRequestData.Create(test);
         
         // Act
-        var resp = await _func.Run(testReq, _loggerMock.Object);
+        var resp = await _func.Run(testReq, _functionContextMock.Object, _loggerMock.Object);
 
         // Assert
         Assert.True(resp != Guid.Empty);

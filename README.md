@@ -77,6 +77,11 @@
   - `HandlePatch<T>()` - Updates existing aggregate roots from request body
   - `HandleDelete<T>()` - Deletes aggregate roots by ID (no request body required)
   - Simplifies Azure Function HTTP trigger implementations with consistent patterns
+  - **Paged Query Extensions**: New `PagedQueryAsync()` extension methods for Cosmos DB containers with server-side filtering, sorting, and pagination
+  - Supports tenant-based filtering with `ITenantFilterable` interface
+  - Custom partition key filtering for flexible query scenarios
+  - Returns `IPagedResult<T>` with items and total count for UI pagination
+  - Built-in SQL injection prevention for filter and sort columns
 - 3.9.0
   - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
   - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
@@ -1042,6 +1047,71 @@ await _nostify.BulkApplyAndPersistAsync<TestProjection>(
 ```
 
 ### Advanced Querying and Cosmos Extensions
+
+#### Paged Queries with Filtering and Sorting
+
+The `PagedQueryAsync()` extension methods provide server-side pagination, filtering, and sorting for Cosmos DB containers. This is ideal for implementing data tables with user-driven filtering and sorting in your UI.
+
+**Tenant-Based Filtering:**
+
+```C#
+// For types that implement ITenantFilterable
+var tableState = new TableStateChange
+{
+    page = 1,
+    pageSize = 25,
+    sortColumn = "createdDate",
+    sortDirection = "desc",  // null defaults to "asc"
+    filters = new List<KeyValuePair<string, string>>
+    {
+        new KeyValuePair<string, string>("status", "active"),
+        new KeyValuePair<string, string>("category", "premium")
+    }
+};
+
+IPagedResult<YourAggregate> result = await container.PagedQueryAsync<YourAggregate>(
+    tableState, 
+    tenantId
+);
+
+// Access results
+List<YourAggregate> items = result.items;
+int totalCount = result.totalCount;
+```
+
+**Custom Partition Key Filtering:**
+
+```C#
+// For any partition key property
+var tableState = new TableStateChange
+{
+    page = 2,
+    pageSize = 50,
+    sortColumn = "name",
+    sortDirection = null  // defaults to ascending
+};
+
+IPagedResult<YourType> result = await container.PagedQueryAsync<YourType>(
+    tableState,
+    "userId",      // partition key property name
+    userIdValue    // partition key value (Guid)
+);
+```
+
+**Features:**
+- Server-side pagination with `OFFSET`/`LIMIT` queries
+- Multiple filters with AND logic
+- Case-insensitive sort direction ("asc" or "desc", defaults to "asc" if null)
+- Automatic total count calculation
+- SQL injection prevention (validates column names with regex)
+- Efficient single-partition queries using partition key
+
+**TableStateChange Properties:**
+- `page` (int) - Current page number (1-based)
+- `pageSize` (int) - Number of items per page
+- `sortColumn` (string?) - Column to sort by (nullable, no sorting if null)
+- `sortDirection` (string?) - "asc" or "desc" (nullable, defaults to "asc")
+- `filters` (List<KeyValuePair<string, string>>?) - Key-value pairs for equality filtering
 
 #### Safe Patch Operations
 
