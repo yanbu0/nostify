@@ -48,18 +48,30 @@ public class NostifyKafkaTriggerEvent
     ///<summary>
     ///Converts string value of the Value to an Event.
     ///</summary>
-    public Event? GetEvent()
+    /// <param name="eventTypeFilter">Optional filter to only return the event if it matches the specified event type.</param>
+    /// <returns>The deserialized Event object from the Kafka message Value.</returns>
+    public Event? GetEvent(string? eventTypeFilter)
     {
-        return JsonConvert.DeserializeObject<Event>(Value);
+        Event? evt = JsonConvert.DeserializeObject<Event>(Value, SerializationSettings.NostifyDefault);
+        if (evt != null && (string.IsNullOrEmpty(eventTypeFilter) || evt.command.name != eventTypeFilter))
+        {
+            evt = null;
+        }
+        return evt;
     }
 
     ///<summary>
     ///Converts string value of the Value to an IEvent.
     ///</summary>
+    /// <param name="eventTypeFilter">Optional filter to only return the event if it matches the specified event type.</param>
     /// <returns>The deserialized IEvent object from the Kafka message Value.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if deserialization fails.</exception>
-    public IEvent GetIEvent()
+    public IEvent? GetIEvent(string? eventTypeFilter)
     {
-        return JsonConvert.DeserializeObject<IEvent>(Value, SerializationSettings.NostifyDefault) ?? throw new InvalidOperationException("Failed to deserialize Event from Kafka message Value.");
+        IEvent? evt = JsonConvert.DeserializeObject<IEvent>(Value, SerializationSettings.NostifyDefault);
+        if (evt != null && (string.IsNullOrEmpty(eventTypeFilter) || evt.command.name != eventTypeFilter))
+        {
+            evt = null;
+        }
+        return evt;
     }
 }
