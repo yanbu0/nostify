@@ -18,7 +18,7 @@ public static class DefaultEventHandlers
     /// <param name="triggerEvent">The Kafka trigger event containing the event data.</param>
     /// <param name="eventTypeFilter">Optional filter to specify which event type to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task AggregateEvent<T>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? eventTypeFilter = null) where T : NostifyObject, IAggregate, new()
+    public async static Task HandleAggregateEvent<T>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? eventTypeFilter = null) where T : NostifyObject, IAggregate, new()
     {
         Event? newEvent = triggerEvent.GetEvent(eventTypeFilter);
         try
@@ -44,7 +44,7 @@ public static class DefaultEventHandlers
     /// <param name="triggerEvent">The Kafka trigger event containing the event data.</param>
     /// <param name="eventTypeFilter">Optional filter to specify which event type to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task ProjectionEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? eventTypeFilter = null) where P : NostifyObject, IProjection, new()
+    public async static Task HandleProjectionEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? eventTypeFilter = null) where P : NostifyObject, IProjection, new()
     {
         Event? newEvent = triggerEvent.GetEvent(eventTypeFilter); 
         try
