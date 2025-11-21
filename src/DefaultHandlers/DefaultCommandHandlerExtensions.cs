@@ -11,7 +11,7 @@ using nostify;
 /// <summary>
 /// Provides extension methods for handling common CRUD operations in Azure Functions with event sourcing.
 /// </summary>
-public static class DefaultCommandHandlerExtensions
+public static class DefaultCommandHandler
 {
     /// <summary>
     /// Handles PATCH operations for aggregate roots by creating and persisting events from request data.
@@ -25,7 +25,7 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <returns>The GUID of the aggregate root that was patched</returns>
     /// <exception cref="ArgumentException">Thrown when the provided ID is invalid</exception>
-    public async static Task<Guid> HandlePatch<T>(this INostify nostify, NostifyCommand command, HttpRequestData req, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandlePatch<T>(INostify nostify, NostifyCommand command, HttpRequestData req, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
     {
         // Read the patch object from the request body
         dynamic patchObj = await req.Body.ReadFromRequestBodyAsync();
@@ -37,7 +37,7 @@ public static class DefaultCommandHandlerExtensions
             throw new ArgumentException($"Invalid id: {unparsedGuid}");
         }
         
-        return await nostify.HandlePatch<T>(command, (object)patchObj, aggRootId, userId, partitionKey);
+        return await HandlePatch<T>(nostify, command, (object)patchObj, aggRootId, userId, partitionKey);
     }
 
     /// <summary>
@@ -51,7 +51,7 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <returns>The GUID of the aggregate root that was patched</returns>
-    public async static Task<Guid> HandlePatch<T>(this INostify nostify, NostifyCommand command, object patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandlePatch<T>(INostify nostify, NostifyCommand command, object patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
     {
         // Create and persist the event using the EventFactory, with validation enabled
         IEvent pe = new EventFactory().Create<T>(command, aggregateRootId, patchObj, userId, partitionKey);
@@ -71,12 +71,12 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <param name="partitionKeyName"></param>
     /// <returns>The GUID of the aggregate root that was created</returns>
-    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
+    public async static Task<Guid> HandlePost<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
         // Read the post object from the request body
         object postObj = await req.Body.ReadFromRequestBodyAsync(true);
         
-        return await nostify.HandlePost<T>(command, postObj, userId, partitionKey);
+        return await HandlePost<T>(nostify, command, postObj, userId, partitionKey);
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <param name="partitionKeyName"></param>
     /// <returns>The GUID of the aggregate root that was created</returns>
-    public async static Task<Guid> HandlePost<T>(this INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
+    public async static Task<Guid> HandlePost<T>(INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
         dynamic dynamicPostObj = postObj as dynamic;
         Guid aggRootId = Guid.NewGuid();
@@ -117,7 +117,7 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <returns>The GUID of the aggregate root that was deleted</returns>
     /// <exception cref="ArgumentException">Thrown when the provided ID is invalid or missing</exception>
-    public async static Task<Guid> HandleDelete<T>(this INostify nostify, NostifyCommand command, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandleDelete<T>(INostify nostify, NostifyCommand command, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
     {
         // Try to get the aggregate root ID from the binding data
         if (!context.BindingContext.BindingData.TryGetValue("id", out string idStr))
@@ -130,7 +130,7 @@ public static class DefaultCommandHandlerExtensions
             throw new ArgumentException($"Invalid id: {idStr}");
         }
 
-        return await nostify.HandleDelete<T>(command, aggRootId, userId, partitionKey);
+        return await HandleDelete<T>(nostify, command, aggRootId, userId, partitionKey);
     }
 
     /// <summary>
@@ -143,7 +143,7 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <returns>The GUID of the aggregate root that was deleted</returns>
-    public async static Task<Guid> HandleDelete<T>(this INostify nostify, NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandleDelete<T>(INostify nostify, NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
     {
 
         // Create and persist the event using the EventFactory
@@ -162,8 +162,11 @@ public static class DefaultCommandHandlerExtensions
     /// <param name="req">The HTTP request containing an array of objects to create</param>
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
+    /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
+    /// <param name="allowRetry">Whether to allow retries on failed operations (default: false)</param>
+    /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were created</returns>
-    public async static Task<int> HandleBulkCreate<T>(this INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<int> HandleBulkCreate<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false) where T : class, IAggregate
     {
         List<dynamic> newObjects = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync()) ?? new List<dynamic>();
         List<IEvent> peList = new List<IEvent>();
@@ -177,7 +180,9 @@ public static class DefaultCommandHandlerExtensions
             peList.Add(pe);
         });
 
-        await nostify.BulkPersistEventAsync(peList);
+        // Persist all events in bulk, with optional retry and error handling. 
+        // This will write to the undeliverable events container if any events fail to persist, and will retry if allowed.
+        await nostify.BulkPersistEventAsync(peList, batchSize, allowRetry, publishErrorEvents);
 
         return newObjects.Count;
     }

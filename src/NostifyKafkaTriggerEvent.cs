@@ -50,10 +50,10 @@ public class NostifyKafkaTriggerEvent
     ///</summary>
     /// <param name="eventTypeFilter">Optional filter to only return the event if it matches the specified event type.</param>
     /// <returns>The deserialized Event object from the Kafka message Value.</returns>
-    public Event? GetEvent(string? eventTypeFilter)
+    public Event? GetEvent(string? eventTypeFilter = null)
     {
         Event? evt = JsonConvert.DeserializeObject<Event>(Value, SerializationSettings.NostifyDefault);
-        if (evt != null && (string.IsNullOrEmpty(eventTypeFilter) || evt.command.name != eventTypeFilter))
+        if (evt != null && !string.IsNullOrEmpty(eventTypeFilter) && evt.command.name != eventTypeFilter)
         {
             evt = null;
         }
@@ -65,10 +65,10 @@ public class NostifyKafkaTriggerEvent
     ///</summary>
     /// <param name="eventTypeFilter">Optional filter to only return the event if it matches the specified event type.</param>
     /// <returns>The deserialized IEvent object from the Kafka message Value.</returns>
-    public IEvent? GetIEvent(string? eventTypeFilter)
+    public IEvent? GetIEvent(string? eventTypeFilter = null)
     {
         IEvent? evt = JsonConvert.DeserializeObject<IEvent>(Value, SerializationSettings.NostifyDefault);
-        if (evt != null && (string.IsNullOrEmpty(eventTypeFilter) || evt.command.name != eventTypeFilter))
+        if (evt != null && !string.IsNullOrEmpty(eventTypeFilter) && evt.command.name != eventTypeFilter)
         {
             evt = null;
         }

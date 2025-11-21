@@ -276,7 +276,7 @@ public class Nostify : INostify
                             if (!itemResponse.IsCompletedSuccessfully)
                             {
                                 //Retry if too many requests error
-                                if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                                if (allowRetry && itemResponse.Exception?.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                                 {
                                     //Wait the specified amount of time or one second then retry, write to undeliverable events if still fails
                                     int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
@@ -286,7 +286,7 @@ public class Nostify : INostify
                                 else
                                 {
                                     //This will cause a record to get written to the undeliverable events container for retry later if needed
-                                    _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                                    _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception?.Message ?? "Unknown", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
                                 }
                             }
                         }));

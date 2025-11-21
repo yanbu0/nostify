@@ -100,7 +100,8 @@ public interface INostify
     public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new();
 
     ///<summary>
-    ///Writes event to event store
+    /// Persist all events in bulk, with optional retry and error handling. 
+    /// This will write to the undeliverable events container if any events fail to persist, and will retry if allowed.
     ///</summary>        
     ///<param name="events">Events to apply and persist in event store</param>
     ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
