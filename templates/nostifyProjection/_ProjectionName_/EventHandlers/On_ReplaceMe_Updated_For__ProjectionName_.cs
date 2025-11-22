@@ -35,24 +35,9 @@ public class On_ReplaceMe_Updated_For__ProjectionName_
                 ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
-        Event? newEvent = triggerEvent.GetEvent();
-        try
-        {
-            if (newEvent != null)
-            {
-                //Update projection container
-                Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
-                var updatedProj = await projectionContainer.ApplyAndPersistAsync<_ProjectionName_>(newEvent);
-                await updatedProj.InitAsync(_nostify, _httpClient);
-            }                       
-
-        }
-        catch (Exception e)
-        {
-            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Updated_For__ProjectionName_), e.Message, newEvent);
-        }
-
-        
+        // Use the default event handler to apply the event to the projection and persist it
+        // If the Projection has no external data dependencies, you can pass null for the HttpClient to avoid unnecessary overhead
+        await DefaultEventHandlers.HandleProjectionEvent<_ProjectionName_>(_nostify, triggerEvent, _httpClient);        
     }
     
 }

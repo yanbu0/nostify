@@ -22,6 +22,14 @@ public class _ReplaceMe_Command : NostifyCommand
     ///Bulk Create Command
     ///</summary>
     public static readonly _ReplaceMe_Command BulkCreate = new _ReplaceMe_Command("BulkCreate__ReplaceMe_", true);
+    ///<summary>
+    ///Bulk Update Command
+    ///</summary>
+    public static readonly _ReplaceMe_Command BulkUpdate = new _ReplaceMe_Command("BulkUpdate__ReplaceMe_");
+    ///<summary>
+    ///Bulk Delete Command
+    ///</summary>
+    public static readonly _ReplaceMe_Command BulkDelete = new _ReplaceMe_Command("BulkDelete__ReplaceMe_");
 
 
     public _ReplaceMe_Command(string name, bool isNew = false)

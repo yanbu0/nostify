@@ -1,35 +1,36 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using nostify;
-using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json;
+using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json.Linq;
 
 namespace _ReplaceMe__Service;
 
-public class On_ReplaceMe_Deleted
+public class On_ReplaceMe_BulkDeleted
 {
     private readonly INostify _nostify;
     
-    
-    public On_ReplaceMe_Deleted(INostify nostify)
+    public On_ReplaceMe_BulkDeleted(INostify nostify)
     {
         this._nostify = nostify;
     }
 
-    [Function(nameof(On_ReplaceMe_Deleted))]
+    [Function(nameof(On_ReplaceMe_BulkDeleted))]
     public async Task Run([
 #if (eventHubs)
                 KafkaTrigger("BrokerList",
-                "Delete__ReplaceMe_",
+                "BulkDelete__ReplaceMe_",
+                ConsumerGroup = "_ReplaceMe_",
                 Username = "$ConnectionString",
                 Password = "EventHubConnectionString",
                 Protocol = BrokerProtocol.SaslSsl,
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
-                ConsumerGroup = "_ReplaceMe_")
+                IsBatched = true)
 #else
                 KafkaTrigger("BrokerList",
-                "Delete__ReplaceMe_",
+                "BulkDelete__ReplaceMe_",
+                ConsumerGroup = "_ReplaceMe_",
 //-:cnd:noEmit
                 #if DEBUG
                 Protocol = BrokerProtocol.NotSet,
@@ -41,12 +42,11 @@ public class On_ReplaceMe_Deleted
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                ConsumerGroup = "_ReplaceMe_")
+                IsBatched = true)
 #endif
-                ] NostifyKafkaTriggerEvent triggerEvent,
+                ] string[] events,
         ILogger log)
     {
-        await DefaultEventHandlers.HandleAggregateEvent<_ReplaceMe_>(_nostify, triggerEvent);
+        await DefaultEventHandlers.HandleAggregateBulkDeleteEvent<_ReplaceMe_>(_nostify, events);
     }
 }
-

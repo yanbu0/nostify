@@ -5,20 +5,23 @@ using Newtonsoft.Json;
 using Microsoft.Azure.Functions.Worker;
 using Newtonsoft.Json.Linq;
 
-namespace _ServiceName__Service;
+namespace _ReplaceMe__Service;
 
-public class On_ReplaceMe_Created
+public class On_ReplaceMe_BulkUpdatedFor__ProjectionName_
 {
     private readonly INostify _nostify;
+    private readonly HttpClient _httpClient;
     
-    public On_ReplaceMe_Created(INostify nostify)
+    public On_ReplaceMe_BulkUpdatedFor__ProjectionName_(INostify nostify, HttpClient httpClient)
     {
         this._nostify = nostify;
+        _httpClient = httpClient;
     }
 
-    [Function(nameof(On_ReplaceMe_Created))]
+    [Function(nameof(On_ReplaceMe_BulkUpdatedFor__ProjectionName_))]
     public async Task Run([KafkaTrigger("BrokerList",
-                "Create__ReplaceMe_",
+                "BulkUpdate__ReplaceMe_",
+                ConsumerGroup = "_ProjectionName_",
 //-:cnd:noEmit
                 #if DEBUG
                 Protocol = BrokerProtocol.NotSet,
@@ -30,10 +33,10 @@ public class On_ReplaceMe_Created
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
+                IsBatched = true)] string[] events,
         ILogger log)
     {
-        await DefaultEventHandlers.HandleAggregateEvent<_ReplaceMe_>(_nostify, triggerEvent);
+        await DefaultEventHandlers.HandleProjectionBulkUpdateEvent<_ProjectionName_>(_nostify, events);
     }
     
 }

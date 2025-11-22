@@ -34,24 +34,9 @@ public class On_ReplaceMe_Deleted_For__ProjectionName_
                 ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
-        Event? newEvent = triggerEvent.GetEvent();
-        try
-        {
-            if (newEvent != null)
-            {
-                //Update projection container
-                Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
-                //Remove from the container.  If you wish to set isDeleted instead, remove the code below and ApplyAndPersist the Event
-                await projectionContainer.DeleteItemAsync<_ProjectionName_>(newEvent.id);
-            }
-        }
-        catch (Exception e)
-        {
-            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Deleted_For__ProjectionName_), e.Message, newEvent);
-        }
-
-        
-        
+        // Use the default event handler to apply the event to the projection and persist it
+        // This will delete the projection from the projection container based on the event's aggregateRootId
+        await DefaultEventHandlers.HandleProjectionEvent<_ProjectionName_>(_nostify, triggerEvent, null);           
     }
 }
 

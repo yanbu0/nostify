@@ -48,6 +48,7 @@
    - 9.8 [Update Projection](#update-projection)
    - 9.9 [Delete Projection](#delete-projection)
    - 9.10 [Event Handlers](#event-handlers)
+   - 9.11 [Topics](#topics)
 10. [Advanced Features](#advanced-features)
     - 10.1 [Error Handling and Undeliverable Events](#error-handling-and-undeliverable-events)
     - 10.2 [Bulk Operations and Performance](#bulk-operations-and-performance)
@@ -72,11 +73,26 @@
   - **Azure Event Hubs Support**: Added `WithEventHubs()` method to use during startup to enable using Azure Event Hubs as an alternative to Kafka for event messaging
   - Templates now have a flag `--eventhHubs true` or `-eh true` and will set things up for you. Default or false means to use Kafka.
   - Added comprehensive tests for Event Hubs configuration and fluent API chaining
+  - **Event Type Filtering**: Added `eventTypeFilter` parameter to all event handler methods for combining multiple commands into single topics
+  - Enables topic consolidation to stay within Azure Event Hubs limits (10 Event Hubs per Basic/Standard tier)
+  - Supports single filter, multiple filters (list), or no filtering
+  - Applied to aggregate and projection event handlers, both single and bulk operations
   - **Default Command Handler Extensions**: New extension methods for common CRUD operations in Azure Functions
   - `HandlePost<T>()` - Creates new aggregate roots with auto-generated GUIDs
   - `HandlePatch<T>()` - Updates existing aggregate roots from request body
   - `HandleDelete<T>()` - Deletes aggregate roots by ID (no request body required)
+  - `HandleBulkCreate<T>()` - Creates multiple aggregate roots from array of objects
+  - `HandleBulkUpdate<T>()` - Updates multiple aggregate roots from array with id properties
+  - `HandleBulkDelete<T>()` - Deletes multiple aggregate roots from array of IDs or list of GUIDs
   - Simplifies Azure Function HTTP trigger implementations with consistent patterns
+  - **Default Event Handler Extensions**: New bulk operation handlers for aggregates and projections
+  - `HandleAggregateBulkCreateEvent<T>()` - Bulk creation from Kafka trigger events with optional event type filtering
+  - `HandleAggregateBulkUpdateEvent<T>()` - Bulk updates using ApplyAndPersistAsync with optional event type filtering
+  - `HandleAggregateBulkDeleteEvent<T>()` - Bulk deletion from events with optional event type filtering
+  - `HandleProjectionBulkCreateEvent<P>()` - Bulk projection creation with optional event type filtering
+  - `HandleProjectionBulkUpdateEvent<P>()` - Bulk projection updates using ApplyAndPersistAsync with optional event type filtering
+  - `HandleProjectionBulkDeleteEvent<P>()` - Bulk projection deletion with optional event type filtering
+  - All bulk handlers support 3 overloads: no filter, single event type filter, or list of event type filters
   - **Paged Query Extensions**: New `PagedQueryAsync()` extension methods for Cosmos DB containers with server-side filtering, sorting, and pagination
   - Supports tenant-based filtering with `ITenantFilterable` interface
   - Custom partition key filtering for flexible query scenarios
@@ -100,8 +116,10 @@
 
 ### Coming Soon
 
-- Better support for non-command events (4.0)
-- Event Hubs support
+- Better support for non-command events
+- Enhanced saga orchestration patterns
+- Additional query optimization features
+- .Net 10
 
 
 ## Getting Started
@@ -313,6 +331,18 @@ public class TestCommand : NostifyCommand
   ///Base Delete Command
   ///</summary>
   public static readonly TestCommand Delete = new TestCommand("Delete_Test");
+  ///<summary>
+  ///Bulk Create Command
+  ///</summary>
+  public static readonly TestCommand BulkCreate = new TestCommand("BulkCreate_Test", true);
+  ///<summary>
+  ///Bulk Update Command
+  ///</summary>
+  public static readonly TestCommand BulkUpdate = new TestCommand("BulkUpdate_Test");
+  ///<summary>
+  ///Bulk Delete Command
+  ///</summary>
+  public static readonly TestCommand BulkDelete = new TestCommand("BulkDelete_Test");
 
 
   public TestCommand(string name, bool isNew = false)
@@ -936,6 +966,252 @@ public async Task Run([KafkaTrigger(<Trigger details go here>)] NostifyKafkaTrig
     
 }
 ```
+
+### Topics
+
+In `nostify`, each command is published to a message broker topic (Kafka or Azure Event Hubs) for consumption by event handlers. By default, each command creates and subscribes to a separate topic. For example, the `Create_Test` command publishes to a `Create_Test` topic, and the `Update_Test` command publishes to an `Update_Test` topic.
+
+#### Default Behavior: One Topic Per Command
+
+```csharp
+// Event handler subscribing to a specific topic
+[KafkaTrigger("BrokerList",
+    "Create_Test",  // This topic name matches the command name
+    ConsumerGroup = "Test")]
+public async Task Run(NostifyKafkaTriggerEvent triggerEvent, ILogger log)
+{
+    await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent);
+}
+```
+
+#### Combining Commands with eventTypeFilter
+
+For cost efficiency and when message broker limits are a concern, you can combine multiple commands into a single topic and use the `eventTypeFilter` parameter to filter specific event types. This is particularly important when using **Azure Event Hubs**, as Microsoft limits the number of Event Hubs (topics) per pricing tier:
+
+- **Basic tier**: 10 Event Hubs per namespace
+- **Standard tier**: 10 Event Hubs per namespace  
+- **Premium/Dedicated tiers**: Higher limits but still constrained
+
+**Example: Combining Create and Update into a Single Topic**
+
+```csharp
+// Subscribe to a combined topic that receives both Create and Update events
+[KafkaTrigger("BrokerList",
+    "Test_Commands",  // Single topic for multiple command types
+    ConsumerGroup = "Test")]
+public async Task Run(NostifyKafkaTriggerEvent triggerEvent, ILogger log)
+{
+    // Filter for Create events only
+    await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent, eventTypeFilter: "Create_Test");
+}
+
+[KafkaTrigger("BrokerList",
+    "Test_Commands",  // Same topic, different filter
+    ConsumerGroup = "Test")]
+public async Task RunUpdate(NostifyKafkaTriggerEvent triggerEvent, ILogger log)
+{
+    // Filter for Update events only
+    await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent, eventTypeFilter: "Update_Test");
+}
+```
+
+When using `eventTypeFilter`, the event handler will only process events matching the specified command name. Events that don't match are ignored, allowing you to:
+
+- **Reduce topic count**: Combine related commands (Create, Update, Delete) into grouped topics
+- **Stay within pricing tier limits**: Critical for Event Hubs Standard tier with only 10 Event Hubs
+- **Organize by domain**: Group commands by aggregate or bounded context (e.g., `Order_Commands`, `Inventory_Commands`)
+- **Maintain separation of concerns**: Each handler still processes only its specific event type
+
+#### When to Use Topic Consolidation
+
+Consider consolidating topics when:
+
+- Using Azure Event Hubs with tier limitations (especially Basic/Standard)
+- Managing a large number of aggregates and commands
+- Cost optimization is a priority
+- Commands are logically related (same aggregate, similar lifecycle)
+
+#### When to Keep Separate Topics
+
+Use separate topics when:
+
+- Using Kafka with no strict topic limits
+- Maximum throughput is required (independent scaling per command)
+- Complete isolation between command types is needed
+- Different retention policies are required per command type
+
+### Bulk Operations
+
+`nostify` provides comprehensive support for bulk operations on both aggregates and projections, enabling high-performance processing of large datasets.
+
+#### Default Bulk Event Handlers
+
+The `DefaultEventHandlers` class provides built-in methods for handling bulk operations from Kafka trigger events:
+
+**Bulk Create Handlers:**
+```C#
+// Aggregate bulk create - no filtering
+[Function(nameof(OnTestBulkCreated))]
+public async Task Run([KafkaTrigger("BrokerList", "BulkCreate_Test", ...)] string[] events, ILogger log)
+{
+    await DefaultEventHandlers.HandleAggregateBulkCreateEvent<Test>(_nostify, events);
+}
+
+// Projection bulk create - single event type filter
+[Function(nameof(OnTestBulkCreated_For_TestProjection))]
+public async Task Run([KafkaTrigger("BrokerList", "Test_Commands", ...)] string[] events, ILogger log)
+{
+    await DefaultEventHandlers.HandleProjectionBulkCreateEvent<TestProjection>(
+        _nostify, 
+        events, 
+        eventTypeFilter: "BulkCreate_Test"
+    );
+}
+
+// Multiple event type filters
+await DefaultEventHandlers.HandleAggregateBulkCreateEvent<Test>(
+    _nostify, 
+    events, 
+    new List<string> { "BulkCreate_Test", "BulkImport_Test" }
+);
+```
+
+**Bulk Update Handlers:**
+```C#
+// Aggregate bulk update - uses ApplyAndPersistAsync for each event
+[Function(nameof(OnTestBulkUpdated))]
+public async Task Run([KafkaTrigger("BrokerList", "BulkUpdate_Test", ...)] string[] events, ILogger log)
+{
+    await DefaultEventHandlers.HandleAggregateBulkUpdateEvent<Test>(_nostify, events);
+}
+
+// Projection bulk update with event type filter
+[Function(nameof(OnTestBulkUpdated_For_TestProjection))]
+public async Task Run([KafkaTrigger("BrokerList", "Test_Commands", ...)] string[] events, ILogger log)
+{
+    await DefaultEventHandlers.HandleProjectionBulkUpdateEvent<TestProjection>(
+        _nostify, 
+        events, 
+        eventTypeFilter: "BulkUpdate_Test"
+    );
+}
+```
+
+**Bulk Delete Handlers:**
+```C#
+// Aggregate bulk delete
+[Function(nameof(OnTestBulkDeleted))]
+public async Task Run([KafkaTrigger("BrokerList", "BulkDelete_Test", ...)] string[] events, ILogger log)
+{
+    await DefaultEventHandlers.HandleAggregateBulkDeleteEvent<Test>(_nostify, events);
+}
+
+// Projection bulk delete with multiple filters
+await DefaultEventHandlers.HandleProjectionBulkDeleteEvent<TestProjection>(
+    _nostify, 
+    events, 
+    new List<string> { "BulkDelete_Test", "BulkArchive_Test" }
+);
+```
+
+#### Default Bulk Command Handlers
+
+The `DefaultCommandHandler` class provides extension methods for HTTP-triggered bulk operations:
+
+**Bulk Create:**
+```C#
+[Function(nameof(BulkCreateTest))]
+public async Task<int> Run(
+    [HttpTrigger("post", Route = "Test/BulkCreate")] HttpRequestData req,
+    ILogger log)
+{
+    return await DefaultCommandHandler.HandleBulkCreate<Test>(
+        _nostify,
+        TestCommand.BulkCreate,
+        req,
+        userId: currentUserId,
+        partitionKey: tenantId,
+        batchSize: 100,
+        allowRetry: true,
+        publishErrorEvents: false
+    );
+}
+```
+
+**Bulk Update:**
+```C#
+[Function(nameof(BulkUpdateTest))]
+public async Task<int> Run(
+    [HttpTrigger("patch", Route = "Test/BulkUpdate")] HttpRequestData req,
+    ILogger log)
+{
+    // Request body must contain array of objects with 'id' property
+    return await DefaultCommandHandler.HandleBulkUpdate<Test>(
+        _nostify,
+        TestCommand.BulkUpdate,
+        req,
+        userId: currentUserId,
+        partitionKey: tenantId,
+        batchSize: 100,
+        allowRetry: true,
+        publishErrorEvents: false
+    );
+}
+```
+
+**Bulk Delete:**
+```C#
+[Function(nameof(BulkDeleteTest))]
+public async Task<int> Run(
+    [HttpTrigger("delete", Route = "Test/BulkDelete")] HttpRequestData req,
+    ILogger log)
+{
+    // Request body must contain array of ID strings
+    return await DefaultCommandHandler.HandleBulkDelete<Test>(
+        _nostify,
+        TestCommand.BulkDelete,
+        req,
+        userId: currentUserId,
+        partitionKey: tenantId,
+        batchSize: 100,
+        allowRetry: true,
+        publishErrorEvents: false
+    );
+}
+
+// Alternative: Delete by list of GUIDs (no HTTP request)
+List<Guid> idsToDelete = GetIdsToDelete();
+int count = await DefaultCommandHandler.HandleBulkDelete<Test>(
+    _nostify,
+    TestCommand.BulkDelete,
+    idsToDelete,
+    userId: currentUserId,
+    partitionKey: tenantId,
+    batchSize: 100
+);
+```
+
+#### Bulk Operation Features
+
+All bulk operation handlers support:
+
+- **Event Type Filtering**: Process only specific event types from combined topics
+- **Batch Processing**: Configure batch sizes for optimal performance (default: 100)
+- **Retry Logic**: Optional retry on transient failures (`allowRetry` parameter)
+- **Error Events**: Optional publishing of error events to Kafka (`publishErrorEvents` parameter)
+- **Undeliverable Tracking**: Failed events written to undeliverable events container
+
+**Three Overloads for Flexibility:**
+1. **No Filter**: Process all events in the batch
+2. **Single Filter**: Process events matching one event type
+3. **Multiple Filters**: Process events matching any event type in the list
+
+**Best Practices:**
+- Use bulk-enabled containers (call `GetBulkCurrentStateContainerAsync` or `GetBulkProjectionContainerAsync`)
+- Configure appropriate batch sizes based on RU availability
+- Enable retry logic for production scenarios
+- Monitor undeliverable events for processing failures
+- Use event type filters when consolidating topics
 
 ## Advanced Features
 

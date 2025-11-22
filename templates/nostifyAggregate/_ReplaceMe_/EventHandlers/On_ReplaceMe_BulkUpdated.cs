@@ -7,18 +7,19 @@ using Newtonsoft.Json.Linq;
 
 namespace _ServiceName__Service;
 
-public class On_ReplaceMe_Created
+public class On_ReplaceMe_BulkUpdated
 {
     private readonly INostify _nostify;
     
-    public On_ReplaceMe_Created(INostify nostify)
+    public On_ReplaceMe_BulkUpdated(INostify nostify)
     {
         this._nostify = nostify;
     }
 
-    [Function(nameof(On_ReplaceMe_Created))]
+    [Function(nameof(On_ReplaceMe_BulkUpdated))]
     public async Task Run([KafkaTrigger("BrokerList",
-                "Create__ReplaceMe_",
+                "BulkUpdate__ReplaceMe_",
+                ConsumerGroup = "_ReplaceMe_",
 //-:cnd:noEmit
                 #if DEBUG
                 Protocol = BrokerProtocol.NotSet,
@@ -30,11 +31,9 @@ public class On_ReplaceMe_Created
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
+                IsBatched = true)] string[] events,
         ILogger log)
     {
-        await DefaultEventHandlers.HandleAggregateEvent<_ReplaceMe_>(_nostify, triggerEvent);
+        await DefaultEventHandlers.HandleAggregateBulkUpdateEvent<_ReplaceMe_>(_nostify, events);
     }
-    
 }
-

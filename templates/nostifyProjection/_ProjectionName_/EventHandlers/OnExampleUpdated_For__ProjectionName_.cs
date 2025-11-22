@@ -7,20 +7,24 @@ using Newtonsoft.Json.Linq;
 
 namespace _ReplaceMe__Service;
 
-public class On_ReplaceMe_Created_For__ProjectionName_
+// This is here as an example of how to handle an event that updates external data for a projection. 
+// This is not required for all projections, but can be used when the projection has dependencies on external data sources that need to be updated when certain events are received.
+// You will need to edit or delete this file based on the specific needs of your projection and the events it receives.
+
+public class OnExternalDataExampleUpdated_For__ProjectionName_
 {
     private readonly INostify _nostify;
     private readonly HttpClient _httpClient;
-    
-    public On_ReplaceMe_Created_For__ProjectionName_(INostify nostify, HttpClient httpClient)
+
+    public OnExternalDataExampleUpdated_For__ProjectionName_(INostify nostify, HttpClient httpClient)
     {
         this._nostify = nostify;
         _httpClient = httpClient;
     }
 
-    [Function(nameof(On_ReplaceMe_Created_For__ProjectionName_))]
+    [Function(nameof(OnExternalDataExampleUpdated_For__ProjectionName_))]
     public async Task Run([KafkaTrigger("BrokerList",
-                "Create__ReplaceMe_",
+                "Update_ExternalDataExample",
 //-:cnd:noEmit
                 #if DEBUG
                 Protocol = BrokerProtocol.NotSet,
@@ -37,7 +41,8 @@ public class On_ReplaceMe_Created_For__ProjectionName_
     {
         // Use the default event handler to apply the event to the projection and persist it
         // If the Projection has no external data dependencies, you can pass null for the HttpClient to avoid unnecessary overhead
-        await DefaultEventHandlers.HandleProjectionEvent<_ProjectionName_>(_nostify, triggerEvent, _httpClient);        
+        await DefaultEventHandlers.HandleMultiApplyEvent<_ProjectionName_>(_nostify, 
+                                        triggerEvent, p => p.externalAggregateExample1Id);        
     }
     
 }

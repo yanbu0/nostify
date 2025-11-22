@@ -333,86 +333,65 @@ public static class ContainerExtensions
     }
 
     /// <summary>
+    /// Bulk creates objects in the Projection container from a raw string array of KafkaTriggerEvents.
+    /// </summary>
+    /// <typeparam name="T">The type of NostifyObject to create.</typeparam>
+    /// <param name="bulkContainer">The Cosmos DB container with bulk operations enabled.</param>
+    /// <param name="events">Array of strings from KafkaTrigger.</param>
+    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events) where T : NostifyObject, new()
+    {
+        await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, new List<string>());
+    }
+
+    /// <summary>
+    /// Bulk creates objects in the Projection container from a raw string array of KafkaTriggerEvents, filtered by a single event type.
+    /// </summary>
+    /// <typeparam name="T">The type of NostifyObject to create.</typeparam>
+    /// <param name="bulkContainer">The Cosmos DB container with bulk operations enabled.</param>
+    /// <param name="events">Array of strings from KafkaTrigger.</param>
+    /// <param name="eventTypeFilter">Event type name to filter when creating items; only events matching this type will be processed.</param>
+    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string eventTypeFilter) where T : NostifyObject, new()
+    {
+        await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, new List<string>(){eventTypeFilter});
+    }
+
+    /// <summary>
     /// Bulk creates objects in Projection container from raw string array of KafkaTriggerEvents.  Use in Event Handler.
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="bulkContainer">Must have bulk operations set to true</param>
     /// <param name="events">Array of strings from KafkaTrigger</param>
+    /// <param name="eventTypeFilters">List of event type names to include when creating items; if null or empty, all events are processed.</param>
     /// <returns></returns>
     /// <exception cref="NostifyException"></exception>
-    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events) where T : NostifyObject, new()
+    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, List<string> eventTypeFilters) where T : NostifyObject, new()
     {
         List<T> objToUpsertList = new List<T>();
         events.ToList().ForEach(eventStr =>
         {
-            NostifyKafkaTriggerEvent triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr);
-            if (triggerEvent == null)
+            NostifyKafkaTriggerEvent? triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr);
+            if (triggerEvent is null)
             {
                 throw new NostifyException("Event is null");
             }
-            Event newEvent = triggerEvent.GetEvent();
-            if (!newEvent.command.isNew)
+            Event? newEvent = triggerEvent.GetEvent(eventTypeFilters);
+            if (newEvent is not null)
             {
-                throw new NostifyException("Event is not a create event");
+                if (!newEvent.command.isNew)
+                {
+                    throw new NostifyException("Event is not a create event");
+                }
+                T objToUpsert = new T();
+                objToUpsert.Apply(newEvent);
+                objToUpsertList.Add(objToUpsert);
             }
-            T objToUpsert = new T();
-            objToUpsert.Apply(newEvent);
-            objToUpsertList.Add(objToUpsert);
         });
 
-        await bulkContainer.DoBulkCreateAsync<T>(objToUpsertList);
+        if (objToUpsertList.Count > 0)
+        {
+            await bulkContainer.DoBulkCreateAsync<T>(objToUpsertList);
+        }
 
-    }
-
-    /// <summary>
-    /// Bulk updates objects from raw string array of KafkaTriggerEvents. Use in Event Handler. NOTE: this only supports updating root-level properties and not nested objects or arrays.
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="bulkContainer">Must have bulk operations set to true</param>
-    /// <param name="events">Array of strings from KafkaTrigger</param>
-    /// <param name="partitionKeyName">Name of partition key, default is tenantId</param>
-    /// <returns></returns>
-    [Obsolete("BulkUpdateFromKafkaTriggerEventsAsync is deprecated, please use BulkApplyAndPersist instead.")]
-    public static async Task<PatchItemResult[]> BulkUpdateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string partitionKeyName = "tenantId")
-    {
-        var triggerEvents = events
-            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
-            .Where(e => e != null)
-            .Select(e => e!);
-
-        var patchOperations = triggerEvents
-            .Where(evt => evt.payload is JObject)
-            .Select(evt =>
-            {
-                var jobj = (JObject)evt.payload;
-                var id = jobj["id"]?.ToString();
-                var partitionId = jobj[partitionKeyName]?.ToString();
-                var operations = jobj.Properties()
-                    .Where(prop => prop.Name != "id" && prop.Name != partitionKeyName)
-                    .Select(prop => PatchOperation.Set($"/{prop.Name}", prop.Value))
-                    .ToList();
-                return (id, partitionId, operations);
-            });
-
-        var validPatchOperations = patchOperations
-            .Where(patch =>
-                !string.IsNullOrWhiteSpace(patch.id) &&
-                !string.IsNullOrWhiteSpace(patch.partitionId) &&
-                patch.operations.Count > 0);
-
-        var tasks = validPatchOperations
-            .Select(patch => SafePatchItemAsync<T>(bulkContainer, patch.id, new PartitionKey(patch.partitionId), patch.operations));
-
-        var results = await Task.WhenAll(tasks);
-        return [
-            ..results,
-            ..patchOperations
-                .Where(patch =>
-                    string.IsNullOrWhiteSpace(patch.id) ||
-                    string.IsNullOrWhiteSpace(patch.partitionId) ||
-                    patch.operations.Count == 0)
-                .Select(patch => PatchItemResult.InvalidOperationResult(patch))
-        ];
     }
 
     /// <summary>
