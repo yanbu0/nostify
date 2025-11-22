@@ -55,7 +55,7 @@ public static class DefaultEventHandlers
     /// <param name="eventTypeFilter">Optional filter specifying which event type to process.</param>
     /// <param name="batchSize">Maximum number of projections to apply per batch.</param>
     /// <returns>A task representing the asynchronous multi-apply operation.</returns>
-    public async static Task HandleMultiApplyEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Func<P, Guid?> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100) where P : NostifyObject, IProjection, new()
+    public async static Task HandleMultiApplyEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Func<P, Guid?> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         Event? newEvent = triggerEvent.GetEvent(eventTypeFilter);
         try
@@ -74,6 +74,8 @@ public static class DefaultEventHandlers
                     newEvent,
                     projectionsToUpdate,
                     batchSize);
+                // Need to init to fetch any external data for the projections that were updated
+                await nostify.InitAllUninitializedAsync<P>();
                 
             }                       
 
@@ -184,7 +186,7 @@ public static class DefaultEventHandlers
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionBulkCreateEvent<P>(INostify nostify, string[] events) where P : NostifyObject, IProjection, new()
+    public async static Task HandleProjectionBulkCreateEvent<P>(INostify nostify, string[] events) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         await HandleProjectionBulkCreateEvent<P>(nostify, events, new List<string>());
     }
@@ -197,7 +199,7 @@ public static class DefaultEventHandlers
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">Single event type filter to specify which event type to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionBulkCreateEvent<P>(INostify nostify, string[] events, string eventTypeFilter) where P : NostifyObject, IProjection, new()
+    public async static Task HandleProjectionBulkCreateEvent<P>(INostify nostify, string[] events, string eventTypeFilter) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         await HandleProjectionBulkCreateEvent<P>(nostify, events, new List<string>() { eventTypeFilter });
     }
@@ -211,13 +213,14 @@ public static class DefaultEventHandlers
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionBulkCreateEvent<P>(INostify nostify, string[] events, List<string> eventTypeFilter) where P : NostifyObject, IProjection, new()
+    public async static Task HandleProjectionBulkCreateEvent<P>(INostify nostify, string[] events, List<string> eventTypeFilter) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         
         try
         {
             Container currentStateContainer = await nostify.GetBulkProjectionContainerAsync<P>();
             await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<P>(events, eventTypeFilter);
+            await nostify.InitAllUninitializedAsync<P>();
         }
         catch (Exception e)
         {
@@ -312,7 +315,7 @@ public static class DefaultEventHandlers
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events) where P : NostifyObject, IProjection, new()
+    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         await HandleProjectionBulkUpdateEvent<P>(nostify, events, new List<string>());
     }
@@ -326,7 +329,7 @@ public static class DefaultEventHandlers
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">Single event type filter to specify which event type to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, string eventTypeFilter) where P : NostifyObject, IProjection, new()
+    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, string eventTypeFilter) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         await HandleProjectionBulkUpdateEvent<P>(nostify, events, new List<string>() { eventTypeFilter });
     }
@@ -340,14 +343,15 @@ public static class DefaultEventHandlers
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, List<string> eventTypeFilter) where P : NostifyObject, IProjection, new()
+    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, List<string> eventTypeFilter) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         
         try
         {
             Container projectionContainer = await nostify.GetProjectionContainerAsync<P>();
-            List<Task> tasks = new List<Task>();
-            
+            List<Task> tasks = new List<Task>();            
+
+            List<P> updatedProjections = new List<P>();
             foreach (var eventStr in events)
             {
                 NostifyKafkaTriggerEvent? triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr);
@@ -356,12 +360,19 @@ public static class DefaultEventHandlers
                     Event? newEvent = triggerEvent.GetEvent(eventTypeFilter);
                     if (newEvent is not null)
                     {
-                        tasks.Add(projectionContainer.ApplyAndPersistAsync<P>(newEvent));
+                        tasks.Add(projectionContainer.ApplyAndPersistAsync<P>(newEvent)
+                            .ContinueWith(t =>
+                            {
+                                if (t.IsCompletedSuccessfully)
+                                {
+                                    updatedProjections.Add(t.Result);
+                                }
+                            }));
                     }
                 }
             }
             
-            await Task.WhenAll(tasks);
+            await nostify.InitAsync<P>(updatedProjections);
         }
         catch (Exception e)
         {

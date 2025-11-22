@@ -77,7 +77,7 @@
   - Enables topic consolidation to stay within Azure Event Hubs limits (10 Event Hubs per Basic/Standard tier)
   - Supports single filter, multiple filters (list), or no filtering
   - Applied to aggregate and projection event handlers, both single and bulk operations
-  - **Default Command Handler Extensions**: New extension methods for common CRUD operations in Azure Functions
+  - **Default Command Handler**: New static methods for common CRUD operations in Azure Functions
   - `HandlePost<T>()` - Creates new aggregate roots with auto-generated GUIDs
   - `HandlePatch<T>()` - Updates existing aggregate roots from request body
   - `HandleDelete<T>()` - Deletes aggregate roots by ID (no request body required)
@@ -85,7 +85,7 @@
   - `HandleBulkUpdate<T>()` - Updates multiple aggregate roots from array with id properties
   - `HandleBulkDelete<T>()` - Deletes multiple aggregate roots from array of IDs or list of GUIDs
   - Simplifies Azure Function HTTP trigger implementations with consistent patterns
-  - **Default Event Handler Extensions**: New bulk operation handlers for aggregates and projections
+  - **Default Event Handlers**: New static methods for bulk operation handlers for aggregates and projections
   - `HandleAggregateBulkCreateEvent<T>()` - Bulk creation from Kafka trigger events with optional event type filtering
   - `HandleAggregateBulkUpdateEvent<T>()` - Bulk updates using ApplyAndPersistAsync with optional event type filtering
   - `HandleAggregateBulkDeleteEvent<T>()` - Bulk deletion from events with optional event type filtering
@@ -1116,7 +1116,7 @@ await DefaultEventHandlers.HandleProjectionBulkDeleteEvent<TestProjection>(
 
 #### Default Bulk Command Handlers
 
-The `DefaultCommandHandler` class provides extension methods for HTTP-triggered bulk operations:
+The `DefaultCommandHandler` class provides static methods for HTTP-triggered bulk operations:
 
 **Bulk Create:**
 ```C#

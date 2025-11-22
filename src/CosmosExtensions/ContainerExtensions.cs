@@ -101,10 +101,10 @@ public static class ContainerExtensions
     public static async Task<int> BulkDeleteAsync<P>(this Container containerToDeleteFrom, List<P> projectionsToDelete) where P : NostifyObject
     {
         containerToDeleteFrom.ValidateBulkEnabled(true);
-        var partitionKeyPath = (await containerToDeleteFrom.ReadContainerAsync()).Resource.PartitionKeyPath;
+        var containerResponse = await containerToDeleteFrom.ReadContainerAsync();
+        var partitionKeyPath = containerResponse.Resource.PartitionKeyPath;
 
-        var response = await containerToDeleteFrom.ReadContainerAsync();
-        var containerProps = response.Resource;
+        var containerProps = containerResponse.Resource;
         //Make sure TTL is enabled
         if (!containerProps.DefaultTimeToLive.HasValue)
         {

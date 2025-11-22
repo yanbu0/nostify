@@ -267,6 +267,6 @@ public interface INostify
     ///Init all non-initialized projections in the container.  Will requery all needed data from all external services by calling InitAsync  
     ///</summary>
     /// <param name="maxloopSize">Maximum size of loops to check for uninitialized projections. Defaults to 10.</param>
-    public Task InitAllUninitializedAsync<P>(int maxloopSize = 10) where P : NostifyObject, IProjection, IHasExternalData<P>, new();
+    public Task InitAllUninitializedAsync<P>(int maxloopSize = 100) where P : NostifyObject, IProjection, IHasExternalData<P>, new();
 
 }
