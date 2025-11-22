@@ -66,7 +66,7 @@ public class NostifyKafkaTriggerEvent
     public Event? GetEvent(IEnumerable<string> eventTypeFilters)
     {
         Event? evt = JsonConvert.DeserializeObject<Event>(Value, SerializationSettings.NostifyDefault);
-        if (evt != null && !eventTypeFilters.Contains(evt.command.name))
+        if (evt != null && eventTypeFilters.Count() > 0 && !eventTypeFilters.Contains(evt.command.name))
         {
             evt = null;
         }
@@ -91,7 +91,7 @@ public class NostifyKafkaTriggerEvent
     public IEvent? GetIEvent(IEnumerable<string> eventTypeFilters)
     {
         IEvent? evt = JsonConvert.DeserializeObject<IEvent>(Value, SerializationSettings.NostifyDefault);
-        if (evt != null && !eventTypeFilters.Contains(evt.command.name))
+        if (evt != null && eventTypeFilters.Count() > 0 && !eventTypeFilters.Contains(evt.command.name))
         {
             evt = null;
         }
