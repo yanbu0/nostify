@@ -3,8 +3,6 @@ using Microsoft.Extensions.Hosting;
 using nostify;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Azure.Functions.Worker;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Azure.Core.Serialization;
 using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json;
@@ -30,7 +28,11 @@ public class Program
             string apiKey = config.GetValue<string>("CosmosApiKey");
             string dbName = config.GetValue<string>("CosmosDbName");
             string endPoint = config.GetValue<string>("CosmosEndPoint");
+#if (eventHubs)
+            string eventHubConnectionString = config.GetValue<string>("EventHubConnectionString");
+#else
             string kafka = config.GetValue<string>("BrokerList");
+#endif
             bool autoCreateContainers = config.GetValue<bool>("AutoCreateContainers");
             int defaultThroughput = config.GetValue<int>("DefaultContainerThroughput");
             bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
@@ -43,7 +45,11 @@ public class Program
                                 createContainers: autoCreateContainers,
                                 containerThroughput: defaultThroughput,
                                 useGatewayConnection: false)
+#if (eventHubs)
+                            .WithEventHubs(eventHubConnectionString)
+#else
                             .WithKafka(kafka)
+#endif
                             .WithHttp(httpClientFactory)
                             .Build<_ReplaceMe_>(verbose: true);
 
@@ -73,11 +79,7 @@ internal static class WorkerConfigurationExtensions
     {
         builder.Services.Configure<WorkerOptions>(workerOptions =>
         {
-            var settings = NewtonsoftJsonObjectSerializer.CreateJsonSerializerSettings();
-            settings.ContractResolver = new CamelCasePropertyNamesContractResolver();
-            settings.NullValueHandling = NullValueHandling.Ignore;
-
-            workerOptions.Serializer = new NewtonsoftJsonObjectSerializer(settings);
+            workerOptions.Serializer = new NewtonsoftJsonObjectSerializer(SerializationSettings.NostifyDefault);
         });
 
         return builder;

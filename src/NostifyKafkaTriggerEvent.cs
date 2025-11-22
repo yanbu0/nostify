@@ -1,4 +1,7 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using nostify;
 
@@ -46,10 +49,52 @@ public class NostifyKafkaTriggerEvent
     public string[] Headers { get; set; }
 
     ///<summary>
+    ///Converts the Kafka message Value to an Event applying an optional single event type filter.
+    ///</summary>
+    ///<param name="eventTypeFilter">Optional event type name; if provided and it does not match the event's command name, null is returned.</param>
+    ///<returns>The deserialized Event or null if the filter does not match.</returns>
+    public Event? GetEvent(string? eventTypeFilter = null)
+    {
+        return GetEvent(eventTypeFilter is null ? new List<string>() : new List<string> { eventTypeFilter });
+    }
+
+    ///<summary>
     ///Converts string value of the Value to an Event.
     ///</summary>
-    public Event? GetEvent()
+    /// <param name="eventTypeFilters">Optional filter to only return the event if it matches one of the specified event types.</param>
+    /// <returns>The deserialized Event object from the Kafka message Value.</returns>
+    public Event? GetEvent(IEnumerable<string> eventTypeFilters)
     {
-        return JsonConvert.DeserializeObject<Event>(Value);
+        Event? evt = JsonConvert.DeserializeObject<Event>(Value, SerializationSettings.NostifyDefault);
+        if (evt != null && !eventTypeFilters.Contains(evt.command.name))
+        {
+            evt = null;
+        }
+        return evt;
+    }
+
+    ///<summary>
+    ///Converts string value of the Value to an IEvent using a single event type filter.
+    ///</summary>
+    ///<param name="eventTypeFilter">Optional event type name used to filter the returned event.</param>
+    ///<returns>The deserialized Event object from the Kafka message Value or null if the filter does not match.</returns>
+    public IEvent? GetIEvent(string? eventTypeFilter = null)
+    {
+        return GetIEvent(eventTypeFilter is null ? new List<string>() : new List<string> { eventTypeFilter });
+    }
+
+    ///<summary>
+    ///Converts string value of the Value to an IEvent.
+    ///</summary>
+    /// <param name="eventTypeFilters">Optional filter to only return the event if it matches one of the specified event types.</param>
+    /// <returns>The deserialized Event object from the Kafka message Value.</returns>
+    public IEvent? GetIEvent(IEnumerable<string> eventTypeFilters)
+    {
+        IEvent? evt = JsonConvert.DeserializeObject<IEvent>(Value, SerializationSettings.NostifyDefault);
+        if (evt != null && !eventTypeFilters.Contains(evt.command.name))
+        {
+            evt = null;
+        }
+        return evt;
     }
 }

@@ -19,15 +19,14 @@ public class Update_ReplaceMe_
 
     [Function(nameof(Update_ReplaceMe_))]
     public async Task<Guid> Run(
-        [HttpTrigger("patch", Route = "_ReplaceMe_")] HttpRequestData req,
+        [HttpTrigger("patch", Route = "_ReplaceMe_/{id:guid?}")] HttpRequestData req,
+        FunctionContext context,
+        Guid? id,
         ILogger log)
     {
-        dynamic update_ReplaceMe_ = await req.Body.ReadFromRequestBodyAsync();
-        Guid aggRootId = Guid.Parse(update_ReplaceMe_.id.ToString());
-        IEvent pe = new EventFactory().Create<_ReplaceMe_>(_ReplaceMe_Command.Update, aggRootId, update_ReplaceMe_);
-        await _nostify.PersistEventAsync(pe);
-
-        return update_ReplaceMe_.id;
+        Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
+        Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
+        return await _nostify.HandlePatch<_ReplaceMe_>(_ReplaceMe_Command.Update, req, context, userId, tenantId);
     }
 }
 

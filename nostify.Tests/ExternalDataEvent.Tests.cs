@@ -19,7 +19,7 @@ public class ExternalDataEventTests
 {
     private readonly List<TestProjection> _testProjections;
     private readonly DateTime _pointInTime;
-    private readonly List<Event> _testEvents;
+    private readonly List<IEvent> _testEvents;
     private List<TestProjectionForExternalData> testProjections;
 
     public ExternalDataEventTests()
@@ -37,7 +37,7 @@ public class ExternalDataEventTests
         };
 
         // Create test events - some before pointInTime, some after
-        _testEvents = new List<Event>
+        _testEvents = new List<IEvent>
         {
             new Event { aggregateRootId = testId1, timestamp = _pointInTime.AddMinutes(-30), command = new NostifyCommand("TestCommand1") },
             new Event { aggregateRootId = testId1, timestamp = _pointInTime.AddMinutes(30), command = new NostifyCommand("TestCommand2") }, // After pointInTime
@@ -136,13 +136,13 @@ public class ExternalDataEventTests
         // Test that results from multiple services are properly combined
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") },
             new Event { aggregateRootId = testProjections[1].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("Service1Command2") }
         };
         
-        var service2Events = new List<Event>
+        var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[0].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-20), command = new NostifyCommand("Service2Command") },
             new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-15), command = new NostifyCommand("Service2Command2") }
@@ -194,13 +194,13 @@ public class ExternalDataEventTests
         // Test that services returning no events don't affect other services' results
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") }
         };
         
-        var service2Events = new List<Event>(); // Empty results
-        var service3Events = new List<Event>
+        var service2Events = new List<IEvent>(); // Empty results
+        var service3Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-15), command = new NostifyCommand("Service3Command") }
         };
@@ -236,7 +236,7 @@ public class ExternalDataEventTests
         // Test that HTTP errors from one service don't prevent other services from working
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") }
         };
@@ -269,13 +269,13 @@ public class ExternalDataEventTests
         // Arrange
         var pointInTime = DateTime.UtcNow.AddMinutes(-20);
         
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = pointInTime.AddMinutes(-10), command = new NostifyCommand("BeforeFilter") }, // Before pointInTime
             new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = pointInTime.AddMinutes(10), command = new NostifyCommand("AfterFilter") }   // After pointInTime - should be filtered out
         };
         
-        var service2Events = new List<Event>
+        var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = pointInTime.AddMinutes(-5), command = new NostifyCommand("BeforeFilter2") }, // Before pointInTime
             new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = pointInTime.AddMinutes(15), command = new NostifyCommand("AfterFilter2") }  // After pointInTime - should be filtered out
@@ -318,12 +318,12 @@ public class ExternalDataEventTests
         // Arrange
         var pointInTime = DateTime.SpecifyKind(DateTime.UtcNow.AddMinutes(-20), DateTimeKind.Utc);
         
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.SpecifyKind(pointInTime.AddMinutes(-10), DateTimeKind.Utc), command = new NostifyCommand("Service1Event") }
         };
         
-        var service2Events = new List<Event>
+        var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.SpecifyKind(pointInTime.AddMinutes(-5), DateTimeKind.Utc), command = new NostifyCommand("Service2Event") }
         };
@@ -369,12 +369,12 @@ public class ExternalDataEventTests
         // Test that multiple service calls are executed in parallel for performance
         
         // Arrange
-        var service1Events = new List<Event>
+        var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") }
         };
         
-        var service2Events = new List<Event>
+        var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("Service2Command") }
         };
@@ -418,7 +418,7 @@ public class ExternalDataEventTests
         
         for (int i = 0; i < numberOfServices; i++)
         {
-            var serviceEvents = new List<Event>
+            var serviceEvents = new List<IEvent>
             {
                 new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30 + i), command = new NostifyCommand($"Service{i}Command") }
             };
@@ -501,7 +501,7 @@ public class ExternalDataEventTests
         var projectionsToInit = new List<TestProjection> { projectionWithEvents, projectionWithoutEvents };
         
         // Create events only for the first projection
-        var eventsForFirstProjectionOnly = new List<Event>
+        var eventsForFirstProjectionOnly = new List<IEvent>
         {
             new Event { aggregateRootId = projectionWithEvents.id, timestamp = DateTime.UtcNow.AddHours(-1), command = new NostifyCommand("TestCommand") }
         };
@@ -589,7 +589,7 @@ public class ExternalDataEventTests
         var pointInTimeBeforeAllEvents = _pointInTime.AddHours(-2); // Before all test events
         
         // Return empty list from mock handler to simulate no events found
-        var mockHandler = new MockHttpMessageHandler(new List<Event>());
+        var mockHandler = new MockHttpMessageHandler(new List<IEvent>());
         var httpClient = new HttpClient(mockHandler);
         var url = "https://test.example.com/events";
 
@@ -635,7 +635,7 @@ public class ExternalDataEventTests
             where foreignId.HasValue
             let eventList = filteredEvents[foreignId!.Value].ToList()
             where eventList.Any() // This filters out empty event lists
-            select new ExternalDataEvent(p.id, eventList)
+            select new ExternalDataEvent(p.id, eventList.Cast<Event>().ToList())
         ).ToList();
         
         // Assert
@@ -689,12 +689,12 @@ public class TestExpenditure
 // Enhanced mock HTTP message handler for testing
 public class MockHttpMessageHandler : HttpMessageHandler
 {
-    private readonly List<Event> _eventsToReturn;
+    private readonly List<IEvent> _eventsToReturn;
     public string RequestContent { get; private set; } = string.Empty;
 
-    public MockHttpMessageHandler(List<Event>? eventsToReturn = null)
+    public MockHttpMessageHandler(List<IEvent>? eventsToReturn = null)
     {
-        _eventsToReturn = eventsToReturn ?? new List<Event>();
+        _eventsToReturn = eventsToReturn ?? new List<IEvent>();
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
@@ -743,11 +743,11 @@ public class MockHttpMessageHandler : HttpMessageHandler
 /// </summary>
 public class MultiServiceMockHttpHandler : HttpMessageHandler
 {
-    private readonly Dictionary<string, List<Event>> _serviceEvents = new();
+    private readonly Dictionary<string, List<IEvent>> _serviceEvents = new();
     private readonly Dictionary<string, (HttpStatusCode statusCode, string message)> _serviceErrors = new();
     public Dictionary<string, string> RequestContents { get; } = new();
 
-    public void AddService(string url, List<Event> eventsToReturn)
+    public void AddService(string url, List<IEvent> eventsToReturn)
     {
         _serviceEvents[url] = eventsToReturn;
     }
@@ -839,10 +839,10 @@ public class MultiServiceMockHttpHandler : HttpMessageHandler
 /// </summary>
 public class TimedMockHttpHandler : HttpMessageHandler
 {
-    private readonly Dictionary<string, (List<Event> events, TimeSpan delay)> _serviceData = new();
+    private readonly Dictionary<string, (List<IEvent> events, TimeSpan delay)> _serviceData = new();
     public Dictionary<string, string> RequestContents { get; } = new();
 
-    public void AddService(string url, List<Event> eventsToReturn, TimeSpan delay)
+    public void AddService(string url, List<IEvent> eventsToReturn, TimeSpan delay)
     {
         _serviceData[url] = (eventsToReturn, delay);
     }

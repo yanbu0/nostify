@@ -118,7 +118,7 @@ public class Event : IEvent
     public Guid id { get; set; }
 
     /// <inheritdoc />
-    public NostifyCommand command { get; set; }  //This is an object because otherwise newtonsoft.json pukes creating an NostifyCommand
+    public NostifyCommand command { get; set; }
 
     /// <inheritdoc />
     public Guid aggregateRootId { get; set; }

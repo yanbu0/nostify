@@ -30,6 +30,21 @@ public class ErrorCommand : NostifyCommand
     public static ErrorCommand BulkApplyAndPersist = new ErrorCommand("Error_BulkApplyAndPersist", false);
 
     /// <summary>
+    /// Handle Projection Error
+    /// </summary>
+    public static ErrorCommand HandleProjection = new ErrorCommand("Error_HandleProjection", false);
+
+    /// <summary>
+    /// Handle Aggregate Event Error
+    /// </summary>
+    public static ErrorCommand HandleAggregateEvent = new ErrorCommand("Error_HandleAggregateEvent", false);
+
+    /// <summary>
+    /// Handle Multi Apply Event Error
+    /// </summary>
+    public static ErrorCommand HandleMultiApplyEvent = new ErrorCommand("Error_HandleMultiApplyEvent", false);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ErrorCommand"/> class.
     /// </summary>
     /// <param name="name">The name of the error command.</param>

@@ -20,13 +20,13 @@ public class Delete_ReplaceMe_
     [Function(nameof(Delete_ReplaceMe_))]
     public async Task<Guid> Run(
         [HttpTrigger("delete", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
+        FunctionContext context,
         Guid aggregateId,
         ILogger log)
     {
-        IEvent pe = new EventFactory().CreateNullPayloadEvent(_ReplaceMe_Command.Delete, aggregateId);
-        await _nostify.PersistEventAsync(pe);
-
-        return aggregateId;
+        Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
+        Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
+        return await _nostify.HandleDelete<_ReplaceMe_>(_ReplaceMe_Command.Delete, context, userId, tenantId);
     }
 }
 

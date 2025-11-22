@@ -85,7 +85,7 @@ public interface INostify
     /// <param name="batchSize">Optional. Number of projections to update in a batch. Default is 100.</param>
     /// <typeparam name="P">The type of the Nostify object.</typeparam>
     /// <returns>The nostify objects after Events are Applied</returns>
-    public Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new();
+    public Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new();
 
     ///<summary>
     ///Applies and persists a bulk array of events from Kafka to the specified container.
@@ -100,7 +100,8 @@ public interface INostify
     public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new();
 
     ///<summary>
-    ///Writes event to event store
+    /// Persist all events in bulk, with optional retry and error handling. 
+    /// This will write to the undeliverable events container if any events fail to persist, and will retry if allowed.
     ///</summary>        
     ///<param name="events">Events to apply and persist in event store</param>
     ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
@@ -266,6 +267,6 @@ public interface INostify
     ///Init all non-initialized projections in the container.  Will requery all needed data from all external services by calling InitAsync  
     ///</summary>
     /// <param name="maxloopSize">Maximum size of loops to check for uninitialized projections. Defaults to 10.</param>
-    public Task InitAllUninitializedAsync<P>(int maxloopSize = 10) where P : NostifyObject, IProjection, IHasExternalData<P>, new();
+    public Task InitAllUninitializedAsync<P>(int maxloopSize = 100) where P : NostifyObject, IProjection, IHasExternalData<P>, new();
 
 }

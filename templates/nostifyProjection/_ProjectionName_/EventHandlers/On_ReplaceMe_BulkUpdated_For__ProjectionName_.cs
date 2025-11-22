@@ -1,0 +1,43 @@
+using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
+using nostify;
+using Newtonsoft.Json;
+using Microsoft.Azure.Functions.Worker;
+using Newtonsoft.Json.Linq;
+
+namespace _ReplaceMe__Service;
+
+public class On_ReplaceMe_BulkUpdatedFor__ProjectionName_
+{
+    private readonly INostify _nostify;
+    private readonly HttpClient _httpClient;
+    
+    public On_ReplaceMe_BulkUpdatedFor__ProjectionName_(INostify nostify, HttpClient httpClient)
+    {
+        this._nostify = nostify;
+        _httpClient = httpClient;
+    }
+
+    [Function(nameof(On_ReplaceMe_BulkUpdatedFor__ProjectionName_))]
+    public async Task Run([KafkaTrigger("BrokerList",
+                "BulkUpdate__ReplaceMe_",
+                ConsumerGroup = "_ProjectionName_",
+//-:cnd:noEmit
+                #if DEBUG
+                Protocol = BrokerProtocol.NotSet,
+                AuthenticationMode = BrokerAuthenticationMode.NotSet,
+                #else
+                Username = "KafkaApiKey",
+                Password = "KafkaApiSecret",
+                Protocol =  BrokerProtocol.SaslSsl,
+                AuthenticationMode = BrokerAuthenticationMode.Plain,
+                #endif
+//+:cnd:noEmit
+                IsBatched = true)] string[] events,
+        ILogger log)
+    {
+        await DefaultEventHandlers.HandleProjectionBulkUpdateEvent<_ProjectionName_>(_nostify, events);
+    }
+    
+}
+

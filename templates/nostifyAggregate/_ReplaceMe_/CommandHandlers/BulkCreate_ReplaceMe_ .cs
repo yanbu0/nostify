@@ -24,24 +24,13 @@ public class BulkCreate_ReplaceMe_
     [Function(nameof(BulkCreate_ReplaceMe_))]
     public async Task<int> Run(
         [HttpTrigger("post", Route = "_ReplaceMe_/BulkCreate")] HttpRequestData req,
+        FunctionContext context,
         ILogger log)
     {
-        List<dynamic> new_ReplaceMe_List = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync()) ?? new List<dynamic>();
-        List<IEvent> peList = new List<IEvent>();
+        Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
+        Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
 
-        new_ReplaceMe_List.ForEach(e =>
-        {
-            //Need new id for aggregate root since its new
-            Guid newId = Guid.NewGuid();
-            e.id = newId;
-            
-            IEvent pe = new EventFactory().Create<_ReplaceMe_>(_ReplaceMe_Command.BulkCreate, newId, e, Guid.Empty, Guid.Empty); //Empty guids should be replaced with user id and tenant id respectively
-            peList.Add(pe);
-        });
-
-        await _nostify.BulkPersistEventAsync(peList);
-
-        return new_ReplaceMe_List.Count;
+        return await _nostify.HandleBulkCreate<_ReplaceMe_>(_ReplaceMe_Command.Create, req, userId, tenantId);
     }
 }
 

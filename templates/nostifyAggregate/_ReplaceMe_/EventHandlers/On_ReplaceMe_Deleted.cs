@@ -34,23 +34,7 @@ public class On_ReplaceMe_Deleted
                 ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
-        Event? newEvent = triggerEvent.GetEvent();
-        try
-        {
-            if (newEvent != null)
-            {
-                //Update aggregate current state projection
-                Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
-                await currentStateContainer.ApplyAndPersistAsync<_ReplaceMe_>(newEvent);
-            }
-        }
-        catch (Exception e)
-        {
-            await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_Deleted), e.Message, newEvent);
-        }
-
-        
-        
+        await DefaultEventHandlers.HandleAggregateEvent<_ReplaceMe_>(_nostify, triggerEvent);
     }
 }
 

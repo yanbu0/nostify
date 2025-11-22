@@ -10,6 +10,9 @@ using Newtonsoft.Json;
 
 namespace nostify;
 
+/// <summary>
+/// Extension methods for IQueryable and FeedIterator to simplify Cosmos DB query operations
+/// </summary>
 public static class QueryExtensions
 {
     ///<summary>
