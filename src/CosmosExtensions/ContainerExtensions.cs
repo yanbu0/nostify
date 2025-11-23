@@ -276,6 +276,17 @@ public static class ContainerExtensions
     }
 
     ///<summary>
+    ///Applies multiple an Event and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
+    ///</summary>
+    ///<param name="container">Container where the projection to update lives</param>
+    ///<param name="newEvent">The Event to apply and persist.</param>
+    ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent, Guid projectionBaseAggregateId) where T : NostifyObject, new()
+    {
+        return await container.ApplyAndPersistAsync<T>(new List<IEvent>() { newEvent }, newEvent.partitionKey.ToPartitionKey(), projectionBaseAggregateId);
+    }
+
+    ///<summary>
     ///Applies multiple Events and updates this container. Uses existence of an "isNew" property to key off if is create or not. Primarily used in Event Handlers.
     ///</summary>
     ///<param name="container">Container where the projection to update lives</param>

@@ -20,18 +20,32 @@ public static class DefaultEventHandlers
     /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="triggerEvent">The Kafka trigger event containing the event data.</param>
+    /// <param name="idToApplyToPropertyName">Optional property name in the event payload to extract the projection base aggregate ID from.
+    /// Will apply to this aggregate rather than the aggregateRootId of the Event. Use when Events can have effects on other aggregates.</param>
     /// <param name="eventTypeFilter">Optional filter to specify which event type to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleAggregateEvent<T>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? eventTypeFilter = null) where T : NostifyObject, IAggregate, new()
+    public async static Task HandleAggregateEvent<T>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? idToApplyToPropertyName = null, string? eventTypeFilter = null) where T : NostifyObject, IAggregate, new()
     {
         Event? newEvent = triggerEvent.GetEvent(eventTypeFilter);
         try
         {
             if (newEvent != null)
             {
+                // If idToApplyToPropertyName is provided, use it to determine the projectionBaseAggregateId
+                Guid? projectionBaseAggregateId = null;
+                if (!string.IsNullOrEmpty(idToApplyToPropertyName))
+                {
+                    var payloadDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(JsonConvert.SerializeObject(newEvent.payload));
+                    if (payloadDict != null && payloadDict.TryGetValue(idToApplyToPropertyName, out var idValue) && Guid.TryParse(idValue.ToString(), out var parsedId))
+                    {
+                        projectionBaseAggregateId = parsedId;
+                    }
+                }
                 //Update aggregate current state projection
                 Container currentStateContainer = await nostify.GetCurrentStateContainerAsync<T>();
-                await currentStateContainer.ApplyAndPersistAsync<T>(newEvent);
+                Task doAppyly = projectionBaseAggregateId.HasValue ? currentStateContainer.ApplyAndPersistAsync<T>(newEvent, projectionBaseAggregateId.Value)
+                    : currentStateContainer.ApplyAndPersistAsync<T>(newEvent);
+                await doAppyly;
             }                           
         }
         catch (Exception e)
@@ -99,18 +113,32 @@ public static class DefaultEventHandlers
     /// <param name="httpClient">The HTTP client used to fetch external data for projection initialization. 
     /// If null will not fetch any external data. Use null when no external data is needed to improve performance and
     /// lower resource utilization.</param>
+    /// <param name="idToApplyToPropertyName">Optional property name in the event payload to extract the projection base aggregate ID from.
+    /// Will apply to this projection rather than the aggregateRootId of the Event. Use when Events can have effects on other projections.</param>
     /// <param name="eventTypeFilter">Optional filter to specify which event type to process.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, HttpClient? httpClient, string? eventTypeFilter = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task HandleProjectionEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, HttpClient? httpClient, string? idToApplyToPropertyName = null, string? eventTypeFilter = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         Event? newEvent = triggerEvent.GetEvent(eventTypeFilter); 
         try
         {
             if (newEvent != null)
             {
+                // If idToApplyToPropertyName is provided, use it to determine the projectionBaseAggregateId
+                Guid? projectionBaseAggregateId = null;
+                if (!string.IsNullOrEmpty(idToApplyToPropertyName))
+                {
+                    var payloadDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(JsonConvert.SerializeObject(newEvent.payload));
+                    if (payloadDict != null && payloadDict.TryGetValue(idToApplyToPropertyName, out var idValue) && Guid.TryParse(idValue.ToString(), out var parsedId))
+                    {
+                        projectionBaseAggregateId = parsedId;
+                    }
+                }
                 //Update aggregate current state projection
                 Container currentStateContainer = await nostify.GetProjectionContainerAsync<P>();
-                P projection = await currentStateContainer.ApplyAndPersistAsync<P>(newEvent);
+                P projection = projectionBaseAggregateId.HasValue 
+                    ? await currentStateContainer.ApplyAndPersistAsync<P>(newEvent, projectionBaseAggregateId.Value)
+                    : await currentStateContainer.ApplyAndPersistAsync<P>(newEvent);
                 //Initialize projection with external data
                 await projection.InitAsync(nostify, httpClient);
             }                           
