@@ -98,6 +98,10 @@
   - Custom partition key filtering for flexible query scenarios
   - Returns `IPagedResult<T>` with items and total count for UI pagination
   - Built-in SQL injection prevention for filter and sort columns
+  - **Filtered Query Extensions**: New `FilteredQuery()` extension methods for creating partition-scoped LINQ queries on Cosmos DB containers
+  - Overloads for Guid tenant IDs, string partition keys, and PartitionKey objects
+  - Optional filter expressions for client-side filtering within partitions
+  - Simplifies common query patterns with automatic partition key configuration
 - 3.9.0
   - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
   - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
@@ -1388,6 +1392,58 @@ IPagedResult<YourType> result = await container.PagedQueryAsync<YourType>(
 - `sortColumn` (string?) - Column to sort by (nullable, no sorting if null)
 - `sortDirection` (string?) - "asc" or "desc" (nullable, defaults to "asc")
 - `filters` (List<KeyValuePair<string, string>>?) - Key-value pairs for equality filtering
+
+#### Filtered Queries for Partition-Scoped LINQ
+
+The `FilteredQuery()` extension methods simplify creating LINQ queries that are scoped to a specific partition. This is useful for efficient queries within a single tenant or partition key.
+
+**Tenant-Based Filtering:**
+
+```C#
+// For types that implement ITenantFilterable
+IQueryable<YourAggregate> query = container.FilteredQuery<YourAggregate>(
+    tenantId,
+    item => item.status == "active"
+);
+
+// Use LINQ to further refine
+var results = await query
+    .Where(x => x.createdDate > DateTime.UtcNow.AddDays(-7))
+    .OrderByDescending(x => x.createdDate)
+    .ToListAsync();
+```
+
+**String Partition Key Filtering:**
+
+```C#
+// Query with string partition key
+IQueryable<YourType> query = container.FilteredQuery<YourType>(
+    "partitionKeyValue",
+    item => item.amount > 100
+);
+
+var results = await query.ReadAllAsync();
+```
+
+**PartitionKey Object Filtering:**
+
+```C#
+// Query with PartitionKey object for maximum flexibility
+var partitionKey = new PartitionKey("someValue");
+IQueryable<YourType> query = container.FilteredQuery<YourType>(
+    partitionKey
+);
+
+// No filter expression - returns all items in partition
+var allInPartition = await query.ReadAllAsync();
+```
+
+**Features:**
+- Three overloads: Guid tenant ID, string partition key, or PartitionKey object
+- Optional filter expression for client-side filtering
+- Returns standard `IQueryable<T>` for LINQ operations
+- Automatically configures partition key in QueryRequestOptions
+- Efficient single-partition queries
 
 #### Safe Patch Operations
 

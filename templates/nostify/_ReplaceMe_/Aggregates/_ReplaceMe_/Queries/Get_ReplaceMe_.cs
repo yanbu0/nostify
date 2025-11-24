@@ -25,11 +25,10 @@ public class Get_ReplaceMe_
         Guid aggregateId,
         ILogger log)
     {
+        Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
         _ReplaceMe_ retObj = await currentStateContainer
-                            .GetItemLinqQueryable<_ReplaceMe_>()
-                            .Where(x => x.id == aggregateId)
-                            .FirstOrDefaultAsync();
+                            .ReadItemAsync<_ReplaceMe_>(aggregateId.ToString(), new PartitionKey(tenantId.ToString()));
                             
         return retObj;
     }

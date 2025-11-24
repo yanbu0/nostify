@@ -25,11 +25,10 @@ public class Get_ProjectionName_
         FunctionContext context,
         ILogger log)
     {
+        Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
         Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
         _ProjectionName_ retObj = await projectionContainer
-                            .GetItemLinqQueryable<_ProjectionName_>()
-                            .Where(x => x.id == aggregateId)
-                            .FirstOrDefaultAsync();
+                            .ReadItemAsync<_ProjectionName_>(aggregateId.ToString(), new PartitionKey(tenantId.ToString()));
                             
         return retObj;
     }

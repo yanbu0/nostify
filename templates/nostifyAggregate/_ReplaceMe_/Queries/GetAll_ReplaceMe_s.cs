@@ -24,9 +24,10 @@ public class GetAll_ReplaceMe_s
         FunctionContext context,
         ILogger log)
     {
+        Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
         List<_ReplaceMe_> allList = await currentStateContainer
-                            .GetItemLinqQueryable<_ReplaceMe_>()
+                            .FilteredQuery<_ReplaceMe_>(tenantId)
                             .ReadAllAsync();
 
 

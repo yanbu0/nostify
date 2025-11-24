@@ -24,9 +24,10 @@ public class GetAll_ProjectionName_s
         FunctionContext context,
         ILogger log)
     {
+        Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
         Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();
         List<_ProjectionName_> allList = await projectionContainer
-                            .GetItemLinqQueryable<_ProjectionName_>()
+                            .FilteredQuery<_ProjectionName_>(tenantId)
                             .ReadAllAsync();
 
 
