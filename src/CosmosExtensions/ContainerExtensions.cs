@@ -221,7 +221,7 @@ public static class ContainerExtensions
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
-                Console.WriteLine($"Aggregate not found {idToMatch}");
+                Console.Error.WriteLine($"Aggregate not found {idToMatch}");
                 nosObjToUpdate = null;
             }
         }
