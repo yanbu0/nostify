@@ -30,7 +30,7 @@ public class BulkUpdate_ReplaceMe_
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
 
-        return await _nostify.HandleBulkUpdate<_ReplaceMe_>(_ReplaceMe_Command.Update, req, userId, tenantId);
+        return await DefaultCommandHandler.HandleBulkUpdate<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Update, req, userId, tenantId);
     }
 }
 
