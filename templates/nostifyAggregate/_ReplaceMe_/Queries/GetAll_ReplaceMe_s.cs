@@ -26,6 +26,7 @@ public class GetAll_ReplaceMe_s
     {
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
+        // FilteredQuery restricts the query to a single partition key, which is ideal for Cosmos DB performance
         List<_ReplaceMe_> allList = await currentStateContainer
                             .FilteredQuery<_ReplaceMe_>(tenantId)
                             .ReadAllAsync();
