@@ -85,14 +85,18 @@
   - `HandleBulkUpdate<T>()` - Updates multiple aggregate roots from array with id properties
   - `HandleBulkDelete<T>()` - Deletes multiple aggregate roots from array of IDs or list of GUIDs
   - Simplifies Azure Function HTTP trigger implementations with consistent patterns
-  - **Default Event Handlers**: New static methods for bulk operation handlers for aggregates and projections
+  - **Default Event Handlers**: New static methods for handling events from Kafka/Event Hubs triggers
+  - `HandleAggregateEvent<T>()` - Applies single event to aggregate current state with optional event type filtering and custom ID targeting
+  - `HandleProjectionEvent<P>()` - Applies single event to projection with external data initialization, optional event type filtering and custom ID targeting
+  - `HandleMultiApplyEvent<P>()` - Applies single event to multiple projection instances matching a filter expression in batches
   - `HandleAggregateBulkCreateEvent<T>()` - Bulk creation from Kafka trigger events with optional event type filtering
   - `HandleAggregateBulkUpdateEvent<T>()` - Bulk updates using ApplyAndPersistAsync with optional event type filtering
   - `HandleAggregateBulkDeleteEvent<T>()` - Bulk deletion from events with optional event type filtering
   - `HandleProjectionBulkCreateEvent<P>()` - Bulk projection creation with optional event type filtering
   - `HandleProjectionBulkUpdateEvent<P>()` - Bulk projection updates using ApplyAndPersistAsync with optional event type filtering
   - `HandleProjectionBulkDeleteEvent<P>()` - Bulk projection deletion with optional event type filtering
-  - All bulk handlers support 3 overloads: no filter, single event type filter, or list of event type filters
+  - All handlers support 3 overloads: no filter, single event type filter, or list of event type filters
+  - Single event handlers support `idToApplyToPropertyName` parameter for cross-aggregate event effects
   - **Paged Query Extensions**: New `PagedQueryAsync()` extension methods for Cosmos DB containers with server-side filtering, sorting, and pagination
   - Supports tenant-based filtering with `ITenantFilterable` interface
   - Custom partition key filtering for flexible query scenarios
@@ -1043,6 +1047,94 @@ Use separate topics when:
 - Maximum throughput is required (independent scaling per command)
 - Complete isolation between command types is needed
 - Different retention policies are required per command type
+
+#### Single Event Handlers
+
+The `DefaultEventHandlers` class provides three primary methods for handling individual events:
+
+**HandleAggregateEvent** - Applies events to aggregate current state projections:
+
+```C#
+[Function(nameof(OnTestCreated))]
+public async Task Run([KafkaTrigger("BrokerList", "Create_Test", ...)] NostifyKafkaTriggerEvent triggerEvent, ILogger log)
+{
+    // Basic usage - applies event to aggregate identified by event.aggregateRootId
+    await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent);
+}
+
+// With event type filtering
+await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent, eventTypeFilter: "Create_Test");
+
+// With custom ID targeting - applies event to a different aggregate than event.aggregateRootId
+await DefaultEventHandlers.HandleAggregateEvent<Test>(
+    _nostify, 
+    triggerEvent, 
+    idToApplyToPropertyName: "targetAggregateId",  // Property name in event payload containing target ID
+    eventTypeFilter: "Update_Test"
+);
+```
+
+**HandleProjectionEvent** - Applies events to projections with external data initialization:
+
+```C#
+[Function(nameof(OnTestCreated_For_TestProjection))]
+public async Task Run([KafkaTrigger("BrokerList", "Create_Test", ...)] NostifyKafkaTriggerEvent triggerEvent, ILogger log)
+{
+    // With HttpClient for external data fetching
+    await DefaultEventHandlers.HandleProjectionEvent<TestProjection>(
+        _nostify, 
+        triggerEvent, 
+        _httpClient
+    );
+}
+
+// Without external data (better performance when not needed)
+await DefaultEventHandlers.HandleProjectionEvent<TestProjection>(
+    _nostify, 
+    triggerEvent, 
+    httpClient: null,
+    eventTypeFilter: "Create_Test"
+);
+
+// With custom ID targeting
+await DefaultEventHandlers.HandleProjectionEvent<TestProjection>(
+    _nostify, 
+    triggerEvent, 
+    _httpClient,
+    idToApplyToPropertyName: "targetProjectionId",
+    eventTypeFilter: "Update_Test"
+);
+```
+
+**HandleMultiApplyEvent** - Applies a single event to multiple projection instances in batches:
+
+```C#
+[Function(nameof(OnAggregateUpdated_For_RelatedProjections))]
+public async Task Run([KafkaTrigger("BrokerList", "Update_Aggregate", ...)] NostifyKafkaTriggerEvent triggerEvent, ILogger log)
+{
+    // Applies event to all projections where foreignAggregateId matches event.aggregateRootId
+    await DefaultEventHandlers.HandleMultiApplyEvent<RelatedProjection>(
+        _nostify,
+        triggerEvent,
+        foreignIdSelector: projection => projection.foreignAggregateId,
+        eventTypeFilter: "Update_Aggregate",
+        batchSize: 100  // Optional batch size for processing
+    );
+}
+```
+
+**When to Use Each Handler:**
+
+- **HandleAggregateEvent**: Standard aggregate current state updates (Create, Update, Delete)
+- **HandleProjectionEvent**: Single projection updates that may need external data from other services
+- **HandleMultiApplyEvent**: When a single aggregate event affects multiple related projections (e.g., updating all orders when a customer is updated)
+
+**idToApplyToPropertyName Feature:**
+
+The `idToApplyToPropertyName` parameter allows events to affect entities other than the event's `aggregateRootId`. Use cases:
+- Cross-aggregate effects (e.g., a payment event affecting both Order and Invoice aggregates)
+- Projection updates from different aggregate events
+- Complex domain logic where events have cascading effects
 
 ### Bulk Operations
 
