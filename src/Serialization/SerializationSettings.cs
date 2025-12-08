@@ -42,7 +42,7 @@ public static class SerializationSettings
                 settings.Converters.Add(new InterfaceConverter<ISaga, Saga>());
                 settings.Converters.Add(new InterfaceConverter<ISagaStep, SagaStep>());
                 settings.ContractResolver = new CamelCasePropertyNamesContractResolver();
-                settings.NullValueHandling = NullValueHandling.Ignore;
+                settings.NullValueHandling = NullValueHandling.Include;
                 return settings;
             }
         }

@@ -134,7 +134,7 @@ public static class DefaultEventHandlers
                         projectionBaseAggregateId = parsedId;
                     }
                 }
-                //Update aggregate current state projection
+                //Update projection
                 Container currentStateContainer = await nostify.GetProjectionContainerAsync<P>();
                 P projection = projectionBaseAggregateId.HasValue 
                     ? await currentStateContainer.ApplyAndPersistAsync<P>(newEvent, projectionBaseAggregateId.Value)

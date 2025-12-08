@@ -1471,6 +1471,29 @@ IPagedResult<YourType> result = await container.PagedQueryAsync<YourType>(
 );
 ```
 
+**Chaining with LINQ Queries:**
+
+```C#
+// Apply custom LINQ filters before pagination
+var tableState = new TableStateChange
+{
+    page = 1,
+    pageSize = 20,
+    sortColumn = "createdDate",
+    sortDirection = "desc"
+};
+
+IPagedResult<YourAggregate> result = await container
+    .GetItemLinqQueryable<YourAggregate>()
+    .Where(x => x.status == "active" && x.amount > 100)
+    .PagedQueryAsync(tableState);
+
+// Or with FilteredQuery for partition-scoped queries
+IPagedResult<YourAggregate> result = await container
+    .FilteredQuery<YourAggregate>(tenantId, x => x.category == "premium")
+    .PagedQueryAsync(tableState);
+```
+
 **Features:**
 - Server-side pagination with `OFFSET`/`LIMIT` queries
 - Multiple filters with AND logic
