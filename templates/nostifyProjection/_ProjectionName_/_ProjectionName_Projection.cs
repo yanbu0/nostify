@@ -68,8 +68,6 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
             p => p.sameServiceAggregateExampleId,
             p => p.sameServiceAggregateExampleId2);
 
-        externalDataEvents.AddRange(externalDataEvents);
-
         // Get external data necessary to initialize projections here
         // To access data in other services, use httpClient and the EventRequest endpoint
         if (httpClient != null)
