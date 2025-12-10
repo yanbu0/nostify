@@ -69,6 +69,13 @@
 
 ### Updates
 
+- 4.0.2
+  - **Safe Patch Fix**: Fixed bug in `SafePatchItemAsync` that allowed attempting to patch the `id` property, which Cosmos DB does not allow. The method now automatically removes any `/id` patch operations before executing.
+  - **Typo Fix**: Fixed spelling error in `DefaultEventHandlers` (`doAppyly` → `doApply`)
+  - **Error Propagation**: `HandleAggregateEvent` now properly re-throws exceptions after logging to undeliverable events, allowing proper error handling upstream
+- 4.0.1
+  - **Bug Fix**: Fixed serialization settings issue in default bulk create command handler
+  - **Template Fix**: Fixed projection template bug (#119)
 - 4.0.0
   - **Azure Event Hubs Support**: Added `WithEventHubs()` method to use during startup to enable using Azure Event Hubs as an alternative to Kafka for event messaging
   - Templates now have a flag `--eventhHubs true` or `-eh true` and will set things up for you. Default or false means to use Kafka.
