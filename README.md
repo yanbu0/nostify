@@ -106,7 +106,8 @@
   - Overloads for Guid tenant IDs, string partition keys, and PartitionKey objects
   - Optional filter expressions for client-side filtering within partitions
   - Simplifies common query patterns with automatic partition key configuration
-- 3.9.0
+  - ** Fixes null handling issue in 3.9.0 in default serialization settings **
+- 3.9.0 - Has a issue with default serialization null handling, do not use
   - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
   - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
   - **Improved Serialization**: Better handling of polymorphic types and interfaces in Cosmos DB operations
