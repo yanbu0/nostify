@@ -43,9 +43,9 @@ public static class DefaultEventHandlers
                 }
                 //Update aggregate current state projection
                 Container currentStateContainer = await nostify.GetCurrentStateContainerAsync<T>();
-                Task doAppyly = projectionBaseAggregateId.HasValue ? currentStateContainer.ApplyAndPersistAsync<T>(newEvent, projectionBaseAggregateId.Value)
+                Task doApply = projectionBaseAggregateId.HasValue ? currentStateContainer.ApplyAndPersistAsync<T>(newEvent, projectionBaseAggregateId.Value)
                     : currentStateContainer.ApplyAndPersistAsync<T>(newEvent);
-                await doAppyly;
+                await doApply;
             }                           
         }
         catch (Exception e)
@@ -54,6 +54,7 @@ public static class DefaultEventHandlers
                 e.Message, 
                 newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, Guid.Empty)
                 );
+            throw;
         }
     }
 
