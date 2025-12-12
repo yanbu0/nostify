@@ -426,6 +426,11 @@ public static class ContainerExtensions
                 modifiablePatchOps.Remove(idPatchOp);
                 patchOperations = modifiablePatchOps;
             }
+            // If all operations were filtered out (e.g., only 'id' was being patched), return early with success
+            if (patchOperations == null || patchOperations.Count == 0)
+            {
+                return PatchItemResult.SuccessResult(id, partitionKey);
+            }
             await container.PatchItemAsync<T>(id, partitionKey, patchOperations);
             return PatchItemResult.SuccessResult(id, partitionKey);
         }
