@@ -418,6 +418,19 @@ public static class ContainerExtensions
     {
         try
         {
+            //Remove 'id' from patch operations if exists, as it cannot be patched
+            var idPatchOp = patchOperations.FirstOrDefault(po => po.Path.Equals("/id", StringComparison.OrdinalIgnoreCase));
+            if (idPatchOp != null)
+            {
+                var modifiablePatchOps = patchOperations.ToList();
+                modifiablePatchOps.Remove(idPatchOp);
+                patchOperations = modifiablePatchOps;
+            }
+            // If all operations were filtered out (e.g., only 'id' was being patched), return early with success
+            if (patchOperations == null || patchOperations.Count == 0)
+            {
+                return PatchItemResult.SuccessResult(id, partitionKey);
+            }
             await container.PatchItemAsync<T>(id, partitionKey, patchOperations);
             return PatchItemResult.SuccessResult(id, partitionKey);
         }
