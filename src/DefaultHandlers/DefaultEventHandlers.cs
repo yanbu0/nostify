@@ -101,6 +101,7 @@ public static class DefaultEventHandlers
                 e.Message, 
                 newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleMultiApplyEvent, Guid.Empty)
                 );
+            throw;
         }
     }
 
@@ -150,6 +151,7 @@ public static class DefaultEventHandlers
                 e.Message, 
                 newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
                 );
+            throw;
         }
     }
 
@@ -205,6 +207,7 @@ public static class DefaultEventHandlers
                     @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
                     );
             });
+            throw;
         }
     }
 
@@ -261,6 +264,7 @@ public static class DefaultEventHandlers
                     @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
                     );
             });
+            throw;
         }
     }
 
@@ -333,6 +337,7 @@ public static class DefaultEventHandlers
                     @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, Guid.Empty)
                     );
             });
+            throw;
         }
     }
 
@@ -413,6 +418,7 @@ public static class DefaultEventHandlers
                     @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
                     );
             });
+            throw;
         }
     }
 
@@ -468,6 +474,7 @@ public static class DefaultEventHandlers
                     @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, Guid.Empty)
                     );
             });
+            throw;
         }
     }
 
@@ -523,6 +530,7 @@ public static class DefaultEventHandlers
                     @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
                     );
             });
+            throw;
         }
     }
 }

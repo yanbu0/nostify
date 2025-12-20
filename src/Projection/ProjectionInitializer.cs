@@ -136,7 +136,7 @@ public class ProjectionInitializer : IProjectionInitializer
     ///<param name="httpClient">Reference to an HttpClient instance.</param>
     /// <param name="maxloopSize">Maximum size of loops to check for uninitialized projections. Defaults to 10.</param>
     /// <param name="pointInTime">Point in time to query external data up to. If null, queries current state.</param>
-    public async Task InitAllUninitialized<P>(INostify nostify, HttpClient? httpClient = null, int maxloopSize = 10, DateTime? pointInTime = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async Task InitAllUninitialized<P>(INostify nostify, HttpClient? httpClient = null, int maxloopSize = 100, DateTime? pointInTime = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         //Query for all projections in container where initialized == false
         Container projectionContainer = await nostify.GetProjectionContainerAsync<P>();

@@ -69,6 +69,20 @@
 
 ### Updates
 
+- 4.1.0
+  - **ExternalDataEventFactory**: New fluent builder pattern for gathering external data events during projection initialization
+    - `WithSameServiceIdSelectors()` - Add foreign key selectors for same-service event lookups
+    - `WithSameServiceListIdSelectors()` - Add list-based foreign key selectors for one-to-many relationships
+    - `WithEventRequestor()` / `AddEventRequestors()` - Add external HTTP service requestors for cross-service events
+    - `GetEventsAsync()` - Execute all configured requestors and combine results
+    - Supports both single Guid and `List<Guid>` foreign key patterns
+  - **IQueryExecutor Interface**: New abstraction for mocking Cosmos DB LINQ queries in unit tests
+    - `IQueryExecutor` - Interface defining `ReadAllAsync`, `FirstOrDefaultAsync`, and `FirstOrNewAsync`
+    - `CosmosQueryExecutor` - Production implementation using Cosmos SDK's `ToFeedIterator`
+    - `InMemoryQueryExecutor` - Test implementation for in-memory query execution without Cosmos emulator
+    - All `ExternalDataEvent.GetEventsAsync` methods now accept optional `IQueryExecutor` parameter
+    - `ExternalDataEventFactory` constructor accepts optional `IQueryExecutor` for testability
+  - **Enhanced Testability**: Query execution can now be fully mocked without requiring Cosmos DB emulator
 - 4.0.2
   - **Safe Patch Fix**: Fixed bug in `SafePatchItemAsync` that allowed attempting to patch the `id` property, which Cosmos DB does not allow. The method now automatically removes any `/id` patch operations before executing.
   - **Typo Fix**: Fixed spelling error in `DefaultEventHandlers` (`doAppyly` → `doApply`)
@@ -1612,6 +1626,226 @@ while (feedIterator.HasMoreResults)
 ### Testing Utilities
 
 The framework includes testing utilities to facilitate unit testing:
+
+#### IQueryExecutor for Mocking Cosmos Queries
+
+The `IQueryExecutor` interface allows you to mock Cosmos DB LINQ query execution in unit tests without requiring the Cosmos emulator. This is particularly useful for testing code that uses `ExternalDataEvent.GetEventsAsync` or `ExternalDataEventFactory`.
+
+**Interface Definition:**
+
+```csharp
+public interface IQueryExecutor
+{
+    Task<List<T>> ReadAllAsync<T>(IQueryable<T> query);
+    Task<T?> FirstOrDefaultAsync<T>(IQueryable<T> query);
+    Task<T> FirstOrNewAsync<T>(IQueryable<T> query) where T : new();
+}
+```
+
+**Production Usage (default behavior):**
+
+```csharp
+// CosmosQueryExecutor is used by default - no changes needed to existing code
+var events = await ExternalDataEvent.GetEventsAsync(
+    eventStore, 
+    projectionsToInit, 
+    p => p.foreignId);
+```
+
+**Unit Testing with InMemoryQueryExecutor:**
+
+```csharp
+[Fact]
+public async Task GetEventsAsync_ReturnsMatchingEvents()
+{
+    // Arrange - Create mock container with test events
+    var testEvents = new List<Event>
+    {
+        new Event
+        {
+            aggregateRootId = projection.foreignId,
+            timestamp = DateTime.UtcNow,
+            command = new NostifyCommand("TestCommand")
+        }
+    };
+
+    // Use CosmosTestHelpers to create a mock container
+    var mockContainer = CosmosTestHelpers.CreateMockContainerWithEvents(testEvents);
+    
+    var mockNostify = new Mock<INostify>();
+    mockNostify.Setup(n => n.GetEventStoreContainerAsync(It.IsAny<bool>()))
+        .ReturnsAsync(mockContainer.Object);
+
+    // Act - Pass InMemoryQueryExecutor to execute queries in-memory
+    var result = await ExternalDataEvent.GetEventsAsync(
+        mockContainer.Object,
+        projectionsToInit,
+        InMemoryQueryExecutor.Default,  // Use in-memory execution
+        pointInTime: null,
+        p => p.foreignId);
+
+    // Assert
+    Assert.Single(result);
+    Assert.Equal(projection.id, result[0].aggregateRootId);
+}
+```
+
+**Testing ExternalDataEventFactory:**
+
+```csharp
+[Fact]
+public async Task Factory_GetEventsAsync_ReturnsMatchingEvents()
+{
+    // Arrange
+    var testEvents = new List<Event> { /* ... test events ... */ };
+    var mockContainer = CosmosTestHelpers.CreateMockContainerWithEvents(testEvents);
+    
+    var mockNostify = new Mock<INostify>();
+    mockNostify.Setup(n => n.GetEventStoreContainerAsync(It.IsAny<bool>()))
+        .ReturnsAsync(mockContainer.Object);
+
+    // Create factory with InMemoryQueryExecutor for testing
+    var factory = new ExternalDataEventFactory<MyProjection>(
+        mockNostify.Object,
+        projectionsToInit,
+        httpClient: null,
+        pointInTime: null,
+        queryExecutor: InMemoryQueryExecutor.Default);  // Enable in-memory testing
+
+    factory.WithSameServiceIdSelectors(p => p.siteId, p => p.ownerId);
+    factory.WithSameServiceListIdSelectors(p => p.tagIds);
+
+    // Act
+    var result = await factory.GetEventsAsync();
+
+    // Assert
+    Assert.NotEmpty(result);
+}
+```
+
+**Testing Container Queries Directly:**
+
+When you need to test code that queries a Cosmos container directly (e.g., using `GetItemLinqQueryable`), you can use `CosmosTestHelpers` to create a mock container with test data:
+
+```csharp
+[Fact]
+public async Task QueryContainer_ReturnsFilteredResults()
+{
+    // Arrange - Create test data
+    var testProjections = new List<MyProjection>
+    {
+        new MyProjection { id = Guid.NewGuid(), name = "Active Item", isActive = true },
+        new MyProjection { id = Guid.NewGuid(), name = "Inactive Item", isActive = false },
+        new MyProjection { id = Guid.NewGuid(), name = "Another Active", isActive = true }
+    };
+
+    // Create mock container that returns test data as queryable
+    var mockContainer = CosmosTestHelpers.CreateMockContainerWithItems(testProjections);
+
+    // Act - Build and execute your query
+    var queryable = mockContainer.Object
+        .GetItemLinqQueryable<MyProjection>()
+        .Where(p => p.isActive);
+    
+    // Use InMemoryQueryExecutor to execute the query
+    var results = await InMemoryQueryExecutor.Default.ReadAllAsync(queryable);
+
+    // Assert
+    Assert.Equal(2, results.Count);
+    Assert.All(results, r => Assert.True(r.isActive));
+}
+```
+
+**Testing Complex Queries with Multiple Conditions:**
+
+```csharp
+[Fact]
+public async Task ComplexQuery_FiltersAndOrdersCorrectly()
+{
+    // Arrange
+    var now = DateTime.UtcNow;
+    var testEvents = new List<Event>
+    {
+        new Event { aggregateRootId = targetId, timestamp = now.AddDays(-1), command = new NostifyCommand("Create") },
+        new Event { aggregateRootId = targetId, timestamp = now.AddDays(-2), command = new NostifyCommand("Update") },
+        new Event { aggregateRootId = otherId, timestamp = now, command = new NostifyCommand("Create") }
+    };
+
+    var mockContainer = CosmosTestHelpers.CreateMockContainerWithEvents(testEvents);
+
+    // Act - Query with multiple filters
+    var queryable = mockContainer.Object
+        .GetItemLinqQueryable<Event>()
+        .Where(e => e.aggregateRootId == targetId)
+        .Where(e => e.timestamp < now)
+        .OrderBy(e => e.timestamp);
+
+    var results = await InMemoryQueryExecutor.Default.ReadAllAsync(queryable);
+
+    // Assert
+    Assert.Equal(2, results.Count);
+    Assert.True(results[0].timestamp < results[1].timestamp);  // Ordered correctly
+    Assert.All(results, e => Assert.Equal(targetId, e.aggregateRootId));
+}
+```
+
+**Testing FirstOrDefaultAsync:**
+
+```csharp
+[Fact]
+public async Task FindById_ReturnsMatchingItem()
+{
+    // Arrange
+    var targetId = Guid.NewGuid();
+    var testItems = new List<MyProjection>
+    {
+        new MyProjection { id = Guid.NewGuid(), name = "Other" },
+        new MyProjection { id = targetId, name = "Target" },
+        new MyProjection { id = Guid.NewGuid(), name = "Another" }
+    };
+
+    var mockContainer = CosmosTestHelpers.CreateMockContainerWithItems(testItems);
+
+    // Act
+    var queryable = mockContainer.Object
+        .GetItemLinqQueryable<MyProjection>()
+        .Where(p => p.id == targetId);
+
+    var result = await InMemoryQueryExecutor.Default.FirstOrDefaultAsync(queryable);
+
+    // Assert
+    Assert.NotNull(result);
+    Assert.Equal("Target", result.name);
+}
+
+[Fact]
+public async Task FindById_ReturnsNullWhenNotFound()
+{
+    // Arrange
+    var testItems = new List<MyProjection>
+    {
+        new MyProjection { id = Guid.NewGuid(), name = "Item1" }
+    };
+
+    var mockContainer = CosmosTestHelpers.CreateMockContainerWithItems(testItems);
+
+    // Act
+    var queryable = mockContainer.Object
+        .GetItemLinqQueryable<MyProjection>()
+        .Where(p => p.id == Guid.NewGuid());  // Non-existent ID
+
+    var result = await InMemoryQueryExecutor.Default.FirstOrDefaultAsync(queryable);
+
+    // Assert
+    Assert.Null(result);
+}
+```
+
+**Key Benefits:**
+- **No Cosmos Emulator Required**: Unit tests run without external dependencies
+- **Fast Execution**: In-memory query execution is much faster than emulator
+- **Full LINQ Support**: `InMemoryQueryExecutor` evaluates LINQ expressions against in-memory collections
+- **Backward Compatible**: Existing code works unchanged (defaults to `CosmosQueryExecutor`)
 
 #### Mock HTTP Request Data
 

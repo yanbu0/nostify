@@ -36,20 +36,11 @@ public class On_ReplaceMe_BulkCreated_For__ProjectionName_
                 IsBatched = true)] string[] events,
         ILogger log)
     {
-        try
-        {
-            Container currentStateContainer = await _nostify.GetBulkProjectionContainerAsync<_ProjectionName_>();
-            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<_ProjectionName_>(events);
-            await _nostify.InitAllUninitializedAsync<_ProjectionName_>();
-        }
-        catch (Exception e)
-        {
-            events.ToList().ForEach(async eventStr =>
-            {
-                Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent() ?? throw new NostifyException("Event is null");
-                await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_BulkCreated_For__ProjectionName_), e.Message, @event);
-            });
-        }
+        DefaultEventHandler.HandleProjectionBulkCreateEvents<_ReplaceMe_, _ProjectionName_>(
+            _nostify,
+            _httpClient,
+            events,
+            log);
 
         
     }
