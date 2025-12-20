@@ -73,9 +73,13 @@
   - **ExternalDataEventFactory**: New fluent builder pattern for gathering external data events during projection initialization
     - `WithSameServiceIdSelectors()` - Add foreign key selectors for same-service event lookups
     - `WithSameServiceListIdSelectors()` - Add list-based foreign key selectors for one-to-many relationships
+    - `WithSameServiceDependantIdSelectors()` - Add dependent ID selectors that run after initial events are applied (for IDs populated by first-round events)
+    - `WithSameServiceDependantListIdSelectors()` - Add dependent list ID selectors for one-to-many relationships populated by events
     - `WithEventRequestor()` / `AddEventRequestors()` - Add external HTTP service requestors for cross-service events
+    - `WithDependantEventRequestor()` / `AddDependantEventRequestors()` - Add dependent external HTTP service requestors that run after initial events populate the foreign key IDs
     - `GetEventsAsync()` - Execute all configured requestors and combine results
     - Supports both single Guid and `List<Guid>` foreign key patterns
+    - Supports multi-level chaining: local events → external events → dependent external events
   - **IQueryExecutor Interface**: New abstraction for mocking Cosmos DB LINQ queries in unit tests
     - `IQueryExecutor` - Interface defining `ReadAllAsync`, `FirstOrDefaultAsync`, and `FirstOrNewAsync`
     - `CosmosQueryExecutor` - Production implementation using Cosmos SDK's `ToFeedIterator`
@@ -1721,6 +1725,52 @@ public async Task Factory_GetEventsAsync_ReturnsMatchingEvents()
     // Assert
     Assert.NotEmpty(result);
 }
+```
+
+**Using Dependent Selectors:**
+
+When a projection has foreign key IDs that are populated by events (not known at initialization time), use dependent selectors:
+
+```csharp
+// Scenario: Projection has a parentId that is null initially, 
+// but gets populated when an event assigns a parent
+var factory = new ExternalDataEventFactory<MyProjection>(
+    nostify,
+    projectionsToInit,
+    httpClient,
+    queryExecutor: InMemoryQueryExecutor.Default);
+
+// First, get the base events (these populate the parentId via Apply())
+factory.WithSameServiceIdSelectors(p => p.siteId);
+
+// Then, get events for IDs populated by the first round of events
+factory.WithSameServiceDependantIdSelectors(p => p.parentId);
+factory.WithSameServiceDependantListIdSelectors(p => p.childIds);
+
+var result = await factory.GetEventsAsync();
+```
+
+**Using Dependent External Event Requestors:**
+
+For multi-level chaining where external service events populate IDs used to fetch from another external service:
+
+```csharp
+var factory = new ExternalDataEventFactory<MyProjection>(
+    nostify,
+    projectionsToInit,
+    httpClient);
+
+// Step 1: Get local events
+factory.WithSameServiceIdSelectors(p => p.siteId);
+
+// Step 2: Get external events (these may populate externalRefId via Apply())
+factory.WithEventRequestor("https://service1.com/events", p => p.externalId);
+
+// Step 3: Get dependent external events using IDs populated by Step 1 or Step 2
+factory.WithDependantEventRequestor("https://service2.com/events", p => p.externalRefId);
+
+var result = await factory.GetEventsAsync();
+// Result contains events from: local store, service1, and service2
 ```
 
 **Testing Container Queries Directly:**
