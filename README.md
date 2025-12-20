@@ -70,7 +70,7 @@
 ### Updates
 
 - 4.1.0
-  - **ExternalDataEventFactory**: New fluent builder pattern for gathering external data events during projection initialization
+  - **ExternalDataEventFactory**: New fluent builder pattern for gathering external data events during projection initialization. See [Projection Initialization and External Data](#projection-initialization-and-external-data) and [Testing ExternalDataEventFactory](#testing-utilities).
     - `WithSameServiceIdSelectors()` - Add foreign key selectors for same-service event lookups
     - `WithSameServiceListIdSelectors()` - Add list-based foreign key selectors for one-to-many relationships
     - `WithSameServiceDependantIdSelectors()` - Add dependent ID selectors that run after initial events are applied (for IDs populated by first-round events)
@@ -80,7 +80,7 @@
     - `GetEventsAsync()` - Execute all configured requestors and combine results
     - Supports both single Guid and `List<Guid>` foreign key patterns
     - Supports multi-level chaining: local events → external events → dependent external events
-  - **IQueryExecutor Interface**: New abstraction for mocking Cosmos DB LINQ queries in unit tests
+  - **IQueryExecutor Interface**: New abstraction for mocking Cosmos DB LINQ queries in unit tests. See [IQueryExecutor for Mocking Cosmos Queries](#iqueryexecutor-for-mocking-cosmos-queries).
     - `IQueryExecutor` - Interface defining `ReadAllAsync`, `FirstOrDefaultAsync`, and `FirstOrNewAsync`
     - `CosmosQueryExecutor` - Production implementation using Cosmos SDK's `ToFeedIterator`
     - `InMemoryQueryExecutor` - Test implementation for in-memory query execution without Cosmos emulator
@@ -88,21 +88,21 @@
     - `ExternalDataEventFactory` constructor accepts optional `IQueryExecutor` for testability
   - **Enhanced Testability**: Query execution can now be fully mocked without requiring Cosmos DB emulator
 - 4.0.2
-  - **Safe Patch Fix**: Fixed bug in `SafePatchItemAsync` that allowed attempting to patch the `id` property, which Cosmos DB does not allow. The method now automatically removes any `/id` patch operations before executing.
+  - **Safe Patch Fix**: Fixed bug in `SafePatchItemAsync` that allowed attempting to patch the `id` property, which Cosmos DB does not allow. The method now automatically removes any `/id` patch operations before executing. See [Safe Patch Operations](#safe-patch-operations).
   - **Typo Fix**: Fixed spelling error in `DefaultEventHandlers` (`doAppyly` → `doApply`)
-  - **Error Propagation**: `HandleAggregateEvent` now properly re-throws exceptions after logging to undeliverable events, allowing proper error handling upstream
+  - **Error Propagation**: `HandleAggregateEvent` now properly re-throws exceptions after logging to undeliverable events, allowing proper error handling upstream. See [Error Handling and Undeliverable Events](#error-handling-and-undeliverable-events).
 - 4.0.1
   - **Bug Fix**: Fixed serialization settings issue in default bulk create command handler
   - **Template Fix**: Fixed projection template bug (#119)
 - 4.0.0
-  - **Azure Event Hubs Support**: Added `WithEventHubs()` method to use during startup to enable using Azure Event Hubs as an alternative to Kafka for event messaging
+  - **Azure Event Hubs Support**: Added `WithEventHubs()` method to use during startup to enable using Azure Event Hubs as an alternative to Kafka for event messaging. See [Topics](#topics) for combining commands with eventTypeFilter.
   - Templates now have a flag `--eventhHubs true` or `-eh true` and will set things up for you. Default or false means to use Kafka.
   - Added comprehensive tests for Event Hubs configuration and fluent API chaining
-  - **Event Type Filtering**: Added `eventTypeFilter` parameter to all event handler methods for combining multiple commands into single topics
+  - **Event Type Filtering**: Added `eventTypeFilter` parameter to all event handler methods for combining multiple commands into single topics. See [Combining Commands with eventTypeFilter](#combining-commands-with-eventtypefilter).
   - Enables topic consolidation to stay within Azure Event Hubs limits (10 Event Hubs per Basic/Standard tier)
   - Supports single filter, multiple filters (list), or no filtering
   - Applied to aggregate and projection event handlers, both single and bulk operations
-  - **Default Command Handler**: New static methods for common CRUD operations in Azure Functions
+  - **Default Command Handler**: New static methods for common CRUD operations in Azure Functions. See [Default Bulk Command Handlers](#default-bulk-command-handlers).
   - `HandlePost<T>()` - Creates new aggregate roots with auto-generated GUIDs
   - `HandlePatch<T>()` - Updates existing aggregate roots from request body
   - `HandleDelete<T>()` - Deletes aggregate roots by ID (no request body required)
@@ -110,7 +110,7 @@
   - `HandleBulkUpdate<T>()` - Updates multiple aggregate roots from array with id properties
   - `HandleBulkDelete<T>()` - Deletes multiple aggregate roots from array of IDs or list of GUIDs
   - Simplifies Azure Function HTTP trigger implementations with consistent patterns
-  - **Default Event Handlers**: New static methods for handling events from Kafka/Event Hubs triggers
+  - **Default Event Handlers**: New static methods for handling events from Kafka/Event Hubs triggers. See [Single Event Handlers](#single-event-handlers) and [Default Bulk Event Handlers](#default-bulk-event-handlers).
   - `HandleAggregateEvent<T>()` - Applies single event to aggregate current state with optional event type filtering and custom ID targeting
   - `HandleProjectionEvent<P>()` - Applies single event to projection with external data initialization, optional event type filtering and custom ID targeting
   - `HandleMultiApplyEvent<P>()` - Applies single event to multiple projection instances matching a filter expression in batches
@@ -122,12 +122,12 @@
   - `HandleProjectionBulkDeleteEvent<P>()` - Bulk projection deletion with optional event type filtering
   - All handlers support 3 overloads: no filter, single event type filter, or list of event type filters
   - Single event handlers support `idToApplyToPropertyName` parameter for cross-aggregate event effects
-  - **Paged Query Extensions**: New `PagedQueryAsync()` extension methods for Cosmos DB containers with server-side filtering, sorting, and pagination
+  - **Paged Query Extensions**: New `PagedQueryAsync()` extension methods for Cosmos DB containers with server-side filtering, sorting, and pagination. See [Paged Queries with Filtering and Sorting](#paged-queries-with-filtering-and-sorting).
   - Supports tenant-based filtering with `ITenantFilterable` interface
   - Custom partition key filtering for flexible query scenarios
   - Returns `IPagedResult<T>` with items and total count for UI pagination
   - Built-in SQL injection prevention for filter and sort columns
-  - **Filtered Query Extensions**: New `FilteredQuery()` extension methods for creating partition-scoped LINQ queries on Cosmos DB containers
+  - **Filtered Query Extensions**: New `FilteredQuery()` extension methods for creating partition-scoped LINQ queries on Cosmos DB containers. See [Filtered Queries for Partition-Scoped LINQ](#filtered-queries-for-partition-scoped-linq).
   - Overloads for Guid tenant IDs, string partition keys, and PartitionKey objects
   - Optional filter expressions for client-side filtering within partitions
   - Simplifies common query patterns with automatic partition key configuration
