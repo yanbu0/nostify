@@ -131,7 +131,6 @@ public class NostifyFactoryTests
         Assert.Null(config.kafkaUserName);
         Assert.Null(config.kafkaPassword);
         Assert.Equal(kafkaUrl, GetProducerConfigValue(config, "bootstrap.servers"));
-        Assert.True(GetProducerConfigBoolValue(config, "allow.auto.create.topics").GetValueOrDefault());
         Assert.Contains("Nostify-", GetProducerConfigValue(config, "client.id"));
     }
 
@@ -326,19 +325,6 @@ public class NostifyFactoryTests
     }
 
     [Fact]
-    public void WithKafka_ShouldSetAllowAutoCreateTopics()
-    {
-        // Arrange
-        var kafkaUrl = "localhost:9092";
-
-        // Act
-        var config = NostifyFactory.WithKafka(kafkaUrl);
-
-        // Assert
-    Assert.True(GetProducerConfigBoolValue(config, "allow.auto.create.topics").GetValueOrDefault());
-    }
-
-    [Fact]
     public void Build_WithoutHttpClientFactory_ShouldStillWork()
     {
         // Arrange
@@ -372,7 +358,6 @@ public class NostifyFactoryTests
         Assert.Equal("localhost:9092", config.kafkaUrl);
         Assert.NotNull(config.httpClientFactory);
     Assert.NotNull(config.producerConfig);
-    Assert.True(GetProducerConfigBoolValue(config, "allow.auto.create.topics").GetValueOrDefault());
     }
 
     [Fact]

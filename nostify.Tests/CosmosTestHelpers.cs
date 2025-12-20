@@ -209,5 +209,89 @@ public static class CosmosTestHelpers
             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
         return property?.GetValue(obj);
     }
+
+    /// <summary>
+    /// Creates a mocked Cosmos DB Container specifically for Event queries used by ExternalDataEvent.
+    /// This handles LINQ queries via GetItemLinqQueryable.
+    /// </summary>
+    /// <param name="events">The list of events to be returned by the container queries.</param>
+    /// <returns>A mocked Container object configured to execute LINQ queries against the events list.</returns>
+    public static Mock<Container> CreateMockContainerWithEvents(List<Event> events)
+    {
+        var mockContainer = new Mock<Container>();
+        
+        // Setup GetItemLinqQueryable to return a mock that works with LINQ
+        // The actual code calls GetItemLinqQueryable<Event>() with no arguments
+        mockContainer.Setup(x => x.GetItemLinqQueryable<Event>(
+                It.IsAny<bool>(),
+                It.IsAny<string>(),
+                It.IsAny<QueryRequestOptions>(),
+                It.IsAny<CosmosLinqSerializerOptions>()))
+            .Returns(new MockOrderedQueryable<Event>(events));
+        
+        return mockContainer;
+    }
+}
+
+/// <summary>
+/// Mock IOrderedQueryable implementation for testing Cosmos LINQ queries
+/// </summary>
+public class MockOrderedQueryable<T> : IOrderedQueryable<T>
+{
+    private readonly List<T> _items;
+    private readonly IQueryable<T> _queryable;
+
+    public MockOrderedQueryable(List<T> items)
+    {
+        _items = items;
+        _queryable = items.AsQueryable();
+    }
+
+    public Type ElementType => _queryable.ElementType;
+    public System.Linq.Expressions.Expression Expression => _queryable.Expression;
+    public IQueryProvider Provider => new MockQueryProvider<T>(_items);
+
+    public IEnumerator<T> GetEnumerator() => _queryable.GetEnumerator();
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+/// <summary>
+/// Mock IQueryProvider that enables LINQ operations on mock data
+/// </summary>
+public class MockQueryProvider<T> : IQueryProvider
+{
+    private readonly List<T> _items;
+
+    public MockQueryProvider(List<T> items)
+    {
+        _items = items;
+    }
+
+    public IQueryable CreateQuery(System.Linq.Expressions.Expression expression)
+    {
+        return new MockOrderedQueryable<T>(_items);
+    }
+
+    public IQueryable<TElement> CreateQuery<TElement>(System.Linq.Expressions.Expression expression)
+    {
+        // Execute the expression against the items to produce a new queryable
+        var result = System.Linq.Expressions.Expression.Lambda(expression).Compile().DynamicInvoke();
+        if (result is IEnumerable<TElement> enumerable)
+        {
+            return enumerable.AsQueryable();
+        }
+        return new List<TElement>().AsQueryable();
+    }
+
+    public object? Execute(System.Linq.Expressions.Expression expression)
+    {
+        return System.Linq.Expressions.Expression.Lambda(expression).Compile().DynamicInvoke();
+    }
+
+    public TResult Execute<TResult>(System.Linq.Expressions.Expression expression)
+    {
+        var result = Execute(expression);
+        return result == null ? default! : (TResult)result;
+    }
 }
 
