@@ -289,9 +289,6 @@ public static class NostifyFactory
             topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
             if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
 
-            topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
-            if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
-
             //Create any new topics needed
             if (topics.Count > 0)
             {
