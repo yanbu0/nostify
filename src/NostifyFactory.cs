@@ -37,6 +37,11 @@ public class NostifyConfig
     public string kafkaUrl { get; set; }
 
     /// <summary>
+    /// Number of partitions to use when automatically creating Kafka topics.
+    /// </summary>
+    public int kafkaTopicAutoCreatePartitions { get; set; } = 2;
+
+    /// <summary>
     /// The username for accessing Kafka.
     /// </summary>
     public string kafkaUserName { get; set; }
@@ -132,23 +137,24 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Kafka.
     /// </summary>
-    public static NostifyConfig WithKafka(string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null)
+    public static NostifyConfig WithKafka(string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
     {
         NostifyConfig config = new NostifyConfig();
-        return config.WithKafka(kafkaUrl, kafkaUserName, kafkaPassword);
+        return config.WithKafka(kafkaUrl, kafkaUserName, kafkaPassword, kafkaTopicAutoCreatePartitions);
     }
 
     /// <summary>
     /// Creates a new instance of Nostify using Kafka.
     /// </summary>
-    public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null)
+    public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
     {
+        config.kafkaTopicAutoCreatePartitions = kafkaTopicAutoCreatePartitions;
+
         config.kafkaUrl = kafkaUrl;
         config.kafkaUserName = kafkaUserName;
         config.kafkaPassword = kafkaPassword;
         config.producerConfig.BootstrapServers = kafkaUrl;
         config.producerConfig.ClientId = $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}";
-        config.producerConfig.AllowAutoCreateTopics = true;
 
         bool isDeployed = !string.IsNullOrWhiteSpace(config.kafkaUserName) && !string.IsNullOrWhiteSpace(config.kafkaPassword);
         if (isDeployed)
@@ -166,21 +172,21 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Azure Event Hubs.
     /// </summary>
-    public static NostifyConfig WithEventHubs(string eventHubsConnectionString)
+    public static NostifyConfig WithEventHubs(string eventHubsConnectionString, bool diagnosticLogging = false, int kafkaTopicAutoCreatePartitions = 2  )
     {
         NostifyConfig config = new NostifyConfig();
-        return config.WithEventHubs(eventHubsConnectionString);
+        return config.WithEventHubs(eventHubsConnectionString, diagnosticLogging, kafkaTopicAutoCreatePartitions);
     }
 
     /// <summary>
     /// Creates a new instance of Nostify using Azure Event Hubs.
     /// </summary>
-    public static NostifyConfig WithEventHubs(this NostifyConfig config, string eventHubsConnectionString, bool diagnosticLogging = false)
+    public static NostifyConfig WithEventHubs(this NostifyConfig config, string eventHubsConnectionString, bool diagnosticLogging = false, int kafkaTopicAutoCreatePartitions = 2)
     {
         // Parse Event Hubs connection string to extract namespace
         var connectionStringParts = eventHubsConnectionString.Split(';');
         string endpoint = connectionStringParts.FirstOrDefault(p => p.StartsWith("Endpoint="))?.Replace("Endpoint=sb://", "").Replace("/", "") ?? "";
-        
+
         // Add port 9093 for Kafka protocol
         if (!endpoint.Contains(":"))
         {
@@ -188,6 +194,7 @@ public static class NostifyFactory
         }
 
         // Configure for Event Hubs using Kafka protocol
+        config.kafkaTopicAutoCreatePartitions = kafkaTopicAutoCreatePartitions;
         config.kafkaUrl = endpoint;
         config.producerConfig.BootstrapServers = endpoint;
         config.producerConfig.ClientId = $"Nostify-{config.cosmosDbName}-{Guid.NewGuid()}";
@@ -249,7 +256,7 @@ public static class NostifyFactory
     /// <param name="verbose">If true, will write to console the steps taken to create the containers and topics</param>
     public static INostify Build<T>(this NostifyConfig config, bool verbose = false) where T : IAggregate
     {
-        try
+        try 
         {
             //Create Confluent admin client
             if (verbose) Console.WriteLine("Building Admin Client");
@@ -261,6 +268,7 @@ public static class NostifyFactory
             var assembly = typeof(T).Assembly;
             var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
             if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
+            
             //Get any static properties of each commandType that inherit type NostifyCommand        
             var commandProperties = commandTypes
                 .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -273,15 +281,11 @@ public static class NostifyFactory
             {
                 //Get the name property value of the commandType
                 var topic = commandType.GetValue(null).GetType().GetProperty("name").GetValue(commandType.GetValue(null)).ToString();
-                var topicSpec = new TopicSpecification {
-                    Name = topic,
-                    NumPartitions = 6
-                };
+                var topicSpec = new TopicSpecification { Name = topic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 };
                 topics.Add(topicSpec);
             }
             //Filter topics to only create new topics
             var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-            if (verbose) Console.WriteLine($"Existing topics: {string.Join(", ", existingTopics.Select(t => t.Topic))}");
             topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
             if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
 
