@@ -462,7 +462,7 @@ public static class ContainerExtensions
         bulkContainer.ValidateBulkEnabled(true);
 
         List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => bulkContainer.UpsertItemAsync(i).ContinueWith(itemResponse =>
+        itemList.ForEach(i => taskList.Add(bulkContainer.UpsertItemAsync(i).ContinueWith(itemResponse =>
         {
             if (!itemResponse.IsCompletedSuccessfully)
             {
@@ -478,7 +478,7 @@ public static class ContainerExtensions
                     throw new NostifyException($"Bulk Upsert Error {itemResponse.Exception.Message}");
                 }
             }
-        }));
+        })));
         await Task.WhenAll(taskList);
     }
 
