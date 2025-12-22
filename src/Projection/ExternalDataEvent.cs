@@ -43,12 +43,29 @@ public class ExternalDataEvent
     /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
     /// <param name="foreignIdSelectorsList">Functions to get lists of foreign ids for the aggregates required to populate one or more fields in the projection</param>
     /// <returns>List of ExternalDataEvent</returns>
-    public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, DateTime? pointInTime = null, params Func<TProjection, List<Guid?>>[] foreignIdSelectorsList)
+    public static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, DateTime? pointInTime = null, params Func<TProjection, List<Guid?>>[] foreignIdSelectorsList)
+        where TProjection : IUniquelyIdentifiable
+    {
+        return GetEventsAsync(eventStore, projectionsToInit, CosmosQueryExecutor.Default, pointInTime, foreignIdSelectorsList);
+    }
+
+    /// <summary>
+    /// Gets the events needed to initialize a list of projections using a list of foreign ID selector functions that return lists of Guid?.
+    /// This overload is primarily used for unit testing with InMemoryQueryExecutor.
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="eventStore">The Event Store Container</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="queryExecutor">The query executor to use for running LINQ queries</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="foreignIdSelectorsList">Functions to get lists of foreign ids for the aggregates required to populate one or more fields in the projection</param>
+    /// <returns>List of ExternalDataEvent</returns>
+    public static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, IQueryExecutor queryExecutor, DateTime? pointInTime = null, params Func<TProjection, List<Guid?>>[] foreignIdSelectorsList)
         where TProjection : IUniquelyIdentifiable
     {
         // transform the foreignIdSelectors using a helper function
         Func<TProjection, Guid?>[] foreignIdSelectors = TransformForeignIdSelectors(projectionsToInit, foreignIdSelectorsList);
-        return await GetEventsAsync(eventStore, projectionsToInit, pointInTime, foreignIdSelectors);
+        return GetEventsAsync(eventStore, projectionsToInit, queryExecutor, pointInTime, foreignIdSelectors);
     }
 
     /// <summary>
@@ -95,7 +112,24 @@ public class ExternalDataEvent
     /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
     /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
     /// <returns>List of ExternalDataEvent</returns>
-    public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, DateTime? pointInTime = null, params Func<TProjection, Guid?>[] foreignIdSelectors)
+    public static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, DateTime? pointInTime = null, params Func<TProjection, Guid?>[] foreignIdSelectors)
+        where TProjection : IUniquelyIdentifiable
+    {
+        return GetEventsAsync(eventStore, projectionsToInit, CosmosQueryExecutor.Default, pointInTime, foreignIdSelectors);
+    }
+
+    /// <summary>
+    /// Gets the events needed to initialize a list of projections with a custom query executor.
+    /// This overload is primarily used for unit testing with InMemoryQueryExecutor.
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="eventStore">The Event Store Container</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="queryExecutor">The query executor to use for running LINQ queries</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
+    /// <returns>List of ExternalDataEvent</returns>
+    public async static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, IQueryExecutor queryExecutor, DateTime? pointInTime = null, params Func<TProjection, Guid?>[] foreignIdSelectors)
     where TProjection : IUniquelyIdentifiable
     {
         var foreignIds =
@@ -116,9 +150,7 @@ public class ExternalDataEvent
             eventsQuery = eventsQuery.Where(e => e.timestamp <= pointInTime.Value);
         }
 
-        var events = (await eventsQuery
-            .OrderBy(e => e.timestamp)
-            .ReadAllAsync())
+        var events = (await queryExecutor.ReadAllAsync(eventsQuery.OrderBy(e => e.timestamp)))
             .ToLookup(e => e.aggregateRootId);
 
         var result = (
@@ -132,6 +164,78 @@ public class ExternalDataEvent
         ).ToList();
 
         return result; 
+    }
+
+    /// <summary>
+    /// Gets the events needed to initialize a list of projections using non-nullable Guid selectors
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="eventStore">The Event Store Container</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
+    /// <returns>List of ExternalDataEvent</returns>
+    public static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, DateTime? pointInTime = null, params Func<TProjection, Guid>[] foreignIdSelectors)
+        where TProjection : IUniquelyIdentifiable
+    {
+        return GetEventsAsync(eventStore, projectionsToInit, CosmosQueryExecutor.Default, pointInTime, foreignIdSelectors);
+    }
+
+    /// <summary>
+    /// Gets the events needed to initialize a list of projections using non-nullable Guid selectors.
+    /// This overload is primarily used for unit testing with InMemoryQueryExecutor.
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="eventStore">The Event Store Container</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="queryExecutor">The query executor to use for running LINQ queries</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
+    /// <returns>List of ExternalDataEvent</returns>
+    public static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, IQueryExecutor queryExecutor, DateTime? pointInTime = null, params Func<TProjection, Guid>[] foreignIdSelectors)
+        where TProjection : IUniquelyIdentifiable
+    {
+        // Convert non-nullable selectors to nullable and delegate
+        var nullableSelectors = foreignIdSelectors
+            .Select<Func<TProjection, Guid>, Func<TProjection, Guid?>>(selector => p => selector(p))
+            .ToArray();
+        return GetEventsAsync(eventStore, projectionsToInit, queryExecutor, pointInTime, nullableSelectors);
+    }
+
+    /// <summary>
+    /// Gets the events needed to initialize a list of projections using non-nullable Guid list selectors
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="eventStore">The Event Store Container</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="foreignIdSelectorsList">Functions to get lists of foreign ids for the aggregates required to populate one or more fields in the projection</param>
+    /// <returns>List of ExternalDataEvent</returns>
+    public static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, DateTime? pointInTime = null, params Func<TProjection, List<Guid>>[] foreignIdSelectorsList)
+        where TProjection : IUniquelyIdentifiable
+    {
+        return GetEventsAsync(eventStore, projectionsToInit, CosmosQueryExecutor.Default, pointInTime, foreignIdSelectorsList);
+    }
+
+    /// <summary>
+    /// Gets the events needed to initialize a list of projections using non-nullable Guid list selectors.
+    /// This overload is primarily used for unit testing with InMemoryQueryExecutor.
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="eventStore">The Event Store Container</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="queryExecutor">The query executor to use for running LINQ queries</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="foreignIdSelectorsList">Functions to get lists of foreign ids for the aggregates required to populate one or more fields in the projection</param>
+    /// <returns>List of ExternalDataEvent</returns>
+    public static Task<List<ExternalDataEvent>> GetEventsAsync<TProjection>(Container eventStore, List<TProjection> projectionsToInit, IQueryExecutor queryExecutor, DateTime? pointInTime = null, params Func<TProjection, List<Guid>>[] foreignIdSelectorsList)
+        where TProjection : IUniquelyIdentifiable
+    {
+        // Convert non-nullable list selectors to nullable and delegate
+        var nullableSelectors = foreignIdSelectorsList
+            .Select<Func<TProjection, List<Guid>>, Func<TProjection, List<Guid?>>>(selector => p => selector(p).Select(g => (Guid?)g).ToList())
+            .ToArray();
+        return GetEventsAsync(eventStore, projectionsToInit, queryExecutor, pointInTime, nullableSelectors);
     }
 
     /// <summary>
