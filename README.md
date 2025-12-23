@@ -1961,6 +1961,186 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
 }
 ```
 
+#### ExternalDataEventFactory (Recommended)
+
+The `ExternalDataEventFactory<P>` provides a fluent builder pattern for gathering external data events during projection initialization. It simplifies complex scenarios involving multiple data sources and dependent IDs.
+
+**Basic Usage - Same Service Events:**
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient? httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify,
+        projectionsToInit,
+        httpClient,
+        pointInTime);
+
+    // Add selectors for foreign keys pointing to other aggregates in the same service
+    factory.WithSameServiceIdSelectors(
+        p => p.customerId,       // Get Customer events
+        p => p.shippingAddressId // Get Address events
+    );
+
+    // Add list selectors for one-to-many relationships
+    factory.WithSameServiceListIdSelectors(
+        p => p.lineItemIds,      // Get all LineItem events
+        p => p.discountIds       // Get all Discount events
+    );
+
+    // External service events - requires httpClient
+    if (httpClient != null)
+    {
+        factory.WithEventRequestor(
+            "https://inventory-service/api/EventRequest",
+            p => p.warehouseId
+        );
+        
+        factory.WithEventRequestor(
+            "https://payment-service/api/EventRequest",
+            p => p.paymentMethodId,
+            p => p.billingAccountId  // Multiple IDs from same service
+        );
+    }
+
+    return await factory.GetEventsAsync();
+}
+```
+
+**Dependent Selectors - IDs Populated by Events:**
+
+Use dependent selectors when foreign key IDs are not known at initialization time but are populated by the first round of events. The factory applies initial events to projection copies, then uses the updated values to fetch additional events.
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient? httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify,
+        projectionsToInit,
+        httpClient,
+        pointInTime);
+
+    // Step 1: Get base aggregate events (these populate assignedWarehouseId via Apply())
+    factory.WithSameServiceIdSelectors(p => p.orderId);
+
+    // Step 2: Get events for IDs that were null initially but populated by Step 1 events
+    // These selectors run AFTER Step 1 events are applied to projection copies
+    factory.WithSameServiceDependantIdSelectors(
+        p => p.assignedWarehouseId,  // Populated by "AssignWarehouse" event
+        p => p.assignedCarrierId     // Populated by "AssignCarrier" event
+    );
+
+    factory.WithSameServiceDependantListIdSelectors(
+        p => p.splitShipmentIds      // Populated when order is split into shipments
+    );
+
+    return await factory.GetEventsAsync();
+}
+```
+
+**Dependent External Requestors - Multi-Level Chaining:**
+
+For complex scenarios where external service events populate IDs used to fetch from another external service:
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient? httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify,
+        projectionsToInit,
+        httpClient,
+        pointInTime);
+
+    // Step 1: Local events
+    factory.WithSameServiceIdSelectors(p => p.customerId);
+
+    // Step 2: External service events (may populate fulfillmentCenterId via Apply())
+    factory.WithEventRequestor(
+        "https://fulfillment-service/api/EventRequest",
+        p => p.fulfillmentRequestId
+    );
+
+    // Step 3: Dependent external events - uses IDs populated by Step 1 or Step 2
+    // These requestors run AFTER all initial events are applied
+    factory.WithDependantEventRequestor(
+        "https://warehouse-service/api/EventRequest",
+        p => p.fulfillmentCenterId  // This ID comes from fulfillment-service events
+    );
+
+    return await factory.GetEventsAsync();
+    // Result contains events from: local store, fulfillment-service, and warehouse-service
+}
+```
+
+**Complete Example with All Features:**
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient? httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify,
+        projectionsToInit,
+        httpClient,
+        pointInTime);
+
+    // === Primary Selectors (run first) ===
+    
+    // Same-service single ID selectors
+    factory.WithSameServiceIdSelectors(
+        p => p.customerId,
+        p => p.shippingAddressId
+    );
+
+    // Same-service list ID selectors
+    factory.WithSameServiceListIdSelectors(
+        p => p.lineItemIds
+    );
+
+    // External service requestors
+    if (httpClient != null)
+    {
+        factory.WithEventRequestor(
+            "https://inventory-service/api/EventRequest",
+            p => p.warehouseId
+        );
+    }
+
+    // === Dependent Selectors (run after initial events are applied) ===
+    
+    // Same-service dependent IDs (populated by primary events)
+    factory.WithSameServiceDependantIdSelectors(
+        p => p.assignedCarrierId
+    );
+
+    // External dependent requestors (populated by primary events)
+    if (httpClient != null)
+    {
+        factory.WithDependantEventRequestor(
+            "https://carrier-service/api/EventRequest",
+            p => p.carrierAccountId  // Populated by carrier assignment event
+        );
+    }
+
+    return await factory.GetEventsAsync();
+}
+```
+
 #### Projection Container Initialization
 
 Initialize entire projection containers:
