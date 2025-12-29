@@ -297,6 +297,49 @@ await _nostify.PersistEventAsync(pe);
 
 When a command becomes an `Event` the text name of the command becomes the topic name published to Kafka, so for this example the event handler, `OnTestCreated` would subscribe to the `Create_Test` topic.
 
+#### NostifyKafkaTriggerEvent
+
+The `NostifyKafkaTriggerEvent` class is used to deserialize Kafka trigger inputs in Azure Functions event handlers:
+
+```C#
+public class NostifyKafkaTriggerEvent
+{
+    public int Offset { get; set; }
+    public int Partition { get; set; }
+    public string Topic { get; set; }
+    public string Value { get; set; }  // JSON-serialized Event
+    public string Key { get; set; }
+    public string[] Headers { get; set; }
+
+    // Convert to Event with optional filtering
+    public Event? GetEvent(string? eventTypeFilter = null);
+    public Event? GetEvent(IEnumerable<string> eventTypeFilters);
+    
+    // Convert to IEvent interface
+    public IEvent? GetIEvent(string? eventTypeFilter = null);
+    public IEvent? GetIEvent(IEnumerable<string> eventTypeFilters);
+}
+```
+
+Example usage in an event handler:
+
+```C#
+[Function(nameof(OnTestCreated))]
+public async Task OnTestCreated(
+    [KafkaTrigger("%BrokerList%", "Create_Test", ConsumerGroup = "$Default")] string[] events)
+{
+    foreach (string evt in events)
+    {
+        NostifyKafkaTriggerEvent kafkaEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(evt);
+        Event? newEvent = kafkaEvent?.GetEvent();
+        if (newEvent != null)
+        {
+            // Process the event
+        }
+    }
+}
+```
+
 #### Payload Validation
 
 Event payloads are validated by default when using EventFactory. This is done by placing `ValidationAttribute` attributes on the properties of the Aggregate the Command is being performed on. This ensures that required properties are present and valid according to the specified command. Only properties present on the current payload will be validated, except for `[Required]` and `[RequiredFor()]`. 
@@ -348,7 +391,19 @@ await _nostify.PersistEventAsync(deleteEvent);
 
 ### Command
 
-A `Command` is an `Event` that comes from the user interface.  All `Aggregate` classes should have a matching `Command` class where you must register all commands that the user may issue.  This class must extend the `NostifyCommand` class.  It will look like this by default:
+A `Command` is an `Event` that comes from the user interface.  All `Aggregate` classes should have a matching `Command` class where you must register all commands that the user may issue.  This class must extend the `NostifyCommand` class.
+
+#### NostifyCommand Constructor
+
+```C#
+public NostifyCommand(string name, bool isNew = false, bool allowNullPayload = false)
+```
+
+- **name**: Human-readable command name (MUST BE UNIQUE). Convention: `{Action}_{EntityName}` (e.g., `Create_User`). This becomes the Kafka topic name.
+- **isNew**: Set to `true` if this command creates a new aggregate instance.
+- **allowNullPayload**: Set to `true` for commands that don't require payload data (e.g., delete commands).
+
+It will look like this by default:
 
 ```C#
 public class TestCommand : NostifyCommand
@@ -364,7 +419,7 @@ public class TestCommand : NostifyCommand
   ///<summary>
   ///Base Delete Command
   ///</summary>
-  public static readonly TestCommand Delete = new TestCommand("Delete_Test");
+  public static readonly TestCommand Delete = new TestCommand("Delete_Test", false, true);
   ///<summary>
   ///Bulk Create Command
   ///</summary>
@@ -376,11 +431,12 @@ public class TestCommand : NostifyCommand
   ///<summary>
   ///Bulk Delete Command
   ///</summary>
-  public static readonly TestCommand BulkDelete = new TestCommand("BulkDelete_Test");
+  public static readonly TestCommand BulkDelete = new TestCommand("BulkDelete_Test", false, true);
 
 
-  public TestCommand(string name, bool isNew = false)
-  : base(name, isNew)
+  // Constructor signature: NostifyCommand(string name, bool isNew = false, bool allowNullPayload = false)
+  public TestCommand(string name, bool isNew = false, bool allowNullPayload = false)
+  : base(name, isNew, allowNullPayload)
   {
 
   }
@@ -406,6 +462,86 @@ public override void Apply(IEvent eventToApply)
 ### Saga
 
 The `Saga` pattern allows you to create multi-step, long lived transactions across multiple services and define rollback actions in case of failure to maintain data consistency. `nostify` does not require a particular method of implementation but provides a class structure and some basic functions to support implementing `Saga` orchestration.
+
+## Core Interfaces
+
+The following interfaces define the core contracts for nostify objects:
+
+### IAggregate
+
+```C#
+public interface IAggregate : IUniquelyIdentifiable
+{
+    public bool isDeleted { get; set; }
+    public static abstract string aggregateType { get; }
+    public static abstract string currentStateContainerName { get; }
+}
+```
+
+### IProjection
+
+```C#
+public interface IProjection
+{
+    public bool initialized { get; set; }
+    public static abstract string containerName { get; }
+}
+```
+
+### IApplyable
+
+```C#
+public interface IApplyable
+{
+    public abstract void Apply(IEvent eventToApply);
+}
+```
+
+### ITenantFilterable
+
+```C#
+public interface ITenantFilterable
+{
+    public Guid tenantId { get; set; }
+}
+```
+
+### IUniquelyIdentifiable
+
+```C#
+public interface IUniquelyIdentifiable
+{
+    public Guid id { get; set; }
+}
+```
+
+### NostifyObject (Base Class)
+
+```C#
+public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, IApplyable
+{
+    public int ttl { get; set; }      // Time to live, -1 = never expire
+    public Guid tenantId { get; set; }
+    public Guid id { get; set; }
+    
+    public abstract void Apply(IEvent eventToApply);
+    
+    // Update properties from event payload (automatic property matching)
+    public void UpdateProperties<T>(object payload) where T : NostifyObject;
+    
+    // Update properties with explicit mapping dictionary
+    public void UpdateProperties<T>(object payload, Dictionary<string, string> propertyPairs, bool strict = false)
+        where T : NostifyObject;
+    
+    // Update properties with conditional ID matching (see PropertyCheck section)
+    public void UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues)
+        where T : NostifyObject;
+    
+    // Update single property
+    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, object payload,
+        List<PropertyInfo> thisNostifyObjectProps = null) where T : NostifyObject;
+}
+```
 
 ## Setup
 
@@ -528,6 +664,8 @@ public  class  Test : NostifyObject, IAggregate
   public  bool  isDeleted { get; set; } = false;  
 
   public  static  string  aggregateType => "Test";
+  
+  public  static  string  currentStateContainerName => "Test";
 
 
   public  override  void  Apply(IEvent  eventToApply)
@@ -1401,6 +1539,32 @@ await bulkContainer.BulkDeleteAsync<TestProjection>(projectionIdsToDelete);
 await bulkContainer.BulkDeleteFromEventsAsync<TestProjection>(kafkaTriggerEvents);
 ```
 
+#### Container Extension Method Signatures
+
+The following extension methods are available on `Container` for bulk operations:
+
+```C#
+// Bulk delete by list of Guids (sets TTL to expire items)
+public static Task<int> BulkDeleteAsync<P>(this Container container, List<Guid> projectionIdsToDelete)
+    where P : NostifyObject;
+
+// Bulk delete by list of objects
+public static Task<int> BulkDeleteAsync<P>(this Container container, List<P> projectionsToDelete)
+    where P : NostifyObject;
+
+// Bulk delete from Kafka trigger events array
+public static Task<int> BulkDeleteFromEventsAsync<P>(this Container container, string[] events)
+    where P : NostifyObject;
+
+// Delete all items in container (use with caution)
+public static Task<int> DeleteAllBulkAsync<P>(this Container container)
+    where P : NostifyObject;
+
+// Bulk upsert items
+public static Task DoBulkUpsertAsync<T>(this Container container, List<T> itemList, bool allowRetry = false)
+    where T : IApplyable;
+```
+
 #### Multi-Apply Operations
 
 Apply a single event to multiple projections efficiently:
@@ -2146,19 +2310,22 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
 Initialize entire projection containers:
 
 ```C#
-// Initialize all projections in a container
-await nostify.ProjectionInitializer.InitContainerAsync<TestProjection, TestAggregate>(
-    nostify, 
+// Initialize all projections in a container (rebuilds from event store)
+await nostify.InitContainerAsync<TestProjection, TestAggregate>(
     httpClient, 
     partitionKeyPath: "/tenantId", 
     loopSize: 1000
 );
 
-// Initialize only uninitialized projections
-await nostify.ProjectionInitializer.InitAllUninitialized<TestProjection>(
-    nostify, 
-    httpClient, 
-    maxloopSize: 10
+// Initialize only uninitialized projections (where initialized == false)
+await nostify.InitAllUninitializedAsync<TestProjection>(maxloopSize: 10);
+
+// Or use ProjectionInitializer directly for more control
+await nostify.ProjectionInitializer.InitAsync<TestProjection>(
+    projectionsToInit,
+    nostify,
+    httpClient,
+    pointInTime: null  // or DateTime for historical state
 );
 ```
 
@@ -2202,30 +2369,43 @@ public class Saga : ISaga
 {
     public Guid id { get; set; }
     public string name { get; set; }
-    public SagaStatusEnum status { get; set; }
+    public SagaStatus status { get; set; }
     public DateTime createdOn { get; set; }
-    public DateTime? executionCompletedOn { get; set; }
     public DateTime? executionStart { get; set; }
+    public DateTime? executionCompletedOn { get; set; }
     public DateTime? rollbackStartedOn { get; set; }
     public DateTime? rollbackCompletedOn { get; set; }
     public string? errorMessage { get; set; }
     public string? rollbackErrorMessage { get; set; }
     public List<SagaStep> steps { get; set; } = new List<SagaStep>();
+    
+    // Navigation methods
+    public ISagaStep? GetCurrentlyExecutingStep();
+    public ISagaStep? GetNextStep();
+    public ISagaStep? GetLastCompletedStep();
+    
+    // Step management
+    public void AddStep(IEvent stepEvent, IEvent? rollbackEvent = null);
+    
+    // Execution methods
+    public async Task StartAsync(INostify nostify);
+    public async Task HandleSuccessfulStepAsync(INostify nostify, object? successData = null);
+    public async Task StartRollbackAsync(INostify nostify);
+    public async Task HandleSuccessfulStepRollbackAsync(INostify nostify, object? rollbackData = null);
 }
 ```
 
 #### Saga Status Enumeration
 
 ```C#
-public enum SagaStatusEnum
+public enum SagaStatus
 {
-    Created,
-    Executing,
-    Completed,
-    RollingBack,
-    RollbackCompleted,
-    Failed,
-    RollbackFailed
+    Pending,              // Saga has not started yet
+    InProgress,           // Saga is currently executing
+    CompletedSuccessfully, // All steps completed successfully
+    RollingBack,          // Saga is rolling back due to failure
+    RolledBack,           // Saga rollback completed
+    Failed                // Saga failed
 }
 ```
 
@@ -2234,108 +2414,206 @@ public enum SagaStatusEnum
 ```C#
 public class SagaStep : ISagaStep
 {
-    public Guid id { get; set; }
-    public string name { get; set; }
     public int order { get; set; }
-    public SagaStepStatusEnum status { get; set; }
-    public DateTime? executionStart { get; set; }
-    public DateTime? executionCompleted { get; set; }
-    public DateTime? rollbackStart { get; set; }
-    public DateTime? rollbackCompleted { get; set; }
-    public string? errorMessage { get; set; }
-    public string? rollbackErrorMessage { get; set; }
-    public object? stepData { get; set; }
+    public IEvent stepEvent { get; set; }
+    public IEvent? rollbackEvent { get; set; }
+    public SagaStepStatus status { get; set; }
+    public object? successData { get; set; }
     public object? rollbackData { get; set; }
+    public DateTime? executionStart { get; set; }
+    public DateTime? executionComplete { get; set; }
+    public DateTime? rollbackStart { get; set; }
+    public DateTime? rollbackComplete { get; set; }
+    public Guid aggregateRootId => stepEvent.aggregateRootId;
+}
+
+public enum SagaStepStatus
+{
+    WaitingForTrigger,
+    Triggered,
+    CompletedSuccessfully,
+    RollingBack,
+    RolledBack
 }
 ```
 
 #### Using Sagas
 
 ```C#
-// Create and start a saga
-var saga = new OrderProcessingSaga();
-saga.steps.Add(new SagaStep { name = "ReserveInventory", order = 1 });
-saga.steps.Add(new SagaStep { name = "ProcessPayment", order = 2 });
-saga.steps.Add(new SagaStep { name = "ShipOrder", order = 3 });
+// Create a saga with steps
+var saga = new Saga("OrderProcessingSaga");
 
+// Add steps with events and optional rollback events
+var reserveInventoryEvent = new EventFactory().Create<InventoryItem>(
+    InventoryCommand.Reserve, inventoryId, new { quantity = 5 });
+var releaseInventoryEvent = new EventFactory().Create<InventoryItem>(
+    InventoryCommand.Release, inventoryId, new { quantity = 5 });
+
+saga.AddStep(reserveInventoryEvent, releaseInventoryEvent);
+
+var processPaymentEvent = new EventFactory().Create<Payment>(
+    PaymentCommand.Process, paymentId, new { amount = 99.99 });
+var refundPaymentEvent = new EventFactory().Create<Payment>(
+    PaymentCommand.Refund, paymentId, new { amount = 99.99 });
+
+saga.AddStep(processPaymentEvent, refundPaymentEvent);
+
+// Start the saga (persists first step event)
 await saga.StartAsync(nostify);
 
-// Handle successful step completion
-await saga.HandleSuccessfulStepAsync(nostify, stepData);
+// In event handler, mark step as successful and trigger next step
+await saga.HandleSuccessfulStepAsync(nostify, successData: new { transactionId = "abc123" });
 
-// Handle failures and rollback
+// If a step fails, start rollback
 await saga.StartRollbackAsync(nostify);
+
+// After rollback event is processed, mark rollback complete
+await saga.HandleSuccessfulStepRollbackAsync(nostify);
 ```
+
+### PropertyCheck for Conditional Property Updates
+
+The `PropertyCheck` class enables conditional property mapping in projections where the same aggregate type appears multiple times (e.g., a projection with both `primaryUserId` and `secondaryUserId`).
+
+#### PropertyCheck Class Signature
+
+```C#
+public class PropertyCheck
+{
+    // Constructor
+    public PropertyCheck(
+        Guid? projectionIdPropertyValue,  // The ID value to match against event's aggregateRootId
+        string eventPropertyName,          // Source property name in event payload
+        string projectionPropertyName      // Target property name in projection
+    );
+
+    public string eventPropertyName { get; set; }
+    public string projectionPropertyName { get; set; }
+    public Guid? projectionIdPropertyValue { get; set; }
+}
+```
+
+#### Usage Example
+
+```C#
+public class OrderProjection : NostifyObject, IProjection
+{
+    public Guid primaryContactId { get; set; }
+    public string primaryContactName { get; set; }
+    public string primaryContactEmail { get; set; }
+    
+    public Guid secondaryContactId { get; set; }
+    public string secondaryContactName { get; set; }
+    public string secondaryContactEmail { get; set; }
+
+    public override void Apply(IEvent eventToApply)
+    {
+        if (eventToApply.command.name == "Update_Contact")
+        {
+            // Only update properties where the ID matches the event's aggregateRootId
+            List<PropertyCheck> propertyChecks = new List<PropertyCheck>
+            {
+                new PropertyCheck(this.primaryContactId, "name", "primaryContactName"),
+                new PropertyCheck(this.primaryContactId, "email", "primaryContactEmail"),
+                new PropertyCheck(this.secondaryContactId, "name", "secondaryContactName"),
+                new PropertyCheck(this.secondaryContactId, "email", "secondaryContactEmail")
+            };
+            
+            this.UpdateProperties<OrderProjection>(
+                eventToApply.aggregateRootId, 
+                eventToApply.payload, 
+                propertyChecks
+            );
+        }
+    }
+}
+```
+
+If `eventToApply.aggregateRootId` equals `this.primaryContactId`, only `primaryContactName` and `primaryContactEmail` will be updated.
 
 ### Container Management
 
-#### Dynamic Container Creation
+#### Container Access Methods
 
 ```C#
-// Get containers with specific configuration
+// Get event store container (optionally bulk-enabled)
 Container eventStore = await _nostify.GetEventStoreContainerAsync(allowBulk: true);
-Container currentState = await _nostify.GetCurrentStateContainerAsync<TestAggregate>("/customPartitionKey");
+
+// Get current state container for an aggregate
+Container currentState = await _nostify.GetCurrentStateContainerAsync<TestAggregate>("/tenantId");
+Container bulkCurrentState = await _nostify.GetBulkCurrentStateContainerAsync<TestAggregate>("/tenantId");
+
+// Get projection container
+Container projection = await _nostify.GetProjectionContainerAsync<TestProjection>("/tenantId");
 Container bulkProjection = await _nostify.GetBulkProjectionContainerAsync<TestProjection>("/tenantId");
 
-// Get custom containers
+// Get custom container by name
 Container customContainer = await _nostify.GetContainerAsync(
-    "CustomContainerName", 
-    bulkEnabled: true, 
-    partitionKeyPath: "/customKey"
+    "CustomContainerName",  // container name
+    true,                   // bulk enabled
+    "/partitionKey"         // partition key path
 );
+
+// Get saga and undeliverable containers
+Container sagaContainer = await _nostify.GetSagaContainerAsync();
+Container undeliverableContainer = await _nostify.GetUndeliverableEventsContainerAsync();
 ```
 
-#### Database Management
+#### Low-Level Database Access
 
 ```C#
-// Get database reference with bulk operations
-DatabaseRef database = await _nostify.Repository.GetDatabaseAsync(allowBulk: true);
+// Get database reference (via Repository for advanced scenarios)
+DatabaseRef database = await _nostify.Repository.GetDatabaseAsync(allowBulk: false);
+DatabaseRef bulkDatabase = await _nostify.Repository.GetDatabaseAsync(true, throughput: 1000);
 
-// Get database with specific throughput
-DatabaseRef database = await _nostify.Repository.GetDatabaseAsync(allowBulk: true, throughput: 1000);
-
-// Get containers with specific settings
+// Get container with all options via Repository
 Container container = await _nostify.Repository.GetContainerAsync(
-    containerName: "Events",
-    partitionKeyPath: "/tenantId",
-    allowBulk: false,
-    throughput: 400,
-    verbose: true
+    "Events",       // containerName
+    "/tenantId",    // partitionKeyPath  
+    false,          // allowBulk
+    400,            // throughput (null for default)
+    true            // verbose logging
 );
 ```
 
 ### Validation System
 
-The framework includes a validation system for ensuring data integrity:
+The framework includes a validation system for ensuring data integrity when creating events.
 
 #### RequiredForAttribute
 
-Use the `RequiredForAttribute` to specify when fields are required based on event type:
+Use the `RequiredForAttribute` to specify which properties are required for specific commands:
 
 ```C#
-public class TestEvent : Event
+public class OrderAggregate : NostifyObject, IAggregate
 {
-    [RequiredFor(EventTypeEnum.Created)]
-    public string name { get; set; }
+    // Required only for Create_Order command
+    [RequiredFor("Create_Order")]
+    public string customerName { get; set; }
     
-    [RequiredFor(EventTypeEnum.Updated, EventTypeEnum.Deleted)]
-    public string description { get; set; }
+    // Required for multiple commands
+    [RequiredFor(new[] { "Create_Order", "Update_Order" })]
+    public decimal totalAmount { get; set; }
+    
+    // Standard Required attribute - required for ALL commands
+    [Required]
+    public Guid customerId { get; set; }
 }
 ```
 
-#### Validation Extensions
+#### EventFactory Validation
 
-Validate objects and events:
+Validation is performed automatically when using `EventFactory.Create<T>()`:
 
 ```C#
-// Validate an object
-bool isValid = myObject.IsValid();
+// Validation enabled by default - throws NostifyValidationException on failure
+IEvent pe = new EventFactory().Create<OrderAggregate>(OrderCommand.Create, newId, orderPayload);
 
-// Get validation messages
-var validationMessages = myObject.GetValidationMessages();
+// Skip validation when needed
+IEvent pe = new EventFactory().NoValidate().Create<OrderAggregate>(OrderCommand.Update, id, partialPayload);
 
-// Validate with specific event type
-bool isValidForEventType = myEvent.IsValidForEventType(EventTypeEnum.Created);
+// Events with no payload skip validation automatically
+IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(OrderCommand.Delete, aggregateId);
 ```
 
 ## Performance Considerations
