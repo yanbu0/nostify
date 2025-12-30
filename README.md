@@ -883,7 +883,9 @@ The example above shows both approaches:
 
 #### Multi-Service Event Querying
 
-For efficient parallel querying of multiple external services, use the new `GetMultiServiceEventsAsync` method with `EventRequester` objects:
+**Note:** While you can use `GetMultiServiceEventsAsync` directly, the recommended approach is to use [`ExternalDataEventFactory`](#externaldataeventfactory-recommended) which provides a cleaner fluent API built on top of these methods.
+
+For efficient parallel querying of multiple external services, use the `GetMultiServiceEventsAsync` method with `EventRequester` objects:
 
 ```csharp
 // Query all services in parallel - EventRequester constructors passed directly as parameters
@@ -1004,7 +1006,9 @@ var mixedRequester = new EventRequester<TestProjection>(
 
 #### Single Service Event Querying
 
-For single external service calls, continue using the traditional `GetEventsAsync` method:
+**Note:** While you can use `GetEventsAsync` directly, the recommended approach is to use [`ExternalDataEventFactory`](#externaldataeventfactory-recommended) which provides a cleaner fluent API that handles both same-service and external service events.
+
+For single external service calls, you can use the `GetEventsAsync` method:
 
 ```csharp
 var locationEvents = await ExternalDataEvent.GetEventsAsync(httpClient,
@@ -1044,13 +1048,13 @@ public async Task<List<Event>> Run(
 - Content-Type: `application/json`
 - Body: Array of aggregate root IDs (`List<Guid>`)
 
-This endpoint is automatically generated in each nostify service and is used by `GetEventsAsync` and `GetMultiServiceEventsAsync` methods to retrieve events for external projections.
+This endpoint is automatically generated in each nostify service and is used by `ExternalDataEventFactory`, `GetEventsAsync` and `GetMultiServiceEventsAsync` methods to retrieve events for external projections.
 
 ### Create New Projection
 
 A `Projection` will have a "base" aggregate when it is defined. Projection create event handlers should subscribe to the create event of the base aggregate.
 
-Adding a new instance of a projection requires implementing the `Apply()` method to handle all necessary events, and the `GetExternalDataEventsAsync()` method to get events external to the base aggregate when initializing new instances of the projection.
+Adding a new instance of a projection requires implementing the `Apply()` method to handle all necessary events, and the `GetExternalDataEventsAsync()` method to get events external to the base aggregate when initializing new instances of the projection. **It is strongly recommended to use `ExternalDataEventFactory` in your `GetExternalDataEventsAsync()` implementation** - see [ExternalDataEventFactory (Recommended)](#externaldataeventfactory-recommended) for examples.
 
 This method is called in the event handler function to update the projection with any exsiting external data and then applied and saved to the projection container along with the `Event` signifying the creation of the `Test`
 

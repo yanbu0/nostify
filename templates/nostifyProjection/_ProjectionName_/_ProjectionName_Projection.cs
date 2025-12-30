@@ -59,21 +59,53 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
 
     public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<_ProjectionName_> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
     {
-        // If data exists within this service, even if a different container, use the container to get the data
+        // RECOMMENDED: Use ExternalDataEventFactory for cleaner, more maintainable code
+        var factory = new ExternalDataEventFactory<_ProjectionName_>(
+            nostify,
+            projectionsToInit,
+            httpClient,
+            pointInTime);
+
+        // Get events from same service for related aggregates
+        factory.WithSameServiceIdSelectors(
+            p => p.sameServiceAggregateExampleId,
+            p => p.sameServiceAggregateExampleId2);
+
+        // Get events from external services (if httpClient provided)
+        if (httpClient != null)
+        {
+            // Add external service requestors
+            factory.WithEventRequestor(
+                "https://externalDataExampleUrl/api/EventRequest",
+                p => p.externalAggregateExample1Id);
+
+            // For multiple external services, chain additional requestors
+            factory.WithEventRequestor(
+                "https://service1/api/EventRequest",
+                p => p.externalAggregateExample2Id,
+                p => p.externalAggregateExample3Id,
+                p => p.externalAggregateExample4Id);
+            
+            factory.WithEventRequestor(
+                "https://service2/api/EventRequest",
+                p => p.externalAggregateExample5Id);
+            
+            factory.WithEventRequestor(
+                "https://service3/api/EventRequest",
+                p => p.externalAggregateExample6Id);
+        }
+
+        return await factory.GetEventsAsync();
+
+        /* ALTERNATIVE: Legacy approach using ExternalDataEvent directly
         Container sameServiceEventStore = await nostify.GetEventStoreContainerAsync();
-        
-        //Use GetEventsAsync to get events from the same service, the selectors are a parameter list of the properties that are used to filter the events
         List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync(sameServiceEventStore, 
             projectionsToInit, 
             p => p.sameServiceAggregateExampleId,
             p => p.sameServiceAggregateExampleId2);
 
-        // Get external data necessary to initialize projections here
-        // To access data in other services, use httpClient and the EventRequest endpoint
         if (httpClient != null)
         {
-            //An EventRequest endpoint is created by the template in every service
-            //For a single external Aggregate, you can create one ExternalDataEvent object
             var externalEventsFromExternalService = await ExternalDataEvent.GetEventsAsync(httpClient,
                 "https://externalDataExampleUrl/api/EventRequest",
                 projectionsToInit,
@@ -81,9 +113,6 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
             );
             externalDataEvents.AddRange(externalEventsFromExternalService);
 
-            //If this Projection has more than one external Aggregate to get data from, create more queries, 
-            //use the GetMultiServiceEventsAsync method to combine multiple requests into one call
-            //the queries will run in parallel for efficiency
             var events = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient,
                     projectionsToInit,
                     new EventRequester<_ProjectionName_>($"https://service1/api/EventRequest",
@@ -102,5 +131,6 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
         }
 
         return externalDataEvents;
+        */
     }
 }
