@@ -70,6 +70,7 @@
 ### Updates
 
 - 4.1.0
+  - **Upgraded to .NET 10**: All projects and templates now target .NET 10 for improved performance and access to the latest framework features.
   - **ExternalDataEventFactory**: New fluent builder pattern for gathering external data events during projection initialization. See [Projection Initialization and External Data](#projection-initialization-and-external-data) and [Testing ExternalDataEventFactory](#testing-utilities).
     - `WithSameServiceIdSelectors()` - Add foreign key selectors for same-service event lookups
     - `WithSameServiceListIdSelectors()` - Add list-based foreign key selectors for one-to-many relationships
@@ -153,7 +154,6 @@
 - Better support for non-command events
 - Enhanced saga orchestration patterns
 - Additional query optimization features
-- .Net 10
 
 
 ## Getting Started
