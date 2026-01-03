@@ -178,6 +178,95 @@ public interface INostify
     public Task<Container> GetSagaContainerAsync();
 
     ///<summary>
+    ///Retrieves the sequence container for storing sequential number generators
+    ///</summary>
+    public Task<Container> GetSequenceContainerAsync();
+
+    ///<summary>
+    ///Gets the next value for a sequence, creating the sequence if it doesn't exist (starting at 0).
+    ///Uses atomic patch operations and handles concurrent creation with retry logic.
+    ///</summary>
+    ///<param name="sequenceName">The name of the sequence within the partition</param>
+    ///<param name="partitionKeyValue">The partition key value for the sequence</param>
+    ///<returns>The next sequential value (incremented by 1)</returns>
+    public Task<long> GetNextSequenceValueAsync(string sequenceName, string partitionKeyValue);
+
+    ///<summary>
+    ///Gets the next value for a sequence, creating the sequence if it doesn't exist with the specified starting value.
+    ///Uses atomic patch operations and handles concurrent creation with retry logic.
+    ///</summary>
+    ///<param name="sequenceName">The name of the sequence within the partition</param>
+    ///<param name="partitionKeyValue">The partition key value for the sequence</param>
+    ///<param name="startingValue">The starting value if the sequence doesn't exist</param>
+    ///<returns>The next sequential value (incremented by 1)</returns>
+    public Task<long> GetNextSequenceValueAsync(string sequenceName, string partitionKeyValue, long startingValue);
+
+    ///<summary>
+    ///Gets the next value for a sequence, creating the sequence if it doesn't exist (starting at 0).
+    ///Uses atomic patch operations and handles concurrent creation with retry logic.
+    ///</summary>
+    ///<param name="sequenceName">The name of the sequence within the partition</param>
+    ///<param name="partitionKeyValue">The partition key value as a Guid (typically tenantId)</param>
+    ///<returns>The next sequential value (incremented by 1)</returns>
+    public Task<long> GetNextSequenceValueAsync(string sequenceName, Guid partitionKeyValue);
+
+    ///<summary>
+    ///Gets the next value for a sequence, creating the sequence if it doesn't exist with the specified starting value.
+    ///Uses atomic patch operations and handles concurrent creation with retry logic.
+    ///</summary>
+    ///<param name="sequenceName">The name of the sequence within the partition</param>
+    ///<param name="partitionKeyValue">The partition key value as a Guid (typically tenantId)</param>
+    ///<param name="startingValue">The starting value if the sequence doesn't exist</param>
+    ///<returns>The next sequential value (incremented by 1)</returns>
+    public Task<long> GetNextSequenceValueAsync(string sequenceName, Guid partitionKeyValue, long startingValue);
+
+    ///<summary>
+    ///Reserves a range of sequential values atomically in a single database operation.
+    ///Ideal for bulk create operations where multiple sequential numbers are needed.
+    ///Creates the sequence if it doesn't exist, starting from 0.
+    ///</summary>
+    ///<param name="sequenceName">The name of the sequence within the partition</param>
+    ///<param name="partitionKeyValue">The partition key value (typically tenantId)</param>
+    ///<param name="count">The number of sequential values to reserve</param>
+    ///<returns>A SequenceRange containing the start and end values of the reserved range</returns>
+    public Task<SequenceRange> GetNextSequenceValuesAsync(string sequenceName, string partitionKeyValue, int count);
+
+    ///<summary>
+    ///Reserves a range of sequential values atomically in a single database operation.
+    ///Ideal for bulk create operations where multiple sequential numbers are needed.
+    ///Creates the sequence if it doesn't exist, starting from the specified value.
+    ///</summary>
+    ///<param name="sequenceName">The name of the sequence within the partition</param>
+    ///<param name="partitionKeyValue">The partition key value (typically tenantId)</param>
+    ///<param name="count">The number of sequential values to reserve</param>
+    ///<param name="startingValue">The starting value if the sequence doesn't exist</param>
+    ///<returns>A SequenceRange containing the start and end values of the reserved range</returns>
+    public Task<SequenceRange> GetNextSequenceValuesAsync(string sequenceName, string partitionKeyValue, int count, long startingValue);
+
+    ///<summary>
+    ///Reserves a range of sequential values atomically in a single database operation.
+    ///Ideal for bulk create operations where multiple sequential numbers are needed.
+    ///Creates the sequence if it doesn't exist, starting from 0.
+    ///</summary>
+    ///<param name="sequenceName">The name of the sequence within the partition</param>
+    ///<param name="partitionKeyValue">The partition key value as a Guid (typically tenantId)</param>
+    ///<param name="count">The number of sequential values to reserve</param>
+    ///<returns>A SequenceRange containing the start and end values of the reserved range</returns>
+    public Task<SequenceRange> GetNextSequenceValuesAsync(string sequenceName, Guid partitionKeyValue, int count);
+
+    ///<summary>
+    ///Reserves a range of sequential values atomically in a single database operation.
+    ///Ideal for bulk create operations where multiple sequential numbers are needed.
+    ///Creates the sequence if it doesn't exist, starting from the specified value.
+    ///</summary>
+    ///<param name="sequenceName">The name of the sequence within the partition</param>
+    ///<param name="partitionKeyValue">The partition key value as a Guid (typically tenantId)</param>
+    ///<param name="count">The number of sequential values to reserve</param>
+    ///<param name="startingValue">The starting value if the sequence doesn't exist</param>
+    ///<returns>A SequenceRange containing the start and end values of the reserved range</returns>
+    public Task<SequenceRange> GetNextSequenceValuesAsync(string sequenceName, Guid partitionKeyValue, int count, long startingValue);
+
+    ///<summary>
     ///Retrieves the container.  Uses the knownContainers list to skip checks if container already exists. Will create if it doesn't exist and update knownContainers list.
     ///</summary>
     ///<param name="containerName">Name of container to retrieve</param>

@@ -467,6 +467,178 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
+    public async Task<Container> GetSequenceContainerAsync()
+    {
+        return await GetContainerAsync(Repository.SequenceContainer, false, "/partitionKey");
+    }
+
+    ///<inheritdoc />
+    public async Task<long> GetNextSequenceValueAsync(string sequenceName, string partitionKeyValue)
+    {
+        return await GetNextSequenceValueAsync(sequenceName, partitionKeyValue, 0);
+    }
+
+    ///<inheritdoc />
+    public async Task<long> GetNextSequenceValueAsync(string sequenceName, string partitionKeyValue, long startingValue)
+    {
+        var container = await GetSequenceContainerAsync();
+        var documentId = Sequence.GenerateId(partitionKeyValue, sequenceName);
+        var partitionKey = new PartitionKey(partitionKeyValue);
+        
+        const int maxRetries = 3;
+        int retryCount = 0;
+        
+        while (true)
+        {
+            try
+            {
+                // Try to read the existing sequence
+                var response = await container.ReadItemAsync<Sequence>(documentId, partitionKey);
+                
+                // Sequence exists, increment atomically using patch
+                var patchOperations = new List<PatchOperation>
+                {
+                    PatchOperation.Increment("/currentValue", 1)
+                };
+                
+                var patchResponse = await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
+                return patchResponse.Resource.currentValue;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // Sequence doesn't exist, create it
+                try
+                {
+                    var newSequence = new Sequence(sequenceName, partitionKeyValue, startingValue);
+                    await container.CreateItemAsync(newSequence, partitionKey);
+                    
+                    // Now increment and return
+                    var patchOperations = new List<PatchOperation>
+                    {
+                        PatchOperation.Increment("/currentValue", 1)
+                    };
+                    
+                    var patchResponse = await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
+                    return patchResponse.Resource.currentValue;
+                }
+                catch (CosmosException createEx) when (createEx.StatusCode == System.Net.HttpStatusCode.Conflict)
+                {
+                    // Another process created the sequence, retry the read
+                    retryCount++;
+                    if (retryCount >= maxRetries)
+                    {
+                        throw new NostifyException($"Failed to get next sequence value after {maxRetries} retries due to concurrent creation conflicts.");
+                    }
+                    
+                    // Exponential backoff
+                    await Task.Delay(TimeSpan.FromMilliseconds(Math.Pow(2, retryCount) * 50));
+                    continue;
+                }
+            }
+        }
+    }
+
+    ///<inheritdoc />
+    public async Task<long> GetNextSequenceValueAsync(string sequenceName, Guid partitionKeyValue)
+    {
+        return await GetNextSequenceValueAsync(sequenceName, partitionKeyValue.ToString(), 0);
+    }
+
+    ///<inheritdoc />
+    public async Task<long> GetNextSequenceValueAsync(string sequenceName, Guid partitionKeyValue, long startingValue)
+    {
+        return await GetNextSequenceValueAsync(sequenceName, partitionKeyValue.ToString(), startingValue);
+    }
+
+    ///<inheritdoc />
+    public async Task<SequenceRange> GetNextSequenceValuesAsync(string sequenceName, string partitionKeyValue, int count)
+    {
+        return await GetNextSequenceValuesAsync(sequenceName, partitionKeyValue, count, 0);
+    }
+
+    ///<inheritdoc />
+    public async Task<SequenceRange> GetNextSequenceValuesAsync(string sequenceName, string partitionKeyValue, int count, long startingValue)
+    {
+        if (count <= 0)
+        {
+            throw new ArgumentException("Count must be greater than zero.", nameof(count));
+        }
+
+        var container = await GetSequenceContainerAsync();
+        var documentId = Sequence.GenerateId(partitionKeyValue, sequenceName);
+        var partitionKey = new PartitionKey(partitionKeyValue);
+        
+        const int maxRetries = 3;
+        int retryCount = 0;
+        
+        while (true)
+        {
+            try
+            {
+                // Try to read the existing sequence to get the current value before incrementing
+                var response = await container.ReadItemAsync<Sequence>(documentId, partitionKey);
+                long currentValue = response.Resource.currentValue;
+                
+                // Sequence exists, increment atomically by count using patch
+                var patchOperations = new List<PatchOperation>
+                {
+                    PatchOperation.Increment("/currentValue", count)
+                };
+                
+                await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
+                
+                // Return the range: from (currentValue + 1) to (currentValue + count)
+                return new SequenceRange(currentValue + 1, currentValue + count);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // Sequence doesn't exist, create it
+                try
+                {
+                    var newSequence = new Sequence(sequenceName, partitionKeyValue, startingValue);
+                    await container.CreateItemAsync(newSequence, partitionKey);
+                    
+                    // Now increment by count and return
+                    var patchOperations = new List<PatchOperation>
+                    {
+                        PatchOperation.Increment("/currentValue", count)
+                    };
+                    
+                    await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
+                    
+                    // Return the range: from (startingValue + 1) to (startingValue + count)
+                    return new SequenceRange(startingValue + 1, startingValue + count);
+                }
+                catch (CosmosException createEx) when (createEx.StatusCode == System.Net.HttpStatusCode.Conflict)
+                {
+                    // Another process created the sequence, retry the read
+                    retryCount++;
+                    if (retryCount >= maxRetries)
+                    {
+                        throw new NostifyException($"Failed to get next sequence values after {maxRetries} retries due to concurrent creation conflicts.");
+                    }
+                    
+                    // Exponential backoff
+                    await Task.Delay(TimeSpan.FromMilliseconds(Math.Pow(2, retryCount) * 50));
+                    continue;
+                }
+            }
+        }
+    }
+
+    ///<inheritdoc />
+    public async Task<SequenceRange> GetNextSequenceValuesAsync(string sequenceName, Guid partitionKeyValue, int count)
+    {
+        return await GetNextSequenceValuesAsync(sequenceName, partitionKeyValue.ToString(), count, 0);
+    }
+
+    ///<inheritdoc />
+    public async Task<SequenceRange> GetNextSequenceValuesAsync(string sequenceName, Guid partitionKeyValue, int count, long startingValue)
+    {
+        return await GetNextSequenceValuesAsync(sequenceName, partitionKeyValue.ToString(), count, startingValue);
+    }
+
+    ///<inheritdoc />
     public async Task DoBulkUpsertAsync<T>(Container bulkContainer, List<T> itemList) where T : IApplyable
     {
         await bulkContainer.DoBulkUpsertAsync<T>(itemList);
@@ -512,6 +684,9 @@ public class Nostify : INostify
 
         // Create the event store container
         await CreateContainerAsync(Repository.EventStoreContainer, Repository.EventStorePartitionKey, throughput, verbose);
+
+        // Create the sequence container
+        await CreateContainerAsync(Repository.SequenceContainer, "/partitionKey", throughput, verbose);
 
         // Create the containers for the aggregates and projections
         foreach (var containerName in EnumerateContainerNames(assembly))
