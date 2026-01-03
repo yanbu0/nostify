@@ -95,7 +95,7 @@ namespace nostify
         /// </summary>
         public readonly string SagaContainer;
 
-        ///<summary>
+        /// <summary>
         /// Optional. Name of sequence container for storing sequential number generators, defaults to "sequenceContainer"
         /// </summary>
         public readonly string SequenceContainer;
