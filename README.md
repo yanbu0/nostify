@@ -58,7 +58,8 @@
     - 10.6 [Rehydration and Point-in-Time Queries](#rehydration-and-point-in-time-queries)
     - 10.7 [Saga Pattern Implementation](#saga-pattern-implementation)
     - 10.8 [Container Management](#container-management)
-    - 10.9 [Validation System](#validation-system)
+    - 10.9 [Sequential Number Generation](#sequential-number-generation)
+    - 10.10 [Validation System](#validation-system)
 11. [Performance Considerations](#performance-considerations)
     - 11.1 [Bulk Operations](#bulk-operations)
     - 11.2 [Query Optimization](#query-optimization)
@@ -70,6 +71,13 @@
 ### Updates
 
 - 4.1.0
+  - **Upgraded to .NET 10**: All projects and templates now target .NET 10 for improved performance and access to the latest framework features.
+  - **Sequential Number Generation**: New `Sequence` class and `GetNextSequenceValueAsync()` method for generating sequential numbers within partitions. Ideal for invoice numbers, order numbers, or any business-friendly sequential identifiers. See [Sequential Number Generation](#sequential-number-generation).
+    - Atomic increment using Cosmos DB patch operations
+    - Partition-scoped sequences for multi-tenant isolation
+    - Automatic sequence creation with configurable starting values
+    - Conflict retry with exponential backoff (max 3 retries)
+    - **Bulk Sequence Generation**: New `GetNextSequenceValuesAsync()` method for reserving multiple sequential values in a single atomic operation. Returns a `SequenceRange` struct with `StartValue`, `EndValue`, `Count`, `ToArray()`, and `ToEnumerable()` for efficient bulk create scenarios.
   - **ExternalDataEventFactory**: New fluent builder pattern for gathering external data events during projection initialization. See [Projection Initialization and External Data](#projection-initialization-and-external-data) and [Testing ExternalDataEventFactory](#testing-utilities).
     - `WithSameServiceIdSelectors()` - Add foreign key selectors for same-service event lookups
     - `WithSameServiceListIdSelectors()` - Add list-based foreign key selectors for one-to-many relationships
@@ -153,7 +161,6 @@
 - Better support for non-command events
 - Enhanced saga orchestration patterns
 - Additional query optimization features
-- .Net 10
 
 
 ## Getting Started
@@ -2578,6 +2585,9 @@ Container customContainer = await _nostify.GetContainerAsync(
 // Get saga and undeliverable containers
 Container sagaContainer = await _nostify.GetSagaContainerAsync();
 Container undeliverableContainer = await _nostify.GetUndeliverableEventsContainerAsync();
+
+// Get sequence container
+Container sequenceContainer = await _nostify.GetSequenceContainerAsync();
 ```
 
 #### Low-Level Database Access
@@ -2596,6 +2606,268 @@ Container container = await _nostify.Repository.GetContainerAsync(
     true            // verbose logging
 );
 ```
+
+### Sequential Number Generation
+
+`nostify` provides built-in support for generating sequential numbers within partitions, ideal for creating business-friendly identifiers like invoice numbers, order numbers, or ticket IDs.
+
+#### Sequence Class
+
+```C#
+public class Sequence
+{
+    public string id { get; set; }           // Deterministic ID: "{partitionKey}_{name}"
+    public string name { get; set; }          // Sequence name within partition
+    public long currentValue { get; set; }    // Current sequence value
+    public string partitionKey { get; set; }  // Partition key for isolation
+    
+    // Generate deterministic document ID
+    public static string GenerateId(string partitionKeyValue, string sequenceName);
+}
+```
+
+#### Getting Next Sequence Value
+
+```C#
+// Get next value for a sequence (creates sequence starting at 0 if not exists)
+// Accepts Guid directly - no need to call .ToString()
+long orderNumber = await _nostify.GetNextSequenceValueAsync("OrderNumber", tenantId);
+// Returns: 1, 2, 3, ... (increments atomically)
+
+// Get next value with custom starting value (only used if sequence doesn't exist)
+long invoiceNumber = await _nostify.GetNextSequenceValueAsync("InvoiceNumber", tenantId, 1000);
+// First call returns: 1001 (starts at 1000, increments to 1001)
+// Subsequent calls return: 1002, 1003, ...
+
+// String overloads also available for non-Guid partition keys
+long storeOrderNum = await _nostify.GetNextSequenceValueAsync("Order", "STORE-NYC");
+long storeOrderNum2 = await _nostify.GetNextSequenceValueAsync("Order", "STORE-NYC", 10000);
+```
+
+#### Bulk Sequence Generation
+
+For scenarios where you need multiple sequential numbers at once (e.g., bulk order creation), use `GetNextSequenceValuesAsync()` which reserves a range of values in a single atomic database operation:
+
+```C#
+// Reserve 100 order numbers atomically (creates sequence starting at 0 if not exists)
+SequenceRange orderNumbers = await _nostify.GetNextSequenceValuesAsync("OrderNumber", tenantId, 100);
+// Returns: SequenceRange { StartValue = 1, EndValue = 100, Count = 100 }
+
+// Reserve values with custom starting value (only used if sequence doesn't exist)
+SequenceRange invoiceNumbers = await _nostify.GetNextSequenceValuesAsync("InvoiceNumber", tenantId, 50, 10000);
+// Returns: SequenceRange { StartValue = 10001, EndValue = 10050, Count = 50 }
+
+// String overloads for non-Guid partition keys
+SequenceRange storeOrders = await _nostify.GetNextSequenceValuesAsync("Order", "STORE-NYC", 25);
+SequenceRange storeOrders2 = await _nostify.GetNextSequenceValuesAsync("Order", "STORE-NYC", 25, 5000);
+```
+
+#### SequenceRange Struct
+
+The `SequenceRange` struct provides convenient methods for working with reserved sequences:
+
+```C#
+var range = new SequenceRange(1, 100);
+
+// Properties
+long start = range.StartValue;  // 1
+long end = range.EndValue;      // 100
+int count = range.Count;        // 100
+
+// Get all values
+long[] allValues = range.ToArray();                    // [1, 2, 3, ..., 100]
+IEnumerable<long> enumerable = range.ToEnumerable();   // Lazy enumeration
+
+// Check if value is in range
+bool contains = range.Contains(50);  // true
+bool outside = range.Contains(101);  // false
+
+// String representation
+string str = range.ToString();  // "[1..100] (Count: 100)"
+```
+
+#### Bulk Sequence Use Cases
+
+```C#
+// Bulk order creation with sequential order numbers
+public async Task<List<Order>> CreateBulkOrders(Guid tenantId, List<OrderDto> orderDtos)
+{
+    // Reserve all order numbers in one atomic operation
+    var orderNumbers = await _nostify.GetNextSequenceValuesAsync("OrderNumber", tenantId, orderDtos.Count);
+    
+    // Assign sequential numbers to each order
+    var orders = orderDtos
+        .Zip(orderNumbers.ToEnumerable(), (dto, seqNum) => new Order
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = $"ORD-{seqNum:D8}",
+            TenantId = tenantId,
+            CustomerId = dto.CustomerId,
+            Items = dto.Items
+        })
+        .ToList();
+    
+    // Persist all orders...
+    return orders;
+}
+
+// Import historical data with known starting numbers
+public async Task ImportInvoices(Guid tenantId, List<InvoiceDto> invoices)
+{
+    // Start numbering from 50000 if sequence doesn't exist
+    var numbers = await _nostify.GetNextSequenceValuesAsync("Invoice", tenantId, invoices.Count, 49999);
+    
+    var invoiceNumbers = numbers.ToArray();
+    for (int i = 0; i < invoices.Count; i++)
+    {
+        invoices[i].InvoiceNumber = $"INV-{invoiceNumbers[i]}";
+    }
+}
+
+// Mixed batch processing with different sequence types
+public async Task ProcessBatch(Guid tenantId, int orderCount, int ticketCount)
+{
+    // Reserve both sequence ranges atomically
+    var orderNumbers = await _nostify.GetNextSequenceValuesAsync("Order", tenantId, orderCount);
+    var ticketNumbers = await _nostify.GetNextSequenceValuesAsync("Ticket", tenantId, ticketCount);
+    
+    Console.WriteLine($"Reserved orders: {orderNumbers}");   // [1..100] (Count: 100)
+    Console.WriteLine($"Reserved tickets: {ticketNumbers}"); // [1..50] (Count: 50)
+}
+```
+
+#### How It Works
+
+1. **Atomic Operations**: Uses Cosmos DB patch operations (`PatchOperation.Increment`) for thread-safe increments
+2. **Auto-Creation**: Automatically creates the sequence document if it doesn't exist
+3. **Conflict Handling**: Retries up to 3 times with exponential backoff on 409 Conflict errors
+4. **Partition Isolation**: Each partition (e.g., tenant) has independent sequences
+
+#### Use Cases
+
+```C#
+// Multi-tenant invoice numbering (using Guid overload)
+public async Task<string> GenerateInvoiceNumber(Guid tenantId)
+{
+    long seq = await _nostify.GetNextSequenceValueAsync("Invoice", tenantId);
+    return $"INV-{seq:D8}"; // INV-00000001, INV-00000002, ...
+}
+
+// Order numbers per store location (using string overload)
+public async Task<string> GenerateOrderNumber(string storeCode)
+{
+    long seq = await _nostify.GetNextSequenceValueAsync("Order", storeCode, 10000);
+    return $"{storeCode}-{seq}"; // NYC-10001, NYC-10002, ...
+}
+
+// Multiple independent sequences per tenant (using Guid overload)
+public async Task<(long order, long ticket)> GetNumbers(Guid tenantId)
+{
+    long orderNum = await _nostify.GetNextSequenceValueAsync("Order", tenantId);
+    long ticketNum = await _nostify.GetNextSequenceValueAsync("SupportTicket", tenantId);
+    return (orderNum, ticketNum);
+}
+```
+
+#### Configuration
+
+The sequence container name can be customized in `NostifyCosmosClient`:
+
+```C#
+var cosmosClient = new NostifyCosmosClient(
+    ApiKey: config["CosmosApiKey"],
+    DbName: config["CosmosDbName"],
+    EndpointUri: config["CosmosEndpointUri"],
+    SequenceContainer: "customSequenceContainer"  // Default: "sequenceContainer"
+);
+```
+
+The sequence container is automatically created when calling `CreateContainersAsync()` with partition key `/partitionKey`.
+
+#### Complete Example: Order Service with Sequential Order Numbers
+
+This example shows how to integrate sequential numbering into an order creation workflow:
+
+```C#
+// OrderAggregate.cs
+public class OrderAggregate : NostifyObject, IAggregate
+{
+    public static string aggregateType => "Order";
+    public static string currentStateContainerName => "OrderCurrentState";
+    
+    public bool isDeleted { get; set; }
+    public string orderNumber { get; set; } = string.Empty;  // Human-readable: "ORD-00001234"
+    public Guid customerId { get; set; }
+    public decimal totalAmount { get; set; }
+    public string status { get; set; } = "Pending";
+    
+    public override void Apply(IEvent e)
+    {
+        UpdateProperties<OrderAggregate>(e.payload);
+    }
+}
+
+// OrderCommand.cs
+public class OrderCommand : NostifyCommand
+{
+    public static OrderCommand Create = new OrderCommand("Create_Order", true);
+    public static OrderCommand Update = new OrderCommand("Update_Order", false);
+    public static OrderCommand Delete = new OrderCommand("Delete_Order", false);
+    
+    public OrderCommand(string name, bool isNew) : base(name, isNew) { }
+}
+
+// CreateOrder.cs - HTTP Trigger
+public class CreateOrder
+{
+    private readonly INostify _nostify;
+    
+    public CreateOrder(INostify nostify)
+    {
+        _nostify = nostify;
+    }
+    
+    [Function("CreateOrder")]
+    public async Task<HttpResponseData> Run(
+        [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req,
+        FunctionContext context)
+    {
+        // Parse request body
+        dynamic orderData = await req.Body.ReadFromRequestBodyAsync();
+        Guid tenantId = Guid.Parse(orderData.tenantId.ToString());
+        
+        // Generate sequential order number for this tenant (Guid overload)
+        long sequenceValue = await _nostify.GetNextSequenceValueAsync("OrderNumber", tenantId);
+        string orderNumber = $"ORD-{sequenceValue:D8}"; // ORD-00000001, ORD-00000002, etc.
+        
+        // Create the order with the generated number
+        Guid orderId = Guid.NewGuid();
+        var payload = new {
+            id = orderId,
+            tenantId = tenantId,
+            orderNumber = orderNumber,
+            customerId = orderData.customerId,
+            totalAmount = orderData.totalAmount,
+            status = "Pending"
+        };
+        
+        // Create and persist the event
+        IEvent orderEvent = new EventFactory().Create<OrderAggregate>(
+            OrderCommand.Create, orderId, payload, Guid.Empty, tenantId);
+        await _nostify.PersistEventAsync(orderEvent);
+        
+        var response = req.CreateResponse(HttpStatusCode.Created);
+        await response.WriteAsJsonAsync(new { id = orderId, orderNumber = orderNumber });
+        return response;
+    }
+}
+```
+
+**Key Points:**
+- The sequence is scoped to `tenantId`, so each tenant gets their own independent order number sequence
+- Order numbers are human-readable (ORD-00000001) while still maintaining a GUID as the primary key
+- The sequence is generated before creating the event, ensuring the order number is included in the payload
+- Multiple tenants can simultaneously create orders without conflicts due to partition isolation
 
 ### Validation System
 

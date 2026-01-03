@@ -95,6 +95,11 @@ namespace nostify
         /// </summary>
         public readonly string SagaContainer;
 
+        /// <summary>
+        /// Optional. Name of sequence container for storing sequential number generators, defaults to "sequenceContainer"
+        /// </summary>
+        public readonly string SequenceContainer;
+
         ///<summary>
         ///Optional. Will default to "AccountEndpoint={this.EndpointUri}/;AccountKey={this.Primarykey};"
         ///</summary>
@@ -155,7 +160,8 @@ namespace nostify
             int DefaultContainerThroughput = -1,
             int DefaultDbThroughput = -1,
             bool UseGatewayConnection = false,
-            string SagaContainer = "sagaContainer")
+            string SagaContainer = "sagaContainer",
+            string SequenceContainer = "sequenceContainer")
         {
             this.EndpointUri = EndpointUri;
             this.Primarykey = ApiKey;
@@ -168,6 +174,7 @@ namespace nostify
             this.DefaultDbThroughput = DefaultDbThroughput;
             this.UseGatewayConnection = UseGatewayConnection;
             this.SagaContainer = SagaContainer;
+            this.SequenceContainer = SequenceContainer;
             _ = InitAsync();
         }
 
