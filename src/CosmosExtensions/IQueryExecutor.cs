@@ -35,4 +35,12 @@ public interface IQueryExecutor
     /// <param name="query">The LINQ query to execute</param>
     /// <returns>The first matching item or a new instance of T</returns>
     Task<T> FirstOrNewAsync<T>(IQueryable<T> query) where T : new();
+
+    /// <summary>
+    /// Executes a query and returns the count of matching items.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the query result</typeparam>
+    /// <param name="query">The LINQ query to execute</param>
+    /// <returns>The count of matching items</returns>
+    Task<int> CountAsync<T>(IQueryable<T> query);
 }

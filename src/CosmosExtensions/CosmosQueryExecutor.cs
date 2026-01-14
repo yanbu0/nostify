@@ -40,4 +40,11 @@ public class CosmosQueryExecutor : IQueryExecutor
         List<T> list = await fi.ReadFeedIteratorAsync<T>();
         return list.FirstOrDefault() ?? new T();
     }
+
+    /// <inheritdoc />
+    public async Task<int> CountAsync<T>(IQueryable<T> query)
+    {
+        var countResponse = await CosmosLinqExtensions.CountAsync(query);
+        return countResponse.Resource;
+    }
 }

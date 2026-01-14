@@ -23,6 +23,14 @@ public static class CosmosTestHelpers
     {
         var mockContainer = new Mock<Container>();
 
+        // Setup GetItemLinqQueryable for LINQ-based queries (used by PagedQueryAsync)
+        mockContainer.Setup(x => x.GetItemLinqQueryable<T>(
+                It.IsAny<bool>(),
+                It.IsAny<string>(),
+                It.IsAny<QueryRequestOptions>(),
+                It.IsAny<CosmosLinqSerializerOptions>()))
+            .Returns(items.AsQueryable().OrderBy(x => 1));
+
         // Setup for COUNT queries
         mockContainer.Setup(x => x.GetItemQueryIterator<int>(
                 It.IsAny<QueryDefinition>(),

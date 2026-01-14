@@ -407,7 +407,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -425,7 +425,7 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, Guid.Empty));
+            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, Guid.Empty, InMemoryQueryExecutor.Default));
     }
 
     [Fact]
@@ -448,7 +448,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "customPartitionKey", partitionKeyValue);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -479,7 +479,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -506,7 +506,7 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId));
+            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
     }
 
     [Fact]
@@ -532,7 +532,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -557,7 +557,7 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId));
+            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
     }
 
     [Fact]
@@ -583,7 +583,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -618,7 +618,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -649,7 +649,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -670,7 +670,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer<TestTenantItem>(new List<TestTenantItem>());
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -701,7 +701,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -732,7 +732,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "userId", userId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "userId", userId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -761,7 +761,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "organizationId", orgId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "organizationId", orgId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -792,7 +792,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "deviceId", deviceId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "deviceId", deviceId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -825,7 +825,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "accountId", accountId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "accountId", accountId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -857,7 +857,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "projectId", projectId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "projectId", projectId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -887,7 +887,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "sessionId", sessionId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "sessionId", sessionId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -914,7 +914,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "customerId", customerId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "customerId", customerId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -944,7 +944,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "vendorId", vendorId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "vendorId", vendorId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -970,7 +970,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "locationId", locationId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "locationId", locationId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -997,7 +997,7 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "groupId", groupId));
+            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "groupId", groupId, InMemoryQueryExecutor.Default));
     }
 
     [Fact]
@@ -1016,7 +1016,7 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "departmentId", departmentId));
+            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "departmentId", departmentId, InMemoryQueryExecutor.Default));
     }
 
     [Fact]
@@ -1045,7 +1045,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "workspaceId", workspaceId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "workspaceId", workspaceId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -1075,7 +1075,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "regionId", regionId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "regionId", regionId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
