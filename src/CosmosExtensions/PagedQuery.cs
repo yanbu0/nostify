@@ -82,6 +82,9 @@ public static class PagedQueryExtensions
     {
         var executor = queryExecutor ?? CosmosQueryExecutor.Default;
 
+        // Validate pagination parameters
+        ValidatePaginationParameters(tableState);
+
         // Validate partition key name to prevent injection
         if (!System.Text.RegularExpressions.Regex.IsMatch(partitionKeyName, @"^[a-zA-Z0-9_]+$"))
         {
@@ -155,6 +158,9 @@ public static class PagedQueryExtensions
     {
         var executor = queryExecutor ?? CosmosQueryExecutor.Default;
 
+        // Validate pagination parameters
+        ValidatePaginationParameters(tableState);
+
         // Validate partition key name to prevent injection
         if (!System.Text.RegularExpressions.Regex.IsMatch(partitionKeyName, @"^[a-zA-Z0-9_]+$"))
         {
@@ -198,6 +204,40 @@ public static class PagedQueryExtensions
     }
 
     /// <summary>
+    /// Validates pagination parameters to ensure they are within valid ranges.
+    /// </summary>
+    /// <param name="tableState">The table state containing pagination parameters.</param>
+    /// <exception cref="ArgumentNullException">Thrown when tableState is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when page is less than 1, pageSize is less than 1, or the combination would cause an overflow.</exception>
+    private static void ValidatePaginationParameters(ITableStateChange tableState)
+    {
+        if (tableState == null)
+        {
+            throw new ArgumentNullException(nameof(tableState), "Table state cannot be null.");
+        }
+        if (tableState.page < 1)
+        {
+            throw new ArgumentException($"Page must be greater than or equal to 1. Received: {tableState.page}", "tableState.page");
+        }
+        if (tableState.pageSize < 1)
+        {
+            throw new ArgumentException($"Page size must be greater than or equal to 1. Received: {tableState.pageSize}", "tableState.pageSize");
+        }
+        
+        // Check for potential overflow in offset calculation: (page - 1) * pageSize
+        try
+        {
+            _ = checked((tableState.page - 1) * tableState.pageSize);
+        }
+        catch (OverflowException)
+        {
+            throw new ArgumentException(
+                $"The combination of page ({tableState.page}) and pageSize ({tableState.pageSize}) would cause an arithmetic overflow.",
+                "tableState");
+        }
+    }
+
+    /// <summary>
     /// Applies filters to an IQueryable using reflection-based property access.
     /// </summary>
     private static IQueryable<T> ApplyFilters<T>(IQueryable<T> query, List<KeyValuePair<string, string>>? filters) where T : class
@@ -221,7 +261,7 @@ public static class PagedQueryExtensions
             
             // Convert filter value to the property type
             var propertyType = typeof(T).GetProperty(filter.Key)?.PropertyType ?? typeof(string);
-            object? convertedValue = ConvertFilterValue(filter.Value, propertyType);
+            object? convertedValue = ConvertFilterValue(filter.Key, filter.Value, propertyType);
             
             var constant = Expression.Constant(convertedValue, propertyType);
             var equality = Expression.Equal(property, constant);
@@ -236,50 +276,79 @@ public static class PagedQueryExtensions
     /// <summary>
     /// Converts a string filter value to the target property type.
     /// </summary>
-    private static object? ConvertFilterValue(string value, Type targetType)
+    /// <param name="filterKey">The filter key name for error messages.</param>
+    /// <param name="value">The string value to convert.</param>
+    /// <param name="targetType">The target type to convert to.</param>
+    /// <returns>The converted value.</returns>
+    /// <exception cref="ArgumentException">Thrown when the value cannot be converted to the target type.</exception>
+    private static object? ConvertFilterValue(string filterKey, string value, Type targetType)
     {
-        if (targetType == typeof(string))
+        try
         {
-            return value;
-        }
-        if (targetType == typeof(Guid))
-        {
-            return Guid.Parse(value);
-        }
-        if (targetType == typeof(int))
-        {
-            return int.Parse(value);
-        }
-        if (targetType == typeof(long))
-        {
-            return long.Parse(value);
-        }
-        if (targetType == typeof(decimal))
-        {
-            return decimal.Parse(value);
-        }
-        if (targetType == typeof(double))
-        {
-            return double.Parse(value);
-        }
-        if (targetType == typeof(bool))
-        {
-            return bool.Parse(value);
-        }
-        if (targetType == typeof(DateTime))
-        {
-            return DateTime.Parse(value);
-        }
-        if (Nullable.GetUnderlyingType(targetType) != null)
-        {
-            if (string.IsNullOrEmpty(value))
+            if (targetType == typeof(string))
             {
-                return null;
+                return value;
             }
-            return ConvertFilterValue(value, Nullable.GetUnderlyingType(targetType)!);
+            if (targetType == typeof(Guid))
+            {
+                return Guid.Parse(value);
+            }
+            if (targetType == typeof(int))
+            {
+                return int.Parse(value);
+            }
+            if (targetType == typeof(long))
+            {
+                return long.Parse(value);
+            }
+            if (targetType == typeof(decimal))
+            {
+                return decimal.Parse(value);
+            }
+            if (targetType == typeof(double))
+            {
+                return double.Parse(value);
+            }
+            if (targetType == typeof(bool))
+            {
+                return bool.Parse(value);
+            }
+            if (targetType == typeof(DateTime))
+            {
+                return DateTime.Parse(value);
+            }
+            if (Nullable.GetUnderlyingType(targetType) != null)
+            {
+                if (string.IsNullOrEmpty(value))
+                {
+                    return null;
+                }
+                return ConvertFilterValue(filterKey, value, Nullable.GetUnderlyingType(targetType)!);
+            }
+
+            return Convert.ChangeType(value, targetType);
         }
-        
-        return Convert.ChangeType(value, targetType);
+        catch (FormatException ex)
+        {
+            throw new ArgumentException(
+                $"Filter '{filterKey}' has invalid value '{value}'. Expected type: {targetType.Name}.",
+                filterKey,
+                ex);
+        }
+        catch (InvalidCastException ex)
+        {
+            throw new ArgumentException(
+                $"Filter '{filterKey}' value '{value}' cannot be converted to type {targetType.Name}.",
+                filterKey,
+                ex);
+        }
+        catch (OverflowException ex)
+        {
+            throw new ArgumentException(
+                $"Filter '{filterKey}' value '{value}' is out of range for type {targetType.Name}.",
+                filterKey,
+                ex);
+        }
     }
 
     /// <summary>
