@@ -34,4 +34,10 @@ public class InMemoryQueryExecutor : IQueryExecutor
     {
         return Task.FromResult(query.FirstOrDefault() ?? new T());
     }
+
+    /// <inheritdoc />
+    public Task<int> CountAsync<T>(IQueryable<T> query)
+    {
+        return Task.FromResult(query.Count());
+    }
 }

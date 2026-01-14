@@ -19,6 +19,8 @@ public class PagedQueryTests
         public string name { get; set; } = string.Empty;
         public int age { get; set; }
         public string email { get; set; } = string.Empty;
+        public bool isActive { get; set; }
+        public DateTime createdAt { get; set; }
 
         public override void Apply(IEvent e)
         {
@@ -31,6 +33,7 @@ public class PagedQueryTests
     {
         public string name { get; set; } = string.Empty;
         public int value { get; set; }
+        public bool isDeleted { get; set; }
         
         // Custom partition key properties for testing
         public Guid userId { get; set; }
@@ -407,7 +410,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -425,7 +428,229 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, Guid.Empty));
+            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, Guid.Empty, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithZeroPage_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange { page = 0, pageSize = 10 };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("Page must be greater than or equal to 1", ex.Message);
+        Assert.Contains("0", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithNegativePage_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange { page = -5, pageSize = 10 };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("Page must be greater than or equal to 1", ex.Message);
+        Assert.Contains("-5", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithZeroPageSize_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange { page = 1, pageSize = 0 };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("Page size must be greater than or equal to 1", ex.Message);
+        Assert.Contains("0", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithNegativePageSize_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange { page = 1, pageSize = -10 };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("Page size must be greater than or equal to 1", ex.Message);
+        Assert.Contains("-10", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithZeroPage_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange { page = 0, pageSize = 10 };
+
+        IOrderedQueryable<TestTenantItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await orderedQuery.PagedQueryAsync(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("Page must be greater than or equal to 1", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithZeroPageSize_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var partitionKeyValue = Guid.NewGuid();
+        var testItems = new List<TestItem>
+        {
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Test", value = 100 }
+        };
+        var tableState = new TableStateChange { page = 1, pageSize = 0 };
+
+        IOrderedQueryable<TestItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await orderedQuery.PagedQueryAsync(tableState, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("Page size must be greater than or equal to 1", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithNullTableState_ShouldThrowArgumentNullException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+
+        var queryable = testItems.AsQueryable();
+        TableStateChange? tableState = null;
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState!, tenantId, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithOverflowingPaginationValues_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        // These values would cause (page - 1) * pageSize to overflow
+        var tableState = new TableStateChange { page = int.MaxValue, pageSize = 2 };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("overflow", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithInvalidPartitionKeyName_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var partitionKeyValue = Guid.NewGuid();
+        var testItems = new List<TestItem>
+        {
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Test", value = 100 }
+        };
+        var tableState = new TableStateChange { page = 1, pageSize = 10 };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestItem>(tableState, "invalid; DROP TABLE--", partitionKeyValue, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("Invalid partition key name", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithNullTableState_ShouldThrowArgumentNullException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+
+        IOrderedQueryable<TestTenantItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+        TableStateChange? tableState = null;
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await orderedQuery.PagedQueryAsync(tableState!, tenantId, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithOverflowingPaginationValues_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        // These values would cause (page - 1) * pageSize to overflow
+        var tableState = new TableStateChange { page = int.MaxValue, pageSize = 2 };
+
+        IOrderedQueryable<TestTenantItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await orderedQuery.PagedQueryAsync(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        Assert.Contains("overflow", ex.Message);
     }
 
     [Fact]
@@ -448,7 +673,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "customPartitionKey", partitionKeyValue);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -479,7 +704,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -506,7 +731,209 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId));
+            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithNonExistentFilterProperty_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("nonExistentProperty", "someValue")
+            }
+        };
+
+        var mockContainer = CosmosTestHelpers.CreateMockContainer<TestTenantItem>(new List<TestTenantItem>());
+
+        // Act & Assert - Expression.Property throws ArgumentException for non-existent properties
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithNonExistentSortProperty_ShouldThrowArgumentException()
+    {
+        // Arrange - Using IQueryable (not IOrderedQueryable) to test sort property validation
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            sortColumn = "nonExistentColumn",
+            sortDirection = "asc"
+        };
+
+        // Create a regular IQueryable (not IOrderedQueryable) to ensure ApplySorting is called
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert - Expression.Property throws ArgumentException for non-existent properties
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithInvalidGuidFilterValue_ShouldThrowDescriptiveArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("tenantId", "not-a-valid-guid")
+            }
+        };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        // Verify the exception message contains helpful information
+        Assert.Contains("tenantId", ex.Message);
+        Assert.Contains("not-a-valid-guid", ex.Message);
+        Assert.Contains("Guid", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithInvalidIntFilterValue_ShouldThrowDescriptiveArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("age", "not-a-number")
+            }
+        };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        // Verify the exception message contains helpful information
+        Assert.Contains("age", ex.Message);
+        Assert.Contains("not-a-number", ex.Message);
+        Assert.Contains("Int32", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithInvalidBoolFilterValue_ShouldThrowDescriptiveArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25, isActive = true }
+        };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("isActive", "not-a-bool")
+            }
+        };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        // Verify the exception message contains helpful information
+        Assert.Contains("isActive", ex.Message);
+        Assert.Contains("not-a-bool", ex.Message);
+        Assert.Contains("Boolean", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithOverflowIntFilterValue_ShouldThrowDescriptiveArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                // Value larger than int.MaxValue
+                new KeyValuePair<string, string>("age", "99999999999999999999")
+            }
+        };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        // Verify the exception message contains helpful information about overflow
+        Assert.Contains("age", ex.Message);
+        Assert.Contains("out of range", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithInvalidDateTimeFilterValue_ShouldThrowDescriptiveArgumentException()
+    {
+        // Arrange - need a type with DateTime property
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Test", age = 25 }
+        };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("createdAt", "not-a-date")
+            }
+        };
+
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        // Verify the exception message contains helpful information
+        Assert.Contains("createdAt", ex.Message);
+        Assert.Contains("not-a-date", ex.Message);
+        Assert.Contains("DateTime", ex.Message);
     }
 
     [Fact]
@@ -532,7 +959,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -557,7 +984,7 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId));
+            await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default));
     }
 
     [Fact]
@@ -583,7 +1010,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -618,7 +1045,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -649,7 +1076,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -670,7 +1097,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer<TestTenantItem>(new List<TestTenantItem>());
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -701,7 +1128,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestTenantItem>(tableState, tenantId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -732,7 +1159,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "userId", userId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "userId", userId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -761,7 +1188,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "organizationId", orgId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "organizationId", orgId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -792,7 +1219,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "deviceId", deviceId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "deviceId", deviceId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -825,7 +1252,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "accountId", accountId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "accountId", accountId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -857,7 +1284,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "projectId", projectId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "projectId", projectId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -887,7 +1314,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "sessionId", sessionId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "sessionId", sessionId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -914,7 +1341,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "customerId", customerId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "customerId", customerId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -944,7 +1371,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "vendorId", vendorId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "vendorId", vendorId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -970,7 +1397,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "locationId", locationId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "locationId", locationId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -997,7 +1424,54 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "groupId", groupId));
+            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "groupId", groupId, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithCustomPartitionKey_NonExistentFilterProperty_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var groupId = Guid.NewGuid();
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("nonExistentProperty", "someValue")
+            }
+        };
+
+        var mockContainer = CosmosTestHelpers.CreateMockContainer<TestItem>(new List<TestItem>());
+
+        // Act & Assert - Expression.Property throws ArgumentException for non-existent properties
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "groupId", groupId, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithCustomPartitionKey_NonExistentSortProperty_ShouldThrowArgumentException()
+    {
+        // Arrange - Using IQueryable (not IOrderedQueryable) to test sort property validation
+        var groupId = Guid.NewGuid();
+        var testItems = new List<TestItem>
+        {
+            new TestItem { groupId = groupId, name = "Test", value = 25 }
+        };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            sortColumn = "nonExistentColumn",
+            sortDirection = "asc"
+        };
+
+        // Create a regular IQueryable (not IOrderedQueryable) to ensure ApplySorting is called
+        var queryable = testItems.AsQueryable();
+
+        // Act & Assert - Expression.Property throws ArgumentException for non-existent properties
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await queryable.PagedQueryAsync<TestItem>(tableState, "groupId", groupId, InMemoryQueryExecutor.Default));
     }
 
     [Fact]
@@ -1016,7 +1490,7 @@ public class PagedQueryTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "departmentId", departmentId));
+            await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "departmentId", departmentId, InMemoryQueryExecutor.Default));
     }
 
     [Fact]
@@ -1045,7 +1519,7 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "workspaceId", workspaceId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "workspaceId", workspaceId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
@@ -1075,12 +1549,390 @@ public class PagedQueryTests
         var mockContainer = CosmosTestHelpers.CreateMockContainer(testItems);
 
         // Act
-        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "regionId", regionId);
+        var result = await mockContainer.Object.PagedQueryAsync<TestItem>(tableState, "regionId", regionId, InMemoryQueryExecutor.Default);
 
         // Assert
         Assert.NotNull(result);
         Assert.Equal(50, result.items.Count);
         Assert.Equal(50, result.totalCount);
+    }
+
+    #endregion
+
+    #region IOrderedQueryable Extension Method Tests
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithTenantId_ShouldPreserveOrdering()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Zebra", age = 30 },
+            new TestTenantItem { tenantId = tenantId, name = "Apple", age = 25 },
+            new TestTenantItem { tenantId = tenantId, name = "Mango", age = 35 },
+            new TestTenantItem { tenantId = Guid.NewGuid(), name = "Other", age = 40 } // Different tenant
+        };
+
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            // Sort parameters should be ignored for IOrderedQueryable
+            sortColumn = "age",
+            sortDirection = "asc"
+        };
+
+        // Pre-order by name descending (Zebra, Mango, Apple order expected)
+        IOrderedQueryable<TestTenantItem> orderedQuery = testItems.AsQueryable().OrderByDescending(x => x.name);
+
+        // Act
+        var result = await orderedQuery.PagedQueryAsync(tableState, tenantId, InMemoryQueryExecutor.Default);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(3, result.totalCount);
+        Assert.Equal(3, result.items.Count);
+        // Verify pre-applied ordering is preserved (name descending), not tableState sorting (age asc)
+        Assert.Equal("Zebra", result.items[0].name);
+        Assert.Equal("Mango", result.items[1].name);
+        Assert.Equal("Apple", result.items[2].name);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithTenantId_ShouldApplyPagination()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>();
+        for (int i = 0; i < 25; i++)
+        {
+            testItems.Add(new TestTenantItem { tenantId = tenantId, name = $"Item{i:D2}", age = i });
+        }
+
+        var tableStatePage1 = new TableStateChange { page = 1, pageSize = 10 };
+        var tableStatePage2 = new TableStateChange { page = 2, pageSize = 10 };
+        var tableStatePage3 = new TableStateChange { page = 3, pageSize = 10 };
+
+        // Pre-order by name ascending
+        IOrderedQueryable<TestTenantItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+
+        // Act
+        var resultPage1 = await orderedQuery.PagedQueryAsync(tableStatePage1, tenantId, InMemoryQueryExecutor.Default);
+        var resultPage2 = await orderedQuery.PagedQueryAsync(tableStatePage2, tenantId, InMemoryQueryExecutor.Default);
+        var resultPage3 = await orderedQuery.PagedQueryAsync(tableStatePage3, tenantId, InMemoryQueryExecutor.Default);
+
+        // Assert
+        Assert.Equal(25, resultPage1.totalCount);
+        Assert.Equal(10, resultPage1.items.Count);
+        Assert.Equal("Item00", resultPage1.items[0].name);
+        Assert.Equal("Item09", resultPage1.items[9].name);
+
+        Assert.Equal(25, resultPage2.totalCount);
+        Assert.Equal(10, resultPage2.items.Count);
+        Assert.Equal("Item10", resultPage2.items[0].name);
+        Assert.Equal("Item19", resultPage2.items[9].name);
+
+        Assert.Equal(25, resultPage3.totalCount);
+        Assert.Equal(5, resultPage3.items.Count); // Only 5 remaining items
+        Assert.Equal("Item20", resultPage3.items[0].name);
+        Assert.Equal("Item24", resultPage3.items[4].name);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithTenantId_ShouldApplyFilters()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Alice", age = 30, email = "alice@test.com" },
+            new TestTenantItem { tenantId = tenantId, name = "Bob", age = 25, email = "bob@test.com" },
+            new TestTenantItem { tenantId = tenantId, name = "Charlie", age = 30, email = "charlie@test.com" }
+        };
+
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("age", "30")
+            }
+        };
+
+        // Pre-order by name ascending
+        IOrderedQueryable<TestTenantItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+
+        // Act
+        var result = await orderedQuery.PagedQueryAsync(tableState, tenantId, InMemoryQueryExecutor.Default);
+
+        // Assert
+        Assert.Equal(2, result.totalCount);
+        Assert.Equal(2, result.items.Count);
+        // Verify ordering is preserved after filtering
+        Assert.Equal("Alice", result.items[0].name);
+        Assert.Equal("Charlie", result.items[1].name);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithTenantId_EmptyGuid_ShouldThrow()
+    {
+        // Arrange
+        var testItems = new List<TestTenantItem>();
+        IOrderedQueryable<TestTenantItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+        var tableState = new TableStateChange { page = 1, pageSize = 10 };
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await orderedQuery.PagedQueryAsync(tableState, Guid.Empty, InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithCustomPartitionKey_ShouldPreserveOrdering()
+    {
+        // Arrange
+        var partitionKeyValue = Guid.NewGuid();
+        var testItems = new List<TestItem>
+        {
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Zebra", value = 300 },
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Apple", value = 100 },
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Mango", value = 200 },
+            new TestItem { customPartitionKey = Guid.NewGuid(), name = "Other", value = 400 } // Different partition
+        };
+
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            // Sort parameters should be ignored for IOrderedQueryable
+            sortColumn = "name",
+            sortDirection = "asc"
+        };
+
+        // Pre-order by value descending (300, 200, 100 order expected)
+        IOrderedQueryable<TestItem> orderedQuery = testItems.AsQueryable().OrderByDescending(x => x.value);
+
+        // Act
+        var result = await orderedQuery.PagedQueryAsync(tableState, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(3, result.totalCount);
+        Assert.Equal(3, result.items.Count);
+        // Verify pre-applied ordering is preserved (value descending), not tableState sorting (name asc)
+        Assert.Equal("Zebra", result.items[0].name);  // value 300
+        Assert.Equal("Mango", result.items[1].name);  // value 200
+        Assert.Equal("Apple", result.items[2].name);  // value 100
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithCustomPartitionKey_ShouldApplyPagination()
+    {
+        // Arrange
+        var partitionKeyValue = Guid.NewGuid();
+        var testItems = new List<TestItem>();
+        for (int i = 0; i < 30; i++)
+        {
+            testItems.Add(new TestItem { customPartitionKey = partitionKeyValue, name = $"Item{i:D2}", value = i * 10 });
+        }
+
+        var tableStatePage1 = new TableStateChange { page = 1, pageSize = 10 };
+        var tableStatePage2 = new TableStateChange { page = 2, pageSize = 10 };
+        var tableStatePage3 = new TableStateChange { page = 3, pageSize = 10 };
+
+        // Pre-order by value descending
+        IOrderedQueryable<TestItem> orderedQuery = testItems.AsQueryable().OrderByDescending(x => x.value);
+
+        // Act
+        var resultPage1 = await orderedQuery.PagedQueryAsync(tableStatePage1, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
+        var resultPage2 = await orderedQuery.PagedQueryAsync(tableStatePage2, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
+        var resultPage3 = await orderedQuery.PagedQueryAsync(tableStatePage3, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
+
+        // Assert - items ordered by value descending: 290, 280, ..., 0
+        Assert.Equal(30, resultPage1.totalCount);
+        Assert.Equal(10, resultPage1.items.Count);
+        Assert.Equal(290, resultPage1.items[0].value);  // Item29
+        Assert.Equal(200, resultPage1.items[9].value);  // Item20
+
+        Assert.Equal(30, resultPage2.totalCount);
+        Assert.Equal(10, resultPage2.items.Count);
+        Assert.Equal(190, resultPage2.items[0].value);  // Item19
+        Assert.Equal(100, resultPage2.items[9].value);  // Item10
+
+        Assert.Equal(30, resultPage3.totalCount);
+        Assert.Equal(10, resultPage3.items.Count);
+        Assert.Equal(90, resultPage3.items[0].value);   // Item09
+        Assert.Equal(0, resultPage3.items[9].value);    // Item00
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithCustomPartitionKey_ShouldApplyFilters()
+    {
+        // Arrange
+        var partitionKeyValue = Guid.NewGuid();
+        var testItems = new List<TestItem>
+        {
+            new TestItem { customPartitionKey = partitionKeyValue, name = "HighValue1", value = 100 },
+            new TestItem { customPartitionKey = partitionKeyValue, name = "LowValue", value = 50 },
+            new TestItem { customPartitionKey = partitionKeyValue, name = "HighValue2", value = 100 }
+        };
+
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("value", "100")
+            }
+        };
+
+        // Pre-order by name descending
+        IOrderedQueryable<TestItem> orderedQuery = testItems.AsQueryable().OrderByDescending(x => x.name);
+
+        // Act
+        var result = await orderedQuery.PagedQueryAsync(tableState, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
+
+        // Assert
+        Assert.Equal(2, result.totalCount);
+        Assert.Equal(2, result.items.Count);
+        // Verify ordering is preserved after filtering (name descending)
+        Assert.Equal("HighValue2", result.items[0].name);
+        Assert.Equal("HighValue1", result.items[1].name);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithCustomPartitionKey_InvalidPartitionKeyName_ShouldThrow()
+    {
+        // Arrange
+        var testItems = new List<TestItem>();
+        IOrderedQueryable<TestItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+        var tableState = new TableStateChange { page = 1, pageSize = 10 };
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await orderedQuery.PagedQueryAsync(tableState, "invalid; DROP TABLE--", Guid.NewGuid(), InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithCustomPartitionKey_InvalidSortColumn_ShouldThrow()
+    {
+        // Arrange
+        var testItems = new List<TestItem>();
+        IOrderedQueryable<TestItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            sortColumn = "invalid; DROP TABLE--"
+        };
+
+        // Act & Assert - should validate sortColumn even though it's ignored
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await orderedQuery.PagedQueryAsync(tableState, "customPartitionKey", Guid.NewGuid(), InMemoryQueryExecutor.Default));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithThenBy_ShouldPreserveSecondaryOrdering()
+    {
+        // Arrange
+        var partitionKeyValue = Guid.NewGuid();
+        var testItems = new List<TestItem>
+        {
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Apple", value = 100 },
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Apple", value = 50 },
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Banana", value = 75 },
+            new TestItem { customPartitionKey = partitionKeyValue, name = "Banana", value = 25 }
+        };
+
+        var tableState = new TableStateChange { page = 1, pageSize = 10 };
+
+        // Pre-order by name ascending, then by value descending
+        IOrderedQueryable<TestItem> orderedQuery = testItems.AsQueryable()
+            .OrderBy(x => x.name)
+            .ThenByDescending(x => x.value);
+
+        // Act
+        var result = await orderedQuery.PagedQueryAsync(tableState, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
+
+        // Assert - verify both primary and secondary ordering preserved
+        Assert.Equal(4, result.items.Count);
+        Assert.Equal("Apple", result.items[0].name);
+        Assert.Equal(100, result.items[0].value);  // Apple with higher value first
+        Assert.Equal("Apple", result.items[1].name);
+        Assert.Equal(50, result.items[1].value);   // Apple with lower value second
+        Assert.Equal("Banana", result.items[2].name);
+        Assert.Equal(75, result.items[2].value);   // Banana with higher value first
+        Assert.Equal("Banana", result.items[3].name);
+        Assert.Equal(25, result.items[3].value);   // Banana with lower value second
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_EmptyResult_ShouldReturnEmptyList()
+    {
+        // Arrange
+        var partitionKeyValue = Guid.NewGuid();
+        var testItems = new List<TestItem>
+        {
+            new TestItem { customPartitionKey = Guid.NewGuid(), name = "Other", value = 100 } // Different partition
+        };
+
+        var tableState = new TableStateChange { page = 1, pageSize = 10 };
+
+        IOrderedQueryable<TestItem> orderedQuery = testItems.AsQueryable().OrderBy(x => x.name);
+
+        // Act
+        var result = await orderedQuery.PagedQueryAsync(tableState, "customPartitionKey", partitionKeyValue, InMemoryQueryExecutor.Default);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Empty(result.items);
+        Assert.Equal(0, result.totalCount);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IOrderedQueryable_WithFiltersAndPagination_Combined()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testItems = new List<TestTenantItem>();
+        for (int i = 0; i < 20; i++)
+        {
+            // Half with age 30, half with age 25
+            testItems.Add(new TestTenantItem
+            {
+                tenantId = tenantId,
+                name = $"User{i:D2}",
+                age = i % 2 == 0 ? 30 : 25
+            });
+        }
+
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 5,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("age", "30")
+            }
+        };
+
+        // Pre-order by name descending
+        IOrderedQueryable<TestTenantItem> orderedQuery = testItems.AsQueryable().OrderByDescending(x => x.name);
+
+        // Act
+        var result = await orderedQuery.PagedQueryAsync(tableState, tenantId, InMemoryQueryExecutor.Default);
+
+        // Assert
+        Assert.Equal(10, result.totalCount); // 10 items with age=30
+        Assert.Equal(5, result.items.Count);  // Page size of 5
+        // Verify ordering preserved (name descending) with even-numbered items (age=30)
+        Assert.Equal("User18", result.items[0].name);
+        Assert.Equal("User16", result.items[1].name);
+        Assert.Equal("User14", result.items[2].name);
+        Assert.Equal("User12", result.items[3].name);
+        Assert.Equal("User10", result.items[4].name);
     }
 
     #endregion
