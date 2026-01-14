@@ -70,6 +70,20 @@
 
 ### Updates
 
+- 4.2.0
+  - **PagedQuery IQueryable/IOrderedQueryable Support**: Added `PagedQueryAsync()` extension methods for `IQueryable<T>` and `IOrderedQueryable<T>`, enabling paged queries on pre-constructed LINQ queries. See [Paged Queries with Filtering and Sorting](#paged-queries-with-filtering-and-sorting).
+    - New overloads for `IQueryable<T>` - apply custom LINQ filters before pagination with automatic sorting
+    - New overloads for `IOrderedQueryable<T>` - use pre-applied ordering, pagination respects existing sort
+    - Supports both tenant-based (`ITenantFilterable`) and custom partition key filtering
+    - Chain with `FilteredQuery()` or `GetItemLinqQueryable()` for flexible query composition
+  - **PagedQuery Testability**: Added `IQueryExecutor` parameter to all `PagedQueryAsync()` extension methods for improved unit testing support.
+    - All 6 `PagedQueryAsync` overloads now accept an optional `IQueryExecutor` parameter
+    - Use `InMemoryQueryExecutor.Default` in unit tests to avoid Cosmos DB emulator dependency
+    - Backwards compatible - existing code works without changes (defaults to `CosmosQueryExecutor`)
+  - **IQueryExecutor.CountAsync**: Added `CountAsync<T>()` method to `IQueryExecutor` interface for counting query results. See [IQueryExecutor for Mocking Cosmos Queries](#iqueryexecutor-for-mocking-cosmos-queries).
+    - `CosmosQueryExecutor` uses `CosmosLinqExtensions.CountAsync()` for efficient server-side counting
+    - `InMemoryQueryExecutor` uses LINQ `.Count()` for in-memory test execution
+
 - 4.1.0
   - **Upgraded to .NET 10**: All projects and templates now target .NET 10 for improved performance and access to the latest framework features.
   - **Sequential Number Generation**: New `Sequence` class and `GetNextSequenceValueAsync()` method for generating sequential numbers within partitions. Ideal for invoice numbers, order numbers, or any business-friendly sequential identifiers. See [Sequential Number Generation](#sequential-number-generation).
@@ -89,11 +103,12 @@
     - Supports both single Guid and `List<Guid>` foreign key patterns
     - Supports multi-level chaining: local events → external events → dependent external events
   - **IQueryExecutor Interface**: New abstraction for mocking Cosmos DB LINQ queries in unit tests. See [IQueryExecutor for Mocking Cosmos Queries](#iqueryexecutor-for-mocking-cosmos-queries).
-    - `IQueryExecutor` - Interface defining `ReadAllAsync`, `FirstOrDefaultAsync`, and `FirstOrNewAsync`
+    - `IQueryExecutor` - Interface defining `ReadAllAsync`, `FirstOrDefaultAsync`, `FirstOrNewAsync`, and `CountAsync`
     - `CosmosQueryExecutor` - Production implementation using Cosmos SDK's `ToFeedIterator`
     - `InMemoryQueryExecutor` - Test implementation for in-memory query execution without Cosmos emulator
     - All `ExternalDataEvent.GetEventsAsync` methods now accept optional `IQueryExecutor` parameter
     - `ExternalDataEventFactory` constructor accepts optional `IQueryExecutor` for testability
+    - All `PagedQueryAsync` extension methods accept optional `IQueryExecutor` parameter for testability
   - **Enhanced Testability**: Query execution can now be fully mocked without requiring Cosmos DB emulator
 - 4.0.2
   - **Safe Patch Fix**: Fixed bug in `SafePatchItemAsync` that allowed attempting to patch the `id` property, which Cosmos DB does not allow. The method now automatically removes any `/id` patch operations before executing. See [Safe Patch Operations](#safe-patch-operations).
@@ -1726,6 +1741,46 @@ IPagedResult<YourAggregate> result = await container
 - `sortDirection` (string?) - "asc" or "desc" (nullable, defaults to "asc")
 - `filters` (List<KeyValuePair<string, string>>?) - Key-value pairs for equality filtering
 
+**Unit Testing with InMemoryQueryExecutor:**
+
+All `PagedQueryAsync` methods accept an optional `IQueryExecutor` parameter, making them easy to test without the Cosmos DB emulator:
+
+```csharp
+[Fact]
+public async Task PagedQueryAsync_ReturnsCorrectPage()
+{
+    // Arrange - Create test data
+    var tenantId = Guid.NewGuid();
+    var testItems = new List<YourAggregate>
+    {
+        new YourAggregate { tenantId = tenantId, name = "Item1" },
+        new YourAggregate { tenantId = tenantId, name = "Item2" },
+        new YourAggregate { tenantId = tenantId, name = "Item3" }
+    };
+
+    // Create mock container with test data
+    var mockContainer = CosmosTestHelpers.CreateMockContainer<YourAggregate>(testItems);
+
+    var tableState = new TableStateChange
+    {
+        page = 1,
+        pageSize = 2,
+        sortColumn = "name",
+        sortDirection = "asc"
+    };
+
+    // Act - Pass InMemoryQueryExecutor to execute queries in-memory
+    var result = await mockContainer.Object.PagedQueryAsync<YourAggregate>(
+        tableState,
+        tenantId,
+        InMemoryQueryExecutor.Default);  // Use in-memory execution for testing
+
+    // Assert
+    Assert.Equal(2, result.items.Count);
+    Assert.Equal(3, result.totalCount);
+}
+```
+
 #### Filtered Queries for Partition-Scoped LINQ
 
 The `FilteredQuery()` extension methods simplify creating LINQ queries that are scoped to a specific partition. This is useful for efficient queries within a single tenant or partition key.
@@ -1835,6 +1890,7 @@ public interface IQueryExecutor
     Task<List<T>> ReadAllAsync<T>(IQueryable<T> query);
     Task<T?> FirstOrDefaultAsync<T>(IQueryable<T> query);
     Task<T> FirstOrNewAsync<T>(IQueryable<T> query) where T : new();
+    Task<int> CountAsync<T>(IQueryable<T> query);
 }
 ```
 
