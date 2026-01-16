@@ -18,7 +18,6 @@ public class FilteredQueryTests
 {
     private class TestTenantEntity : NostifyObject, ITenantFilterable
     {
-        public new Guid tenantId { get; set; }
         public string Name { get; set; } = string.Empty;
         public int Value { get; set; }
 
@@ -26,6 +25,20 @@ public class FilteredQueryTests
         {
             UpdateProperties<TestTenantEntity>(e.payload);
         }
+    }
+
+    /// <summary>
+    /// Helper method to validate that a parameter type is Expression{Func{T, bool}}
+    /// </summary>
+    private static bool IsExpressionFuncType(Type paramType)
+    {
+        if (!paramType.IsGenericType)
+        {
+            return false;
+        }
+        
+        var genericTypeDef = paramType.GetGenericTypeDefinition();
+        return genericTypeDef == typeof(Expression<>);
     }
 
     [Fact]
@@ -46,14 +59,8 @@ public class FilteredQueryTests
         // Verify that the third parameter is Expression<Func<T, bool>>
         var filterParameter = methodInfo.GetParameters()[2];
         Assert.NotNull(filterParameter);
-        Assert.True(filterParameter.ParameterType.IsGenericType);
-        
-        var genericTypeDef = filterParameter.ParameterType.GetGenericTypeDefinition();
-        // The parameter should be Expression<> or a nullable variant
-        Assert.True(
-            genericTypeDef.FullName?.Contains("Expression") == true ||
-            Nullable.GetUnderlyingType(filterParameter.ParameterType)?.GetGenericTypeDefinition()?.FullName?.Contains("Expression") == true
-        );
+        Assert.True(IsExpressionFuncType(filterParameter.ParameterType), 
+            $"Expected Expression<> type but found: {filterParameter.ParameterType.Name}");
     }
 
     [Fact]
@@ -75,21 +82,9 @@ public class FilteredQueryTests
             
             if (filterParam != null && filterParam.Name == "filterExpression")
             {
-                // Get the actual type (handle nullable)
-                var paramType = filterParam.ParameterType;
-                
-                // Check if it's a generic type
-                if (paramType.IsGenericType)
-                {
-                    var genericTypeDef = paramType.GetGenericTypeDefinition();
-                    
-                    // It should be Expression<T> (not Func<T>)
-                    Assert.True(
-                        genericTypeDef == typeof(Expression<>) ||
-                        (Nullable.GetUnderlyingType(paramType)?.IsGenericType == true && 
-                         Nullable.GetUnderlyingType(paramType)?.GetGenericTypeDefinition() == typeof(Expression<>)),
-                        $"FilteredQuery method should use Expression<Func<T, bool>> for filter parameter, but found: {paramType.FullName ?? paramType.Name}");
-                }
+                // Verify it's Expression<Func<T, bool>>
+                Assert.True(IsExpressionFuncType(filterParam.ParameterType),
+                    $"FilteredQuery method should use Expression<Func<T, bool>> for filter parameter, but found: {filterParam.ParameterType.FullName ?? filterParam.ParameterType.Name}");
             }
         }
     }
