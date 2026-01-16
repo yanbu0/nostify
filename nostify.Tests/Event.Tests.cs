@@ -29,8 +29,6 @@ public class EventTests
 
         public string? name { get; set; }
 
-        public new Guid id { get; set; }
-
         public bool isDeleted { get; set; }
 
         public override void Apply(IEvent eventToApply)
@@ -47,9 +45,6 @@ public class EventTests
 
         [Required(ErrorMessage = "Name is required")]
         public string? name { get; set; }
-
-        [Required(ErrorMessage = "ID is required")]
-        public new Guid id { get; set; }
 
         [RequiredFor(["Test_ValueUpdate","Test_TwoCommands"])]
         [Range(1, 100, ErrorMessage = "Value must be between 1 and 100")]
@@ -1658,7 +1653,6 @@ public class EventTests
         // Instance properties - SHOULD be valid
         [Required]
         public string? name { get; set; }
-        public new Guid id { get; set; }
         public bool isDeleted { get; set; }
 
         public override void Apply(IEvent eventToApply)
@@ -1687,7 +1681,6 @@ public class EventTests
         // Instance properties - SHOULD be valid
         [Required]
         public string? name { get; set; }
-        public new Guid id { get; set; }
         public bool isDeleted { get; set; }
 
         public override void Apply(IEvent eventToApply)
@@ -1712,18 +1705,28 @@ public class EventTests
     }
 
     [Fact]
-    public void ValidatePayload_ShouldRemoveStaticProperty_WhenThrowErrorIfExtraPropsIsFalse()
+    public void ValidatePayload_ShouldIgnoreStaticProperty_WhenThrowErrorIfExtraPropsIsFalse()
     {
         // Arrange - Include a property that matches a static property name
         var command = new NostifyCommand("Test_Create", true);
-        var payload = new { name = "Test", id = Guid.NewGuid(), StaticProperty = "attempting to set static" };
+        var testId = Guid.NewGuid();
+        var payload = new { name = "Test", id = testId, StaticProperty = "attempting to set static" };
         var eventToTest = new Event(command, payload);
 
-        // Act - Should not throw, but should remove the static property from payload
+        // Act - Should not throw when throwErrorIfExtraProps is false
+        // The static property is removed from the internal cleaned payload during validation
         var result = eventToTest.ValidatePayload<AggregateWithStaticProperties>(throwErrorIfExtraProps: false);
 
-        // Assert
+        // Assert - Method returns the event for chaining
         Assert.Equal(eventToTest, result);
+        
+        // Verify that GetPayload deserializes correctly - the static property is not 
+        // included when deserializing to the target type
+        var deserializedPayload = eventToTest.GetPayload<AggregateWithStaticProperties>();
+        Assert.Equal("Test", deserializedPayload.name);
+        Assert.Equal(testId, deserializedPayload.id);
+        // Static property retains its default value (not set from payload)
+        Assert.Equal("static value", AggregateWithStaticProperties.StaticProperty);
     }
 
     [Fact]
