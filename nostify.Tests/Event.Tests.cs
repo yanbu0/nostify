@@ -1601,4 +1601,325 @@ public class EventTests
     }
 
     #endregion
+
+    #region Property Reflection Tests (BindingFlags.Public | BindingFlags.Instance)
+
+    /// <summary>
+    /// Abstract base class that inherits from NostifyObject to test inherited property validation.
+    /// This simulates a common pattern where aggregates share base properties.
+    /// </summary>
+    public abstract class AbstractAggregateBase : NostifyObject, IAggregate, ITenantFilterable
+    {
+        public static string aggregateType => "AbstractBase";
+        public static string currentStateContainerName => $"{aggregateType}CurrentState";
+
+        // Properties defined in the abstract base class - these should be valid for validation
+        public string? baseProperty { get; set; }
+        public DateTime? createdDate { get; set; }
+        public string? createdBy { get; set; }
+        
+        public bool isDeleted { get; set; }
+    }
+
+    /// <summary>
+    /// Concrete aggregate that inherits from AbstractAggregateBase.
+    /// This tests that properties from NostifyObject -> AbstractAggregateBase -> ConcreteAggregate
+    /// are all recognized during validation.
+    /// </summary>
+    public class ConcreteAggregateWithInheritance : AbstractAggregateBase
+    {
+        public new static string aggregateType => "ConcreteInherited";
+        public new static string currentStateContainerName => $"{aggregateType}CurrentState";
+
+        // Properties specific to the concrete class
+        [Required]
+        public string? name { get; set; }
+        public string? description { get; set; }
+        public int? quantity { get; set; }
+
+        public override void Apply(IEvent eventToApply)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    /// <summary>
+    /// Test aggregate with static properties to verify they are not included in validation.
+    /// This tests the fix for using BindingFlags.Public | BindingFlags.Instance.
+    /// </summary>
+    public class AggregateWithStaticProperties : NostifyObject, IAggregate, ITenantFilterable
+    {
+        public static string aggregateType => "TestStatic";
+        public static string currentStateContainerName => $"{aggregateType}CurrentState";
+        
+        // Static property - should NOT be considered a valid property for payload
+        public static string StaticProperty { get; set; } = "static value";
+        
+        // Instance properties - SHOULD be valid
+        [Required]
+        public string? name { get; set; }
+        public new Guid id { get; set; }
+        public bool isDeleted { get; set; }
+
+        public override void Apply(IEvent eventToApply)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    /// <summary>
+    /// Test aggregate with private and protected properties to verify they are not included in validation.
+    /// </summary>
+    public class AggregateWithNonPublicProperties : NostifyObject, IAggregate, ITenantFilterable
+    {
+        public static string aggregateType => "TestNonPublic";
+        public static string currentStateContainerName => $"{aggregateType}CurrentState";
+        
+        // Private property - should NOT be considered a valid property for payload
+        private string? PrivateProperty { get; set; }
+        
+        // Protected property - should NOT be considered a valid property for payload
+        protected string? ProtectedProperty { get; set; }
+        
+        // Internal property - should NOT be considered a valid property for payload (not public)
+        internal string? InternalProperty { get; set; }
+        
+        // Instance properties - SHOULD be valid
+        [Required]
+        public string? name { get; set; }
+        public new Guid id { get; set; }
+        public bool isDeleted { get; set; }
+
+        public override void Apply(IEvent eventToApply)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrowForStaticProperty_WhenThrowErrorIfExtraPropsIsTrue()
+    {
+        // Arrange - Include a property that matches a static property name
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { name = "Test", id = Guid.NewGuid(), StaticProperty = "attempting to set static" };
+        var eventToTest = new Event(command, payload);
+
+        // Act & Assert - Should throw because StaticProperty is not a valid instance property
+        var exception = Assert.Throws<NostifyValidationException>(() =>
+            eventToTest.ValidatePayload<AggregateWithStaticProperties>(throwErrorIfExtraProps: true));
+        
+        Assert.Contains("Invalid property 'StaticProperty' found in payload", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldRemoveStaticProperty_WhenThrowErrorIfExtraPropsIsFalse()
+    {
+        // Arrange - Include a property that matches a static property name
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { name = "Test", id = Guid.NewGuid(), StaticProperty = "attempting to set static" };
+        var eventToTest = new Event(command, payload);
+
+        // Act - Should not throw, but should remove the static property from payload
+        var result = eventToTest.ValidatePayload<AggregateWithStaticProperties>(throwErrorIfExtraProps: false);
+
+        // Assert
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrowForPrivateProperty_WhenThrowErrorIfExtraPropsIsTrue()
+    {
+        // Arrange - Include a property that matches a private property name
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { name = "Test", id = Guid.NewGuid(), PrivateProperty = "attempting to set private" };
+        var eventToTest = new Event(command, payload);
+
+        // Act & Assert - Should throw because PrivateProperty is not a public instance property
+        var exception = Assert.Throws<NostifyValidationException>(() =>
+            eventToTest.ValidatePayload<AggregateWithNonPublicProperties>(throwErrorIfExtraProps: true));
+        
+        Assert.Contains("Invalid property 'PrivateProperty' found in payload", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrowForProtectedProperty_WhenThrowErrorIfExtraPropsIsTrue()
+    {
+        // Arrange - Include a property that matches a protected property name
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { name = "Test", id = Guid.NewGuid(), ProtectedProperty = "attempting to set protected" };
+        var eventToTest = new Event(command, payload);
+
+        // Act & Assert - Should throw because ProtectedProperty is not a public instance property
+        var exception = Assert.Throws<NostifyValidationException>(() =>
+            eventToTest.ValidatePayload<AggregateWithNonPublicProperties>(throwErrorIfExtraProps: true));
+        
+        Assert.Contains("Invalid property 'ProtectedProperty' found in payload", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldThrowForInternalProperty_WhenThrowErrorIfExtraPropsIsTrue()
+    {
+        // Arrange - Include a property that matches an internal property name
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { name = "Test", id = Guid.NewGuid(), InternalProperty = "attempting to set internal" };
+        var eventToTest = new Event(command, payload);
+
+        // Act & Assert - Should throw because InternalProperty is not a public instance property
+        var exception = Assert.Throws<NostifyValidationException>(() =>
+            eventToTest.ValidatePayload<AggregateWithNonPublicProperties>(throwErrorIfExtraProps: true));
+        
+        Assert.Contains("Invalid property 'InternalProperty' found in payload", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldOnlyAcceptPublicInstanceProperties()
+    {
+        // Arrange - Valid payload with only public instance properties
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { name = "Test", id = Guid.NewGuid(), isDeleted = false };
+        var eventToTest = new Event(command, payload);
+
+        // Act - Should succeed with only public instance properties
+        var result = eventToTest.ValidatePayload<AggregateWithStaticProperties>(throwErrorIfExtraProps: true);
+
+        // Assert
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldRejectMultipleNonPublicProperties()
+    {
+        // Arrange - Include multiple non-public property names
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { 
+            name = "Test", 
+            id = Guid.NewGuid(), 
+            PrivateProperty = "private", 
+            ProtectedProperty = "protected",
+            InternalProperty = "internal"
+        };
+        var eventToTest = new Event(command, payload);
+
+        // Act & Assert - Should throw with all invalid properties mentioned
+        var exception = Assert.Throws<NostifyValidationException>(() =>
+            eventToTest.ValidatePayload<AggregateWithNonPublicProperties>(throwErrorIfExtraProps: true));
+        
+        // All three non-public properties should be flagged
+        Assert.Contains("Invalid property 'PrivateProperty' found in payload", exception.Message);
+        Assert.Contains("Invalid property 'ProtectedProperty' found in payload", exception.Message);
+        Assert.Contains("Invalid property 'InternalProperty' found in payload", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldAcceptInheritedPropertiesFromNostifyObject()
+    {
+        // Arrange - Include properties inherited from NostifyObject (id, tenantId, ttl)
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { 
+            name = "Test", 
+            id = Guid.NewGuid(),
+            tenantId = Guid.NewGuid(),  // Inherited from NostifyObject
+            ttl = 3600                   // Inherited from NostifyObject
+        };
+        var eventToTest = new Event(command, payload);
+
+        // Act - Should succeed because tenantId and ttl are inherited public instance properties
+        var result = eventToTest.ValidatePayload<ConcreteAggregateWithInheritance>(throwErrorIfExtraProps: true);
+
+        // Assert
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldAcceptPropertiesFromAbstractBaseClass()
+    {
+        // Arrange - Include properties defined in AbstractAggregateBase
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { 
+            name = "Test",
+            id = Guid.NewGuid(),
+            baseProperty = "base value",      // From AbstractAggregateBase
+            createdDate = DateTime.UtcNow,    // From AbstractAggregateBase
+            createdBy = "testuser",           // From AbstractAggregateBase
+            isDeleted = false                 // From AbstractAggregateBase
+        };
+        var eventToTest = new Event(command, payload);
+
+        // Act - Should succeed because these are all inherited public instance properties
+        var result = eventToTest.ValidatePayload<ConcreteAggregateWithInheritance>(throwErrorIfExtraProps: true);
+
+        // Assert
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldAcceptAllPropertiesFromEntireInheritanceChain()
+    {
+        // Arrange - Include properties from all levels: NostifyObject -> AbstractAggregateBase -> ConcreteAggregate
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { 
+            // From ConcreteAggregateWithInheritance (leaf class)
+            name = "Test Product",
+            description = "A test product",
+            quantity = 10,
+            
+            // From AbstractAggregateBase (middle class)
+            baseProperty = "base value",
+            createdDate = DateTime.UtcNow,
+            createdBy = "testuser",
+            isDeleted = false,
+            
+            // From NostifyObject (root base class)
+            id = Guid.NewGuid(),
+            tenantId = Guid.NewGuid(),
+            ttl = 7200
+        };
+        var eventToTest = new Event(command, payload);
+
+        // Act - Should succeed because all properties exist in the inheritance chain
+        var result = eventToTest.ValidatePayload<ConcreteAggregateWithInheritance>(throwErrorIfExtraProps: true);
+
+        // Assert
+        Assert.Equal(eventToTest, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldRejectPropertyNotInInheritanceChain()
+    {
+        // Arrange - Include a property that doesn't exist anywhere in the inheritance chain
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { 
+            name = "Test",
+            id = Guid.NewGuid(),
+            nonExistentProperty = "should fail"  // Not in any class in the hierarchy
+        };
+        var eventToTest = new Event(command, payload);
+
+        // Act & Assert - Should throw because nonExistentProperty is not in any base class
+        var exception = Assert.Throws<NostifyValidationException>(() =>
+            eventToTest.ValidatePayload<ConcreteAggregateWithInheritance>(throwErrorIfExtraProps: true));
+        
+        Assert.Contains("Invalid property 'nonExistentProperty' found in payload", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_ShouldNotAcceptStaticPropertiesFromBaseClass()
+    {
+        // Arrange - Try to set a static property from the base class
+        var command = new NostifyCommand("Test_Create", true);
+        var payload = new { 
+            name = "Test",
+            id = Guid.NewGuid(),
+            aggregateType = "trying to set static"  // Static property - should be rejected
+        };
+        var eventToTest = new Event(command, payload);
+
+        // Act & Assert - Should throw because aggregateType is static
+        var exception = Assert.Throws<NostifyValidationException>(() =>
+            eventToTest.ValidatePayload<ConcreteAggregateWithInheritance>(throwErrorIfExtraProps: true));
+        
+        Assert.Contains("Invalid property 'aggregateType' found in payload", exception.Message);
+    }
+
+    #endregion
 }
