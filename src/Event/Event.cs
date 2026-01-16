@@ -7,6 +7,7 @@ using System.ComponentModel.DataAnnotations;
 using Newtonsoft.Json.Linq;
 using Confluent.Kafka;
 using Newtonsoft.Json;
+using System.Reflection;
 
 namespace nostify;
 
@@ -201,7 +202,7 @@ public class Event : IEvent
     {
         validationMessages = new List<ValidationResult>();
 
-        var validProperties = typeof(T).GetProperties().Select(p => p.Name).ToHashSet();
+        var validProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => p.Name).ToHashSet();
         var payloadObject = JObject.FromObject(payload) ?? throw new NullReferenceException("Payload cannot be null when removing non-existent properties.");
         // Remove any properties from the payload that are not valid for the aggregate
         foreach (var prop in payloadObject.Properties().Select(p => p.Name).ToList())
