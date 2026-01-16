@@ -70,6 +70,9 @@
 
 ### Updates
 
+- 4.2.1
+  - **Validation Bug Fix**: Fixed issue in `Event.ValidateAndRemoveNonExistentProperties<T>()` where reflection was not correctly filtering to public instance properties. The method now uses `BindingFlags.Public | BindingFlags.Instance` to properly identify valid aggregate properties during payload validation.
+
 - 4.2.0
   - **PagedQuery IQueryable/IOrderedQueryable Support**: Added `PagedQueryAsync()` extension methods for `IQueryable<T>` and `IOrderedQueryable<T>`, enabling paged queries on pre-constructed LINQ queries. See [Paged Queries with Filtering and Sorting](#paged-queries-with-filtering-and-sorting).
     - New overloads for `IQueryable<T>` - apply custom LINQ filters before pagination with automatic sorting
