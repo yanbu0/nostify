@@ -17,9 +17,13 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     private readonly IQueryExecutor _queryExecutor;
     private List<Guid> _sameServiceIds = new List<Guid>();
     private List<Func<P, Guid>> _foreignKeySelectors = new List<Func<P, Guid>>();
+    private List<Func<P, Guid?>> _nullableForeignKeySelectors = new List<Func<P, Guid?>>();
     private List<Func<P, List<Guid>>> _foreignKeyListSelectors = new List<Func<P, List<Guid>>>();
+    private List<Func<P, List<Guid?>>> _nullableForeignKeyListSelectors = new List<Func<P, List<Guid?>>>();
     private List<Func<P, Guid>> _dependantIdSelectors = new List<Func<P, Guid>>();
+    private List<Func<P, Guid?>> _nullableDependantIdSelectors = new List<Func<P, Guid?>>();
     private List<Func<P, List<Guid>>> _dependantListIdSelectors = new List<Func<P, List<Guid>>>();
+    private List<Func<P, List<Guid?>>> _nullableDependantListIdSelectors = new List<Func<P, List<Guid?>>>();
     private EventRequester<P>[] _eventRequestors = new EventRequester<P>[0];
     private EventRequester<P>[] _dependantEventRequestors = new EventRequester<P>[0];
     private List<P> _projectionsToInit = new List<P>();
@@ -42,14 +46,50 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         this._queryExecutor = queryExecutor ?? CosmosQueryExecutor.Default;
     }
 
-    public void WithSameServiceIdSelectors(params Func<P, Guid>[] selectors)
+    /// <summary>
+    /// Adds selectors for single foreign key IDs from the same service.
+    /// </summary>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithSameServiceIdSelectors(params Func<P, Guid>[] selectors)
     {
         _foreignKeySelectors.AddRange(selectors);
+        return this;
     }
 
-    public void WithSameServiceListIdSelectors(params Func<P, List<Guid>>[] selectors)
+    /// <summary>
+    /// Adds selectors for single nullable foreign key IDs from the same service.
+    /// Null values are automatically filtered out during event retrieval.
+    /// </summary>
+    /// <param name="selectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithSameServiceIdSelectors(params Func<P, Guid?>[] selectors)
+    {
+        _nullableForeignKeySelectors.AddRange(selectors);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds selectors for lists of foreign key IDs from the same service.
+    /// </summary>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithSameServiceListIdSelectors(params Func<P, List<Guid>>[] selectors)
     {
         _foreignKeyListSelectors.AddRange(selectors);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds selectors for lists of nullable foreign key IDs from the same service.
+    /// Null values within the lists are automatically filtered out during event retrieval.
+    /// </summary>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithSameServiceListIdSelectors(params Func<P, List<Guid?>>[] selectors)
+    {
+        _nullableForeignKeyListSelectors.AddRange(selectors);
+        return this;
     }
 
     /// <summary>
@@ -58,9 +98,25 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     /// allowing you to fetch events for IDs that weren't known until the first events were processed.
     /// </summary>
     /// <param name="selectors">Functions that extract dependent foreign key IDs from a projection after initial events are applied</param>
-    public void WithSameServiceDependantIdSelectors(params Func<P, Guid>[] selectors)
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithSameServiceDependantIdSelectors(params Func<P, Guid>[] selectors)
     {
         _dependantIdSelectors.AddRange(selectors);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds selectors for nullable IDs that depend on values populated by events from the primary selectors.
+    /// These selectors are evaluated after the first round of events are applied to projections,
+    /// allowing you to fetch events for IDs that weren't known until the first events were processed.
+    /// Null values are automatically filtered out during event retrieval.
+    /// </summary>
+    /// <param name="selectors">Functions that extract nullable dependent foreign key IDs from a projection after initial events are applied</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithSameServiceDependantIdSelectors(params Func<P, Guid?>[] selectors)
+    {
+        _nullableDependantIdSelectors.AddRange(selectors);
+        return this;
     }
 
     /// <summary>
@@ -69,27 +125,56 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     /// allowing you to fetch events for IDs that weren't known until the first events were processed.
     /// </summary>
     /// <param name="selectors">Functions that extract lists of dependent foreign key IDs from a projection after initial events are applied</param>
-    public void WithSameServiceDependantListIdSelectors(params Func<P, List<Guid>>[] selectors)
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithSameServiceDependantListIdSelectors(params Func<P, List<Guid>>[] selectors)
     {
         _dependantListIdSelectors.AddRange(selectors);
+        return this;
     }
 
-    public void AddEventRequestors(params EventRequester<P>[] eventRequestors)
+    /// <summary>
+    /// Adds selectors for lists of nullable IDs that depend on values populated by events from the primary selectors.
+    /// These selectors are evaluated after the first round of events are applied to projections,
+    /// allowing you to fetch events for IDs that weren't known until the first events were processed.
+    /// Null values within the lists are automatically filtered out during event retrieval.
+    /// </summary>
+    /// <param name="selectors">Functions that extract lists of nullable dependent foreign key IDs from a projection after initial events are applied</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithSameServiceDependantListIdSelectors(params Func<P, List<Guid?>>[] selectors)
+    {
+        _nullableDependantListIdSelectors.AddRange(selectors);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds event requestors for fetching events from external services.
+    /// </summary>
+    /// <param name="eventRequestors">Event requestors containing service URLs and ID selectors</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> AddEventRequestors(params EventRequester<P>[] eventRequestors)
     {
         if (_httpClient == null)
         {
             throw new InvalidOperationException("HttpClient is not provided. Cannot add external event requestors.");
         }
         this._eventRequestors = this._eventRequestors.Concat(eventRequestors).ToArray();
+        return this;
     }
 
-    public void WithEventRequestor(string serviceUrl, params Func<P, Guid?>[] foreignIdSelectors)
+    /// <summary>
+    /// Adds an event requestor for fetching events from an external service.
+    /// </summary>
+    /// <param name="serviceUrl">The URL of the external service's event endpoint</param>
+    /// <param name="foreignIdSelectors">Functions that extract foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithEventRequestor(string serviceUrl, params Func<P, Guid?>[] foreignIdSelectors)
     {
         if (_httpClient == null)
         {
             throw new InvalidOperationException("HttpClient is not provided. Cannot add external event requestors.");
         }
         this._eventRequestors = this._eventRequestors.Append(new EventRequester<P>(serviceUrl, foreignIdSelectors)).ToArray();
+        return this;
     }
 
     /// <summary>
@@ -98,13 +183,15 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     /// allowing you to fetch events for IDs that weren't known until the first events were processed.
     /// </summary>
     /// <param name="eventRequestors">Event requestors for external services with dependent ID selectors</param>
-    public void AddDependantEventRequestors(params EventRequester<P>[] eventRequestors)
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> AddDependantEventRequestors(params EventRequester<P>[] eventRequestors)
     {
         if (_httpClient == null)
         {
             throw new InvalidOperationException("HttpClient is not provided. Cannot add external event requestors.");
         }
         this._dependantEventRequestors = this._dependantEventRequestors.Concat(eventRequestors).ToArray();
+        return this;
     }
 
     /// <summary>
@@ -114,13 +201,15 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     /// </summary>
     /// <param name="serviceUrl">The URL of the external service's event endpoint</param>
     /// <param name="foreignIdSelectors">Functions that extract dependent foreign key IDs from a projection after initial events are applied</param>
-    public void WithDependantEventRequestor(string serviceUrl, params Func<P, Guid?>[] foreignIdSelectors)
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantEventRequestor(string serviceUrl, params Func<P, Guid?>[] foreignIdSelectors)
     {
         if (_httpClient == null)
         {
             throw new InvalidOperationException("HttpClient is not provided. Cannot add external event requestors.");
         }
         this._dependantEventRequestors = this._dependantEventRequestors.Append(new EventRequester<P>(serviceUrl, foreignIdSelectors)).ToArray();
+        return this;
     }
 
     public async Task<List<ExternalDataEvent>> GetEventsAsync()
@@ -130,7 +219,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         // Handle same service IDs using ExternalDataEvent.GetEventsAsync
         Container eventStoreContainer = await _nostify.GetEventStoreContainerAsync();
         
-        // Get events for single-ID selectors
+        // Get events for single-ID selectors (non-nullable)
         if (_foreignKeySelectors.Any())
         {
             var singleIdEvents = await ExternalDataEvent.GetEventsAsync(
@@ -142,7 +231,19 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             result.AddRange(singleIdEvents);
         }
 
-        // Get events for list-ID selectors
+        // Get events for single-ID selectors (nullable) - nulls filtered by HasValue in ExternalDataEvent
+        if (_nullableForeignKeySelectors.Any())
+        {
+            var nullableSingleIdEvents = await ExternalDataEvent.GetEventsAsync(
+                eventStoreContainer, 
+                _projectionsToInit, 
+                _queryExecutor,
+                _pointInTime, 
+                _nullableForeignKeySelectors.ToArray());
+            result.AddRange(nullableSingleIdEvents);
+        }
+
+        // Get events for list-ID selectors (non-nullable)
         if (_foreignKeyListSelectors.Any())
         {
             var listIdEvents = await ExternalDataEvent.GetEventsAsync(
@@ -152,6 +253,18 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 _pointInTime, 
                 _foreignKeyListSelectors.ToArray());
             result.AddRange(listIdEvents);
+        }
+
+        // Get events for list-ID selectors (nullable) - nulls within lists filtered by HasValue in ExternalDataEvent
+        if (_nullableForeignKeyListSelectors.Any())
+        {
+            var nullableListIdEvents = await ExternalDataEvent.GetEventsAsync(
+                eventStoreContainer, 
+                _projectionsToInit, 
+                _queryExecutor,
+                _pointInTime, 
+                _nullableForeignKeyListSelectors.ToArray());
+            result.AddRange(nullableListIdEvents);
         }
 
         // Handle external service IDs before dependent selectors
@@ -168,7 +281,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
         // Handle dependent selectors - these require applying ALL initial events first to get the IDs
         // This runs after both local and external events have been collected
-        if (_dependantIdSelectors.Any() || _dependantListIdSelectors.Any())
+        if (_dependantIdSelectors.Any() || _dependantListIdSelectors.Any() || _nullableDependantIdSelectors.Any() || _nullableDependantListIdSelectors.Any())
         {
             var dependantEvents = await GetDependantEventsAsync(eventStoreContainer, result);
             result.AddRange(dependantEvents);
@@ -241,6 +354,23 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 }
             }
 
+            // Extract nullable single IDs
+            foreach (var selector in _nullableDependantIdSelectors)
+            {
+                try
+                {
+                    var id = selector(projection);
+                    if (id.HasValue && id.Value != Guid.Empty)
+                    {
+                        dependantIds.Add(id.Value);
+                    }
+                }
+                catch
+                {
+                    // Selector threw an exception (e.g., null reference), skip this ID
+                }
+            }
+
             // Extract list IDs
             foreach (var selector in _dependantListIdSelectors)
             {
@@ -252,6 +382,26 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                         foreach (var id in ids.Where(id => id != Guid.Empty))
                         {
                             dependantIds.Add(id);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Selector threw an exception (e.g., null reference), skip these IDs
+                }
+            }
+
+            // Extract nullable list IDs
+            foreach (var selector in _nullableDependantListIdSelectors)
+            {
+                try
+                {
+                    var ids = selector(projection);
+                    if (ids != null)
+                    {
+                        foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty))
+                        {
+                            dependantIds.Add(id!.Value);
                         }
                     }
                 }
@@ -301,6 +451,20 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     catch { }
                 }
 
+                // Get IDs from nullable single selectors
+                foreach (var selector in _nullableDependantIdSelectors)
+                {
+                    try
+                    {
+                        var id = selector(projection);
+                        if (id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value))
+                        {
+                            projectionDependantIds.Add(id.Value);
+                        }
+                    }
+                    catch { }
+                }
+
                 foreach (var selector in _dependantListIdSelectors)
                 {
                     try
@@ -311,6 +475,23 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                             foreach (var id in ids.Where(id => id != Guid.Empty && newIds.Contains(id)))
                             {
                                 projectionDependantIds.Add(id);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // Get IDs from nullable list selectors
+                foreach (var selector in _nullableDependantListIdSelectors)
+                {
+                    try
+                    {
+                        var ids = selector(projection);
+                        if (ids != null)
+                        {
+                            foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value)))
+                            {
+                                projectionDependantIds.Add(id!.Value);
                             }
                         }
                     }

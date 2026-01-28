@@ -107,6 +107,19 @@ After making changes to the nostify library, validate by:
 
 ## Documentation Guidelines
 
+### Specification Files
+- **BEFORE modifying any class, interface, or module**: Read the corresponding spec file from `/Specs/` to understand the component's purpose, responsibilities, and relationships
+  - Spec files follow naming convention: `<ComponentName>.spec.md`
+  - Example: Before modifying `Event.cs`, read `/Specs/Event.spec.md`
+  - Use the spec file index at `/Specs/README.md` to locate related specs
+- **AFTER making changes to any class, interface, or module**: Update the corresponding spec file to reflect the changes
+  - Add new properties, methods, or behaviors to the spec
+  - Update relationships if dependencies change
+  - Document any new usage examples or patterns
+  - Update the "Key Relationships" section if component interactions change
+- **When creating new classes/interfaces**: Create a corresponding spec file following the existing format
+- Spec files are the source of truth for component behavior and design intent
+
 ### Version Update List Management
 - **NEVER overwrite or remove existing version entries** in README.md update list unless explicitly instructed to do so
 - When adding new version entries, **always preserve all previous version information**
