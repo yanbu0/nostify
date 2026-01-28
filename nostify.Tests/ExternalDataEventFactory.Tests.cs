@@ -2724,6 +2724,326 @@ public class ExternalDataEventFactoryTests
 
     #endregion
 
+    #region Nullable Guid? Selector Tests
+
+    [Fact]
+    public void WithSameServiceIdSelectors_NullableSelector_ReturnsThisForFluent()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        var result = factory.WithSameServiceIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void WithSameServiceIdSelectors_NonNullableSelector_ReturnsThisForFluent()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        var result = factory.WithSameServiceIdSelectors(p => p.siteId);
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void WithSameServiceListIdSelectors_NullableSelector_ReturnsThisForFluent()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        var result = factory.WithSameServiceListIdSelectors((Func<FactoryTestProjection, List<Guid?>>)(p => new List<Guid?> { p.externalId, p.anotherExternalId }));
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void WithSameServiceDependantIdSelectors_NullableSelector_ReturnsThisForFluent()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        var result = factory.WithSameServiceDependantIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId));
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void WithSameServiceDependantListIdSelectors_NullableSelector_ReturnsThisForFluent()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        var result = factory.WithSameServiceDependantListIdSelectors((Func<FactoryTestProjection, List<Guid?>>)(p => new List<Guid?> { p.dependentExternalId }));
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_WithNullableIdSelector_FiltersOutNullValues()
+    {
+        // Arrange - create projections where some have null externalId
+        var id1 = Guid.NewGuid();
+        var id2 = Guid.NewGuid();
+        var foreignId = Guid.NewGuid();
+        
+        var projectionsWithNulls = new List<FactoryTestProjection>
+        {
+            new FactoryTestProjection { id = id1, name = "HasExternalId", externalId = foreignId },
+            new FactoryTestProjection { id = id2, name = "NoExternalId", externalId = null }
+        };
+
+        var events = new List<Event>
+        {
+            new Event
+            {
+                aggregateRootId = foreignId,
+                timestamp = DateTime.UtcNow.AddMinutes(-30),
+                command = new NostifyCommand("CreateExternal")
+            }
+        };
+
+        var (mockNostify, mockContainer) = CreateMockNostifyWithEvents(events);
+
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            mockNostify.Object,
+            projectionsWithNulls,
+            queryExecutor: InMemoryQueryExecutor.Default);
+
+        // Act
+        factory.WithSameServiceIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+        var result = await factory.GetEventsAsync();
+
+        // Assert - only projection with non-null externalId should have events
+        Assert.Single(result);
+        Assert.Equal(id1, result[0].aggregateRootId);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_WithNullableListSelector_FiltersOutNullValuesWithinList()
+    {
+        // Arrange
+        var projectionId = Guid.NewGuid();
+        var validForeignId = Guid.NewGuid();
+        
+        var projections = new List<FactoryTestProjection>
+        {
+            new FactoryTestProjection 
+            { 
+                id = projectionId, 
+                name = "HasMixedList",
+                externalId = validForeignId,
+                anotherExternalId = null // null in the list
+            }
+        };
+
+        var events = new List<Event>
+        {
+            new Event
+            {
+                aggregateRootId = validForeignId,
+                timestamp = DateTime.UtcNow.AddMinutes(-30),
+                command = new NostifyCommand("CreateExternal")
+            }
+        };
+
+        var (mockNostify, mockContainer) = CreateMockNostifyWithEvents(events);
+
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            mockNostify.Object,
+            projections,
+            queryExecutor: InMemoryQueryExecutor.Default);
+
+        // Act - use a list selector that includes both non-null and null values
+        factory.WithSameServiceListIdSelectors((Func<FactoryTestProjection, List<Guid?>>)(p => new List<Guid?> { p.externalId, p.anotherExternalId }));
+        var result = await factory.GetEventsAsync();
+
+        // Assert - should get events for the valid foreign ID only
+        Assert.Single(result);
+        Assert.Equal(projectionId, result[0].aggregateRootId);
+        Assert.Single(result[0].events);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_MixedNullableAndNonNullableSelectors_ReturnsEventsForBoth()
+    {
+        // Arrange
+        var projectionId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var externalId = Guid.NewGuid();
+        
+        var projections = new List<FactoryTestProjection>
+        {
+            new FactoryTestProjection 
+            { 
+                id = projectionId, 
+                name = "Test",
+                siteId = siteId,
+                externalId = externalId
+            }
+        };
+
+        var events = new List<Event>
+        {
+            new Event
+            {
+                aggregateRootId = siteId,
+                timestamp = DateTime.UtcNow.AddMinutes(-30),
+                command = new NostifyCommand("CreateSite")
+            },
+            new Event
+            {
+                aggregateRootId = externalId,
+                timestamp = DateTime.UtcNow.AddMinutes(-25),
+                command = new NostifyCommand("CreateExternal")
+            }
+        };
+
+        var (mockNostify, mockContainer) = CreateMockNostifyWithEvents(events);
+
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            mockNostify.Object,
+            projections,
+            queryExecutor: InMemoryQueryExecutor.Default);
+
+        // Act - mix non-nullable and nullable selectors in fluent chain
+        var result = await factory
+            .WithSameServiceIdSelectors(p => p.siteId)  // non-nullable
+            .WithSameServiceIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.externalId))  // nullable
+            .GetEventsAsync();
+
+        // Assert - should get events from both selectors
+        Assert.NotEmpty(result);
+        var allEvents = result.SelectMany(r => r.events).ToList();
+        Assert.Equal(2, allEvents.Count);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_AllNullSelectors_ReturnsEmptyList()
+    {
+        // Arrange
+        var projections = new List<FactoryTestProjection>
+        {
+            new FactoryTestProjection { id = Guid.NewGuid(), name = "AllNull", externalId = null, anotherExternalId = null }
+        };
+
+        var (mockNostify, mockContainer) = CreateMockNostifyWithEvents(new List<Event>());
+
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            mockNostify.Object,
+            projections,
+            queryExecutor: InMemoryQueryExecutor.Default);
+
+        // Act
+        factory.WithSameServiceIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+        factory.WithSameServiceIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.anotherExternalId));
+        var result = await factory.GetEventsAsync();
+
+        // Assert
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void FluentChaining_AllMethodsReturnThis()
+    {
+        // Arrange
+        using var httpClient = new HttpClient();
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            httpClient);
+
+        // Act & Assert - verify all methods return the same factory instance
+        var result = factory
+            .WithSameServiceIdSelectors(p => p.siteId)
+            .WithSameServiceIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.externalId))
+            .WithSameServiceListIdSelectors(p => p.tagIds)
+            .WithSameServiceListIdSelectors((Func<FactoryTestProjection, List<Guid?>>)(p => new List<Guid?> { p.externalId }))
+            .WithSameServiceDependantIdSelectors(p => p.dependentId)
+            .WithSameServiceDependantIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId))
+            .WithSameServiceDependantListIdSelectors(p => p.dependentListIds)
+            .WithSameServiceDependantListIdSelectors((Func<FactoryTestProjection, List<Guid?>>)(p => new List<Guid?> { p.dependentExternalId }))
+            .AddEventRequestors(new EventRequester<FactoryTestProjection>("https://test.com/events", p => p.externalId))
+            .WithEventRequestor("https://test2.com/events", p => p.anotherExternalId)
+            .AddDependantEventRequestors(new EventRequester<FactoryTestProjection>("https://test3.com/events", p => p.dependentExternalId))
+            .WithDependantEventRequestor("https://test4.com/events", p => p.anotherDependentExternalId);
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_WithNullableDependantIdSelector_FiltersOutNulls()
+    {
+        // Arrange
+        var projectionId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+
+        var projections = new List<FactoryTestProjection>
+        {
+            new FactoryTestProjection 
+            { 
+                id = projectionId, 
+                name = "Test",
+                siteId = siteId,
+                dependentExternalId = null // Starts null, will remain null since we don't have events to populate it
+            }
+        };
+
+        var siteEvents = new List<Event>
+        {
+            new Event
+            {
+                aggregateRootId = siteId,
+                timestamp = DateTime.UtcNow.AddMinutes(-30),
+                command = new NostifyCommand("CreateSite"),
+                payload = new { name = "Site" }
+            }
+        };
+
+        var (mockNostify, mockContainer) = CreateMockNostifyWithEvents(siteEvents);
+
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            mockNostify.Object,
+            projections,
+            queryExecutor: InMemoryQueryExecutor.Default);
+
+        // Act
+        var result = await factory
+            .WithSameServiceIdSelectors(p => p.siteId)
+            .WithSameServiceDependantIdSelectors((Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId))
+            .GetEventsAsync();
+
+        // Assert - should only have site events, not dependant events (since dependentExternalId is null)
+        Assert.Single(result);
+        var allEvents = result.SelectMany(r => r.events).ToList();
+        Assert.Single(allEvents);
+        Assert.Equal(siteId, allEvents[0].aggregateRootId);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private (Mock<INostify> mockNostify, Mock<Container> mockContainer) CreateMockNostifyWithEvents(List<Event> events)

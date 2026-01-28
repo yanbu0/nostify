@@ -70,6 +70,21 @@
 
 ### Updates
 
+- 4.3.0
+  - **ExternalDataEventFactory Nullable Guid? Selector Support**: Added overloads for all selector methods that accept nullable `Guid?` return types, enabling seamless handling of optional foreign key relationships.
+    - `WithSameServiceIdSelectors(params Func<P, Guid?>[] selectors)` - Handle nullable single ID selectors
+    - `WithSameServiceListIdSelectors(params Func<P, List<Guid?>>[] selectors)` - Handle lists with nullable elements
+    - `WithSameServiceDependantIdSelectors(params Func<P, Guid?>[] selectors)` - Handle nullable dependant ID selectors
+    - `WithSameServiceDependantListIdSelectors(params Func<P, List<Guid?>>[] selectors)` - Handle dependant lists with nullable elements
+    - Null values are automatically filtered out during event retrieval via `HasValue` checks
+    - Both nullable and non-nullable overloads can be mixed in fluent chains
+  - **ExternalDataEventFactory Fluent API Enhancement**: All selector and requestor methods now return `this` for fluent method chaining.
+    - `WithSameServiceIdSelectors()`, `WithSameServiceListIdSelectors()` now return `ExternalDataEventFactory<P>`
+    - `WithSameServiceDependantIdSelectors()`, `WithSameServiceDependantListIdSelectors()` now return `ExternalDataEventFactory<P>`
+    - `AddEventRequestors()`, `WithEventRequestor()` now return `ExternalDataEventFactory<P>`
+    - `AddDependantEventRequestors()`, `WithDependantEventRequestor()` now return `ExternalDataEventFactory<P>`
+    - Enables cleaner initialization: `factory.WithSameServiceIdSelectors(p => p.Id).WithSameServiceIdSelectors(p => p.OptionalId).GetEventsAsync()`
+
 - 4.2.1
   - **Validation Bug Fix**: Fixed issue in `Event.ValidatePayload<T>()` where reflection was not correctly filtering to public instance properties when validating payloads against aggregate types. The internal method now uses `BindingFlags.Public | BindingFlags.Instance` to properly identify valid properties, including those inherited from base classes like `NostifyObject`.
 
