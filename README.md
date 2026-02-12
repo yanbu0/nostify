@@ -70,6 +70,9 @@
 
 ### Updates
 
+- 4.3.1
+  - **Constructor-Injected ILogger**: Updated all templates to use constructor-injected `ILogger<T>` instead of method-injected `ILogger`. This follows the recommended pattern for Azure Functions isolated worker model and improves testability.
+
 - 4.3.0
   - **ExternalDataEventFactory Nullable Guid? Selector Support**: Added overloads for all selector methods that accept nullable `Guid?` return types, enabling seamless handling of optional foreign key relationships.
     - `WithSameServiceIdSelectors(params Func<P, Guid?>[] selectors)` - Handle nullable single ID selectors
@@ -172,22 +175,7 @@
   - Overloads for Guid tenant IDs, string partition keys, and PartitionKey objects
   - Optional filter expressions for client-side filtering within partitions
   - Simplifies common query patterns with automatic partition key configuration
-  - ** Fixes null handling issue in 3.9.0 in default serialization settings **
-- 3.9.0 - Has a issue with default serialization null handling, do not use
-  - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
-  - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
-  - **Improved Serialization**: Better handling of polymorphic types and interfaces in Cosmos DB operations
-  - **Event Interface Usage**: Converted codebase to use `IEvent` interface instead of concrete `Event` class for better testability and abstraction
-- 3.8.2
-  - **Patch**: Updated templates and documentation to reference nostify 3.8.2
-  - **Tests**: Added comprehensive unit tests for TransformForeignIdSelectors helper (ensures correct behavior for list selectors, nulls, duplicates, and mapping edge cases)
-- 3.8.1
-  - **Bug Fix**: Fixed issue with null values in PropertyCheck when projectionIdPropertyValue is null
-  - **Template Updates**: All template project files updated to reference nostify 3.8.1
-- 3.8.0
-  - **Enhanced UpdateProperties using PropertyCheck class**: Added new `UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues)` overload for conditional property mapping based on ID matching, used in `Apply` when a projection has multiple references to external aggregates of the same type.
-  - **PropertyCheck Testing**: Added 14+ test scenarios including shared ID handling, edge cases, and complex multi-property updates
-  - **Template Updates**: All template project files updated to reference nostify 3.8.0
+  - **Fixes null handling issue in 3.9.0 in default serialization settings**
 
 ### Coming Soon
 
