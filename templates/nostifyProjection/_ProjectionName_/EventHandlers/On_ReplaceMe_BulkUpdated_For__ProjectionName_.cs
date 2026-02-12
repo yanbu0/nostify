@@ -11,11 +11,13 @@ public class On_ReplaceMe_BulkUpdatedFor__ProjectionName_
 {
     private readonly INostify _nostify;
     private readonly HttpClient _httpClient;
+    private readonly ILogger<On_ReplaceMe_BulkUpdatedFor__ProjectionName_> _logger;
     
-    public On_ReplaceMe_BulkUpdatedFor__ProjectionName_(INostify nostify, HttpClient httpClient)
+    public On_ReplaceMe_BulkUpdatedFor__ProjectionName_(INostify nostify, HttpClient httpClient, ILogger<On_ReplaceMe_BulkUpdatedFor__ProjectionName_> logger)
     {
         this._nostify = nostify;
         _httpClient = httpClient;
+        this._logger = logger;
     }
 
     [Function(nameof(On_ReplaceMe_BulkUpdatedFor__ProjectionName_))]
@@ -33,8 +35,7 @@ public class On_ReplaceMe_BulkUpdatedFor__ProjectionName_
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                IsBatched = true)] string[] events,
-        ILogger log)
+                IsBatched = true)] string[] events)
     {
         await DefaultEventHandlers.HandleProjectionBulkUpdateEvent<_ProjectionName_>(_nostify, events);
     }

@@ -10,10 +10,12 @@ namespace _ReplaceMe__Service;
 public class On_ReplaceMe_BulkCreated
 {
     private readonly INostify _nostify;
+    private readonly ILogger<On_ReplaceMe_BulkCreated> _logger;
     
-    public On_ReplaceMe_BulkCreated(INostify nostify)
+    public On_ReplaceMe_BulkCreated(INostify nostify, ILogger<On_ReplaceMe_BulkCreated> logger)
     {
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(On_ReplaceMe_BulkCreated))]
@@ -44,8 +46,7 @@ public class On_ReplaceMe_BulkCreated
 //+:cnd:noEmit
                 IsBatched = true)
 #endif
-                ] string[] events,
-        ILogger log)
+                ] string[] events)
     {
         try
         {

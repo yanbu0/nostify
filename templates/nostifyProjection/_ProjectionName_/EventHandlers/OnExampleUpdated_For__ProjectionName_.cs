@@ -15,11 +15,13 @@ public class OnExternalDataExampleUpdated_For__ProjectionName_
 {
     private readonly INostify _nostify;
     private readonly HttpClient _httpClient;
+    private readonly ILogger<OnExternalDataExampleUpdated_For__ProjectionName_> _logger;
 
-    public OnExternalDataExampleUpdated_For__ProjectionName_(INostify nostify, HttpClient httpClient)
+    public OnExternalDataExampleUpdated_For__ProjectionName_(INostify nostify, HttpClient httpClient, ILogger<OnExternalDataExampleUpdated_For__ProjectionName_> logger)
     {
         this._nostify = nostify;
         _httpClient = httpClient;
+        this._logger = logger;
     }
 
     [Function(nameof(OnExternalDataExampleUpdated_For__ProjectionName_))]
@@ -36,8 +38,7 @@ public class OnExternalDataExampleUpdated_For__ProjectionName_
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent,
-        ILogger log)
+                ConsumerGroup = "_ProjectionName_")] NostifyKafkaTriggerEvent triggerEvent)
     {
         // Use the default event handler to apply the event to the projection and persist it
         // If the Projection has no external data dependencies, you can pass null for the HttpClient to avoid unnecessary overhead

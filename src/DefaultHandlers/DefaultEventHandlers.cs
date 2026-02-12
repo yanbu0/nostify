@@ -137,10 +137,10 @@ public static class DefaultEventHandlers
                     }
                 }
                 //Update projection
-                Container currentStateContainer = await nostify.GetProjectionContainerAsync<P>();
+                Container projectionContainer = await nostify.GetProjectionContainerAsync<P>();
                 P projection = projectionBaseAggregateId.HasValue 
-                    ? await currentStateContainer.ApplyAndPersistAsync<P>(newEvent, projectionBaseAggregateId.Value)
-                    : await currentStateContainer.ApplyAndPersistAsync<P>(newEvent);
+                    ? await projectionContainer.ApplyAndPersistAsync<P>(newEvent, projectionBaseAggregateId.Value)
+                    : await projectionContainer.ApplyAndPersistAsync<P>(newEvent);
                 //Initialize projection with external data
                 await projection.InitAsync(nostify, httpClient);
             }                           

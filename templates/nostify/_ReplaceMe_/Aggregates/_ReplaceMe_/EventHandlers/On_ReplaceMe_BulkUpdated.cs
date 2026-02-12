@@ -10,10 +10,12 @@ namespace _ReplaceMe__Service;
 public class On_ReplaceMe_BulkUpdated
 {
     private readonly INostify _nostify;
+    private readonly ILogger<On_ReplaceMe_BulkUpdated> _logger;
     
-    public On_ReplaceMe_BulkUpdated(INostify nostify)
+    public On_ReplaceMe_BulkUpdated(INostify nostify, ILogger<On_ReplaceMe_BulkUpdated> logger)
     {
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(On_ReplaceMe_BulkUpdated))]
@@ -44,8 +46,7 @@ public class On_ReplaceMe_BulkUpdated
 //+:cnd:noEmit
                 IsBatched = true)
 #endif
-                ] string[] events,
-        ILogger log)
+                ] string[] events)
     {
         await DefaultEventHandlers.HandleAggregateBulkUpdateEvent<_ReplaceMe_>(_nostify, events);
     }

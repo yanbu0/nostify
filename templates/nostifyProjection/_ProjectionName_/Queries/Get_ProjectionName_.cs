@@ -12,18 +12,19 @@ public class Get_ProjectionName_
 
     private readonly HttpClient _client;
     private readonly INostify _nostify;
-    public Get_ProjectionName_(HttpClient httpClient, INostify nostify)
+    private readonly ILogger<Get_ProjectionName_> _logger;
+    public Get_ProjectionName_(HttpClient httpClient, INostify nostify, ILogger<Get_ProjectionName_> logger)
     {
         this._client = httpClient;
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(Get_ProjectionName_))]
     public async Task<_ProjectionName_> Run(
         [HttpTrigger("get", Route = "_ProjectionName_/{aggregateId:guid}")] HttpRequestData req,
         Guid aggregateId,
-        FunctionContext context,
-        ILogger log)
+        FunctionContext context)
     {
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
         Container projectionContainer = await _nostify.GetProjectionContainerAsync<_ProjectionName_>();

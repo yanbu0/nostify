@@ -10,10 +10,12 @@ namespace _ReplaceMe__Service;
 public class On_ReplaceMe_Created
 {
     private readonly INostify _nostify;
+    private readonly ILogger<On_ReplaceMe_Created> _logger;
     
-    public On_ReplaceMe_Created(INostify nostify)
+    public On_ReplaceMe_Created(INostify nostify, ILogger<On_ReplaceMe_Created> logger)
     {
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(On_ReplaceMe_Created))]
@@ -42,8 +44,7 @@ public class On_ReplaceMe_Created
 //+:cnd:noEmit
                 ConsumerGroup = "_ReplaceMe_")
 #endif
-                ] NostifyKafkaTriggerEvent triggerEvent,
-        ILogger log)
+                ] NostifyKafkaTriggerEvent triggerEvent)
     {
         await DefaultEventHandlers.HandleAggregateEvent<_ReplaceMe_>(_nostify, triggerEvent);
     }

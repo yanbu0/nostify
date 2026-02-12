@@ -10,10 +10,12 @@ namespace _ServiceName__Service;
 public class On_ReplaceMe_Updated
 {
     private readonly INostify _nostify;
+    private readonly ILogger<On_ReplaceMe_Updated> _logger;
 
-    public On_ReplaceMe_Updated(INostify nostify)
+    public On_ReplaceMe_Updated(INostify nostify, ILogger<On_ReplaceMe_Updated> logger)
     {
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(On_ReplaceMe_Updated))]
@@ -30,8 +32,7 @@ public class On_ReplaceMe_Updated
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent,
-        ILogger log)
+                ConsumerGroup = "_ReplaceMe_")] NostifyKafkaTriggerEvent triggerEvent)
     {
         await DefaultEventHandlers.HandleAggregateEvent<_ReplaceMe_>(_nostify, triggerEvent);
     }

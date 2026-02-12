@@ -11,18 +11,19 @@ public class Update_ReplaceMe_
 
     private readonly HttpClient _httpClient;
     private readonly INostify _nostify;
-    public Update_ReplaceMe_(HttpClient httpClient, INostify nostify)
+    private readonly ILogger<Update_ReplaceMe_> _logger;
+    public Update_ReplaceMe_(HttpClient httpClient, INostify nostify, ILogger<Update_ReplaceMe_> logger)
     {
         this._httpClient = httpClient;
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(Update_ReplaceMe_))]
     public async Task<Guid> Run(
         [HttpTrigger("patch", Route = "_ReplaceMe_/{id:guid?}")] HttpRequestData req,
         FunctionContext context,
-        Guid? id,
-        ILogger log)
+        Guid? id)
     {
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic

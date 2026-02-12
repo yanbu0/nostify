@@ -12,18 +12,19 @@ public class Get_ReplaceMe_
 
     private readonly HttpClient _client;
     private readonly INostify _nostify;
-    public Get_ReplaceMe_(HttpClient httpClient, INostify nostify)
+    private readonly ILogger<Get_ReplaceMe_> _logger;
+    public Get_ReplaceMe_(HttpClient httpClient, INostify nostify, ILogger<Get_ReplaceMe_> logger)
     {
         this._client = httpClient;
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(Get_ReplaceMe_))]
     public async Task<_ReplaceMe_> Run(
         [HttpTrigger("get", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
         FunctionContext context,
-        Guid aggregateId,
-        ILogger log)
+        Guid aggregateId)
     {
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
         Container currentStateContainer = await _nostify.GetCurrentStateContainerAsync<_ReplaceMe_>();
