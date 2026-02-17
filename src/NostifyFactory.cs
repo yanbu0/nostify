@@ -117,6 +117,24 @@ public static class NostifyFactory
     }
 
     /// <summary>
+    /// Creates a new instance of Nostify using Azure DocumentDB (legacy name for Cosmos DB).
+    /// This method is provided for backwards compatibility and is functionally equivalent to WithCosmos.
+    /// </summary>
+    public static NostifyConfig WithDocumentDB(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false)
+    {
+        return WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers, containerThroughput, useGatewayConnection);
+    }
+
+    /// <summary>
+    /// Creates a new instance of Nostify using Azure DocumentDB (legacy name for Cosmos DB).
+    /// This method is provided for backwards compatibility and is functionally equivalent to WithCosmos.
+    /// </summary>
+    public static NostifyConfig WithDocumentDB(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false)
+    {
+        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers, containerThroughput, useGatewayConnection);
+    }
+
+    /// <summary>
     /// Creates a new instance of Nostify using Kafka.
     /// </summary>
     public static NostifyConfig WithKafka(ProducerConfig producerConfig)

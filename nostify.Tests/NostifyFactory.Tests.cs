@@ -585,6 +585,226 @@ public class NostifyFactoryTests
         Assert.Equal(connectionString, config.producerConfig.SaslPassword);
     }
 
+    [Fact]
+    public void WithDocumentDB_ShouldCreateConfigWithCosmosSettings()
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.com:443/";
+
+        // Act
+        var config = NostifyFactory.WithDocumentDB(cosmosApiKey, cosmosDbName, cosmosEndpointUri);
+
+        // Assert
+        Assert.NotNull(config);
+        Assert.Equal(cosmosApiKey, config.cosmosApiKey);
+        Assert.Equal(cosmosDbName, config.cosmosDbName);
+        Assert.Equal(cosmosEndpointUri, config.cosmosEndpointUri);
+        Assert.False(config.createContainers);
+        Assert.Null(config.containerThroughput);
+        Assert.False(config.useGatewayConnection);
+    }
+
+    [Fact]
+    public void WithDocumentDB_WithOptionalParameters_ShouldSetAllProperties()
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.us:443/";
+        var createContainers = true;
+        var containerThroughput = 1000;
+        var useGatewayConnection = true;
+
+        // Act
+        var config = NostifyFactory.WithDocumentDB(
+            cosmosApiKey, 
+            cosmosDbName, 
+            cosmosEndpointUri, 
+            createContainers, 
+            containerThroughput, 
+            useGatewayConnection);
+
+        // Assert
+        Assert.Equal(cosmosApiKey, config.cosmosApiKey);
+        Assert.Equal(cosmosDbName, config.cosmosDbName);
+        Assert.Equal(cosmosEndpointUri, config.cosmosEndpointUri);
+        Assert.True(config.createContainers);
+        Assert.Equal(containerThroughput, config.containerThroughput);
+        Assert.True(config.useGatewayConnection);
+    }
+
+    [Fact]
+    public void WithDocumentDB_ExtensionMethod_ShouldChainCorrectly()
+    {
+        // Arrange
+        var existingConfig = new NostifyConfig();
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.com:443/";
+
+        // Act
+        var config = existingConfig.WithDocumentDB(cosmosApiKey, cosmosDbName, cosmosEndpointUri);
+
+        // Assert
+        Assert.Same(existingConfig, config);
+        Assert.Equal(cosmosApiKey, config.cosmosApiKey);
+        Assert.Equal(cosmosDbName, config.cosmosDbName);
+        Assert.Equal(cosmosEndpointUri, config.cosmosEndpointUri);
+    }
+
+    [Fact]
+    public void FluentApi_WithDocumentDB_ShouldChainCorrectly()
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.com:443/";
+        var kafkaUrl = "localhost:9092";
+        var mockHttpClientFactory = new Mock<IHttpClientFactory>();
+
+        // Act
+        var config = NostifyFactory
+            .WithDocumentDB(cosmosApiKey, cosmosDbName, cosmosEndpointUri, true, 1000)
+            .WithKafka(kafkaUrl, "user", "pass")
+            .WithHttp(mockHttpClientFactory.Object);
+
+        // Assert
+        Assert.NotNull(config);
+        Assert.Equal(cosmosApiKey, config.cosmosApiKey);
+        Assert.Equal(cosmosDbName, config.cosmosDbName);
+        Assert.Equal(cosmosEndpointUri, config.cosmosEndpointUri);
+        Assert.True(config.createContainers);
+        Assert.Equal(1000, config.containerThroughput);
+        Assert.Equal(kafkaUrl, config.kafkaUrl);
+        Assert.Equal("user", config.kafkaUserName);
+        Assert.Equal("pass", config.kafkaPassword);
+        Assert.Equal(mockHttpClientFactory.Object, config.httpClientFactory);
+    }
+
+    [Fact]
+    public void Build_WithDocumentDB_ShouldCreateNostifyInstance()
+    {
+        // Arrange
+        var config = NostifyFactory
+            .WithDocumentDB("test-key", "test-db", "https://test.documents.azure.com:443/")
+            .WithKafka("localhost:9092")
+            .WithHttp(new Mock<IHttpClientFactory>().Object);
+
+        // Act
+        var nostify = config.Build();
+
+        // Assert
+        Assert.NotNull(nostify);
+        Assert.IsAssignableFrom<INostify>(nostify);
+        Assert.NotNull(nostify.Repository);
+        Assert.NotNull(nostify.KafkaProducer);
+        Assert.Equal("localhost:9092", nostify.KafkaUrl);
+    }
+
+    [Fact]
+    public void WithDocumentDB_WithEventHubs_ShouldChainCorrectly()
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.us:443/";
+        var eventHubsConnectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+        var mockHttpClientFactory = new Mock<IHttpClientFactory>();
+
+        // Act
+        var config = NostifyFactory
+            .WithDocumentDB(cosmosApiKey, cosmosDbName, cosmosEndpointUri, true, 1000)
+            .WithEventHubs(eventHubsConnectionString)
+            .WithHttp(mockHttpClientFactory.Object);
+
+        // Assert
+        Assert.NotNull(config);
+        Assert.Equal(cosmosApiKey, config.cosmosApiKey);
+        Assert.Equal(cosmosDbName, config.cosmosDbName);
+        Assert.Equal(cosmosEndpointUri, config.cosmosEndpointUri);
+        Assert.True(config.createContainers);
+        Assert.Equal(1000, config.containerThroughput);
+        Assert.Equal("test-namespace.servicebus.windows.net:9093", config.kafkaUrl);
+        Assert.Equal(mockHttpClientFactory.Object, config.httpClientFactory);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WithDocumentDB_CreateContainers_ShouldHandleNullableBoolean(bool? createContainers)
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.com:443/";
+
+        // Act
+        var config = NostifyFactory.WithDocumentDB(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers);
+
+        // Assert
+        Assert.Equal(createContainers ?? false, config.createContainers);
+    }
+
+    [Fact]
+    public void WithDocumentDB_NullCreateContainers_ShouldDefaultToFalse()
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.com:443/";
+
+        // Act
+        var config = NostifyFactory.WithDocumentDB(cosmosApiKey, cosmosDbName, cosmosEndpointUri, null);
+
+        // Assert
+        Assert.False(config.createContainers);
+    }
+
+    [Fact]
+    public void WithDocumentDB_AllOptionalParameters_ShouldSetCorrectly()
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var cosmosEndpointUri = "https://test.documents.azure.us:443/";
+
+        // Act
+        var config = NostifyFactory.WithDocumentDB(cosmosApiKey, cosmosDbName, cosmosEndpointUri, 
+            createContainers: true, 
+            containerThroughput: 500, 
+            useGatewayConnection: true);
+
+        // Assert
+        Assert.True(config.createContainers);
+        Assert.Equal(500, config.containerThroughput);
+        Assert.True(config.useGatewayConnection);
+    }
+
+    [Fact]
+    public void WithDocumentDB_MixedWithCosmos_ShouldBeInterchangeable()
+    {
+        // Arrange
+        var cosmosApiKey = "test-api-key";
+        var cosmosDbName = "test-db";
+        var documentDbEndpoint = "https://test.documents.azure.com:443/";
+
+        // Act - Use WithDocumentDB followed by other configs
+        var config1 = NostifyFactory.WithDocumentDB(cosmosApiKey, cosmosDbName, documentDbEndpoint)
+            .WithKafka("localhost:9092");
+
+        // Act - Verify WithCosmos produces equivalent config
+        var config2 = NostifyFactory.WithCosmos(cosmosApiKey, cosmosDbName, documentDbEndpoint)
+            .WithKafka("localhost:9092");
+
+        // Assert - Both should have identical properties
+        Assert.Equal(config1.cosmosApiKey, config2.cosmosApiKey);
+        Assert.Equal(config1.cosmosDbName, config2.cosmosDbName);
+        Assert.Equal(config1.cosmosEndpointUri, config2.cosmosEndpointUri);
+        Assert.Equal(config1.kafkaUrl, config2.kafkaUrl);
+    }
+
 }
 
 
