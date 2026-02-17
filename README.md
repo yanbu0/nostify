@@ -70,6 +70,16 @@
 
 ### Updates
 
+- 4.3.1
+  - **Azure DocumentDB Compatibility**: Added `WithDocumentDB()` methods for configuring nostify with Azure DocumentDB (legacy name for Cosmos DB).
+    - `WithDocumentDB()` static method - Creates new configuration with DocumentDB settings
+    - `WithDocumentDB()` extension method - Adds DocumentDB configuration to existing config
+    - Functionally equivalent to `WithCosmos()` methods, provided for backwards compatibility
+    - Both methods are fully interchangeable and use identical underlying implementation
+    - Supports all connection modes (direct/gateway) and endpoint formats (documents.azure.com, documents.azure.us)
+    - Updated template Program.cs with DocumentDB configuration option
+    - Added comprehensive test coverage (12 new tests)
+
 - 4.3.0
   - **ExternalDataEventFactory Nullable Guid? Selector Support**: Added overloads for all selector methods that accept nullable `Guid?` return types, enabling seamless handling of optional foreign key relationships.
     - `WithSameServiceIdSelectors(params Func<P, Guid?>[] selectors)` - Handle nullable single ID selectors
@@ -660,6 +670,31 @@ Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<keyname>;
 ```
 
 Event Hubs uses the Kafka protocol internally, so the same Event handlers and publishing mechanisms work seamlessly.
+
+#### Using Azure DocumentDB
+
+Azure DocumentDB is the legacy name for Azure Cosmos DB. For backwards compatibility, you can use `WithDocumentDB()` instead of `WithCosmos()`. Both methods are functionally identical:
+
+```csharp
+// Using DocumentDB (legacy name)
+var nostify = NostifyFactory.WithDocumentDB(
+                            cosmosApiKey: apiKey,
+                            cosmosDbName: dbName,
+                            cosmosEndpointUri: endPoint,
+                            createContainers: autoCreateContainers,
+                            containerThroughput: defaultThroughput,
+                            useGatewayConnection: useGatewayConnection)
+                        .WithKafka(kafka)
+                        .WithHttp(httpClientFactory)
+                        .Build<InventoryItem>(verboseNostifyBuild);
+```
+
+This is particularly useful if you:
+- Have existing DocumentDB endpoints (e.g., `https://myaccount.documents.azure.com:443/` or `https://myaccount.documents.azure.us:443/`)
+- Prefer DocumentDB terminology in your codebase
+- Are migrating legacy DocumentDB code to nostify
+
+Both `WithCosmos()` and `WithDocumentDB()` use the same underlying implementation and are fully interchangeable.
 
 ##### Auto-Creating Event Hubs (Topics)
 

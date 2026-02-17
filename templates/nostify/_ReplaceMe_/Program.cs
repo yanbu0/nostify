@@ -38,6 +38,7 @@ public class Program
             bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
             var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
 
+            // Configure with Cosmos DB (or use .WithDocumentDB() for Azure DocumentDB compatibility)
             var nostify = NostifyFactory.WithCosmos(
                                 cosmosApiKey: apiKey,
                                 cosmosDbName: dbName,

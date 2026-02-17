@@ -2,7 +2,7 @@
 
 ## Overview
 
-`NostifyFactory` is a static factory class that creates properly configured `INostify` instances. It handles the setup of Cosmos DB clients, Kafka producers, and JSON serialization settings.
+`NostifyFactory` is a static factory class that creates properly configured `INostify` instances using a fluent API. It provides methods for configuring Azure Cosmos DB (or Azure DocumentDB), Kafka/Event Hubs messaging, and HTTP client factories.
 
 ## Class Definition
 
@@ -10,144 +10,270 @@
 public static class NostifyFactory
 ```
 
-## Factory Methods
+## Configuration Class
 
-### Build (Full Configuration)
+### NostifyConfig
+
+The configuration object used by all factory methods.
 
 ```csharp
-public static INostify Build(
-    string cosmosConnectionString,
-    string kafkaUrl,
-    string databaseName,
-    string eventStoreContainerName = "event-store",
-    Guid? defaultUserId = null,
-    JsonSerializerSettings? jsonSerializerSettings = null,
-    CosmosClientOptions? cosmosClientOptions = null
+public class NostifyConfig
+{
+    public string cosmosApiKey { get; set; }
+    public string cosmosDbName { get; set; }
+    public string cosmosEndpointUri { get; set; }
+    public string kafkaUrl { get; set; }
+    public int kafkaTopicAutoCreatePartitions { get; set; } = 2;
+    public string kafkaUserName { get; set; }
+    public string kafkaPassword { get; set; }
+    public string defaultPartitionKeyPath { get; set; }
+    public Guid defaultTenantId { get; set; }
+    public ProducerConfig producerConfig { get; set; }
+    public bool createContainers { get; set; }
+    public int? containerThroughput { get; set; }
+    public bool useGatewayConnection { get; set; }
+    public IHttpClientFactory? httpClientFactory { get; set; }
+}
+```
+
+## Factory Methods
+
+### WithCosmos
+
+Configures nostify to use Azure Cosmos DB for data storage.
+
+```csharp
+public static NostifyConfig WithCosmos(
+    string cosmosApiKey, 
+    string cosmosDbName, 
+    string cosmosEndpointUri, 
+    bool? createContainers = false, 
+    int? containerThroughput = null, 
+    bool useGatewayConnection = false
+)
+
+public static NostifyConfig WithCosmos(
+    this NostifyConfig config,
+    string cosmosApiKey, 
+    string cosmosDbName, 
+    string cosmosEndpointUri, 
+    bool? createContainers = false, 
+    int? containerThroughput = null, 
+    bool useGatewayConnection = false
 )
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `cosmosConnectionString` | `string` | Required | Azure Cosmos DB connection string |
-| `kafkaUrl` | `string` | Required | Kafka broker URL (e.g., "localhost:9092") |
-| `databaseName` | `string` | Required | Cosmos DB database name |
-| `eventStoreContainerName` | `string` | `"event-store"` | Name for the event store container |
-| `defaultUserId` | `Guid?` | `Guid.Empty` | Default user ID for events |
-| `jsonSerializerSettings` | `JsonSerializerSettings?` | `null` | Custom JSON settings for serialization |
-| `cosmosClientOptions` | `CosmosClientOptions?` | `null` | Custom Cosmos DB client options |
+| `cosmosApiKey` | `string` | Required | Azure Cosmos DB API key |
+| `cosmosDbName` | `string` | Required | Database name |
+| `cosmosEndpointUri` | `string` | Required | Endpoint URI (e.g., "https://myaccount.documents.azure.com:443/") |
+| `createContainers` | `bool?` | `false` | Whether to auto-create containers |
+| `containerThroughput` | `int?` | `null` | Throughput for containers (RU/s) |
+| `useGatewayConnection` | `bool` | `false` | Use gateway mode instead of direct connection |
 
-**Returns:** `INostify` - A fully configured nostify instance
+**Returns:** `NostifyConfig` - Configuration object for method chaining
 
-### Build (Configuration Object)
+### WithDocumentDB
+
+Configures nostify to use Azure DocumentDB (legacy name for Cosmos DB). This method is functionally equivalent to `WithCosmos` and is provided for backwards compatibility.
 
 ```csharp
-public static INostify Build(NostifyConfiguration config)
+public static NostifyConfig WithDocumentDB(
+    string cosmosApiKey, 
+    string cosmosDbName, 
+    string cosmosEndpointUri, 
+    bool? createContainers = false, 
+    int? containerThroughput = null, 
+    bool useGatewayConnection = false
+)
+
+public static NostifyConfig WithDocumentDB(
+    this NostifyConfig config,
+    string cosmosApiKey, 
+    string cosmosDbName, 
+    string cosmosEndpointUri, 
+    bool? createContainers = false, 
+    int? containerThroughput = null, 
+    bool useGatewayConnection = false
+)
+```
+
+Parameters are identical to `WithCosmos`. Azure DocumentDB was the original name for what is now Azure Cosmos DB, and both methods use the same underlying implementation.
+
+**Returns:** `NostifyConfig` - Configuration object for method chaining
+
+### WithKafka
+
+Configures nostify to use Apache Kafka for event messaging.
+
+```csharp
+public static NostifyConfig WithKafka(ProducerConfig producerConfig)
+
+public static NostifyConfig WithKafka(
+    this NostifyConfig config, 
+    ProducerConfig producerConfig
+)
+
+public static NostifyConfig WithKafka(
+    string kafkaUrl, 
+    string kafkaUserName = null, 
+    string kafkaPassword = null, 
+    int kafkaTopicAutoCreatePartitions = 2
+)
+
+public static NostifyConfig WithKafka(
+    this NostifyConfig config,
+    string kafkaUrl, 
+    string kafkaUserName = null, 
+    string kafkaPassword = null, 
+    int kafkaTopicAutoCreatePartitions = 2
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `kafkaUrl` | `string` | Required | Kafka broker URL (e.g., "localhost:9092") |
+| `kafkaUserName` | `string` | `null` | Username for SASL authentication |
+| `kafkaPassword` | `string` | `null` | Password for SASL authentication |
+| `kafkaTopicAutoCreatePartitions` | `int` | `2` | Number of partitions for auto-created topics |
+| `producerConfig` | `ProducerConfig` | Required | Confluent Kafka producer configuration |
+
+**Returns:** `NostifyConfig` - Configuration object for method chaining
+
+### WithEventHubs
+
+Configures nostify to use Azure Event Hubs for event messaging (using Kafka protocol).
+
+```csharp
+public static NostifyConfig WithEventHubs(
+    string eventHubsConnectionString, 
+    bool diagnosticLogging = false, 
+    int kafkaTopicAutoCreatePartitions = 2
+)
+
+public static NostifyConfig WithEventHubs(
+    this NostifyConfig config,
+    string eventHubsConnectionString, 
+    bool diagnosticLogging = false, 
+    int kafkaTopicAutoCreatePartitions = 2
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `eventHubsConnectionString` | `string` | Required | Event Hubs connection string |
+| `diagnosticLogging` | `bool` | `false` | Enable Kafka debug logging |
+| `kafkaTopicAutoCreatePartitions` | `int` | `2` | Number of partitions for auto-created topics |
+
+**Returns:** `NostifyConfig` - Configuration object for method chaining
+
+### WithHttp
+
+Configures nostify to use an IHttpClientFactory for making HTTP requests.
+
+```csharp
+public static NostifyConfig WithHttp(
+    this NostifyConfig config, 
+    IHttpClientFactory httpClientFactory
+)
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `config` | `NostifyConfiguration` | Configuration object with all settings |
+| `httpClientFactory` | `IHttpClientFactory` | Factory for creating HTTP clients |
 
-## NostifyConfiguration Class
+**Returns:** `NostifyConfig` - Configuration object for method chaining
 
-```csharp
-public class NostifyConfiguration
-{
-    public string CosmosConnectionString { get; set; }
-    public string KafkaUrl { get; set; }
-    public string DatabaseName { get; set; }
-    public string EventStoreContainerName { get; set; } = "event-store";
-    public Guid DefaultUserId { get; set; } = Guid.Empty;
-    public JsonSerializerSettings? JsonSerializerSettings { get; set; }
-    public CosmosClientOptions? CosmosClientOptions { get; set; }
-}
-```
+### Build
 
-## Default Configuration
-
-When no custom options are provided, the factory applies these defaults:
-
-### Cosmos Client Options
+Builds the final `INostify` instance from the configuration.
 
 ```csharp
-var defaultCosmosOptions = new CosmosClientOptions
-{
-    Serializer = new NewtonsoftJsonCosmosSerializer(jsonSettings),
-    ConnectionMode = ConnectionMode.Direct,
-    ConsistencyLevel = ConsistencyLevel.Session,
-    AllowBulkExecution = true
-};
+public static INostify Build(this NostifyConfig config)
+
+public static INostify Build<T>(
+    this NostifyConfig config, 
+    bool verbose = false
+) where T : IAggregate
 ```
 
-### JSON Serializer Settings
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `verbose` | `bool` | `false` | Output detailed build information to console |
+| `T` | `IAggregate` | Required | Aggregate type to scan for commands (generic version only) |
 
-```csharp
-var defaultJsonSettings = new JsonSerializerSettings
-{
-    ContractResolver = new CamelCasePropertyNamesContractResolver(),
-    NullValueHandling = NullValueHandling.Ignore,
-    DateTimeZoneHandling = DateTimeZoneHandling.Utc,
-    Converters = { new StringEnumConverter() }
-};
-```
+The generic version auto-creates Kafka topics for all commands found in the assembly of type `T` and optionally creates Cosmos DB containers.
 
-### Kafka Producer Configuration
-
-```csharp
-var producerConfig = new ProducerConfig
-{
-    BootstrapServers = kafkaUrl,
-    Acks = Acks.All,
-    EnableIdempotence = true,
-    MessageSendMaxRetries = 3,
-    RetryBackoffMs = 1000
-};
-```
+**Returns:** `INostify` - Fully configured nostify instance
 
 ## Usage Examples
 
-### Basic Setup
+### Basic Setup with Cosmos DB
 
 ```csharp
-var nostify = NostifyFactory.Build(
-    cosmosConnectionString: "AccountEndpoint=https://localhost:8081/;AccountKey=...",
-    kafkaUrl: "localhost:9092",
-    databaseName: "MyEventStore"
-);
+var nostify = NostifyFactory
+    .WithCosmos("api-key", "database-name", "https://myaccount.documents.azure.com:443/")
+    .WithKafka("localhost:9092")
+    .Build();
 ```
 
-### With Custom Configuration
+### Using DocumentDB (Legacy Azure DocumentDB)
 
 ```csharp
-var config = new NostifyConfiguration
-{
-    CosmosConnectionString = Environment.GetEnvironmentVariable("COSMOS_CONNECTION"),
-    KafkaUrl = Environment.GetEnvironmentVariable("KAFKA_URL"),
-    DatabaseName = "ProductionEventStore",
-    EventStoreContainerName = "events",
-    DefaultUserId = Guid.Parse("00000000-0000-0000-0000-000000000001")
-};
-
-var nostify = NostifyFactory.Build(config);
+var nostify = NostifyFactory
+    .WithDocumentDB("api-key", "database-name", "https://myaccount.documents.azure.com:443/")
+    .WithKafka("localhost:9092")
+    .Build();
 ```
 
-### With Custom Cosmos Options
+### With Auto-Create Containers and Topics
 
 ```csharp
-var cosmosOptions = new CosmosClientOptions
-{
-    ApplicationRegion = Regions.WestUS2,
-    RequestTimeout = TimeSpan.FromSeconds(30),
-    MaxRetryAttemptsOnRateLimitedRequests = 9,
-    MaxRetryWaitTimeOnRateLimitedRequests = TimeSpan.FromSeconds(30)
-};
+var nostify = NostifyFactory
+    .WithCosmos(
+        cosmosApiKey: apiKey,
+        cosmosDbName: "ProductionDB",
+        cosmosEndpointUri: "https://myaccount.documents.azure.com:443/",
+        createContainers: true,
+        containerThroughput: 1000
+    )
+    .WithKafka("localhost:9092")
+    .Build<MyAggregate>(verbose: true);
+```
 
-var nostify = NostifyFactory.Build(
-    cosmosConnectionString: "...",
-    kafkaUrl: "...",
-    databaseName: "MyDB",
-    cosmosClientOptions: cosmosOptions
-);
+### With Event Hubs
+
+```csharp
+var eventHubsConnectionString = "Endpoint=sb://mynamespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=...";
+
+var nostify = NostifyFactory
+    .WithCosmos(apiKey, dbName, endpointUri)
+    .WithEventHubs(eventHubsConnectionString)
+    .Build();
+```
+
+### With SASL Authentication for Kafka
+
+```csharp
+var nostify = NostifyFactory
+    .WithCosmos(apiKey, dbName, endpointUri)
+    .WithKafka(
+        kafkaUrl: "my-kafka-broker.com:9092",
+        kafkaUserName: "my-user",
+        kafkaPassword: "my-password"
+    )
+    .Build();
+```
+
+### With Custom HTTP Client Factory
+
+```csharp
+var nostify = NostifyFactory
+    .WithCosmos(apiKey, dbName, endpointUri)
+    .WithKafka(kafkaUrl)
+    .WithHttp(httpClientFactory)
+    .Build();
 ```
 
 ### Dependency Injection Registration
@@ -157,39 +283,56 @@ var nostify = NostifyFactory.Build(
 services.AddSingleton<INostify>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
+    var httpFactory = sp.GetRequiredService<IHttpClientFactory>();
     
-    return NostifyFactory.Build(
-        cosmosConnectionString: config["Cosmos:ConnectionString"],
-        kafkaUrl: config["Kafka:Url"],
-        databaseName: config["Cosmos:DatabaseName"]
-    );
+    return NostifyFactory
+        .WithCosmos(
+            config["Cosmos:ApiKey"],
+            config["Cosmos:DatabaseName"],
+            config["Cosmos:EndpointUri"]
+        )
+        .WithKafka(config["Kafka:Url"])
+        .WithHttp(httpFactory)
+        .Build();
 });
 ```
 
 ## Internal Behavior
 
-The `Build` method performs these steps:
+The fluent API allows method chaining to build up a configuration. The `Build` method performs these steps:
 
-1. **Create JSON Settings** - Merges custom settings with defaults
-2. **Create Cosmos Client** - Initializes `CosmosClient` with connection string and options
-3. **Create NostifyCosmosClient** - Wraps the Cosmos client for nostify operations
-4. **Create Kafka Producer** - Initializes Kafka producer with idempotence enabled
+1. **Create Cosmos Client** - Initializes `NostifyCosmosClient` with API key, database name, and endpoint
+2. **Create Kafka Producer** - Initializes Kafka producer with the provided configuration
+3. **Auto-Create Topics** (generic `Build<T>` only) - Scans assembly for commands and creates Kafka topics
+4. **Auto-Create Containers** (when `createContainers = true`) - Creates database and container infrastructure
 5. **Return Nostify Instance** - Returns configured `Nostify` implementation
+
+## DocumentDB vs Cosmos DB
+
+Azure DocumentDB was rebranded to Azure Cosmos DB in 2017. The `WithDocumentDB` methods are provided for:
+- **Backwards compatibility** with existing code
+- **Legacy endpoint support** (documents.azure.com, documents.azure.us)
+- **Naming preference** for teams still using DocumentDB terminology
+
+Both `WithCosmos` and `WithDocumentDB` use identical underlying implementation and are fully interchangeable.
 
 ## Error Handling
 
 | Exception | Condition |
 |-----------|-----------|
+| `NostifyException` | Error during Build with auto-create topics |
 | `ArgumentNullException` | Required parameters are null or empty |
-| `CosmosException` | Invalid Cosmos DB connection string |
+| `CosmosException` | Invalid Cosmos DB credentials or endpoint |
 | `KafkaException` | Invalid Kafka URL or broker unavailable |
 
 ## Best Practices
 
 1. **Use Singleton Pattern** - Create one `INostify` instance per application
-2. **Secure Connection Strings** - Use environment variables or Azure Key Vault
-3. **Configure Retries** - Use custom `CosmosClientOptions` for production resilience
-4. **Enable Bulk Execution** - Keep `AllowBulkExecution = true` for high-throughput scenarios
+2. **Secure Credentials** - Use environment variables or Azure Key Vault for secrets
+3. **Choose Connection Mode** - Use direct mode (default) for lower latency
+4. **Auto-Create in Development** - Use `createContainers: true` for local development
+5. **Manual Create in Production** - Pre-create containers with proper throughput settings
+6. **Method Chaining** - Use fluent API for clean, readable configuration
 
 ## Related Types
 
