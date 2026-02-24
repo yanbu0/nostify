@@ -309,7 +309,7 @@ public static class DefaultEventHandlers
         
         try
         {
-            Container currentStateContainer = await nostify.GetCurrentStateContainerAsync<T>();
+            Container currentStateContainer = await nostify.GetBulkCurrentStateContainerAsync<T>();
             List<Task> tasks = new List<Task>();
             
             foreach (var eventStr in events)

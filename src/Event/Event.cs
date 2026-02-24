@@ -40,12 +40,12 @@ public class Event : IEvent
         //Check payload is not null
         if (payload is null || !payload.GetType().GetProperties().Any())
         {
-            throw new ArgumentNullException("Payload cannot be null if you do not specify an aggregate root ID");
+            throw new ArgumentNullException("Event Create Error: Payload cannot be null if you do not specify an aggregate root ID");
         }
         var jPayload = JObject.FromObject(payload);
         if (jPayload["id"] == null || (jPayload["id"].Type != JTokenType.Guid && !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId)))
         {
-            throw new ArgumentException("Aggregate Root ID does not exist or is not parsable to a Guid");
+            throw new ArgumentException("Event Create Errpr: Aggregate Root ID does not exist or is not parsable to a Guid");
         }
         //Only do this if we didn't parse out the guid value above
         else if (aggregateRootId == default)
