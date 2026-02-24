@@ -70,6 +70,9 @@
 
 ### Updates
 
+- 4.3.1
+  - Bug fix for `DefaultEventHandlers.HandleAggregateBulkUpdateEvent<T>()`
+
 - 4.3.0
   - **ExternalDataEventFactory Nullable Guid? Selector Support**: Added overloads for all selector methods that accept nullable `Guid?` return types, enabling seamless handling of optional foreign key relationships.
     - `WithSameServiceIdSelectors(params Func<P, Guid?>[] selectors)` - Handle nullable single ID selectors
@@ -975,36 +978,83 @@ new EventRequester<TestProjection>(url,
 For projections that have both individual foreign keys and collections of foreign keys, use the mixed constructor:
 
 ```csharp
-// Example projection with both single and list foreign IDs
-public class ComplexProjection : IUniquelyIdentifiable
+// Example base class (shared by aggregate and projection)
+public class ExampleAggregateBase : NostifyObject
 {
-    public Guid id { get; set; }
+    public Guid exampleTypeId { get; set; } // Same service foriegn key
     public Guid? primarySiteId { get; set; }      // Single foreign key
-    public Guid? ownerId { get; set; }            // Single foreign key
-    public List<Guid?> relatedIds { get; set; }   // Collection of foreign keys
+    public Guid? ownerId { get; set; }      // Single foreign key
+    public List<Guid?> vehicleIds { get; set; }   // Collection of foreign keys
     public List<Guid?> departmentIds { get; set; } // Collection of foreign keys
 }
+// Example projection 
+public class ExampleProjection : ExampleAggregateBase, IProjection, IHasExternalData<ExampleProjection>
+{
+    public ExampleProjection()
+    {
 
-// Mixed constructor combining single and list selectors
-var eventRequester = new EventRequester<ComplexProjection>(
-    url: "https://api.example.com/events",
-    singleIdSelectors: new Func<ComplexProjection, Guid?>[] {
-        p => p.primarySiteId,     // Single ID selector
-        p => p.ownerId            // Another single ID selector
-    },
-    listIdSelectors: new Func<ComplexProjection, List<Guid?>>[] {
-        p => p.relatedIds,        // List ID selector - gets all related IDs
-        p => p.departmentIds      // Another list ID selector - gets all department IDs
     }
-);
 
-// Use with GetMultiServiceEventsAsync
-var events = await ExternalDataEvent.GetMultiServiceEventsAsync(
-    httpClient,
-    projections,
-    DateTime.Now, // Point in time (optional)
-    eventRequester
-);
+    public static string containerName => "ExampleProjection";
+
+    public bool initialized { get; set; } = false;
+
+    public bool isDeleted { get; set; }
+
+    public string exampleTypeName { get; set; }
+    public string primarySiteName { get; set; }
+    public string ownerName { get; set; }
+    public List<Vehicle> vehicles { get; set; }
+    public List<Department> departments { get; set; }
+
+    public override void Apply(IEvent eventToApply)
+    {
+        // Logic to apply events goes here
+    }
+
+    public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<FullScheduleItem> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
+    {
+        // If data exists within this service, even if a different container, use the container to get the data
+        Container sameServiceEventStore = await nostify.GetEventStoreContainerAsync();
+        
+        //Use GetEventsAsync to get events from the same service, the selectors are a parameter list of the properties that are used to filter the events
+        List<ExternalDataEvent> externalDataEvents = await ExternalDataEvent.GetEventsAsync(sameServiceEventStore, 
+            projectionsToInit, 
+            p => p.exampleTypeId);
+
+        // Get external data necessary to initialize projections here
+        // To access data in other services, use httpClient and the EventRequest endpoint
+        if (httpClient != null)
+        {
+            // Mixed constructor combining single and list selectors
+            var eventRequester = new EventRequester<ComplexProjection>(
+                url: "https://api.example.com/events",
+                singleIdSelectors: new Func<ComplexProjection, Guid?>[] {
+                    p => p.primarySiteId,     // Single ID selector
+                    p => p.ownerId            // Another single ID selector
+                },
+                listIdSelectors: new Func<ComplexProjection, List<Guid?>>[] {
+                    p => p.vehicleIds,        // List ID selector - gets all related IDs
+                    p => p.departmentIds      // Another list ID selector - gets all department IDs
+                }
+            );
+
+            // Use with GetMultiServiceEventsAsync
+            var events = await ExternalDataEvent.GetMultiServiceEventsAsync(
+                httpClient,
+                projections,
+                DateTime.Now, // Point in time (optional)
+                eventRequester
+            );
+            externalDataEvents.AddRange(events);
+        }
+        
+        return externalDataEvents;
+    }
+
+}
+
+
 ```
 
 **Benefits of Mixed Constructor:**
