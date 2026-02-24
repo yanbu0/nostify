@@ -6,6 +6,7 @@ using Microsoft.Azure.Cosmos;
 using System.Linq;
 using System.Net.Http;
 using Newtonsoft.Json;
+using System.Collections.Concurrent;
 
 namespace nostify;
 
@@ -382,10 +383,11 @@ public static class DefaultEventHandlers
         
         try
         {
-            Container projectionContainer = await nostify.GetProjectionContainerAsync<P>();
+            Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
             List<Task> tasks = new List<Task>();            
 
-            List<P> updatedProjections = new List<P>();
+            // Need to use thread safe collection here
+            ConcurrentBag<P> updatedProjections = new ConcurrentBag<P>();
             foreach (var eventStr in events)
             {
                 NostifyKafkaTriggerEvent? triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr);
@@ -399,14 +401,17 @@ public static class DefaultEventHandlers
                             {
                                 if (t.IsCompletedSuccessfully)
                                 {
+                                    // Add the updated projection to the bag so we don't have to query them again to Init
                                     updatedProjections.Add(t.Result);
                                 }
                             }));
                     }
                 }
             }
+
+            await Task.WhenAll(tasks);
             
-            await nostify.InitAsync<P>(updatedProjections);
+            await nostify.InitAsync<P>(updatedProjections.ToList());
         }
         catch (Exception e)
         {
