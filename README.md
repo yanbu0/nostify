@@ -70,6 +70,9 @@
 
 ### Updates
 
+- 4.3.1
+  - Bug fix for `DefaultEventHandlers.HandleAggregateBulkUpdateEvent<T>()`
+
 - 4.3.0
   - **ExternalDataEventFactory Nullable Guid? Selector Support**: Added overloads for all selector methods that accept nullable `Guid?` return types, enabling seamless handling of optional foreign key relationships.
     - `WithSameServiceIdSelectors(params Func<P, Guid?>[] selectors)` - Handle nullable single ID selectors
