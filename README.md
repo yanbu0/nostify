@@ -70,7 +70,8 @@
 
 ### Updates
 
-- 4.3.1
+- 4.3.2
+  - Bug fix for `DefaultEventHandlers.HandleProjectionBulkUpdateEvent<T>()`
   - Bug fix for `DefaultEventHandlers.HandleAggregateBulkUpdateEvent<T>()`
 
 - 4.3.0
