@@ -335,7 +335,7 @@ public static class DefaultEventHandlers
                 Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent(eventTypeFilter) ?? throw new NostifyException("Event is null");
                 await nostify.HandleUndeliverableAsync($"{nameof(HandleAggregateBulkUpdateEvent)}:{nameof(T)}", 
                     e.Message, 
-                    @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, Guid.Empty)
+                    @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, @event.aggregateRootId)
                     );
             });
             throw;
@@ -377,8 +377,9 @@ public static class DefaultEventHandlers
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
+    /// <param name="retryWhenNotFound">System will wait and retry delivering the event if the Projection hasn't completed create operations before Update is applied.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, List<string> eventTypeFilter) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, List<string> eventTypeFilter, bool retryWhenNotFound = false) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         
         try
@@ -403,6 +404,11 @@ public static class DefaultEventHandlers
                                 {
                                     // Add the updated projection to the bag so we don't have to query them again to Init
                                     updatedProjections.Add(t.Result);
+                                }
+                                else if (retryWhenNotFound && t.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.NotFound)
+                                {
+                                    // Retry logic if the projection is not found
+                                    
                                 }
                             }));
                     }
