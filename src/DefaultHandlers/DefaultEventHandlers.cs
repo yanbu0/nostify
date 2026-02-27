@@ -283,6 +283,20 @@ public static class DefaultEventHandlers
     }
 
     /// <summary>
+    /// Handles bulk update of aggregate events from Kafka trigger events without event type filtering, with retry options.
+    /// Uses ApplyAndPersistAsync to update each aggregate's current state.
+    /// </summary>
+    /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
+    /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
+    /// <param name="events">Array of Kafka trigger event strings to process.</param>
+    /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async static Task HandleAggregateBulkUpdateEvent<T>(INostify nostify, string[] events, RetryOptions retryOptions) where T : NostifyObject, IAggregate, new()
+    {
+        await HandleAggregateBulkUpdateEvent<T>(nostify, events, new List<string>(), retryOptions);
+    }
+
+    /// <summary>
     /// Handles bulk update of aggregate events from Kafka trigger events with a single event type filter.
     /// Uses ApplyAndPersistAsync to update each aggregate's current state.
     /// </summary>
@@ -299,15 +313,17 @@ public static class DefaultEventHandlers
     /// <summary>
     /// Handles bulk update of aggregate events from Kafka trigger events with multiple event type filters.
     /// Uses ApplyAndPersistAsync to update each aggregate's current state projection.
+    /// Supports configurable retry behavior for handling eventual consistency scenarios.
     /// </summary>
     /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
+    /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleAggregateBulkUpdateEvent<T>(INostify nostify, string[] events, List<string> eventTypeFilter) where T : NostifyObject, IAggregate, new()
+    public async static Task HandleAggregateBulkUpdateEvent<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
-        
+        retryOptions ??= new RetryOptions();
         try
         {
             Container currentStateContainer = await nostify.GetBulkCurrentStateContainerAsync<T>();
@@ -321,7 +337,58 @@ public static class DefaultEventHandlers
                     Event? newEvent = triggerEvent.GetEvent(eventTypeFilter);
                     if (newEvent is not null)
                     {
-                        tasks.Add(currentStateContainer.ApplyAndPersistAsync<T>(newEvent));
+                        tasks.Add(Task.Run(async () =>
+                            {
+                                for (int attempt = 0; attempt <= retryOptions.MaxRetries; attempt++)
+                                {
+                                    try
+                                    {
+                                        T? result = await currentStateContainer.ApplyAndPersistAsync<T>(newEvent);
+                                        
+                                        // ApplyAndPersistAsync returns null when the item is not found in the container
+                                        // (it catches CosmosException NotFound internally and returns null)
+                                        if (result != null)
+                                        {
+                                            return;
+                                        }
+                                        
+                                        // Result is null - the aggregate was not found
+                                        if (retryOptions.RetryWhenNotFound)
+                                        {
+                                            if (attempt < retryOptions.MaxRetries)
+                                            {
+                                                await Task.Delay(retryOptions.Delay);
+                                            }
+                                            else
+                                            {
+                                                // Exhausted all retries, handle as undeliverable
+                                                await nostify.HandleUndeliverableAsync($"{nameof(HandleAggregateBulkUpdateEvent)}:{nameof(T)}:Retry", 
+                                                    $"Not found after {retryOptions.MaxRetries} retries",
+                                                    newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, Guid.Empty)
+                                                    );
+                                            }
+                                        }
+                                        else
+                                        {
+                                            // Not configured to retry on not found, handle as undeliverable immediately
+                                            await nostify.HandleUndeliverableAsync($"{nameof(HandleAggregateBulkUpdateEvent)}:{nameof(T)}:NotFound", 
+                                                $"Not found and RetryWhenNotFound is false",
+                                                newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, Guid.Empty)
+                                                );
+                                            return;
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        // For any other exceptions, handle as undeliverable immediately (no retry)
+                                        await nostify.HandleUndeliverableAsync($"{nameof(HandleAggregateBulkUpdateEvent)}:{nameof(T)}", 
+                                            ex.Message ?? "Unknown error",
+                                            newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, newEvent?.aggregateRootId ?? Guid.Empty)
+                                            );
+                                        return;
+                                    }
+                                }
+                            }));
                     }
                 }
             }
@@ -356,6 +423,20 @@ public static class DefaultEventHandlers
     }
 
     /// <summary>
+    /// Handles bulk update of projection events from Kafka trigger events without event type filtering.
+    /// Uses ApplyAndPersistAsync to update each projection's state with retry options.
+    /// </summary>
+    /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
+    /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
+    /// <param name="events">Array of Kafka trigger event strings to process.</param>
+    /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, RetryOptions retryOptions) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        await HandleProjectionBulkUpdateEvent<P>(nostify, events, new List<string>(), retryOptions);
+    }
+
+    /// <summary>
     /// Handles bulk update of projection events from Kafka trigger events with a single event type filter.
     /// Uses ApplyAndPersistAsync to update each projection's state.
     /// </summary>
@@ -377,11 +458,11 @@ public static class DefaultEventHandlers
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
-    /// <param name="retryWhenNotFound">System will wait and retry delivering the event if the Projection hasn't completed create operations before Update is applied.</param>
+    /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, List<string> eventTypeFilter, bool retryWhenNotFound = false) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task HandleProjectionBulkUpdateEvent<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
-        
+        retryOptions ??= new RetryOptions();
         try
         {
             Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
@@ -397,18 +478,61 @@ public static class DefaultEventHandlers
                     Event? newEvent = triggerEvent.GetEvent(eventTypeFilter);
                     if (newEvent is not null)
                     {
-                        tasks.Add(projectionContainer.ApplyAndPersistAsync<P>(newEvent)
-                            .ContinueWith(t =>
+                        tasks.Add(Task.Run(async () =>
                             {
-                                if (t.IsCompletedSuccessfully)
+                                for (int attempt = 0; attempt <= retryOptions.MaxRetries; attempt++)
                                 {
-                                    // Add the updated projection to the bag so we don't have to query them again to Init
-                                    updatedProjections.Add(t.Result);
-                                }
-                                else if (retryWhenNotFound && t.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.NotFound)
-                                {
-                                    // Retry logic if the projection is not found
-                                    
+                                    try
+                                    {
+                                        P? result = await projectionContainer.ApplyAndPersistAsync<P>(newEvent);
+                                        
+                                        // ApplyAndPersistAsync returns null when the item is not found in the container
+                                        // (it catches CosmosException NotFound internally and returns null)
+                                        if (result != null)
+                                        {
+                                            // Add the updated projection to the bag so we don't have to query them again to Init
+                                            updatedProjections.Add(result);
+                                            return;
+                                        }
+                                        
+                                        // Result is null - the projection was not found
+                                        if (retryOptions.RetryWhenNotFound)
+                                        {
+                                            // If the projection to update was not found, we may need to retry if the projection is eventually consistent and may not have been created yet
+                                            // This can happen when we have a Create event followed by an Update event for the same projection in quick succession, and the Update is processed before the Create has fully propagated to the point where it can be read by the Update
+                                            // In this case we will retry the Update up to MaxRetries times with a delay in between to give the Create time to propagate
+                                            if (attempt < retryOptions.MaxRetries)
+                                            {
+                                                await Task.Delay(retryOptions.Delay);
+                                            }
+                                            else
+                                            {
+                                                // Exhausted all retries, handle as undeliverable
+                                                await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionBulkUpdateEvent)}:{nameof(P)}:Retry", 
+                                                    $"Not found after {retryOptions.MaxRetries} retries",
+                                                    newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
+                                                    );
+                                            }
+                                        }
+                                        else
+                                        {
+                                            // Not configured to retry on not found, handle as undeliverable immediately
+                                            await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionBulkUpdateEvent)}:{nameof(P)}:NotFound", 
+                                                $"Not found and RetryWhenNotFound is false",
+                                                newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
+                                                );
+                                            return;
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        // For any other exceptions, handle as undeliverable immediately (no retry)
+                                        await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionBulkUpdateEvent)}:{nameof(P)}", 
+                                            ex.Message ?? "Unknown error",
+                                            newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, newEvent?.aggregateRootId ?? Guid.Empty)
+                                            );
+                                        return;
+                                    }
                                 }
                             }));
                     }
@@ -426,7 +550,7 @@ public static class DefaultEventHandlers
                 Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent(eventTypeFilter) ?? throw new NostifyException("Event is null");
                 await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionBulkUpdateEvent)}:{nameof(P)}", 
                     e.Message, 
-                    @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
+                    @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, @event?.aggregateRootId ?? Guid.Empty)
                     );
             });
             throw;
