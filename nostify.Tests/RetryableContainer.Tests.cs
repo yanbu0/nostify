@@ -447,7 +447,7 @@ public class RetryableContainerTests
         var mockResponse = new Mock<ItemResponse<TestAggregate>>();
         mockContainer
             .Setup(c => c.CreateItemAsync(
-                It.IsAny<TestAggregate>(),
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(mockResponse.Object);
 
@@ -458,14 +458,10 @@ public class RetryableContainerTests
             new TestAggregate(), (PartitionKey?)null);
 
         Assert.NotNull(result);
-        // Verify the overload WITHOUT explicit PartitionKey was called
+        // Verify CreateItemAsync was called with a null partition key
         mockContainer.Verify(c => c.CreateItemAsync(
-            It.IsAny<TestAggregate>(),
+            It.IsAny<TestAggregate>(), null,
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        // Verify the overload WITH explicit PartitionKey was NOT called
-        mockContainer.Verify(c => c.CreateItemAsync(
-            It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
-            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -474,7 +470,7 @@ public class RetryableContainerTests
         var mockContainer = new Mock<Container>();
         mockContainer
             .Setup(c => c.CreateItemAsync(
-                It.IsAny<TestAggregate>(),
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
 
@@ -497,7 +493,7 @@ public class RetryableContainerTests
         var mockResponse = new Mock<ItemResponse<TestAggregate>>();
         mockContainer
             .Setup(c => c.CreateItemAsync(
-                It.IsAny<TestAggregate>(),
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(mockResponse.Object);
 
@@ -507,9 +503,9 @@ public class RetryableContainerTests
         var result = await retryable.CreateItemAsync(new TestAggregate());
 
         Assert.NotNull(result);
-        // Should use the Container overload without PartitionKey (since PK is null internally)
+        // Should call Container with null partition key (since PK is null internally)
         mockContainer.Verify(c => c.CreateItemAsync(
-            It.IsAny<TestAggregate>(),
+            It.IsAny<TestAggregate>(), null,
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -519,7 +515,7 @@ public class RetryableContainerTests
         var mockContainer = new Mock<Container>();
         mockContainer
             .Setup(c => c.CreateItemAsync(
-                It.IsAny<TestAggregate>(),
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
 
