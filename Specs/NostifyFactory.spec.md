@@ -166,6 +166,32 @@ services.AddSingleton<INostify>(sp =>
 });
 ```
 
+### With Structured Logging
+
+The `.WithLogger()` fluent method enables structured logging throughout the nostify framework, replacing `Console.WriteLine` calls with `ILogger` output:
+
+```csharp
+var logger = services.BuildServiceProvider()
+    .GetRequiredService<ILoggerFactory>()
+    .CreateLogger("nostify");
+
+var nostify = NostifyFactory.WithCosmos(
+        cosmosApiKey: apiKey,
+        cosmosDbName: dbName,
+        cosmosEndpointUri: endPoint,
+        createContainers: true)
+    .WithKafka(kafka)
+    .WithHttp(httpClientFactory)
+    .WithLogger(logger)      // Enables structured logging
+    .Build<MyAggregate>(verbose: true);
+```
+
+When a logger is provided:
+- All verbose/debug output uses `ILogger.LogDebug()` instead of `Console.WriteLine`
+- Error output uses `ILogger.LogError()` instead of `Console.Error.WriteLine`
+- The logger is automatically propagated to `RetryOptions` in `DefaultEventHandlers` and internal retry sites
+- If no logger is set, the framework falls back to `Console.WriteLine` for backwards compatibility
+
 ## Internal Behavior
 
 The `Build` method performs these steps:

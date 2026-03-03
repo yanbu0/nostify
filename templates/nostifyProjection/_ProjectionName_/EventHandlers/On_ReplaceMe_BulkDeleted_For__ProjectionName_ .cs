@@ -36,19 +36,8 @@ public class On_ReplaceMe_BulkDeletedFor__ProjectionName_
                 IsBatched = true)] string[] events,
         ILogger log)
     {
-        try
-        {
-            Container bulkDeleteContainer = await _nostify.GetBulkProjectionContainerAsync<_ProjectionName_>();
-            await bulkDeleteContainer.BulkDeleteFromEventsAsync<_ProjectionName_>(events);
-        }
-        catch (Exception e)
-        {
-            events.ToList().ForEach(async eventStr =>
-            {
-                Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent() ?? throw new NostifyException("Event is null");
-                await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_BulkDeletedFor__ProjectionName_), e.Message, @event);
-            });
-        }
+        int deletedCount = await DefaultEventHandlers.HandleProjectionBulkDeleteEventAsync<_ProjectionName_>(_nostify, events);
+        log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkDeletedFor__ProjectionName_), deletedCount);
 
         
     }

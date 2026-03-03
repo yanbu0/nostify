@@ -45,7 +45,11 @@ public class On_ReplaceMe_Updated
                 ] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
-        await DefaultEventHandlers.HandleAggregateEvent<_ReplaceMe_>(_nostify, triggerEvent);
+        // Optional: Add retry options for eventual consistency scenarios
+        // var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true);
+        // await DefaultEventHandlers.HandleAggregateEventAsync<_ReplaceMe_>(_nostify, triggerEvent, retryOptions: retryOptions, logger: log);
+        // Note: If WithLogger() was called during Nostify setup, the logger is passed automatically via nostify.Logger
+        await DefaultEventHandlers.HandleAggregateEventAsync<_ReplaceMe_>(_nostify, triggerEvent);
     }
     
 }

@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
+using Microsoft.Extensions.Logging;
 
 namespace nostify;
 
@@ -32,6 +33,8 @@ public class Nostify : INostify
     public IProjectionInitializer ProjectionInitializer { get; } = new ProjectionInitializer();
     /// <inheritdoc />
     public IHttpClientFactory HttpClientFactory { get; }
+    /// <inheritdoc />
+    public ILogger? Logger { get; }
 
     ///<summary>
     /// Nostify constructor for development with no username and password for Kafka.
@@ -41,7 +44,7 @@ public class Nostify : INostify
     {
     }
 
-    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory)
+    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory, ILogger? logger = null)
     {
         Repository = repository;
         DefaultPartitionKeyPath = defaultPartitionKeyPath;
@@ -49,6 +52,7 @@ public class Nostify : INostify
         KafkaUrl = kafkaUrl;
         KafkaProducer = kafkaProducer;
         HttpClientFactory = httpClientFactory;
+        Logger = logger;
     }
 
     ///<summary>
@@ -87,7 +91,10 @@ public class Nostify : INostify
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
         var eventContainer = await GetEventStoreContainerAsync();
-        await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        var retryOptions = new RetryOptions { Logger = Logger, LogRetries = Logger != null };
+        await eventContainer
+            .WithRetry(retryOptions)
+            .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
     }
 
     ///<inheritdoc />
@@ -115,11 +122,13 @@ public class Nostify : INostify
                     {                        
                         if (result.IsCompletedSuccessfully)
                         {
-                            Console.WriteLine($"Event published to topic(s) {peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}")}");
+                            if (Logger != null) Logger.LogInformation("Event published to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
+                            else Console.WriteLine($"Event published to topic(s) {peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}")}");
                         }
                         else
                         {
-                            Console.WriteLine($"Failed to publish event to topic(s) {peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}")} || Expception: {result.Exception?.Message}");
+                            if (Logger != null) Logger.LogError(result.Exception, "Failed to publish event to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
+                            else Console.WriteLine($"Failed to publish event to topic(s) {peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}")} || Expception: {result.Exception?.Message}");
                         }
                     }
                 });
@@ -227,31 +236,33 @@ public class Nostify : INostify
         return succesfulTasks.Take(1000).ToList();
     }
 
-    private Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()
+    private async Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()
     {
-        return bulkContainer.ApplyAndPersistAsync<P>(
-                                new List<IEvent>() { pe }, pk.ToPartitionKey(), id
-                            ).ContinueWith(itemResponse =>
-                            {
-                                if (!itemResponse.IsCompletedSuccessfully)
-                                {
-                                    //Retry if too many requests error
-                                    if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                                    {
-                                        //Wait the specified amount of time or one second then retry, write to undeliverable events if still fails
-                                        int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
-                                        Task.Delay(waitTime).ContinueWith(_ => bulkContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
-                                            .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)));
-                                    }
-                                    else
-                                    {
-                                        //This will cause a record to get written to the undeliverable events container for retry later if needed
-                                        _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
-                                    }
-                                }
-
-                                return itemResponse.Result;
-                            });
+        if (allowRetry)
+        {
+            var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: Logger);
+            var retryable = bulkContainer.WithRetry(retryOptions);
+            var result = await retryable.ApplyAndPersistAsync<P>(
+                pe,
+                id,
+                onExhausted: () => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), "Exhausted retries", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
+                onNotFound: () => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
+                onException: (ex) => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+            );
+            return result ?? new P();
+        }
+        else
+        {
+            try
+            {
+                return await bulkContainer.ApplyAndPersistAsync<P>(new List<IEvent>() { pe }, pk.ToPartitionKey(), id);
+            }
+            catch (Exception ex)
+            {
+                await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                throw;
+            }
+        }
     }
 
     ///<inheritdoc />
@@ -267,32 +278,40 @@ public class Nostify : INostify
         {
             var eventBatch = events.Skip(i).Take(loopSize).ToList();
 
-            List<Task> taskList = new List<Task>();
-            eventBatch.ForEach(pe =>
+            if (allowRetry)
             {
-                taskList.Add(eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
-                        .ContinueWith(itemResponse =>
+                var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: Logger);
+                var retryable = eventContainer.WithRetry(retryOptions);
+                List<Task> taskList = new List<Task>();
+                eventBatch.ForEach(pe =>
+                {
+                    taskList.Add(retryable.CreateItemAsync(
+                        pe,
+                        pe.aggregateRootId.ToPartitionKey(),
+                        onException: (ex) => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+                    ));
+                });
+                await Task.WhenAll(taskList);
+            }
+            else
+            {
+                List<Task> taskList = new List<Task>();
+                eventBatch.ForEach(pe =>
+                {
+                    taskList.Add(Task.Run(async () =>
+                    {
+                        try
                         {
-                            if (!itemResponse.IsCompletedSuccessfully)
-                            {
-                                //Retry if too many requests error
-                                if (allowRetry && itemResponse.Exception?.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                                {
-                                    //Wait the specified amount of time or one second then retry, write to undeliverable events if still fails
-                                    int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
-                                    Task.Delay(waitTime).ContinueWith(_ => eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey())
-                                        .ContinueWith(_ => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)));
-                                }
-                                else
-                                {
-                                    //This will cause a record to get written to the undeliverable events container for retry later if needed
-                                    _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), itemResponse.Exception?.Message ?? "Unknown", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
-                                }
-                            }
-                        }));
-            });
-
-            await Task.WhenAll(taskList);
+                            await eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey());
+                        }
+                        catch (Exception ex)
+                        {
+                            _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                        }
+                    }));
+                });
+                await Task.WhenAll(taskList);
+            }
         }
     }
 
@@ -658,24 +677,28 @@ public class Nostify : INostify
         if (Repository.IsLocalEmulator && !throughput.HasValue)
         {
             throughput = 400; // Set a default throughput for local emulator
-            Console.WriteLine("Using default throughput of 400 for local emulator since none was set. This will probably be really slow.");
+            if (Logger != null) Logger.LogWarning("Using default throughput of 400 for local emulator since none was set. This will probably be really slow.");
+            else Console.WriteLine("Using default throughput of 400 for local emulator since none was set. This will probably be really slow.");
         }
 
         if (localhostOnly && !Repository.IsLocalEmulator)
         {
-            Console.WriteLine("Not running on localhost. Containers will not be created.");
+            if (Logger != null) Logger.LogInformation("Not running on localhost. Containers will not be created.");
+            else Console.WriteLine("Not running on localhost. Containers will not be created.");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(Repository.ConnectionString))
         {
-            Console.WriteLine("Connection string is null or empty. Containers will not be created.");
+            if (Logger != null) Logger.LogWarning("Connection string is null or empty. Containers will not be created.");
+            else Console.WriteLine("Connection string is null or empty. Containers will not be created.");
             return;
         }
 
         if (Repository.DbName == null)
         {
-            Console.WriteLine("Database name is null or empty. Containers will not be created.");
+            if (Logger != null) Logger.LogWarning("Database name is null or empty. Containers will not be created.");
+            else Console.WriteLine("Database name is null or empty. Containers will not be created.");
             return;
         }
 
@@ -767,17 +790,23 @@ public class Nostify : INostify
         try
         {
             // Create the container if it does not exist
-            if (verbose) Console.WriteLine($"Creating container {containerName} with partition key path {partitionKeyPath} and throughput {throughput}, if it does not already exist");
+            if (verbose || Logger != null)
+            {
+                if (Logger != null) Logger.LogDebug("Creating container {ContainerName} with partition key path {PartitionKeyPath} and throughput {Throughput}, if it does not already exist", containerName, partitionKeyPath, throughput);
+                else Console.WriteLine($"Creating container {containerName} with partition key path {partitionKeyPath} and throughput {throughput}, if it does not already exist");
+            }
             await Repository.GetContainerAsync(containerName, partitionKeyPath, throughput: throughput, verbose: verbose);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            Console.WriteLine($"Database not found: {Repository.DbName}");
+            if (Logger != null) Logger.LogError(ex, "Database not found: {DbName}", Repository.DbName);
+            else Console.WriteLine($"Database not found: {Repository.DbName}");
             throw;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"An error occurred while creating or retrieving the container {containerName}: {ex.Message}");
+            if (Logger != null) Logger.LogError(ex, "An error occurred while creating or retrieving the container {ContainerName}", containerName);
+            else Console.WriteLine($"An error occurred while creating or retrieving the container {containerName}: {ex.Message}");
             throw;
         }
     }

@@ -46,7 +46,7 @@ public class On_ReplaceMe_Deleted
                 ] NostifyKafkaTriggerEvent triggerEvent,
         ILogger log)
     {
-        await DefaultEventHandlers.HandleAggregateEvent<_ReplaceMe_>(_nostify, triggerEvent);
+        await DefaultEventHandlers.HandleAggregateEventAsync<_ReplaceMe_>(_nostify, triggerEvent);
     }
 }
 

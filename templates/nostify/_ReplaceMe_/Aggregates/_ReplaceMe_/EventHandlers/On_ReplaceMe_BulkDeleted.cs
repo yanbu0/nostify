@@ -47,6 +47,7 @@ public class On_ReplaceMe_BulkDeleted
                 ] string[] events,
         ILogger log)
     {
-        await DefaultEventHandlers.HandleAggregateBulkDeleteEvent<_ReplaceMe_>(_nostify, events);
+        int deletedCount = await DefaultEventHandlers.HandleAggregateBulkDeleteEventAsync<_ReplaceMe_>(_nostify, events);
+        log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkDeleted), deletedCount);
     }
 }

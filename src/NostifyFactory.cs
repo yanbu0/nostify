@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Castle.Components.DictionaryAdapter.Xml;
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace nostify;
@@ -85,6 +86,12 @@ public class NostifyConfig
     /// The IHttpClientFactory instance for creating HttpClient instances to make HTTP requests.
     /// </summary>
     public IHttpClientFactory? httpClientFactory { get; set; } = null;
+
+    /// <summary>
+    /// Optional logger instance for structured logging throughout the Nostify framework.
+    /// When set, replaces Console.WriteLine calls with structured log output.
+    /// </summary>
+    public ILogger? logger { get; set; } = null;
 
 }
 
@@ -221,6 +228,20 @@ public static class NostifyFactory
     }
 
     /// <summary>
+    /// Configures an <see cref="ILogger"/> for structured logging throughout the Nostify framework.
+    /// When set, replaces Console.WriteLine output with structured log calls at appropriate levels
+    /// (Debug for verbose/startup diagnostics, Warning for non-critical issues, Error for failures).
+    /// </summary>
+    /// <param name="config">The Nostify configuration settings.</param>
+    /// <param name="logger">The logger instance to use for structured logging.</param>
+    /// <returns>The configuration instance for fluent chaining.</returns>
+    public static NostifyConfig WithLogger(this NostifyConfig config, ILogger logger)
+    {
+        config.logger = logger;
+        return config;
+    }
+
+    /// <summary>
     /// Builds the Nostify instance. Use generic method if wanting verbose output and/or autocreate topics.
     /// </summary>
     public static INostify Build(this NostifyConfig config)
@@ -230,7 +251,8 @@ public static class NostifyFactory
             config.cosmosEndpointUri,
             UseGatewayConnection: config.useGatewayConnection,
             DefaultContainerThroughput: config.containerThroughput ?? -1,
-            DefaultDbThroughput: config.containerThroughput ?? -1
+            DefaultDbThroughput: config.containerThroughput ?? -1,
+            logger: config.logger
         );
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
         var DefaultTenantId = config.defaultTenantId;
@@ -244,7 +266,8 @@ public static class NostifyFactory
             DefaultTenantId,
             KafkaUrl,
             KafkaProducer,
-            HttpClientFactory
+            HttpClientFactory,
+            config.logger
         );
     }
 
@@ -259,22 +282,26 @@ public static class NostifyFactory
         try 
         {
             //Create Confluent admin client
-            if (verbose) Console.WriteLine("Building Admin Client");
+            if (config.logger != null) config.logger.LogDebug("Building Admin Client");
+            else if (verbose) Console.WriteLine("Building Admin Client");
             var adminClientConfig = new AdminClientConfig(config.producerConfig);
             var adminClient = new AdminClientBuilder(adminClientConfig).Build();
-            if (verbose) Console.WriteLine("Admin Client built");
+            if (config.logger != null) config.logger.LogDebug("Admin Client built");
+            else if (verbose) Console.WriteLine("Admin Client built");
 
             //Find all NostifyCommand instances in this assembly of T and create a topic for each
             var assembly = typeof(T).Assembly;
             var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
-            if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
+            if (config.logger != null) config.logger.LogDebug("Found {CommandTypes} command definitions in assembly {Assembly}", string.Join(", ", commandTypes.Select(c => c.Name)), assembly.FullName);
+            else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
             
             //Get any static properties of each commandType that inherit type NostifyCommand        
             var commandProperties = commandTypes
                 .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(p => p.FieldType.IsSubclassOf(typeof(NostifyCommand))));
 
-            if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");
+            if (config.logger != null) config.logger.LogDebug("Found {Commands} commands", string.Join(", ", commandProperties.Select(c => c.Name)));
+            else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");
 
             List<TopicSpecification> topics = new List<TopicSpecification>();
             foreach (var commandType in commandProperties)
@@ -287,19 +314,22 @@ public static class NostifyFactory
             //Filter topics to only create new topics
             var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
             topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
-            if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
+            if (config.logger != null) config.logger.LogDebug("Creating topics: {Topics}", string.Join(", ", topics.Select(t => t.Name)));
+            else if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
 
             //Create any new topics needed
             if (topics.Count > 0)
             {
                 adminClient.CreateTopicsAsync(topics).Wait();
                 var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-                if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+                if (config.logger != null) config.logger.LogDebug("Current topics: {Topics}", string.Join(", ", currentTopics.Select(t => t.Topic)));
+                else if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
             }
 
             var nostify = Build(config);
 
-            if (verbose) Console.WriteLine($"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}");
+            if (config.logger != null) config.logger.LogDebug("Creating containers for {Assembly}: {CreateContainers}", typeof(T).Assembly.FullName, config.createContainers);
+            else if (verbose) Console.WriteLine($"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}");
             if (config.createContainers)
             {
                 nostify.CreateContainersAsync<T>(false, config.containerThroughput, verbose).Wait();
@@ -309,7 +339,8 @@ public static class NostifyFactory
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error building Nostify with autocreate topics: " + ex.Message + " " + ex.InnerException?.Message);
+            if (config.logger != null) config.logger.LogError(ex, "Error building Nostify with autocreate topics");
+            else Console.WriteLine("Error building Nostify with autocreate topics: " + ex.Message + " " + ex.InnerException?.Message);
             throw new NostifyException("Error building Nostify with autocreate topics " + ex.Message + " " + ex.InnerException?.Message);
         }
         

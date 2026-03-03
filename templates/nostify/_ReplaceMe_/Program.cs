@@ -6,6 +6,7 @@ using Microsoft.Azure.Functions.Worker;
 using Azure.Core.Serialization;
 using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json;
+using Microsoft.Extensions.Logging;
 
 namespace _ReplaceMe__Service;
 
@@ -37,6 +38,7 @@ public class Program
             int defaultThroughput = config.GetValue<int>("DefaultContainerThroughput");
             bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
             var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
+            var logger = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
 
             var nostify = NostifyFactory.WithCosmos(
                                 cosmosApiKey: apiKey,
@@ -51,6 +53,7 @@ public class Program
                             .WithKafka(kafka)
 #endif
                             .WithHttp(httpClientFactory)
+                            .WithLogger(logger)
                             .Build<_ReplaceMe_>(verbose: true);
 
             services.AddSingleton<INostify>(nostify);

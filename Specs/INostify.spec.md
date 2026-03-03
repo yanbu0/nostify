@@ -19,6 +19,7 @@ public interface INostify
 | `DefaultUserId` | `Guid` | Default user ID for events without explicit user |
 | `kafkaUrl` | `string` | Kafka broker connection URL |
 | `eventStoreContainerName` | `string` | Name of the container storing all events |
+| `Logger` | `ILogger?` | Optional structured logger. Set via `NostifyFactory.WithLogger()`. When non-null, used by internal retry logic and diagnostic output instead of `Console.WriteLine`. |
 
 ## Methods
 

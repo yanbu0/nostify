@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>4.3.2</Version>
+    <Version>4.4.1</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -26,6 +26,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" /> <!-- Don't update this to 2.3.0 or IEndpointFeature will not resolve, Microsoft messed something up -->
     <PackageReference Include="Microsoft.Azure.Core.NewtonsoftJson" Version="2.0.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.48.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <None Include="LICENSE.txt" Pack="true" PackagePath="$(PackageLicenseFile)" />
     <None Include="README.md" Pack="true" PackagePath="\" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
