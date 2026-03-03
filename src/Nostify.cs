@@ -259,8 +259,8 @@ public class Nostify : INostify
             }
             catch (Exception ex)
             {
-                _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
-                return new P();
+                await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                throw;
             }
         }
     }
