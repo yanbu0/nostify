@@ -71,7 +71,7 @@
 
 ### Updates
 
-- 4.4.0
+- 4.4.1
   - **RetryableContainer**: New `IRetryableContainer` interface and `RetryableContainer` implementation that wraps a Cosmos DB `Container` with configurable retry logic.
     - Chainable API via `.WithRetry(retryOptions)` extension method on `Container`
     - Automatic retry on 429 TooManyRequests using server-provided `RetryAfter` header
