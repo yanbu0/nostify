@@ -163,7 +163,7 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
     }
 
     /// <inheritdoc/>
-    public Task<ItemResponse<TResult>?> ReadItemAsync<TResult>(
+    public async Task<ItemResponse<TResult>?> ReadItemAsync<TResult>(
         string id,
         PartitionKey partitionKey,
         Func<Task>? onExhausted = null,
@@ -175,21 +175,21 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
 
         if (_exceptionToThrow != null)
         {
-            if (onException != null) { onException(_exceptionToThrow); return Task.FromResult<ItemResponse<TResult>?>(default); }
+            if (onException != null) { await onException(_exceptionToThrow); return default; }
             throw _exceptionToThrow;
         }
 
         if (_simulateNotFound)
         {
-            if (onNotFound != null) onNotFound();
-            return Task.FromResult<ItemResponse<TResult>?>(default);
+            if (onNotFound != null) await onNotFound();
+            return default;
         }
 
-        return Task.FromResult<ItemResponse<TResult>?>(default);
+        return default;
     }
 
     /// <inheritdoc/>
-    public Task<ItemResponse<TResult>?> CreateItemAsync<TResult>(
+    public async Task<ItemResponse<TResult>?> CreateItemAsync<TResult>(
         TResult item,
         PartitionKey? partitionKey,
         Func<Exception, Task>? onException = null,
@@ -197,41 +197,41 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
     {
         if (_exceptionToThrow != null)
         {
-            if (onException != null) { onException(_exceptionToThrow); return Task.FromResult<ItemResponse<TResult>?>(default); }
+            if (onException != null) { await onException(_exceptionToThrow); return default; }
             throw _exceptionToThrow;
         }
 
-        return Task.FromResult<ItemResponse<TResult>?>(default);
+        return default;
     }
 
     /// <inheritdoc/>
-    public Task<ItemResponse<TResult>?> CreateItemAsync<TResult>(
+    public async Task<ItemResponse<TResult>?> CreateItemAsync<TResult>(
         TResult item,
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {
         if (_exceptionToThrow != null)
         {
-            if (onException != null) { onException(_exceptionToThrow); return Task.FromResult<ItemResponse<TResult>?>(default); }
+            if (onException != null) { await onException(_exceptionToThrow); return default; }
             throw _exceptionToThrow;
         }
 
-        return Task.FromResult<ItemResponse<TResult>?>(default);
+        return default;
     }
 
     /// <inheritdoc/>
-    public Task<ItemResponse<TResult>?> UpsertItemAsync<TResult>(
+    public async Task<ItemResponse<TResult>?> UpsertItemAsync<TResult>(
         TResult item,
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {
         if (_exceptionToThrow != null)
         {
-            if (onException != null) { onException(_exceptionToThrow); return Task.FromResult<ItemResponse<TResult>?>(default); }
+            if (onException != null) { await onException(_exceptionToThrow); return default; }
             throw _exceptionToThrow;
         }
 
-        return Task.FromResult<ItemResponse<TResult>?>(default);
+        return default;
     }
 
     #region Query Methods
