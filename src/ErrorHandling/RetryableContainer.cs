@@ -128,7 +128,7 @@ public class RetryableContainer : IRetryableContainer
     /// <inheritdoc/>
     public async Task<ItemResponse<T>?> CreateItemAsync<T>(
         T item,
-        PartitionKey partitionKey,
+        PartitionKey? partitionKey,
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {
@@ -136,7 +136,9 @@ public class RetryableContainer : IRetryableContainer
         {
             try
             {
-                return await Container.CreateItemAsync(item, partitionKey, cancellationToken: cancellationToken);
+                return await (partitionKey.HasValue
+                    ? Container.CreateItemAsync(item, partitionKey.Value, cancellationToken: cancellationToken)
+                    : Container.CreateItemAsync(item, cancellationToken: cancellationToken));
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
@@ -151,6 +153,15 @@ public class RetryableContainer : IRetryableContainer
         }
 
         return default;
+    }
+
+    /// <inheritdoc/>
+    public async Task<ItemResponse<T>?> CreateItemAsync<T>(
+        T item,
+        Func<Exception, Task>? onException = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await CreateItemAsync(item, null, onException, cancellationToken);
     }
 
     /// <inheritdoc/>

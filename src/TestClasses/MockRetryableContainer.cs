@@ -191,7 +191,22 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
     /// <inheritdoc/>
     public Task<ItemResponse<TResult>?> CreateItemAsync<TResult>(
         TResult item,
-        PartitionKey partitionKey,
+        PartitionKey? partitionKey,
+        Func<Exception, Task>? onException = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (_exceptionToThrow != null)
+        {
+            if (onException != null) { onException(_exceptionToThrow); return Task.FromResult<ItemResponse<TResult>?>(default); }
+            throw _exceptionToThrow;
+        }
+
+        return Task.FromResult<ItemResponse<TResult>?>(default);
+    }
+
+    /// <inheritdoc/>
+    public Task<ItemResponse<TResult>?> CreateItemAsync<TResult>(
+        TResult item,
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {

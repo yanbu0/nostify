@@ -224,6 +224,52 @@ public class MockRetryableContainerTests
         Assert.Null(result); // Mock always returns default for ItemResponse
     }
 
+    [Fact]
+    public async Task CreateItem_NullPartitionKey_WithException_CallsOnException()
+    {
+        var ex = new InvalidOperationException("Create failed");
+        var mock = new MockRetryableContainer<TestAggregate>(ex);
+
+        Exception? caught = null;
+        await mock.CreateItemAsync(new TestAggregate(), (PartitionKey?)null,
+            onException: (e) => { caught = e; return Task.CompletedTask; });
+
+        Assert.Same(ex, caught);
+    }
+
+    [Fact]
+    public async Task CreateItem_NullPartitionKey_NoException_ReturnsDefault()
+    {
+        var mock = new MockRetryableContainer<TestAggregate>(new TestAggregate());
+
+        var result = await mock.CreateItemAsync(new TestAggregate(), (PartitionKey?)null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task CreateItem_NoPK_WithException_CallsOnException()
+    {
+        var ex = new InvalidOperationException("Create failed");
+        var mock = new MockRetryableContainer<TestAggregate>(ex);
+
+        Exception? caught = null;
+        await mock.CreateItemAsync(new TestAggregate(),
+            onException: (e) => { caught = e; return Task.CompletedTask; });
+
+        Assert.Same(ex, caught);
+    }
+
+    [Fact]
+    public async Task CreateItem_NoPK_NoException_ReturnsDefault()
+    {
+        var mock = new MockRetryableContainer<TestAggregate>(new TestAggregate());
+
+        var result = await mock.CreateItemAsync(new TestAggregate());
+
+        Assert.Null(result);
+    }
+
     #endregion
 
     #region UpsertItemAsync

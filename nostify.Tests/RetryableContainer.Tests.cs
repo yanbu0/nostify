@@ -440,6 +440,96 @@ public class RetryableContainerTests
             retryable.CreateItemAsync(new TestAggregate(), new PartitionKey("pk")));
     }
 
+    [Fact]
+    public async Task CreateItem_NullPartitionKey_Success_CallsContainerWithoutPK()
+    {
+        var mockContainer = new Mock<Container>();
+        var mockResponse = new Mock<ItemResponse<TestAggregate>>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResponse.Object);
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var result = await retryable.CreateItemAsync(
+            new TestAggregate(), (PartitionKey?)null);
+
+        Assert.NotNull(result);
+        // Verify the overload WITHOUT explicit PartitionKey was called
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        // Verify the overload WITH explicit PartitionKey was NOT called
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateItem_NullPartitionKey_Exception_CallsOnException()
+    {
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        Exception? caught = null;
+        await retryable.CreateItemAsync(
+            new TestAggregate(), (PartitionKey?)null,
+            onException: (ex) => { caught = ex; return Task.CompletedTask; });
+
+        Assert.NotNull(caught);
+        Assert.IsType<CosmosException>(caught);
+    }
+
+    [Fact]
+    public async Task CreateItem_NoPK_Success_DelegatesToNullablePKOverload()
+    {
+        var mockContainer = new Mock<Container>();
+        var mockResponse = new Mock<ItemResponse<TestAggregate>>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResponse.Object);
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var result = await retryable.CreateItemAsync(new TestAggregate());
+
+        Assert.NotNull(result);
+        // Should use the Container overload without PartitionKey (since PK is null internally)
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateItem_NoPK_Exception_NoCallback_Throws()
+    {
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        await Assert.ThrowsAsync<CosmosException>(() =>
+            retryable.CreateItemAsync(new TestAggregate()));
+    }
+
     #endregion
 
     #region UpsertItemAsync

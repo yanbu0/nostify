@@ -24,7 +24,8 @@ public interface IRetryableContainer
 | `ApplyAndPersistAsync<T>(IEvent, ...)` | `Task<T?>` | Apply event and persist with retry logic |
 | `ApplyAndPersistAsync<T>(IEvent, Guid, ...)` | `Task<T?>` | Apply event to specific projection with retry |
 | `ReadItemAsync<T>(string, PartitionKey, ...)` | `Task<ItemResponse<T>?>` | Read item with retry for transient failures |
-| `CreateItemAsync<T>(T, PartitionKey, ...)` | `Task<ItemResponse<T>?>` | Create item with 429 retry |
+| `CreateItemAsync<T>(T, PartitionKey?, ...)` | `Task<ItemResponse<T>?>` | Create item with 429 retry; when partition key is null, Cosmos SDK infers it from the item |
+| `CreateItemAsync<T>(T, ...)` | `Task<ItemResponse<T>?>` | Create item with 429 retry; partition key inferred by Cosmos SDK |
 | `UpsertItemAsync<T>(T, ...)` | `Task<ItemResponse<T>?>` | Upsert item with 429 retry |
 
 ### Callback Parameters

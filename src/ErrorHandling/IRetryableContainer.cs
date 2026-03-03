@@ -94,7 +94,21 @@ public interface IRetryableContainer
     /// <returns>The item response.</returns>
     Task<ItemResponse<T>?> CreateItemAsync<T>(
         T item,
-        PartitionKey partitionKey,
+        PartitionKey? partitionKey,
+        Func<Exception, Task>? onException = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates an item with automatic 429 retry. The partition key is inferred from the item
+    /// by the Cosmos DB SDK based on the container's partition key path. Does NOT retry on 404.
+    /// </summary>
+    /// <typeparam name="T">The type of item to create.</typeparam>
+    /// <param name="item">The item to create.</param>
+    /// <param name="onException">Callback invoked when a non-transient exception occurs.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The item response.</returns>
+    Task<ItemResponse<T>?> CreateItemAsync<T>(
+        T item,
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default);
 
