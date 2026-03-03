@@ -13,13 +13,14 @@ public class NostifyCosmosClient
 ## Constructor
 
 ```csharp
-public NostifyCosmosClient(CosmosClient cosmosClient, string databaseName)
+public NostifyCosmosClient(CosmosClient cosmosClient, string databaseName, ILogger? logger = null)
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `cosmosClient` | `CosmosClient` | The underlying Azure Cosmos DB client |
 | `databaseName` | `string` | The name of the database to use |
+| `logger` | `ILogger?` | Optional structured logger for diagnostic output (container creation, verbose mode). Falls back to `Console.WriteLine` when null. |
 
 ## Properties
 

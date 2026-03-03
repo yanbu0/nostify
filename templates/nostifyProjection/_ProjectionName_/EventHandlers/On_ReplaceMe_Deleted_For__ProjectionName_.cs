@@ -36,7 +36,7 @@ public class On_ReplaceMe_Deleted_For__ProjectionName_
     {
         // Use the default event handler to apply the event to the projection and persist it
         // This will delete the projection from the projection container based on the event's aggregateRootId
-        await DefaultEventHandlers.HandleProjectionEvent<_ProjectionName_>(_nostify, triggerEvent, null);           
+        await DefaultEventHandlers.HandleProjectionEventAsync<_ProjectionName_>(_nostify, triggerEvent, null);           
     }
 }
 

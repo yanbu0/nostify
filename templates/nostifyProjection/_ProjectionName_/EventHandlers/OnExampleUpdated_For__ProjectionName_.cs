@@ -41,8 +41,9 @@ public class OnExternalDataExampleUpdated_For__ProjectionName_
     {
         // Use the default event handler to apply the event to the projection and persist it
         // If the Projection has no external data dependencies, you can pass null for the HttpClient to avoid unnecessary overhead
-        await DefaultEventHandlers.HandleMultiApplyEvent<_ProjectionName_>(_nostify, 
-                                        triggerEvent, p => p.externalAggregateExample1Id);        
+        int updatedCount = await DefaultEventHandlers.HandleMultiApplyEventAsync<_ProjectionName_>(_nostify, 
+                                        triggerEvent, p => p.externalAggregateExample1Id);
+        log.LogInformation("{Handler} processed {Count} records", nameof(OnExternalDataExampleUpdated_For__ProjectionName_), updatedCount);        
     }
     
 }

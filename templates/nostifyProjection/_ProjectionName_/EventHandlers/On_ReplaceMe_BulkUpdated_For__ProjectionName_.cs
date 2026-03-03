@@ -36,7 +36,12 @@ public class On_ReplaceMe_BulkUpdatedFor__ProjectionName_
                 IsBatched = true)] string[] events,
         ILogger log)
     {
-        await DefaultEventHandlers.HandleProjectionBulkUpdateEvent<_ProjectionName_>(_nostify, events);
+        // Optional: Add retry options for eventual consistency scenarios
+        // var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true);
+        // int updatedCount = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<_ProjectionName_>(_nostify, events, retryOptions: retryOptions, logger: log);
+        // Note: If WithLogger() was called during Nostify setup, the logger is passed automatically via nostify.Logger
+        int updatedCount = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<_ProjectionName_>(_nostify, events);
+        log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkUpdatedFor__ProjectionName_), updatedCount);
     }
     
 }

@@ -37,7 +37,11 @@ public class On_ReplaceMe_Updated_For__ProjectionName_
     {
         // Use the default event handler to apply the event to the projection and persist it
         // If the Projection has no external data dependencies, you can pass null for the HttpClient to avoid unnecessary overhead
-        await DefaultEventHandlers.HandleProjectionEvent<_ProjectionName_>(_nostify, triggerEvent, _httpClient);        
+        // Optional: Add retry options for eventual consistency scenarios
+        // var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true);
+        // await DefaultEventHandlers.HandleProjectionEventAsync<_ProjectionName_>(_nostify, triggerEvent, _httpClient, retryOptions: retryOptions, logger: log);
+        // Note: If WithLogger() was called during Nostify setup, the logger is passed automatically via nostify.Logger
+        await DefaultEventHandlers.HandleProjectionEventAsync<_ProjectionName_>(_nostify, triggerEvent, _httpClient);        
     }
     
 }

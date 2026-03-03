@@ -935,4 +935,298 @@ public class DefaultEventHandlersTests
     }
 
     #endregion
+
+    #region Async Projection Tests
+
+    [Fact]
+    public async Task HandleProjectionBulkUpdateEventAsync_SuccessOnFirstAttempt_UpdatesProjection()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateSucceedingMockContainer(aggId);
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
+            _mockNostify.Object, events, new List<string>());
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        _mockNostify.Verify(n => n.InitAsync<TestProjection>(It.Is<List<TestProjection>>(l => l.Count == 1)), Times.Once);
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkUpdateEventAsync_RetryWhenNotFound_SucceedsAfterOneRetry()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateNotFoundThenSucceedMockContainer(1, aggId);
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: true);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
+            _mockNostify.Object, events, new List<string>(), retryOptions);
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkUpdateEventAsync_ExhaustsRetriesAndHandlesUndeliverable()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateAlwaysNotFoundMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: true);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
+            _mockNostify.Object, events, new List<string>(), retryOptions);
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(4));
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.Is<string>(s => s.Contains("Retry")),
+            It.Is<string>(s => s.Contains("Not found after 3 retries")),
+            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkUpdateEventAsync_RetryWhenNotFoundFalse_DoesNotRetryOnNotFound()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateAlwaysNotFoundMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
+            _mockNostify.Object, events, new List<string>(), retryOptions);
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.Is<string>(s => s.Contains("NotFound")),
+            It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
+            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkUpdateEventAsync_DefaultRetryOptions_DoesNotRetryOnNotFound()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateAlwaysNotFoundMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
+            _mockNostify.Object, events, new List<string>());
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.Is<string>(s => s.Contains("NotFound")),
+            It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
+            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+
+        Assert.Equal(0, result);
+    }
+
+    #endregion
+
+    #region Async Aggregate Tests
+
+    [Fact]
+    public async Task HandleAggregateBulkUpdateEventAsync_SuccessOnFirstAttempt()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateSucceedingAggregateMockContainer(aggId);
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<TestAggregate>(
+            _mockNostify.Object, events, new List<string>());
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    public async Task HandleAggregateBulkUpdateEventAsync_RetryWhenNotFound_SucceedsAfterOneRetry()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateNotFoundThenSucceedAggregateMockContainer(1, aggId);
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: true);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<TestAggregate>(
+            _mockNostify.Object, events, new List<string>(), retryOptions);
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
+    public async Task HandleAggregateBulkUpdateEventAsync_ExhaustsRetriesAndHandlesUndeliverable()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateAlwaysNotFoundAggregateMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: true);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<TestAggregate>(
+            _mockNostify.Object, events, new List<string>(), retryOptions);
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(4));
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.Is<string>(s => s.Contains("Retry")),
+            It.Is<string>(s => s.Contains("Not found after 3 retries")),
+            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task HandleAggregateBulkUpdateEventAsync_RetryWhenNotFoundFalse_HandlesUndeliverable()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateAlwaysNotFoundAggregateMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<TestAggregate>(
+            _mockNostify.Object, events, new List<string>(), retryOptions);
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.Is<string>(s => s.Contains("NotFound")),
+            It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
+            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task HandleAggregateBulkUpdateEventAsync_DefaultRetryOptions_HandlesUndeliverable()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateAlwaysNotFoundAggregateMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<TestAggregate>(
+            _mockNostify.Object, events, new List<string>());
+
+        mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.Is<string>(s => s.Contains("NotFound")),
+            It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
+            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+
+        Assert.Equal(0, result);
+    }
+
+    #endregion
 }

@@ -47,19 +47,8 @@ public class On_ReplaceMe_BulkCreated
                 ] string[] events,
         ILogger log)
     {
-        try
-        {
-            Container currentStateContainer = await _nostify.GetBulkCurrentStateContainerAsync<_ReplaceMe_>();    
-            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<_ReplaceMe_>(events);                         
-        }
-        catch (Exception e)
-        {
-            events.ToList().ForEach(async eventStr =>
-            {
-                Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent() ?? throw new NostifyException("Event is null");
-                await _nostify.HandleUndeliverableAsync(nameof(On_ReplaceMe_BulkCreated), e.Message, @event);
-            });            
-        }        
+        int createdCount = await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<_ReplaceMe_>(_nostify, events);
+        log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkCreated), createdCount);        
     }    
 }
 

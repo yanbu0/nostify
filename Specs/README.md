@@ -74,6 +74,9 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 | [NostifyException](NostifyException.spec.md) | Base exception class |
 | [NostifyValidationException](NostifyValidationException.spec.md) | Validation exception |
 | [NostifyValidationExceptionMiddleware](NostifyValidationExceptionMiddleware.spec.md) | Azure Functions middleware |
+| [RetryOptions](RetryOptions.spec.md) | Retry configuration with exponential backoff and logging |
+| [RetryableContainer](RetryableContainer.spec.md) | Retry-capable Cosmos Container wrapper |
+| [MockRetryableContainer](MockRetryableContainer.spec.md) | Test-friendly IRetryableContainer mock |
 
 ## Shared Interfaces
 
@@ -127,6 +130,7 @@ var order = await nostify.RehydrateAsync<Order>(orderId);
 
 ## Version History
 
+- **4.4.0** - Unified retry logic via RetryableContainer, exponential backoff, ILogger support, ContinueWith replacement, bug fixes
 - **4.3.0** - Added nullable Guid? selector support in ExternalDataEventFactory, fluent API chaining
 - **4.2.1** - Previous stable release
 

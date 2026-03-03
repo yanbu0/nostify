@@ -39,6 +39,7 @@ public Nostify(
 | `DefaultUserId` | `Guid` | Default user for anonymous operations |
 | `kafkaUrl` | `string` | Kafka connection URL |
 | `eventStoreContainerName` | `string` | Event store container name |
+| `Logger` | `ILogger?` | Optional structured logger for diagnostic output and retry logging. Set via `NostifyFactory.WithLogger()`. Falls back to `Console.WriteLine` when null. |
 
 ## Key Method Implementations
 

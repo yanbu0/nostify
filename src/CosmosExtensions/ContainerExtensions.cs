@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Transactions;
 using JsonDiffPatchDotNet;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -198,7 +199,8 @@ public static class ContainerExtensions
     ///<param name="newEvents">The Event list to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
     ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
+    ///<param name="logger">Optional logger for structured logging of not-found conditions.</param>
+    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId, ILogger? logger = null) where T : NostifyObject, new()
     {
         T nosObjToUpdate = new T();
         JObject unchangedNosObj = new JObject();
@@ -221,7 +223,8 @@ public static class ContainerExtensions
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
-                Console.Error.WriteLine($"Aggregate not found: {container.Id} {idToMatch}, tenantId: {partitionKey}");
+                if (logger != null) logger.LogWarning("Aggregate not found: {ContainerId} {IdToMatch}, tenantId: {PartitionKey}", container.Id, idToMatch, partitionKey);
+                else Console.Error.WriteLine($"Aggregate not found: {container.Id} {idToMatch}, tenantId: {partitionKey}");
                 nosObjToUpdate = null;
             }
         }
@@ -263,6 +266,16 @@ public static class ContainerExtensions
 
                     var patchResult = await SafePatchItemAsync<T>(container, nosObjToUpdate.id.ToString(), partitionKey, patchOperations);
 
+                    if (patchResult.IsException)
+                    {
+                        throw new NostifyException($"Patch failed for {idToMatch} || {patchResult.exceptionMessage}");
+                    }
+                    else if (patchResult.NotFound)
+                    {
+                        if (logger != null) logger.LogWarning("Patch target not found: {ContainerId} {IdToMatch}, tenantId: {PartitionKey}", container.Id, idToMatch, partitionKey);
+                        else Console.Error.WriteLine($"Patch target not found: {container.Id} {idToMatch}, tenantId: {partitionKey}");
+                        nosObjToUpdate = null;
+                    }
 
                 }
                 catch (CosmosException ex)
@@ -455,31 +468,30 @@ public static class ContainerExtensions
     /// <param name="bulkContainer">Container to upsert items to</param>
     /// <param name="itemList">List of items to upsert</param>
     /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
+    /// <param name="logger">Optional logger for structured logging of retry operations.</param>
     /// <returns></returns>
-    public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false) where T : IApplyable
+    public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false, ILogger? logger = null) where T : IApplyable
     {
         //throw if bulk not enabled
         bulkContainer.ValidateBulkEnabled(true);
 
-        List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => taskList.Add(bulkContainer.UpsertItemAsync(i).ContinueWith(itemResponse =>
+        if (allowRetry)
         {
-            if (!itemResponse.IsCompletedSuccessfully)
-            {
-                //Retry if too many requests error
-                if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                {
-                    int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
-                    Task.Delay(waitTime).ContinueWith(_ => bulkContainer.UpsertItemAsync(i)
-                                        .ContinueWith(_ => { throw new NostifyException($"Bulk Upsert Error {itemResponse.Exception.Message}"); }));
-                }
-                else
-                {
-                    throw new NostifyException($"Bulk Upsert Error {itemResponse.Exception.Message}");
-                }
-            }
-        })));
-        await Task.WhenAll(taskList);
+            var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: logger);
+            var retryable = bulkContainer.WithRetry(retryOptions);
+            List<Task> taskList = new List<Task>();
+            itemList.ForEach(i => taskList.Add(retryable.UpsertItemAsync(
+                i,
+                onException: (ex) => Task.FromException(new NostifyException($"Bulk Upsert Error {ex.Message}"))
+            )));
+            await Task.WhenAll(taskList);
+        }
+        else
+        {
+            List<Task> taskList = new List<Task>();
+            itemList.ForEach(i => taskList.Add(bulkContainer.UpsertItemAsync(i)));
+            await Task.WhenAll(taskList);
+        }
     }
 
     /// <summary>
@@ -489,31 +501,31 @@ public static class ContainerExtensions
     /// <param name="bulkContainer">Container to create items in, must have bulk enabled</param>
     /// <param name="itemList">List of items to create</param>
     /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
+    /// <param name="logger">Optional logger for structured logging of retry operations.</param>
     /// <returns></returns>
-    public static async Task DoBulkCreateAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false) where T : IApplyable
+    public static async Task DoBulkCreateAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false, ILogger? logger = null) where T : IApplyable
     {
         //throw if bulk not enabled
         bulkContainer.ValidateBulkEnabled(true);
 
-        List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => bulkContainer.CreateItemAsync(i).ContinueWith(itemResponse =>
+        if (allowRetry)
         {
-            if (!itemResponse.IsCompletedSuccessfully)
-            {
-                //Retry if too many requests error
-                if (allowRetry && itemResponse.Exception.InnerException is CosmosException ce && ce.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                {
-                    int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
-                    Task.Delay(waitTime).ContinueWith(_ => bulkContainer.CreateItemAsync(i)
-                                        .ContinueWith(_ => { throw new NostifyException($"Bulk Create Error {itemResponse.Exception.Message}"); }));
-                }
-                else
-                {
-                    throw new NostifyException($"Bulk Create Error {itemResponse.Exception.Message}");
-                }
-            }
-        }));
-        await Task.WhenAll(taskList);
+            var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: logger);
+            var retryable = bulkContainer.WithRetry(retryOptions);
+            List<Task> taskList = new List<Task>();
+            itemList.ForEach(i => taskList.Add(retryable.CreateItemAsync(
+                i,
+                new PartitionKey(),  // Bulk operations use default partition key resolution
+                onException: (ex) => Task.FromException(new NostifyException($"Bulk Create Error {ex.Message}"))
+            )));
+            await Task.WhenAll(taskList);
+        }
+        else
+        {
+            List<Task> taskList = new List<Task>();
+            itemList.ForEach(i => taskList.Add(bulkContainer.CreateItemAsync(i)));
+            await Task.WhenAll(taskList);
+        }
     }
 
 }

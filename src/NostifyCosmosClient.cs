@@ -6,6 +6,7 @@ using System.Net;
 using Microsoft.Azure.Cosmos;
 using System.Linq;
 using System.Net.Http;
+using Microsoft.Extensions.Logging;
 
 namespace nostify
 {
@@ -121,6 +122,11 @@ namespace nostify
         public readonly bool UseGatewayConnection = false;
 
         ///<summary>
+        ///Optional logger instance for structured logging. When set, replaces Console.WriteLine with structured log output.
+        ///</summary>
+        public readonly ILogger? _logger = null;
+
+        ///<summary>
         ///Non-bulk database reference for lower latency
         ///</summary>
         private DatabaseRef? _database { get; set; } = null;
@@ -161,7 +167,8 @@ namespace nostify
             int DefaultDbThroughput = -1,
             bool UseGatewayConnection = false,
             string SagaContainer = "sagaContainer",
-            string SequenceContainer = "sequenceContainer")
+            string SequenceContainer = "sequenceContainer",
+            ILogger? logger = null)
         {
             this.EndpointUri = EndpointUri;
             this.Primarykey = ApiKey;
@@ -175,6 +182,7 @@ namespace nostify
             this.UseGatewayConnection = UseGatewayConnection;
             this.SagaContainer = SagaContainer;
             this.SequenceContainer = SequenceContainer;
+            this._logger = logger;
             _ = InitAsync();
         }
 
@@ -247,13 +255,15 @@ namespace nostify
             Container container;
             if (db.knownContainers.Any(c => c == containerName))
             {
-                if (verbose) Console.WriteLine($"Container {containerName} already exists in known containers list");
+                if (_logger != null) _logger.LogDebug("Container {ContainerName} already exists in known containers list", containerName);
+                else if (verbose) Console.WriteLine($"Container {containerName} already exists in known containers list");
                 container = db.database.GetContainer(containerName);
                 db.AddContainer(containerName);
             }
             else
             {
-                if (verbose) Console.WriteLine($"Creating container {containerName}");
+                if (_logger != null) _logger.LogDebug("Creating container {ContainerName}", containerName);
+                else if (verbose) Console.WriteLine($"Creating container {containerName}");
 
                 ContainerProperties containerProperties = new()
                 {
@@ -275,7 +285,8 @@ namespace nostify
 
                 db.AddContainer(containerName);
 
-                if (verbose) Console.WriteLine($"Created container {containerName}");
+                if (_logger != null) _logger.LogDebug("Created container {ContainerName}", containerName);
+                else if (verbose) Console.WriteLine($"Created container {containerName}");
             }
             return container;
         }

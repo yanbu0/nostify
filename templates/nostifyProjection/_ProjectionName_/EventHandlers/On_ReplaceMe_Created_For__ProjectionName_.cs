@@ -37,7 +37,7 @@ public class On_ReplaceMe_Created_For__ProjectionName_
     {
         // Use the default event handler to apply the event to the projection and persist it
         // If the Projection has no external data dependencies, you can pass null for the HttpClient to avoid unnecessary overhead
-        await DefaultEventHandlers.HandleProjectionEvent<_ProjectionName_>(_nostify, triggerEvent, _httpClient);        
+        await DefaultEventHandlers.HandleProjectionEventAsync<_ProjectionName_>(_nostify, triggerEvent, _httpClient);        
     }
     
 }

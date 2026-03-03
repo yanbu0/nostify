@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System;
 using System.Net.Http;
+using Microsoft.Extensions.Logging;
 
 namespace nostify;
 
@@ -47,6 +48,14 @@ public interface INostify
     /// This property is used to initialize projections with external data events.
     ///</summary>
     IProjectionInitializer ProjectionInitializer { get; }
+
+    ///<summary>
+    /// Optional logger instance for structured logging throughout the Nostify framework.
+    /// When configured via <c>NostifyFactory.WithLogger()</c>, enables structured logging
+    /// for retry operations, container creation, event publishing, and other framework internals.
+    /// Returns <c>null</c> if no logger was configured.
+    ///</summary>
+    ILogger? Logger { get; }
 
     ///<summary>
     ///Writes event to event store

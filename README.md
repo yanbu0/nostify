@@ -51,15 +51,16 @@
    - 9.11 [Topics](#topics)
 10. [Advanced Features](#advanced-features)
     - 10.1 [Error Handling and Undeliverable Events](#error-handling-and-undeliverable-events)
-    - 10.2 [Bulk Operations and Performance](#bulk-operations-and-performance)
-    - 10.3 [Advanced Querying and Cosmos Extensions](#advanced-querying-and-cosmos-extensions)
-    - 10.4 [Testing Utilities](#testing-utilities)
-    - 10.5 [Projection Initialization and External Data](#projection-initialization-and-external-data)
-    - 10.6 [Rehydration and Point-in-Time Queries](#rehydration-and-point-in-time-queries)
-    - 10.7 [Saga Pattern Implementation](#saga-pattern-implementation)
-    - 10.8 [Container Management](#container-management)
-    - 10.9 [Sequential Number Generation](#sequential-number-generation)
-    - 10.10 [Validation System](#validation-system)
+    - 10.2 [Retry Logic with RetryableContainer](#retry-logic-with-retryablecontainer)
+    - 10.3 [Bulk Operations and Performance](#bulk-operations-and-performance)
+    - 10.4 [Advanced Querying and Cosmos Extensions](#advanced-querying-and-cosmos-extensions)
+    - 10.5 [Testing Utilities](#testing-utilities)
+    - 10.6 [Projection Initialization and External Data](#projection-initialization-and-external-data)
+    - 10.7 [Rehydration and Point-in-Time Queries](#rehydration-and-point-in-time-queries)
+    - 10.8 [Saga Pattern Implementation](#saga-pattern-implementation)
+    - 10.9 [Container Management](#container-management)
+    - 10.10 [Sequential Number Generation](#sequential-number-generation)
+    - 10.11 [Validation System](#validation-system)
 11. [Performance Considerations](#performance-considerations)
     - 11.1 [Bulk Operations](#bulk-operations)
     - 11.2 [Query Optimization](#query-optimization)
@@ -69,6 +70,28 @@
 ## Current Status
 
 ### Updates
+
+- 4.4.0
+  - **RetryableContainer**: New `IRetryableContainer` interface and `RetryableContainer` implementation that wraps a Cosmos DB `Container` with configurable retry logic.
+    - Chainable API via `.WithRetry(retryOptions)` extension method on `Container`
+    - Automatic retry on 429 TooManyRequests using server-provided `RetryAfter` header
+    - Optional retry on 404 NotFound for eventual consistency scenarios (controlled by `RetryOptions.RetryWhenNotFound`)
+    - Callback-based error handling: `onExhausted`, `onNotFound`, `onException` — decouples retry logic from `INostify`
+    - Methods: `ApplyAndPersistAsync<T>`, `ReadItemAsync<T>`, `CreateItemAsync<T>`, `UpsertItemAsync<T>`
+  - **RetryOptions Enhancements**: Expanded `RetryOptions` with exponential backoff and logging support.
+    - `DelayMultiplier` (double?) — multiplier for exponential backoff between retries (defaults to 2.0; null = constant delay)
+    - `LogRetries` (bool) — enable/disable logging of retry attempts
+    - `Logger` (ILogger?) — optional structured logger; falls back to `Console.Error` when null
+    - `GetDelayForAttempt(int attempt)` — calculates delay with exponential backoff
+    - `LogRetry(string message)` — logs retry attempts when enabled
+  - **Handler Simplification**: All `DefaultEventHandlers` bulk update handlers (`HandleAggregateBulkUpdateEvent`, `HandleProjectionBulkUpdateEvent`) now use `RetryableContainer` internally, eliminating duplicated retry loops.
+    - `HandleAggregateEvent<T>` and `HandleProjectionEvent<P>` accept optional `RetryOptions` parameter for retry support
+  - **ContinueWith Replacement**: Replaced `ContinueWith` chains in `Nostify.cs` (`CreateApplyAndPersistTask`, `BulkPersistEventAsync`) and `ContainerExtensions.cs` (`DoBulkUpsertAsync`, `DoBulkCreateAsync`) with proper async/await patterns for correct exception propagation.
+  - **Bug Fixes**:
+    - Fixed `SafePatchItemAsync` silently ignoring patch results — now checks for exceptions and not-found responses
+    - Fixed `HandleProjectionEvent` NRE when projection is null after apply (e.g., deleted) — now null-checks before `InitAsync`
+  - **MockRetryableContainer<T>**: New test helper for unit testing code that uses `IRetryableContainer`. Supports simulating success, not-found, exhausted retries, exceptions, and eventual consistency.
+  - **New dependency**: `Microsoft.Extensions.Logging.Abstractions` 10.0.0 (for `ILogger` in `RetryOptions`)
 
 - 4.3.2
   - Bug fix for `DefaultEventHandlers.HandleProjectionBulkUpdateEvent<T>()`
@@ -1632,6 +1655,151 @@ public class NostifyException : Exception
 {
     public NostifyException(string message) : base(message) { }
 }
+```
+
+### Retry Logic with RetryableContainer
+
+The `RetryableContainer` wraps a Cosmos DB `Container` with configurable retry logic, providing a unified approach to handling transient failures across all Cosmos operations. This replaces ad-hoc retry loops with a consistent, testable pattern.
+
+#### When to Use Retry Logic
+
+Retry logic is valuable in the following scenarios:
+
+- **Eventual consistency handling**: When you read a projection or aggregate immediately after writing, the item may not yet be available due to Cosmos DB replication lag. **You must set `RetryWhenNotFound = true`** (or use `.WithRetry(true)`) to enable retries on 404 NotFound responses in these situations — by default, not-found responses are _not_ retried.
+- **Throttling (429 TooManyRequests)**: When your operations exceed provisioned RUs, Cosmos DB returns 429 responses with a `RetryAfter` header. `RetryableContainer` always retries these automatically using the server-provided delay, regardless of your `RetryOptions` settings.
+- **Transient network failures**: Temporary connectivity issues between your Azure Functions host and Cosmos DB — socket timeouts, DNS hiccups, load balancer resets — that typically succeed on the next attempt.
+- **Bulk event processing spikes**: When a Kafka topic delivers a burst of events and multiple handlers hit the same container simultaneously. Exponential backoff naturally spreads the load and avoids thundering-herd problems.
+- **Conflict resolution (409 Conflict)**: When two handlers try to upsert the same projection concurrently, one gets a 409. Retrying with a short delay lets the loser re-read and re-apply cleanly.
+- **Saga step resilience**: Saga steps that write to Cosmos as part of a distributed transaction. Retrying transient failures avoids triggering the full compensation chain unnecessarily.
+- **Partition splits**: When Cosmos DB splits a physical partition under load, requests targeting that partition can briefly fail. These are fully transient and resolve within seconds.
+- **Cold-start / connection warm-up**: The first request after an Azure Functions cold start sometimes fails while the SDK establishes its TCP connection pool. A single retry handles this transparently.
+
+#### Basic Usage
+
+The `.WithRetry()` extension method on `Container` creates an `IRetryableContainer`:
+
+```csharp
+// Default: 3 retries, 1s delay, no retry on not-found
+var retryable = container.WithRetry(new RetryOptions());
+var item = await retryable.ReadItemAsync<MyAggregate>(
+    id.ToString(), new PartitionKey(id.ToString()));
+```
+
+#### Shorthand for Eventual Consistency
+
+The most common use case is retrying on not-found for eventual consistency. Use the boolean overload:
+
+```csharp
+// Shorthand: default options with RetryWhenNotFound = true
+var retryable = container.WithRetry(true);
+var item = await retryable.ReadItemAsync<MyProjection>(
+    id.ToString(), new PartitionKey(id.ToString()));
+```
+
+This is equivalent to:
+
+```csharp
+var retryable = container.WithRetry(new RetryOptions { RetryWhenNotFound = true });
+```
+
+> **Important**: If you are reading data that may not yet exist due to eventual consistency (e.g., a projection that was just created from an event), you **must** set `RetryWhenNotFound` to `true`. The default is `false` because most 404s indicate a genuinely missing item, and retrying those wastes RUs and adds unnecessary latency.
+
+#### Full Configuration
+
+```csharp
+var retryable = container.WithRetry(new RetryOptions(
+    maxRetries: 5,
+    delay: TimeSpan.FromMilliseconds(500),
+    retryWhenNotFound: true,
+    delayMultiplier: 2.0,
+    logRetries: true,
+    logger: myLogger
+));
+
+var item = await retryable.ApplyAndPersistAsync<MyProjection>(
+    evt,
+    onExhausted: () => Task.CompletedTask,
+    onNotFound: () => Task.CompletedTask,
+    onException: (ex) => Task.FromException(ex)
+);
+```
+
+#### Callback Parameters
+
+All retry methods accept three optional callbacks:
+
+| Callback | Signature | When Invoked |
+|----------|-----------|---------------|
+| `onExhausted` | `Func<Task>?` | All retry attempts exhausted — item still not found or operation still failing |
+| `onNotFound` | `Func<Task>?` | 404 received and `RetryWhenNotFound` is `false` (immediate, no retry) |
+| `onException` | `Func<Exception, Task>?` | Non-transient exception occurred. If null, exception propagates normally |
+
+If a callback is null, the default behavior applies: exhausted/notFound return `null`, and exceptions propagate.
+
+#### Available Methods
+
+| Method | Description |
+|--------|-------------|
+| `ApplyAndPersistAsync<T>(event, ...)` | Apply an event to an aggregate/projection and persist |
+| `ReadItemAsync<T>(id, partitionKey, ...)` | Read a single item by ID |
+| `CreateItemAsync<T>(item, ...)` | Create a new item |
+| `UpsertItemAsync<T>(item, ...)` | Create or replace an item |
+
+#### RetryOptions Properties Reference
+
+| Property | Type | Default | Effect |
+|----------|------|---------|--------|
+| `MaxRetries` | `int` | `3` | Maximum number of retry attempts before invoking `onExhausted` or returning null. Set to `0` to disable retries entirely (only the initial attempt runs). Higher values improve resilience but increase latency on persistent failures. |
+| `Delay` | `TimeSpan` | `1 second` | Base delay between retry attempts. This is the _starting_ delay — if `DelayMultiplier` is set, subsequent delays grow exponentially from this base. Keep this low (100-500ms) for latency-sensitive paths, or higher (1-5s) for background processing. |
+| `RetryWhenNotFound` | `bool` | `false` | **Critical for eventual consistency.** When `true`, the retry loop treats a 404 NotFound response as a transient failure and retries. When `false` (default), a 404 immediately invokes `onNotFound` and returns null. **You must set this to `true` when reading items that may not yet be replicated** (e.g., reading a projection immediately after its event was processed). The default is `false` because most 404s indicate a genuinely missing item. |
+| `DelayMultiplier` | `double?` | `2.0` | Multiplier for exponential backoff. When `null`, delay is constant across all retries. When set, each retry delay is calculated as `Delay × DelayMultiplier^attempt`. With the default `Delay=1s` and `DelayMultiplier=2.0`, delays are 1s, 2s, 4s, 8s. Use `1.5` for gentler growth. Exponential backoff is recommended for bulk processing and high-contention scenarios to avoid thundering-herd effects. |
+| `LogRetries` | `bool` | `false` | When `true`, each retry attempt is logged with the attempt number and reason. Uses the `Logger` property if provided, otherwise falls back to `Console.Error` with a `[nostify:retry]` prefix. Enable this in development/staging to diagnose retry storms, and in production for critical paths where visibility into transient failures is important. |
+| `Logger` | `ILogger?` | `null` | An `ILogger` instance for structured logging of retry attempts (logs at `Warning` level). When `null` and `LogRetries` is `true`, falls back to `Console.Error`. Inject your Azure Functions `ILogger` or `ILogger<T>` here for integration with Application Insights, Azure Monitor, or other logging providers. |
+
+#### 429 TooManyRequests Behavior
+
+429 responses are **always** retried, regardless of `MaxRetries`. The retry delay uses the server-provided `RetryAfter` header value, not your configured `Delay`. This ensures your application respects Cosmos DB's throttling guidance and recovers as quickly as possible when RUs become available.
+
+#### Example: Event Handler with Retry
+
+```csharp
+// In an Azure Function event handler
+[Function("OnOrderCreated")]
+public async Task Run(
+    [KafkaTrigger(/* ... */)] string eventData)
+{
+    var nostifyEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventData);
+    var evt = nostifyEvent.nostifyEvent;
+
+    Container container = await _nostify.GetCurrentStateContainerAsync<Order>();
+
+    // Use .WithRetry(true) for eventual consistency support
+    var retryable = container.WithRetry(true);
+    await retryable.ApplyAndPersistAsync<Order>(evt);
+}
+```
+
+#### Testing with MockRetryableContainer
+
+Use `MockRetryableContainer<T>` in unit tests to simulate retry scenarios without Cosmos DB:
+
+```csharp
+// Simulate successful apply
+var expected = new Order { id = Guid.NewGuid(), Total = 99.99m };
+var mock = new MockRetryableContainer<Order>(expected);
+var result = await mock.ApplyAndPersistAsync<Order>(someEvent, container);
+Assert.Equal(expected.id, result.id);
+Assert.Equal(1, mock.ApplyCallCount);
+
+// Simulate not-found
+var mock = new MockRetryableContainer<Order>(simulateNotFound: true);
+bool notFoundCalled = false;
+await mock.ApplyAndPersistAsync<Order>(someEvent, container,
+    onNotFound: async () => { notFoundCalled = true; });
+Assert.True(notFoundCalled);
+
+// Simulate eventual consistency (not-found for first 2 calls, then success)
+var mock = new MockRetryableContainer<Order>(notFoundUntilAttempt: 3, successResult: expected);
 ```
 
 ### Bulk Operations and Performance

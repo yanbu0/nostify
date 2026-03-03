@@ -36,11 +36,8 @@ public class On_ReplaceMe_BulkCreated_For__ProjectionName_
                 IsBatched = true)] string[] events,
         ILogger log)
     {
-        DefaultEventHandler.HandleProjectionBulkCreateEvents<_ReplaceMe_, _ProjectionName_>(
-            _nostify,
-            _httpClient,
-            events,
-            log);
+        int createdCount = await DefaultEventHandlers.HandleProjectionBulkCreateEventAsync<_ProjectionName_>(_nostify, events);
+        log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkCreated_For__ProjectionName_), createdCount);
 
         
     }
