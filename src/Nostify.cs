@@ -155,17 +155,18 @@ public class Nostify : INostify
         for (int i = 0; i < projectionIds.Count; i += batchSize)
         {
             var batch = projectionIds.Skip(i).Take(batchSize).ToList();
-            List<Task> batchTasks = new List<Task>();
 
-            batch.ForEach(projId =>
+            var batchTasks = batch.Select(async projId =>
             {
-                batchTasks.Add(
-                    CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, projId, retryOptions)
-                    .ContinueWith(itemResponse =>
-                    {
-                        if (itemResponse.IsCompletedSuccessfully) successfulTasks.Add(itemResponse.Result);
-                    })
-                );
+                try
+                {
+                    var result = await CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, projId, retryOptions);
+                    successfulTasks.Add(result);
+                }
+                catch (Exception)
+                {
+                    // Exception already handled by CreateApplyAndPersistTask via HandleUndeliverableAsync
+                }
             });
 
             await Task.WhenAll(batchTasks);
