@@ -72,12 +72,16 @@
 ### Updates
 
 - 4.4.2
+  - **Runtime / API Changes**: Enhanced retry infrastructure and handler contracts.
+    - Extended `RetryOptions` with additional parameters for finer-grained retry behavior configuration
+    - Added bulk retry helpers to simplify applying consistent retry policies across bulk operations
+    - Updated relevant handler signatures to accept retry-related options, enabling consumers to opt into the new behavior
   - **Documentation Updates**: Synchronized README and copilot-instructions with current codebase state.
     - Added .NET 10 SDK to Getting Started prerequisites
     - Updated Setup `Program.cs` code block to match actual template (UseNewtonsoftJson, WithLogger, PascalCase config keys)
     - Fixed Architecture section to remove inaccurate Redis reference
     - Updated copilot-instructions: version, framework (net10.0), test count (797), warning count (~107), file structure, expected outputs
-  - **Template Updates**: All template project files updated to reference nostify 4.4.2
+  - **Template Updates**: All template project files updated to reference nostify 4.4.2 and surface the new retry helpers/handler signatures in generated services
 
 - 4.4.1
   - **RetryableContainer**: New `IRetryableContainer` interface and `RetryableContainer` implementation that wraps a Cosmos DB `Container` with configurable retry logic.
