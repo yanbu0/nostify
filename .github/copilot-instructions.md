@@ -2,8 +2,8 @@
 
 ## Template System
 
-- Package first: `dotnet pack` to create `bin/Release/nostify.3.8.1.nupkg`
-- Install templates locally: `dotnet new install bin/Release/nostify.3.8.1.nupkg`
+- Package first: `dotnet pack` to create `bin/Release/nostify.4.4.2.nupkg`
+- Install templates locally: `dotnet new install bin/Release/nostify.4.4.2.nupkg`
 - Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>`
   - Example: `dotnet new nostify -ag TestItem -p 7999`
 - Template validation: After installation, verify templates are available with:
@@ -17,21 +17,21 @@ Always reference these instructions first and fallback to search or bash command
 ### Bootstrap, Build, and Test
 - Install dependencies: `dotnet restore` -- takes 3-7 seconds for main project, up to 25 seconds for cold restore
 - Build the library: `dotnet build` -- takes 1-3 seconds. NEVER CANCEL. Set timeout to 120+ seconds
-- Test the library: `dotnet test nostify.Tests/` -- takes 5-6 seconds, runs 78 tests. NEVER CANCEL. Set timeout to 120+ seconds  
+- Test the library: `dotnet test nostify.Tests/` -- takes ~8 seconds, runs 797 tests. NEVER CANCEL. Set timeout to 120+ seconds  
 - Package for distribution: `dotnet pack` -- takes 1-2 seconds
 - Clean build artifacts: `dotnet clean` -- takes 1 second
 
 ### Validation
 - ALWAYS run `dotnet build && dotnet test nostify.Tests/` after making changes to validate they work
-- The build produces 115+ warnings but zero errors when building from clean state - this is normal and expected
+- The build produces ~107 warnings but zero errors when building from clean state - this is normal and expected
 - Build warnings include: XML documentation issues, nullability warnings, missing XML comments
-- All 78 tests must pass - any test failures indicate breaking changes
+- All 797 tests must pass (1 skipped is expected) - any test failures indicate breaking changes
 - Run `dotnet format --verify-no-changes` to check code formatting (many violations exist in current codebase)
 - Use `dotnet format` to fix whitespace formatting issues before committing
 
 ### Template System
-- Package first: `dotnet pack` to create bin/Release/nostify.3.8.1.nupkg
-- Install templates locally: `dotnet new install bin/Release/nostify.3.8.1.nupkg`
+- Package first: `dotnet pack` to create bin/Release/nostify.4.4.2.nupkg
+- Install templates locally: `dotnet new install bin/Release/nostify.4.4.2.nupkg`
 - Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>`
   - This creates a complete Azure Functions project with CQRS/Event Sourcing pattern
   - Example: `dotnet new nostify -ag InventoryItem -p 7072`
@@ -64,8 +64,8 @@ The nostify framework requires these external services to function properly:
 - Required for: Kafka, additional containers
 - Install from: https://www.docker.com/products/docker-desktop/
 
-### .NET 8.0
-- Target framework: net8.0
+### .NET 10
+- Target framework: net10.0
 - Required for building and running
 
 ## Common Development Tasks
@@ -94,11 +94,11 @@ ProjectName/
 ### Validation Scenarios
 After making changes to the nostify library, validate by:
 
-1. **Build validation**: `dotnet build` succeeds with only warnings (115+ warnings, 0 errors expected)
-2. **Test validation**: All 78 tests pass in `dotnet test nostify.Tests/`
+1. **Build validation**: `dotnet build` succeeds with only warnings (~107 warnings, 0 errors expected)
+2. **Test validation**: All 797 tests pass (1 skipped expected) in `dotnet test nostify.Tests/`
 3. **Template validation**: 
    - `dotnet pack` to create the NuGet package
-   - `dotnet new install bin/Release/nostify.3.8.1.nupkg` to install templates
+   - `dotnet new install bin/Release/nostify.4.4.2.nupkg` to install templates
    - Create test service: `mkdir /tmp/test && cd /tmp/test && dotnet new nostify -ag TestItem -p 7999`
    - `cd TestItem && dotnet restore && dotnet build` -- should succeed with warnings but no errors
 4. **Integration validation**: Start Cosmos DB emulator and Kafka, run generated service with `func start`
@@ -158,7 +158,7 @@ After making changes to the nostify library, validate by:
 ## Troubleshooting Common Issues
 
 ### Build Warnings
-- 115+ warnings are normal (nullability, XML comments, etc.)
+- ~107 warnings are normal (nullability, XML comments, etc.)
 - Zero errors required for successful build
 - Warnings do not affect functionality
 
@@ -183,24 +183,49 @@ After making changes to the nostify library, validate by:
 /src/
 ├── Base_Classes/        # Core base classes (NostifyObject)
 ├── CosmosExtensions/    # Cosmos DB query extensions
+├── DefaultHandlers/     # Default command and event handlers
+├── ErrorHandling/       # RetryableContainer, RetryOptions, NostifyException, UndeliverableEvent
 ├── Event/              # Event handling infrastructure
 ├── Extensions/         # Extension methods
 ├── Projection/         # Projection infrastructure
+├── Properties/         # Assembly info
 ├── Saga/               # Saga orchestration
+├── Sequence/           # Sequential number generation
+├── Serialization/      # Newtonsoft JSON Cosmos serializer
+├── Shared_Interfaces/  # IAggregate, ITenantFilterable, IUniquelyIdentifiable, etc.
+├── TestClasses/        # MockRetryableContainer, InMemoryQueryExecutor, MockHttp helpers
 ├── Validation/         # Command validation
 ├── INostify.cs         # Main interface
 ├── Nostify.cs          # Main implementation
 ├── NostifyCommand.cs   # Command base class
+├── NostifyCosmosClient.cs # Cosmos DB client wrapper
 └── NostifyFactory.cs   # Factory for configuration
 ```
 
 ### Test Structure  
 ```
 /nostify.Tests/
-├── Event.Tests.cs           # Event handling tests
-├── ProjectionInitializer.Tests.cs # Projection tests
-├── Saga.Tests.cs           # Saga orchestration tests
-└── TestModels.cs           # Test domain models
+├── CosmosTestHelpers.cs              # Cosmos DB mock helpers
+├── DefaultEventHandlers.Tests.cs     # Default event handler tests
+├── Event.Tests.cs                    # Event handling tests
+├── EventFactory.Tests.cs             # EventFactory tests
+├── EventRequester.Tests.cs           # EventRequester tests
+├── ExternalDataEvent.Tests.cs        # ExternalDataEvent tests
+├── ExternalDataEventFactory.Tests.cs # ExternalDataEventFactory tests
+├── FilteredQuery.Tests.cs            # Filtered query tests
+├── MockRetryableContainer.Tests.cs   # MockRetryableContainer tests
+├── MultiApplyAndPersist.Tests.cs     # Multi-apply tests
+├── Nostify.Tests.cs                  # Core Nostify tests
+├── NostifyCommand.Tests.cs           # Command tests
+├── NostifyObject.Tests.cs            # NostifyObject tests
+├── PagedQuery.Tests.cs               # Paged query tests
+├── ProjectionInitializer.Tests.cs    # Projection tests
+├── RetryableContainer.Tests.cs       # RetryableContainer tests
+├── RetryOptions.Tests.cs             # RetryOptions tests
+├── Saga.Tests.cs                     # Saga orchestration tests
+├── Sequence.Tests.cs                 # Sequence generation tests
+├── TestModels.cs                     # Test domain models
+└── ...                               # Additional test files
 ```
 
 ### Templates
@@ -214,7 +239,7 @@ After making changes to the nostify library, validate by:
 ## Performance Notes
 
 - **Build time**: 1-3 seconds (fast iteration)
-- **Test time**: 5-6 seconds for full suite (78 tests)
+- **Test time**: ~8 seconds for full suite (797 tests)
 - **Package time**: 1-2 seconds  
 - **Template generation**: Instantaneous
 - **Template validation**: ~14 seconds for full restore + build cycle
@@ -227,35 +252,35 @@ After making changes to the nostify library, validate by:
 ### Expected Build Output
 ```bash
 $ dotnet build
-MSBuild version 17.8.32+74df0b3f5 for .NET
+MSBuild version 17.x for .NET
   Determining projects to restore...
   All projects are up-to-date for restore.
-  nostify -> /home/runner/work/nostify/nostify/bin/Debug/net8.0/nostify.dll
+  nostify -> /home/runner/work/nostify/nostify/bin/Debug/net10.0/nostify.dll
 
 Build succeeded.
-    0 Warning(s)  # May be 115+ warnings if building from clean state
+    107 Warning(s)  # ~107 warnings from XML docs, nullability, etc.
     0 Error(s)
 
-Time Elapsed 00:00:01.17
+Time Elapsed 00:00:02.74
 ```
 
 ### Expected Test Output  
 ```bash
 $ dotnet test nostify.Tests/
-Test run for /home/runner/work/nostify/nostify/nostify.Tests/bin/Debug/net8.0/nostify.Tests.dll (.NETCoreApp,Version=v8.0)
-Microsoft (R) Test Execution Command Line Tool Version 17.8.0 (x64)
+Test run for /home/runner/work/nostify/nostify/nostify.Tests/bin/Debug/net10.0/nostify.Tests.dll (.NETCoreApp,Version=v10.0)
+Microsoft (R) Test Execution Command Line Tool Version 17.x (x64)
 Copyright (c) Microsoft Corporation.  All rights reserved.
 
 Starting test execution, please wait...
 A total of 1 test files matched the specified pattern.
 
-Passed!  - Failed:     0, Passed:    78, Skipped:     0, Total:    78, Duration: 258 ms - nostify.Tests.dll (net8.0)
+Passed!  - Failed:     0, Passed:   796, Skipped:     1, Total:   797, Duration: 8 s - nostify.Tests.dll (net10.0)
 ```
 
 ### Template Installation
 ```bash
-$ dotnet new install bin/Release/nostify.3.8.1.nupkg
-Success: nostify::3.8.1 installed the following templates:
+$ dotnet new install bin/Release/nostify.4.4.2.nupkg
+Success: nostify::4.4.2 installed the following templates:
 Template Name       Short Name         Language  Tags              
 ------------------  -----------------  --------  ------------------
 Nostify Aggregate   nostifyAggregate             Azure/Microservice

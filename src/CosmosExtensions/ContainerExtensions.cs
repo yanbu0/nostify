@@ -27,9 +27,9 @@ public static class ContainerExtensions
     /// and persists the changes to the specified container. Primarily intended for updates
     /// when an event affects multiple projections.
     /// </remarks>
-    public static async Task<List<P>> MultiApplyAndPersistAsync<P>(this Container bulkContainer, INostify nostify, Event eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
+    public static async Task<List<P>> MultiApplyAndPersistAsync<P>(this Container bulkContainer, INostify nostify, Event eventToApply, List<Guid> projectionIds, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, new()
     {
-        return await nostify.MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionIds, batchSize);
+        return await nostify.MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionIds, batchSize, retryOptions);
     }
 
     ///<summary>
@@ -40,9 +40,9 @@ public static class ContainerExtensions
     /// and persists the changes to the specified container. Primarily intended for updates
     /// when an event affects multiple projections.
     /// </remarks>
-    public static async Task<List<P>> MultiApplyAndPersistAsync<P>(this Container bulkContainer, INostify nostify, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    public static async Task<List<P>> MultiApplyAndPersistAsync<P>(this Container bulkContainer, INostify nostify, Event eventToApply, List<P> projectionsToUpdate, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, new()
     {
-        return await nostify.MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate, batchSize);
+        return await nostify.MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate, batchSize, retryOptions);
     }
 
     ///<summary>
