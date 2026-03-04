@@ -71,6 +71,21 @@
 
 ### Updates
 
+- 4.4.2
+  - **RetryableContainer Bulk Methods**: New `DoBulkCreateAsync<T>` and `DoBulkUpsertAsync<T>` methods on `IRetryableContainer` providing per-item 429 retry for bulk operations. Container bulk operations must have bulk enabled.
+  - **RetryOptions Plumbing in All Handlers**: All `DefaultEventHandlers` methods that accept `RetryOptions` now automatically wire `nostify.Logger` into `retryOptions.Logger` (if not already set) and enable `retryOptions.LogRetries = true` — callers no longer need to configure logging manually.
+  - **ILogger Parameter Removed**: `HandleAggregateEventAsync<T>` and `HandleProjectionEventAsync<P>` no longer accept an explicit `ILogger` parameter; logging is now handled automatically via `nostify.Logger` when `RetryOptions` is provided.
+  - **MultiApplyAndPersistAsync RetryOptions Support**: `INostify.MultiApplyAndPersistAsync` and `ContainerExtensions.MultiApplyAndPersistAsync` now accept an optional `RetryOptions?` parameter for per-item retry during multi-apply operations.
+  - **HandleMultiApplyEventAsync RetryOptions Support**: `DefaultEventHandlers.HandleMultiApplyEventAsync<P>` now accepts an optional `RetryOptions?` parameter.
+  - **BulkCreate RetryOptions Support**: `HandleAggregateBulkCreateEventAsync<T>` and `HandleProjectionBulkCreateEventAsync<P>` now support `RetryOptions` in all overloads via `RetryableContainer.DoBulkCreateAsync`.
+  - **Container.DoBulkUpsertAsync Signature Update**: Removed `bool allowRetry` parameter — use `IRetryableContainer.DoBulkUpsertAsync<T>` for retry-enabled bulk upserts.
+  - **Documentation Updates**: Synchronized README and copilot-instructions with current codebase state.
+    - Added .NET 10 SDK to Getting Started prerequisites
+    - Updated Setup `Program.cs` code block to match actual template (UseNewtonsoftJson, WithLogger, PascalCase config keys)
+    - Fixed Architecture section to remove inaccurate Redis reference
+    - Updated copilot-instructions: version, framework (net10.0), test count (797), warning count (~107), file structure, expected outputs
+  - **Template Updates**: All template project files updated to reference nostify 4.4.2 and surface the new retry helpers/handler signatures in generated services
+
 - 4.4.1
   - **RetryableContainer**: New `IRetryableContainer` interface and `RetryableContainer` implementation that wraps a Cosmos DB `Container` with configurable retry logic.
     - Chainable API via `.WithRetry(retryOptions)` extension method on `Container`
@@ -200,21 +215,6 @@
   - Optional filter expressions for client-side filtering within partitions
   - Simplifies common query patterns with automatic partition key configuration
   - ** Fixes null handling issue in 3.9.0 in default serialization settings **
-- 3.9.0 - Has a issue with default serialization null handling, do not use
-  - **Custom Cosmos Serializer**: Added `NewtonsoftJsonCosmosSerializer` class that uses Newtonsoft.Json instead of System.Text.Json for Cosmos DB serialization/deserialization since System.Text.Json is a dumpster fire
-  - **Interface Converters**: Built-in converters for `IEvent` → `Event`, `ISaga` → `Saga`, and `ISagaStep` → `SagaStep` interfaces
-  - **Improved Serialization**: Better handling of polymorphic types and interfaces in Cosmos DB operations
-  - **Event Interface Usage**: Converted codebase to use `IEvent` interface instead of concrete `Event` class for better testability and abstraction
-- 3.8.2
-  - **Patch**: Updated templates and documentation to reference nostify 3.8.2
-  - **Tests**: Added comprehensive unit tests for TransformForeignIdSelectors helper (ensures correct behavior for list selectors, nulls, duplicates, and mapping edge cases)
-- 3.8.1
-  - **Bug Fix**: Fixed issue with null values in PropertyCheck when projectionIdPropertyValue is null
-  - **Template Updates**: All template project files updated to reference nostify 3.8.1
-- 3.8.0
-  - **Enhanced UpdateProperties using PropertyCheck class**: Added new `UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues)` overload for conditional property mapping based on ID matching, used in `Apply` when a projection has multiple references to external aggregates of the same type.
-  - **PropertyCheck Testing**: Added 14+ test scenarios including shared ID handling, edge cases, and complex multi-property updates
-  - **Template Updates**: All template project files updated to reference nostify 3.8.0
 
 ### Coming Soon
 
@@ -239,6 +239,8 @@ To run locally you will need to install some dependencies:
 
 - Cosmos Emulator: <https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-develop-emulator?tabs=windows%2Ccsharp&pivots=api-nosql>
 
+- .NET 10 SDK: <https://dotnet.microsoft.com/download/dotnet/10.0>
+
 To install `nostify` and templates:
 
 ```powershell
@@ -257,7 +259,7 @@ This will install the templates, create the default project based off your Aggre
 
 ## Architecture
 
-The library is designed to be used in a microservice pattern (although not necessarily required) using an Azure Function App api and Cosmos as the event store. Kafka serves as the messaging backpane, and projections can be stored in Cosmos or Redis depending on query needs.
+The library is designed to be used in a microservice pattern (although not necessarily required) using an Azure Function App api and Cosmos as the event store. Kafka (or Azure Event Hubs) serves as the messaging backplane, and projections are stored in Cosmos DB.
 
 You should set up a Function App and Cosmos DB per Aggregate Microservice.
 
@@ -616,29 +618,31 @@ The template will use dependency injection to add a singleton instance of the No
 
 ```C#
 
-public  class  Program
+public class Program
 {
 
-  private  static  void  Main(string[] args)
+  private static void Main(string[] args)
   {
-    var host = new  HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
+    var host = new HostBuilder()
+    .ConfigureFunctionsWorkerDefaults(builder =>
+    {
+        builder.UseNewtonsoftJson();
+    })
     .ConfigureServices((context, services) =>
     {
-      services.AddHttpClient();   
+      services.AddHttpClient();
 
       var config = context.Configuration;
 
       //Note: This is the api key for the cosmos emulator by default
-      string? apiKey = config.GetValue<string>("cosmosApiKey");
-      string? dbName = config.GetValue<string>("cosmosDbName");
-      string? endPoint = config.GetValue<string>("cosmosEndPoint");
-      string? kafka = config.GetValue<string>("BrokerList");
+      string apiKey = config.GetValue<string>("CosmosApiKey");
+      string dbName = config.GetValue<string>("CosmosDbName");
+      string endPoint = config.GetValue<string>("CosmosEndPoint");
+      string kafka = config.GetValue<string>("BrokerList");
       bool autoCreateContainers = config.GetValue<bool>("AutoCreateContainers");
       int defaultThroughput = config.GetValue<int>("DefaultContainerThroughput");
-      bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
-      bool useGatewayConnection = config.GetValue<bool>("UseGatewayConnection");
       var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
+      var logger = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
 
       var nostify = NostifyFactory.WithCosmos(
                                 cosmosApiKey: apiKey,
@@ -646,10 +650,11 @@ public  class  Program
                                 cosmosEndpointUri: endPoint,
                                 createContainers: autoCreateContainers,
                                 containerThroughput: defaultThroughput,
-                                useGatewayConnection: useGatewayConnection)
+                                useGatewayConnection: false)
                             .WithKafka(kafka)
                             .WithHttp(httpClientFactory)
-                            .Build<InventoryItem>(verboseNostifyBuild); //Where T is the base aggregate of the service
+                            .WithLogger(logger)
+                            .Build<InventoryItem>(verbose: true); //Where T is the base aggregate of the service
 
       services.AddSingleton<INostify>(nostify);
 
@@ -1371,6 +1376,13 @@ await DefaultEventHandlers.HandleAggregateEvent<Test>(
     idToApplyToPropertyName: "targetAggregateId",  // Property name in event payload containing target ID
     eventTypeFilter: "Update_Test"
 );
+
+// With RetryOptions for retry support (logger auto-wired from nostify.Logger)
+await DefaultEventHandlers.HandleAggregateEventAsync<Test>(
+    _nostify,
+    triggerEvent,
+    retryOptions: new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true)
+);
 ```
 
 **HandleProjectionEvent** - Applies events to projections with external data initialization:
@@ -1420,6 +1432,14 @@ public async Task Run([KafkaTrigger("BrokerList", "Update_Aggregate", ...)] Nost
         batchSize: 100  // Optional batch size for processing
     );
 }
+
+// With RetryOptions for per-item retry (logger auto-wired from nostify.Logger)
+await DefaultEventHandlers.HandleMultiApplyEventAsync<RelatedProjection>(
+    _nostify,
+    triggerEvent,
+    foreignIdSelector: projection => projection.foreignAggregateId,
+    retryOptions: new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true)
+);
 ```
 
 **When to Use Each Handler:**
@@ -1468,6 +1488,14 @@ await DefaultEventHandlers.HandleAggregateBulkCreateEvent<Test>(
     _nostify, 
     events, 
     new List<string> { "BulkCreate_Test", "BulkImport_Test" }
+);
+
+// With RetryOptions for per-item 429 retry during bulk create
+await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<Test>(
+    _nostify,
+    events,
+    new List<string> { "BulkCreate_Test" },
+    retryOptions: new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false)
 );
 ```
 
@@ -1744,6 +1772,8 @@ If a callback is null, the default behavior applies: exhausted/notFound return `
 | `ReadItemAsync<T>(id, partitionKey, ...)` | Read a single item by ID |
 | `CreateItemAsync<T>(item, ...)` | Create a new item |
 | `UpsertItemAsync<T>(item, ...)` | Create or replace an item |
+| `DoBulkCreateAsync<T>(items, ...)` | Bulk create items with per-item 429 retry; container must have bulk enabled |
+| `DoBulkUpsertAsync<T>(items, ...)` | Bulk upsert items with per-item 429 retry; container must have bulk enabled |
 
 #### RetryOptions Properties Reference
 
@@ -1840,8 +1870,8 @@ public static Task<int> BulkDeleteFromEventsAsync<P>(this Container container, s
 public static Task<int> DeleteAllBulkAsync<P>(this Container container)
     where P : NostifyObject;
 
-// Bulk upsert items
-public static Task DoBulkUpsertAsync<T>(this Container container, List<T> itemList, bool allowRetry = false)
+// Bulk upsert items (no retry; for retry support use IRetryableContainer.DoBulkUpsertAsync)
+public static Task DoBulkUpsertAsync<T>(this Container container, List<T> itemList)
     where T : IApplyable;
 ```
 
@@ -1864,6 +1894,15 @@ await _nostify.MultiApplyAndPersistAsync<TestProjection>(
     eventToApply, 
     projectionsToUpdate, 
     batchSize: 100
+);
+
+// With RetryOptions for per-item retry
+await _nostify.MultiApplyAndPersistAsync<TestProjection>(
+    bulkContainer,
+    eventToApply,
+    projectionIds,
+    batchSize: 100,
+    retryOptions: new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true)
 );
 ```
 

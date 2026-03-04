@@ -285,4 +285,36 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
     }
 
     #endregion
+
+    #region Bulk Methods
+
+    /// <inheritdoc/>
+    public Task DoBulkCreateAsync<TItem>(
+        List<TItem> itemList,
+        Func<Exception, Task>? onException = null) where TItem : IApplyable
+    {
+        if (_exceptionToThrow != null)
+        {
+            if (onException != null) return onException(_exceptionToThrow);
+            throw _exceptionToThrow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task DoBulkUpsertAsync<TItem>(
+        List<TItem> itemList,
+        Func<Exception, Task>? onException = null) where TItem : IApplyable
+    {
+        if (_exceptionToThrow != null)
+        {
+            if (onException != null) return onException(_exceptionToThrow);
+            throw _exceptionToThrow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    #endregion
 }

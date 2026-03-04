@@ -49,7 +49,7 @@ public class On_ReplaceMe_BulkUpdated
     {
         // Optional: Add retry options for eventual consistency scenarios
         // var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true);
-        // int updatedCount = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<_ReplaceMe_>(_nostify, events, retryOptions: retryOptions, logger: log);
+        // int updatedCount = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<_ReplaceMe_>(_nostify, events, retryOptions: retryOptions);
         // Note: If WithLogger() was called during Nostify setup, the logger is passed automatically via nostify.Logger
         int updatedCount = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<_ReplaceMe_>(_nostify, events);
         log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkUpdated), updatedCount);

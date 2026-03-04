@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
 namespace nostify;
@@ -143,13 +144,12 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new()
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<Guid> projectionIds, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, new()
     {
         //Throw if not bulk container
         bulkContainer.ValidateBulkEnabled(true);
 
-        List<Task> tasks = new List<Task>();
-        List<P> succesfulTasks = new List<P>();
+        ConcurrentBag<P> successfulTasks = new ConcurrentBag<P>();
 
         //Loop through in batches to avoid overwhelming CosmosDB
         for (int i = 0; i < projectionIds.Count; i += batchSize)
@@ -160,10 +160,10 @@ public class Nostify : INostify
             batch.ForEach(projId =>
             {
                 batchTasks.Add(
-                    CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, projId, false, false)
+                    CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, projId, retryOptions)
                     .ContinueWith(itemResponse =>
                     {
-                        if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
+                        if (itemResponse.IsCompletedSuccessfully) successfulTasks.Add(itemResponse.Result);
                     })
                 );
             });
@@ -172,13 +172,13 @@ public class Nostify : INostify
         }
 
         //Only return first 1000 results to avoid overwhelming caller
-        return succesfulTasks.Take(1000).ToList();
+        return successfulTasks.Take(1000).ToList();
     }
 
     ///<inheritdoc />
-    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new()
+    public async Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, new()
     {
-        return await MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate.Select(p => p.id).ToList(), batchSize);
+        return await MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate.Select(p => p.id).ToList(), batchSize, retryOptions);
     }
 
     ///<inheritdoc />
@@ -236,18 +236,32 @@ public class Nostify : INostify
         return succesfulTasks.Take(1000).ToList();
     }
 
+    /// <summary>
+    /// Backwards-compatible overload that converts bool allowRetry to RetryOptions.
+    /// </summary>
     private async Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()
     {
-        if (allowRetry)
+        RetryOptions? retryOptions = allowRetry
+            ? new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: Logger)
+            : null;
+        return await CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, id, retryOptions, publishErrorEvents);
+    }
+
+    /// <summary>
+    /// Creates and executes an apply-and-persist task for a single projection item.
+    /// When retryOptions is provided, uses RetryableContainer for per-item retry with exponential backoff.
+    /// </summary>
+    private async Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new()
+    {
+        if (retryOptions != null)
         {
-            var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: Logger);
             var retryable = bulkContainer.WithRetry(retryOptions);
             var result = await retryable.ApplyAndPersistAsync<P>(
                 pe,
                 id,
-                onExhausted: () => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), "Exhausted retries", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
-                onNotFound: () => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
-                onException: (ex) => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+                onExhausted: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Exhausted retries", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
+                onNotFound: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
+                onException: (ex) => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
             );
             return result ?? new P();
         }
@@ -259,7 +273,7 @@ public class Nostify : INostify
             }
             catch (Exception ex)
             {
-                await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                await HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
                 throw;
             }
         }

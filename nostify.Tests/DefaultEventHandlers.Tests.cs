@@ -590,6 +590,363 @@ public class DefaultEventHandlersTests
 
     #endregion
 
+    #region Bulk Create helpers
+
+    /// <summary>
+    /// Helper to create a create Event (isNew = true) for bulk create testing.
+    /// </summary>
+    private static Event CreateCreateEvent(Guid? aggregateRootId = null)
+    {
+        var aggId = aggregateRootId ?? Guid.NewGuid();
+        return new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = aggId,
+            command = new NostifyCommand("CreateTest", isNew: true),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Created" }
+        };
+    }
+
+    /// <summary>
+    /// Creates a mock Container with bulk execution enabled and CreateItemAsync mocked for TestAggregate.
+    /// Wires up Database.Client.ClientOptions.AllowBulkExecution = true so ValidateBulkEnabled passes.
+    /// </summary>
+    private static Mock<Container> CreateBulkEnabledAggregateMockContainer()
+    {
+        var clientOptions = new CosmosClientOptions { AllowBulkExecution = true };
+        var mockClient = new Mock<CosmosClient>();
+        mockClient.Setup(c => c.ClientOptions).Returns(clientOptions);
+
+        var mockDatabase = new Mock<Database>();
+        mockDatabase.Setup(d => d.Client).Returns(mockClient.Object);
+
+        var mockContainer = new Mock<Container>();
+        mockContainer.Setup(c => c.Database).Returns(mockDatabase.Object);
+
+        var mockResponse = new Mock<ItemResponse<TestAggregate>>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(),
+                It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResponse.Object);
+
+        return mockContainer;
+    }
+
+    /// <summary>
+    /// Creates a mock Container with bulk execution enabled and CreateItemAsync mocked for TestProjection.
+    /// </summary>
+    private static Mock<Container> CreateBulkEnabledProjectionMockContainer()
+    {
+        var clientOptions = new CosmosClientOptions { AllowBulkExecution = true };
+        var mockClient = new Mock<CosmosClient>();
+        mockClient.Setup(c => c.ClientOptions).Returns(clientOptions);
+
+        var mockDatabase = new Mock<Database>();
+        mockDatabase.Setup(d => d.Client).Returns(mockClient.Object);
+
+        var mockContainer = new Mock<Container>();
+        mockContainer.Setup(c => c.Database).Returns(mockDatabase.Object);
+
+        var mockResponse = new Mock<ItemResponse<TestProjection>>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestProjection>(),
+                It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResponse.Object);
+
+        return mockContainer;
+    }
+
+    #endregion
+
+    #region HandleAggregateBulkCreateEventAsync
+
+    [Fact]
+    public async Task HandleAggregateBulkCreateEvent_Success_NoRetry()
+    {
+        // Arrange
+        var evt = CreateCreateEvent();
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateBulkEnabledAggregateMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<TestAggregate>(
+            _mockNostify.Object, events);
+
+        // Assert
+        Assert.Equal(1, result);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(),
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAggregateBulkCreateEvent_Success_WithRetryOptions()
+    {
+        // Arrange
+        var evt = CreateCreateEvent();
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateBulkEnabledAggregateMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var retryOptions = new RetryOptions(
+            maxRetries: 3,
+            delay: TimeSpan.FromMilliseconds(10),
+            retryWhenNotFound: false
+        );
+
+        // Act
+        int result = await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<TestAggregate>(
+            _mockNostify.Object, events, retryOptions);
+
+        // Assert
+        Assert.Equal(1, result);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(),
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAggregateBulkCreateEvent_MultipleEvents_ReturnsCorrectCount()
+    {
+        // Arrange
+        var events = new[]
+        {
+            CreateKafkaTriggerEventString(CreateCreateEvent()),
+            CreateKafkaTriggerEventString(CreateCreateEvent()),
+            CreateKafkaTriggerEventString(CreateCreateEvent())
+        };
+
+        var mockContainer = CreateBulkEnabledAggregateMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<TestAggregate>(
+            _mockNostify.Object, events);
+
+        // Assert
+        Assert.Equal(3, result);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(),
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task HandleAggregateBulkCreateEvent_WithEventTypeFilter_FiltersCorrectly()
+    {
+        // Arrange - event with command name "CreateTest" won't match filter "OtherCommand"
+        var evt = CreateCreateEvent();
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateBulkEnabledAggregateMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act - filter for a command that doesn't match
+        int result = await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<TestAggregate>(
+            _mockNostify.Object, events, "OtherCommand");
+
+        // Assert - no events match the filter, so 0 created
+        Assert.Equal(0, result);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(),
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAggregateBulkCreateEvent_NonCreateEvent_ThrowsAndHandlesUndeliverable()
+    {
+        // Arrange - update event (isNew = false) passed to bulk create handler
+        var evt = CreateUpdateEvent();
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateBulkEnabledAggregateMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act & Assert - should throw because BulkCreateFromKafkaTriggerEventsAsync rejects non-create events
+        await Assert.ThrowsAsync<NostifyException>(() =>
+            DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<TestAggregate>(
+                _mockNostify.Object, events));
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.AtLeastOnce);
+    }
+
+    #endregion
+
+    #region HandleProjectionBulkCreateEventAsync
+
+    [Fact]
+    public async Task HandleProjectionBulkCreateEvent_Success_NoRetry()
+    {
+        // Arrange
+        var evt = CreateCreateEvent();
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateBulkEnabledProjectionMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+        _mockNostify
+            .Setup(n => n.InitAllUninitializedAsync<TestProjection>(It.IsAny<int>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleProjectionBulkCreateEventAsync<TestProjection>(
+            _mockNostify.Object, events);
+
+        // Assert
+        Assert.Equal(1, result);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestProjection>(),
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _mockNostify.Verify(n => n.InitAllUninitializedAsync<TestProjection>(It.IsAny<int>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkCreateEvent_Success_WithRetryOptions()
+    {
+        // Arrange
+        var evt = CreateCreateEvent();
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateBulkEnabledProjectionMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+        _mockNostify
+            .Setup(n => n.InitAllUninitializedAsync<TestProjection>(It.IsAny<int>()))
+            .Returns(Task.CompletedTask);
+
+        var retryOptions = new RetryOptions(
+            maxRetries: 3,
+            delay: TimeSpan.FromMilliseconds(10),
+            retryWhenNotFound: false
+        );
+
+        // Act
+        int result = await DefaultEventHandlers.HandleProjectionBulkCreateEventAsync<TestProjection>(
+            _mockNostify.Object, events, retryOptions);
+
+        // Assert
+        Assert.Equal(1, result);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestProjection>(),
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _mockNostify.Verify(n => n.InitAllUninitializedAsync<TestProjection>(It.IsAny<int>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkCreateEvent_MultipleEvents_ReturnsCorrectCount()
+    {
+        // Arrange
+        var events = new[]
+        {
+            CreateKafkaTriggerEventString(CreateCreateEvent()),
+            CreateKafkaTriggerEventString(CreateCreateEvent()),
+            CreateKafkaTriggerEventString(CreateCreateEvent())
+        };
+
+        var mockContainer = CreateBulkEnabledProjectionMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+        _mockNostify
+            .Setup(n => n.InitAllUninitializedAsync<TestProjection>(It.IsAny<int>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        int result = await DefaultEventHandlers.HandleProjectionBulkCreateEventAsync<TestProjection>(
+            _mockNostify.Object, events);
+
+        // Assert
+        Assert.Equal(3, result);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestProjection>(),
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(3));
+        _mockNostify.Verify(n => n.InitAllUninitializedAsync<TestProjection>(It.IsAny<int>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkCreateEvent_CallsInitAllUninitializedAsync()
+    {
+        // Arrange - verify InitAllUninitializedAsync is called even with a single event
+        var evt = CreateCreateEvent();
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateBulkEnabledProjectionMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+        _mockNostify
+            .Setup(n => n.InitAllUninitializedAsync<TestProjection>(It.IsAny<int>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await DefaultEventHandlers.HandleProjectionBulkCreateEventAsync<TestProjection>(
+            _mockNostify.Object, events);
+
+        // Assert - InitAllUninitializedAsync must be called for projections
+        _mockNostify.Verify(n => n.InitAllUninitializedAsync<TestProjection>(It.IsAny<int>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkCreateEvent_NonCreateEvent_ThrowsAndHandlesUndeliverable()
+    {
+        // Arrange - update event (isNew = false) passed to bulk create handler
+        var evt = CreateUpdateEvent();
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        var mockContainer = CreateBulkEnabledProjectionMockContainer();
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NostifyException>(() =>
+            DefaultEventHandlers.HandleProjectionBulkCreateEventAsync<TestProjection>(
+                _mockNostify.Object, events));
+
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.AtLeastOnce);
+    }
+
+    #endregion
+
     #region Aggregate helpers
 
     /// <summary>

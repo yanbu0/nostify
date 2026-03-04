@@ -75,9 +75,10 @@ public interface INostify
     /// <param name="eventToApply">The event to be applied and persisted.</param>
     /// <param name="projectionIds">The list of projection IDs to which the event will be applied.</param>
     /// <param name="batchSize">Optional. Number of projections to update in a batch. Default is 100.</param>
+    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each projection is updated using RetryableContainer with retry logic.</param>
     /// <typeparam name="P">The type of the Nostify object.</typeparam>
     /// <returns>The nostify objects after Events are Applied</returns>
-    public Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<Guid> projectionIds, int batchSize = 100) where P : NostifyObject, new();
+    public Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<Guid> projectionIds, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, new();
 
     /// <summary>
     /// Applies and persists an event to a list of projections in the specified container.
@@ -92,9 +93,10 @@ public interface INostify
     /// <param name="eventToApply">The event to be applied and persisted.</param>
     /// <param name="projectionsToUpdate">The list of projections to which the event will be applied.</param>
     /// <param name="batchSize">Optional. Number of projections to update in a batch. Default is 100.</param>
+    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each projection is updated using RetryableContainer with retry logic.</param>
     /// <typeparam name="P">The type of the Nostify object.</typeparam>
     /// <returns>The nostify objects after Events are Applied</returns>
-    public Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100) where P : NostifyObject, new();
+    public Task<List<P>> MultiApplyAndPersistAsync<P>(Container bulkContainer, IEvent eventToApply, List<P> projectionsToUpdate, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, new();
 
     ///<summary>
     ///Applies and persists a bulk array of events from Kafka to the specified container.

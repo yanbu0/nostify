@@ -283,6 +283,40 @@ public class RetryableContainer : IRetryableContainer
 
     #endregion
 
+    #region Bulk Methods
+
+    /// <inheritdoc/>
+    public async Task DoBulkCreateAsync<T>(
+        List<T> itemList,
+        Func<Exception, Task>? onException = null) where T : IApplyable
+    {
+        Container.ValidateBulkEnabled(true);
+
+        List<Task> taskList = new List<Task>();
+        itemList.ForEach(i => taskList.Add(CreateItemAsync(
+            i,
+            onException: onException ?? ((ex) => Task.FromException(new NostifyException($"Bulk Create Error {ex.Message}")))
+        )));
+        await Task.WhenAll(taskList);
+    }
+
+    /// <inheritdoc/>
+    public async Task DoBulkUpsertAsync<T>(
+        List<T> itemList,
+        Func<Exception, Task>? onException = null) where T : IApplyable
+    {
+        Container.ValidateBulkEnabled(true);
+
+        List<Task> taskList = new List<Task>();
+        itemList.ForEach(i => taskList.Add(UpsertItemAsync(
+            i,
+            onException: onException ?? ((ex) => Task.FromException(new NostifyException($"Bulk Upsert Error {ex.Message}")))
+        )));
+        await Task.WhenAll(taskList);
+    }
+
+    #endregion
+
     /// <summary>
     /// Handles 429 TooManyRequests by waiting the server-specified RetryAfter duration.
     /// Always retries regardless of RetryOptions settings because 429 is always transient.

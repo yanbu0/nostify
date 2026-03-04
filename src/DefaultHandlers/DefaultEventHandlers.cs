@@ -28,18 +28,16 @@ public static class DefaultEventHandlers
     /// Will apply to this aggregate rather than the aggregateRootId of the Event. Use when Events can have effects on other aggregates.</param>
     /// <param name="eventTypeFilter">Optional filter to specify which event type to process.</param>
     /// <param name="retryOptions">Optional retry options for configuring retry behavior.</param>
-    /// <param name="logger">Optional logger for structured logging of retry operations. When provided, automatically enables logging on RetryOptions.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task<T?> HandleAggregateEventAsync<T>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? idToApplyToPropertyName = null, string? eventTypeFilter = null, RetryOptions? retryOptions = null, ILogger? logger = null) where T : NostifyObject, IAggregate, new()
+    public async static Task<T?> HandleAggregateEventAsync<T>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? idToApplyToPropertyName = null, string? eventTypeFilter = null, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
         Event newEvent = triggerEvent.GetEvent(eventTypeFilter) ?? throw new NostifyException("No event found in trigger event for the specified event type filter");
         try
         {
-            // Wire logger into retryOptions if provided
-            logger ??= nostify.Logger;
-            if (logger != null && retryOptions != null)
+            // Wire nostify.Logger into retryOptions if not already set
+            if (retryOptions != null)
             {
-                retryOptions.Logger ??= logger;
+                retryOptions.Logger ??= nostify.Logger;
                 retryOptions.LogRetries = true;
             }
             // If idToApplyToPropertyName is provided, use it to determine the projectionBaseAggregateId
@@ -105,14 +103,22 @@ public static class DefaultEventHandlers
     /// <param name="foreignIdSelector">Function that extracts the foreign key from a projection to match against the event's aggregateRootId.</param>
     /// <param name="eventTypeFilter">Optional filter specifying which event type to process.</param>
     /// <param name="batchSize">Maximum number of projections to apply per batch.</param>
+    /// <param name="retryOptions">Optional retry options for configuring per-item retry behavior. When provided, each projection is updated with retry logic via RetryableContainer.</param>
     /// <returns>A task containing the number of successfully updated projections.</returns>
-    public async static Task<int> HandleMultiApplyEventAsync<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Func<P, Guid?> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task<int> HandleMultiApplyEventAsync<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Func<P, Guid?> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         Event? newEvent = triggerEvent.GetEvent(eventTypeFilter);
         try
         {
             if (newEvent != null)
             {
+                // Wire nostify.Logger into retryOptions if not already set
+                if (retryOptions != null)
+                {
+                    retryOptions.Logger ??= nostify.Logger;
+                    retryOptions.LogRetries = true;
+                }
+
                 //Update projection container
                 Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
                 //Get all projection ids that need to be updated
@@ -124,7 +130,8 @@ public static class DefaultEventHandlers
                 List<P> updatedProjections = await nostify.MultiApplyAndPersistAsync<P>(projectionContainer,
                     newEvent,
                     projectionsToUpdate,
-                    batchSize);
+                    batchSize,
+                    retryOptions);
                 // Need to init to fetch any external data for the projections that were updated
                 await nostify.InitAllUninitializedAsync<P>();
                 
@@ -135,7 +142,7 @@ public static class DefaultEventHandlers
         }
         catch (Exception e)
         {
-            await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}", 
+            await nostify.HandleUndeliverableAsync($"{nameof(HandleMultiApplyEventAsync)}:{nameof(P)}", 
                 e.Message, 
                 newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleMultiApplyEvent, Guid.Empty)
                 );
@@ -157,18 +164,16 @@ public static class DefaultEventHandlers
     /// Will apply to this projection rather than the aggregateRootId of the Event. Use when Events can have effects on other projections.</param>
     /// <param name="eventTypeFilter">Optional filter to specify which event type to process.</param>
     /// <param name="retryOptions">Optional retry options for configuring retry behavior.</param>
-    /// <param name="logger">Optional logger for structured logging of retry operations. When provided, automatically enables logging on RetryOptions.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async static Task<P?> HandleProjectionEventAsync<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, HttpClient? httpClient, string? idToApplyToPropertyName = null, string? eventTypeFilter = null, RetryOptions? retryOptions = null, ILogger? logger = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task<P?> HandleProjectionEventAsync<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, HttpClient? httpClient, string? idToApplyToPropertyName = null, string? eventTypeFilter = null, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         Event newEvent = triggerEvent.GetEvent(eventTypeFilter) ?? throw new NostifyException("No event found in trigger event for the specified event type filter"); 
         try
         {
-            // Wire logger into retryOptions if provided
-            logger ??= nostify.Logger;
-            if (logger != null && retryOptions != null)
+            // Wire nostify.Logger into retryOptions if not already set
+            if (retryOptions != null)
             {
-                retryOptions.Logger ??= logger;
+                retryOptions.Logger ??= nostify.Logger;
                 retryOptions.LogRetries = true;
             }
             // If idToApplyToPropertyName is provided, use it to determine the projectionBaseAggregateId
@@ -243,6 +248,19 @@ public static class DefaultEventHandlers
     }
 
     /// <summary>
+    /// Handles bulk creation of aggregate events from Kafka trigger events without event type filtering, with retry options.
+    /// </summary>
+    /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
+    /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
+    /// <param name="events">Array of Kafka trigger event strings to process.</param>
+    /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
+    /// <returns>A task containing the number of successfully created records.</returns>
+    public async static Task<int> HandleAggregateBulkCreateEventAsync<T>(INostify nostify, string[] events, RetryOptions retryOptions) where T : NostifyObject, IAggregate, new()
+    {
+        return await HandleAggregateBulkCreateEventAsync<T>(nostify, events, new List<string>(), retryOptions);
+    }
+
+    /// <summary>
     /// Handles bulk creation of aggregate events from Kafka trigger events with a single event type filter.
     /// </summary>
     /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
@@ -258,15 +276,22 @@ public static class DefaultEventHandlers
     /// <summary>
     /// Handles bulk creation of aggregate events from Kafka trigger events with multiple event type filters.
     /// Processes events in bulk to create or update current state projections for the specified aggregate type.
+    /// Supports configurable retry behavior for handling transient errors (429 TooManyRequests).
     /// </summary>
     /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
+    /// <param name="retryOptions">Optional retry options for configuring retry behavior on transient errors. When provided, per-item retry is applied.</param>
     /// <returns>A task containing the number of successfully created records.</returns>
-    public async static Task<int> HandleAggregateBulkCreateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter) where T : NostifyObject, IAggregate, new()
+    public async static Task<int> HandleAggregateBulkCreateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
-        
+        // Wire nostify.Logger into retryOptions if not already set
+        if (retryOptions != null)
+        {
+            retryOptions.Logger ??= nostify.Logger;
+            retryOptions.LogRetries = true;
+        }
         try
         {
             // Count events that match the filter (BulkCreate is all-or-nothing on success)
@@ -277,7 +302,7 @@ public static class DefaultEventHandlers
             });
 
             Container currentStateContainer = await nostify.GetBulkCurrentStateContainerAsync<T>();
-            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, eventTypeFilter);
+            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, eventTypeFilter, retryOptions);
 
             return matchingEventCount;
         }
@@ -308,6 +333,19 @@ public static class DefaultEventHandlers
     }
 
     /// <summary>
+    /// Handles bulk creation of projection events from Kafka trigger events without event type filtering, with retry options.
+    /// </summary>
+    /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
+    /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
+    /// <param name="events">Array of Kafka trigger event strings to process.</param>
+    /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
+    /// <returns>A task containing the number of successfully created records.</returns>
+    public async static Task<int> HandleProjectionBulkCreateEventAsync<P>(INostify nostify, string[] events, RetryOptions retryOptions) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        return await HandleProjectionBulkCreateEventAsync<P>(nostify, events, new List<string>(), retryOptions);
+    }
+
+    /// <summary>
     /// Handles bulk creation of projection events from Kafka trigger events with a single event type filter.
     /// </summary>
     /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
@@ -323,15 +361,22 @@ public static class DefaultEventHandlers
     /// <summary>
     /// Handles bulk creation of projection events from Kafka trigger events with multiple event type filters.
     /// Processes events in bulk to create or update projections for the specified projection type.
+    /// Supports configurable retry behavior for handling transient errors (429 TooManyRequests).
     /// </summary>
     /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
+    /// <param name="retryOptions">Optional retry options for configuring retry behavior on transient errors. When provided, per-item retry is applied.</param>
     /// <returns>A task containing the number of successfully created records.</returns>
-    public async static Task<int> HandleProjectionBulkCreateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task<int> HandleProjectionBulkCreateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
-        
+        // Wire nostify.Logger into retryOptions if not already set
+        if (retryOptions != null)
+        {
+            retryOptions.Logger ??= nostify.Logger;
+            retryOptions.LogRetries = true;
+        }
         try
         {
             // Count events that match the filter (BulkCreate is all-or-nothing on success)
@@ -342,7 +387,7 @@ public static class DefaultEventHandlers
             });
 
             Container currentStateContainer = await nostify.GetBulkProjectionContainerAsync<P>();
-            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<P>(events, eventTypeFilter);
+            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<P>(events, eventTypeFilter, retryOptions);
             await nostify.InitAllUninitializedAsync<P>();
 
             return matchingEventCount;
@@ -412,18 +457,13 @@ public static class DefaultEventHandlers
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
     /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
-    /// <param name="logger">Optional logger for structured logging of retry operations. When provided, automatically enables logging on RetryOptions.</param>
     /// <returns>A task containing the number of successfully updated records.</returns>
-    public async static Task<int> HandleAggregateBulkUpdateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null, ILogger? logger = null) where T : NostifyObject, IAggregate, new()
+    public async static Task<int> HandleAggregateBulkUpdateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
         retryOptions ??= new RetryOptions();
-        // Wire logger into retryOptions if provided
-        logger ??= nostify.Logger;
-        if (logger != null)
-        {
-            retryOptions.Logger ??= logger;
-            retryOptions.LogRetries = true;
-        }
+        // Wire nostify.Logger into retryOptions if not already set
+        retryOptions.Logger ??= nostify.Logger;
+        retryOptions.LogRetries = true;
         try
         {
             Container currentStateContainer = await nostify.GetBulkCurrentStateContainerAsync<T>();
@@ -532,18 +572,13 @@ public static class DefaultEventHandlers
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
     /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
-    /// <param name="logger">Optional logger for structured logging of retry operations. When provided, automatically enables logging on RetryOptions.</param>
     /// <returns>A task containing the number of successfully updated records.</returns>
-    public async static Task<int> HandleProjectionBulkUpdateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null, ILogger? logger = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task<int> HandleProjectionBulkUpdateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         retryOptions ??= new RetryOptions();
-        // Wire logger into retryOptions if provided
-        logger ??= nostify.Logger;
-        if (logger != null)
-        {
-            retryOptions.Logger ??= logger;
-            retryOptions.LogRetries = true;
-        }
+        // Wire nostify.Logger into retryOptions if not already set
+        retryOptions.Logger ??= nostify.Logger;
+        retryOptions.LogRetries = true;
         try
         {
             Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
@@ -750,10 +785,11 @@ public static class DefaultEventHandlers
     /// <param name="foreignIdSelector">Function that extracts the foreign key from a projection to match against the event's aggregateRootId.</param>
     /// <param name="eventTypeFilter">Optional filter specifying which event type to process.</param>
     /// <param name="batchSize">Maximum number of projections to apply per batch.</param>
+    /// <param name="retryOptions">Optional retry options for configuring per-item retry behavior.</param>
     /// <returns>A task representing the asynchronous multi-apply operation.</returns>
     [Obsolete("Use HandleMultiApplyEventAsync instead. This method will be removed in a future version.")]
-    public static Task HandleMultiApplyEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Func<P, Guid?> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
-        => HandleMultiApplyEventAsync<P>(nostify, triggerEvent, foreignIdSelector, eventTypeFilter, batchSize);
+    public static Task HandleMultiApplyEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Func<P, Guid?> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+        => HandleMultiApplyEventAsync<P>(nostify, triggerEvent, foreignIdSelector, eventTypeFilter, batchSize, retryOptions);
 
     /// <summary>
     /// Default handler for Projection events by applying the event to the projection of the specified type.

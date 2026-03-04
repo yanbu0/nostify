@@ -35,7 +35,7 @@ public class On_ReplaceMe_Updated
     {
         // Optional: Add retry options for eventual consistency scenarios
         // var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true);
-        // await DefaultEventHandlers.HandleAggregateEventAsync<_ReplaceMe_>(_nostify, triggerEvent, retryOptions: retryOptions, logger: log);
+        // await DefaultEventHandlers.HandleAggregateEventAsync<_ReplaceMe_>(_nostify, triggerEvent, retryOptions: retryOptions);
         // Note: If WithLogger() was called during Nostify setup, the logger is passed automatically via nostify.Logger
         await DefaultEventHandlers.HandleAggregateEventAsync<_ReplaceMe_>(_nostify, triggerEvent);
     }

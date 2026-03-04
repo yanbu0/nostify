@@ -299,6 +299,90 @@ public class MockRetryableContainerTests
 
     #endregion
 
+    #region DoBulkCreateAsync
+
+    [Fact]
+    public async Task DoBulkCreate_NoException_Completes()
+    {
+        var mock = new MockRetryableContainer<TestAggregate>(new TestAggregate());
+        var items = new List<TestAggregate>
+        {
+            new TestAggregate { id = Guid.NewGuid(), name = "A" },
+            new TestAggregate { id = Guid.NewGuid(), name = "B" }
+        };
+
+        await mock.DoBulkCreateAsync(items);
+        // No exception means success
+    }
+
+    [Fact]
+    public async Task DoBulkCreate_WithException_CallsOnException()
+    {
+        var ex = new InvalidOperationException("Bulk create failed");
+        var mock = new MockRetryableContainer<TestAggregate>(ex);
+
+        Exception? caught = null;
+        await mock.DoBulkCreateAsync(
+            new List<TestAggregate> { new TestAggregate() },
+            onException: (e) => { caught = e; return Task.CompletedTask; });
+
+        Assert.Same(ex, caught);
+    }
+
+    [Fact]
+    public async Task DoBulkCreate_WithException_NoCallback_Throws()
+    {
+        var ex = new InvalidOperationException("Bulk create failed");
+        var mock = new MockRetryableContainer<TestAggregate>(ex);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            mock.DoBulkCreateAsync(new List<TestAggregate> { new TestAggregate() }));
+    }
+
+    #endregion
+
+    #region DoBulkUpsertAsync
+
+    [Fact]
+    public async Task DoBulkUpsert_NoException_Completes()
+    {
+        var mock = new MockRetryableContainer<TestAggregate>(new TestAggregate());
+        var items = new List<TestAggregate>
+        {
+            new TestAggregate { id = Guid.NewGuid(), name = "A" },
+            new TestAggregate { id = Guid.NewGuid(), name = "B" }
+        };
+
+        await mock.DoBulkUpsertAsync(items);
+        // No exception means success
+    }
+
+    [Fact]
+    public async Task DoBulkUpsert_WithException_CallsOnException()
+    {
+        var ex = new InvalidOperationException("Bulk upsert failed");
+        var mock = new MockRetryableContainer<TestAggregate>(ex);
+
+        Exception? caught = null;
+        await mock.DoBulkUpsertAsync(
+            new List<TestAggregate> { new TestAggregate() },
+            onException: (e) => { caught = e; return Task.CompletedTask; });
+
+        Assert.Same(ex, caught);
+    }
+
+    [Fact]
+    public async Task DoBulkUpsert_WithException_NoCallback_Throws()
+    {
+        var ex = new InvalidOperationException("Bulk upsert failed");
+        var mock = new MockRetryableContainer<TestAggregate>(ex);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            mock.DoBulkUpsertAsync(new List<TestAggregate> { new TestAggregate() }));
+    }
+
+    #endregion
+
     #region NotFoundUntilAttempt
 
     [Fact]
