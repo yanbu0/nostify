@@ -203,7 +203,7 @@ public class Nostify : INostify
         List<Guid> partitionKeys = eventList.Select(e => e.partitionKey).Distinct().ToList();
 
         List<Task> tasks = new List<Task>();
-        List<P> succesfulTasks = new List<P>();
+        ConcurrentBag<P> succesfulTasks = new ConcurrentBag<P>();
 
         //For each partition, create a list of tasks to apply and persist the events based off the list of ids in the property specified
         partitionKeys.ForEach(pk =>
