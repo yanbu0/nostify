@@ -71,6 +71,10 @@
 
 ### Updates
 
+- 4.4.3
+  - **BulkPersistEventAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkPersistEventAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with default `RetryOptions` (maxRetries: 1, delay: 1s).
+  - **DefaultCommandHandlers RetryOptions Overloads**: Added `RetryOptions?` overloads to all 4 bulk command handlers (`HandleBulkCreate`, `HandleBulkUpdate`, and both `HandleBulkDelete` overloads) so callers can pass custom retry configuration through to `BulkPersistEventAsync`.
+
 - 4.4.2
   - **Documentation Updates**: Synchronized README and copilot-instructions with current codebase state.
     - Added .NET 10 SDK to Getting Started prerequisites
@@ -1870,10 +1874,25 @@ await _nostify.MultiApplyAndPersistAsync<TestProjection>(
 Process multiple events in batches:
 
 ```C#
+// Using boolean allowRetry (backwards-compatible)
 await _nostify.BulkPersistEventAsync(
     events, 
     batchSize: 100, 
     allowRetry: true, 
+    publishErrorEvents: false
+);
+
+// Using configurable RetryOptions for fine-grained control
+var retryOptions = new RetryOptions(
+    maxRetries: 3, 
+    delay: TimeSpan.FromMilliseconds(500), 
+    retryWhenNotFound: false,
+    delayMultiplier: 2.0
+);
+await _nostify.BulkPersistEventAsync(
+    events, 
+    batchSize: 100, 
+    retryOptions: retryOptions, 
     publishErrorEvents: false
 );
 

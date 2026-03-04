@@ -71,6 +71,13 @@ public interface INostify
 | `GetProjectionAsync<P>` | `Task<P?> GetProjectionAsync<P>(Guid id) where P : IProjection` | Retrieves a projection by ID |
 | `DeleteProjectionAsync<P>` | `Task DeleteProjectionAsync<P>(Guid id) where P : IProjection` | Deletes a projection by ID |
 
+### Bulk Event Persistence
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `BulkPersistEventAsync` | `Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)` | Persists all events in bulk. The `bool allowRetry` overload converts to default `RetryOptions` (maxRetries: 1, delay: 1s, retryWhenNotFound: false) and delegates to the `RetryOptions` overload. |
+| `BulkPersistEventAsync` | `Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, RetryOptions? retryOptions = null, bool publishErrorEvents = false)` | Persists all events in bulk with configurable retry. When `retryOptions` is provided, uses `RetryableContainer` for per-item retry. Failed events are written to the undeliverable events container. |
+
 ### Saga Operations
 
 | Method | Signature | Description |

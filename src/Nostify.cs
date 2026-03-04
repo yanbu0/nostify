@@ -279,8 +279,20 @@ public class Nostify : INostify
         }
     }
 
+    /// <summary>
+    /// Backwards-compatible overload that converts bool allowRetry to RetryOptions.
+    /// </summary>
     ///<inheritdoc />
     public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
+    {
+        RetryOptions? retryOptions = allowRetry
+            ? new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: Logger)
+            : null;
+        await BulkPersistEventAsync(events, batchSize, retryOptions, publishErrorEvents);
+    }
+
+    ///<inheritdoc />
+    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, RetryOptions? retryOptions = null, bool publishErrorEvents = false)
     {
         var eventContainer = await GetEventStoreContainerAsync(true);
 
@@ -292,9 +304,8 @@ public class Nostify : INostify
         {
             var eventBatch = events.Skip(i).Take(loopSize).ToList();
 
-            if (allowRetry)
+            if (retryOptions != null)
             {
-                var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: Logger);
                 var retryable = eventContainer.WithRetry(retryOptions);
                 List<Task> taskList = new List<Task>();
                 eventBatch.ForEach(pe =>
