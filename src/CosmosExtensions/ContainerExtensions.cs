@@ -375,7 +375,6 @@ public static class ContainerExtensions
     /// <param name="bulkContainer">The Cosmos DB container with bulk operations enabled.</param>
     /// <param name="events">Array of strings from KafkaTrigger.</param>
     /// <param name="allowRetry">When <c>true</c>, retries are enabled using default <see cref="RetryOptions"/>.</param>
-    [Obsolete("Use the overload that accepts RetryOptions instead of bool allowRetry.")]
     public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, bool allowRetry) where T : NostifyObject, new()
     {
         await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, allowRetry ? new RetryOptions() : null);
@@ -402,7 +401,6 @@ public static class ContainerExtensions
     /// <param name="events">Array of strings from KafkaTrigger.</param>
     /// <param name="eventTypeFilter">Event type name to filter when creating items; only events matching this type will be processed.</param>
     /// <param name="allowRetry">When <c>true</c>, retries are enabled using default <see cref="RetryOptions"/>.</param>
-    [Obsolete("Use the overload that accepts RetryOptions instead of bool allowRetry.")]
     public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string eventTypeFilter, bool allowRetry) where T : NostifyObject, new()
     {
         await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, eventTypeFilter, allowRetry ? new RetryOptions() : null);
@@ -465,7 +463,6 @@ public static class ContainerExtensions
     /// <param name="eventTypeFilters">List of event type names to include when creating items; if null or empty, all events are processed.</param>
     /// <param name="allowRetry">When <c>true</c>, retries are enabled using default <see cref="RetryOptions"/>.</param>
     /// <exception cref="NostifyException"></exception>
-    [Obsolete("Use the overload that accepts RetryOptions instead of bool allowRetry.")]
     public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, List<string> eventTypeFilters, bool allowRetry) where T : NostifyObject, new()
     {
         await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, eventTypeFilters, allowRetry ? new RetryOptions() : null);
