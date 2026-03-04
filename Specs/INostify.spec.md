@@ -71,6 +71,13 @@ public interface INostify
 | `GetProjectionAsync<P>` | `Task<P?> GetProjectionAsync<P>(Guid id) where P : IProjection` | Retrieves a projection by ID |
 | `DeleteProjectionAsync<P>` | `Task DeleteProjectionAsync<P>(Guid id) where P : IProjection` | Deletes a projection by ID |
 
+### Bulk Apply and Persist
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `BulkApplyAndPersistAsync<P>` | `Task<List<P>> BulkApplyAndPersistAsync<P>(Container, string, string[], bool, bool)` | Applies and persists a bulk array of Kafka events. The `bool allowRetry` overload converts to default `RetryOptions` (maxRetries: 1, delay: 1s, retryWhenNotFound: false) and delegates to the `RetryOptions` overload. |
+| `BulkApplyAndPersistAsync<P>` | `Task<List<P>> BulkApplyAndPersistAsync<P>(Container, string, string[], RetryOptions?, bool)` | Applies and persists a bulk array of Kafka events with configurable retry. When `retryOptions` is provided, uses `RetryableContainer` for per-item retry. |
+
 ### Bulk Event Persistence
 
 | Method | Signature | Description |

@@ -73,7 +73,8 @@
 
 - 4.4.3
   - **BulkPersistEventAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkPersistEventAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with default `RetryOptions` (maxRetries: 1, delay: 1s).
-  - **DefaultCommandHandlers RetryOptions Overloads**: Added `RetryOptions?` overloads to all 4 bulk command handlers (`HandleBulkCreate`, `HandleBulkUpdate`, and both `HandleBulkDelete` overloads) so callers can pass custom retry configuration through to `BulkPersistEventAsync`.
+  - **BulkApplyAndPersistAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkApplyAndPersistAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with default `RetryOptions` (maxRetries: 1, delay: 1s).
+  - **DefaultCommandHandler RetryOptions Overloads**: Added `RetryOptions?` overloads to all 4 bulk command handlers (`HandleBulkCreate`, `HandleBulkUpdate`, and both `HandleBulkDelete` overloads) so callers can pass custom retry configuration through to `BulkPersistEventAsync`. Bool overloads now delegate to the `RetryOptions` overload (DRY).
 
 - 4.4.2
   - **Documentation Updates**: Synchronized README and copilot-instructions with current codebase state.
@@ -1896,11 +1897,27 @@ await _nostify.BulkPersistEventAsync(
     publishErrorEvents: false
 );
 
+// Using bool allowRetry (delegates to RetryOptions overload with defaults)
 await _nostify.BulkApplyAndPersistAsync<TestProjection>(
     bulkContainer, 
     "id", 
     kafkaEvents, 
     allowRetry: true, 
+    publishErrorEvents: false
+);
+
+// Using configurable RetryOptions for fine-grained control
+var applyRetryOptions = new RetryOptions(
+    maxRetries: 3,
+    delay: TimeSpan.FromMilliseconds(500),
+    retryWhenNotFound: false,
+    delayMultiplier: 2.0
+);
+await _nostify.BulkApplyAndPersistAsync<TestProjection>(
+    bulkContainer,
+    "id",
+    kafkaEvents,
+    retryOptions: applyRetryOptions,
     publishErrorEvents: false
 );
 ```

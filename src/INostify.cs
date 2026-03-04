@@ -100,6 +100,7 @@ public interface INostify
 
     ///<summary>
     ///Applies and persists a bulk array of events from Kafka to the specified container.
+    ///This overload converts the boolean allowRetry into default RetryOptions and delegates to the RetryOptions overload.
     ///</summary>
     ///<param name="container">The container to which the events will be applied and persisted.</param>
     ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List<Guid> to find the projection to apply to</param>
@@ -109,6 +110,19 @@ public interface INostify
     ///<typeparam name="P">The type of the Nostify object.</typeparam>
     ///<returns>The nostify objects after Events are Applied</returns>   
     public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new();
+
+    ///<summary>
+    ///Applies and persists a bulk array of events from Kafka to the specified container.
+    ///When retryOptions is provided, each projection update uses RetryableContainer with the specified retry policy.
+    ///</summary>
+    ///<param name="container">The container to which the events will be applied and persisted.</param>
+    ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List<Guid> to find the projection to apply to</param>
+    ///<param name="events">The events to be applied and persisted.</param>
+    ///<param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each projection is updated using RetryableContainer with retry logic. When null, no retry is performed.</param>
+    ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container. Default is false.</param>
+    ///<typeparam name="P">The type of the Nostify object.</typeparam>
+    ///<returns>The nostify objects after Events are Applied</returns>   
+    public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, RetryOptions? retryOptions = null, bool publishErrorEvents = false) where P : NostifyObject, new();
 
     ///<summary>
     /// Persist all events in bulk, with optional retry and error handling. 

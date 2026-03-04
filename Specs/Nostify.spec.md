@@ -161,6 +161,14 @@ public async Task<long> GetNextSequenceValueAsync(string sequenceName, string pa
 }
 ```
 
+### BulkApplyAndPersistAsync
+
+Applies and persists a bulk array of Kafka events to projections:
+
+- **`bool allowRetry` overload** — Backwards-compatible. Converts `allowRetry = true` to `new RetryOptions(maxRetries: 1, delay: 1s, retryWhenNotFound: false, logger: Logger)` and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
+- **`RetryOptions?` overload** — Primary implementation. Deserializes events, groups by partition key, resolves target projection IDs from `idPropertyName` (supports both single `Guid` and `List<Guid>` properties), and uses `CreateApplyAndPersistTask` for each item.
+- Returns up to 1000 successfully applied projections.
+
 ### BulkPersistEventAsync
 
 Persists a list of events to the event store in configurable batches:
@@ -170,7 +178,7 @@ Persists a list of events to the event store in configurable batches:
 - Both overloads write failed events to the undeliverable events container via `HandleUndeliverableAsync`.
 - When `publishErrorEvents = true`, error commands (`ErrorCommand.BulkPersistEvent`) are also published to Kafka.
 
-This follows the same delegation pattern used by `CreateApplyAndPersistTask`.
+Both `BulkApplyAndPersistAsync` and `BulkPersistEventAsync` follow the same delegation pattern: `bool` overloads create default `RetryOptions` and delegate to the `RetryOptions?` overload.
 
 ## Event Store Container Configuration
 
