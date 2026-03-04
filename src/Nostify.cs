@@ -194,7 +194,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, string idPropertyName, string[] events, RetryOptions? retryOptions = null, bool publishErrorEvents = false) where P : NostifyObject, new()
+    public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, string idPropertyName, string[] events, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new()
     {
         //Throw if not bulk container
         bulkContainer.ValidateBulkEnabled(true);
@@ -293,7 +293,7 @@ public class Nostify : INostify
     }
 
     ///<inheritdoc />
-    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, RetryOptions? retryOptions = null, bool publishErrorEvents = false)
+    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false)
     {
         var eventContainer = await GetEventStoreContainerAsync(true);
 

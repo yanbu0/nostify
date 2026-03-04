@@ -122,7 +122,7 @@ public interface INostify
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container. Default is false.</param>
     ///<typeparam name="P">The type of the Nostify object.</typeparam>
     ///<returns>The nostify objects after Events are Applied</returns>   
-    public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, RetryOptions? retryOptions = null, bool publishErrorEvents = false) where P : NostifyObject, new();
+    public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new();
 
     ///<summary>
     /// Persist all events in bulk, with optional retry and error handling. 
@@ -144,7 +144,7 @@ public interface INostify
     ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
     ///<param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic. When null, no retry is performed.</param>
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container.  Default is false.</param>
-    public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, RetryOptions? retryOptions = null, bool publishErrorEvents = false);
+    public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false);
 
     ///<summary>
     ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.

@@ -165,7 +165,7 @@ public async Task<long> GetNextSequenceValueAsync(string sequenceName, string pa
 
 Applies and persists a bulk array of Kafka events to projections:
 
-- **`bool allowRetry` overload** — Backwards-compatible. Converts `allowRetry = true` to `new RetryOptions(maxRetries: 1, delay: 1s, retryWhenNotFound: false, logger: Logger)` and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
+- **`bool allowRetry` overload** — Backwards-compatible. Converts `allowRetry = true` to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
 - **`RetryOptions?` overload** — Primary implementation. Deserializes events, groups by partition key, resolves target projection IDs from `idPropertyName` (supports both single `Guid` and `List<Guid>` properties), and uses `CreateApplyAndPersistTask` for each item.
 - Returns up to 1000 successfully applied projections.
 
@@ -173,7 +173,7 @@ Applies and persists a bulk array of Kafka events to projections:
 
 Persists a list of events to the event store in configurable batches:
 
-- **`bool allowRetry` overload** — Backwards-compatible. Converts `allowRetry = true` to `new RetryOptions(maxRetries: 1, delay: 1s, retryWhenNotFound: false, logger: Logger)` and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
+- **`bool allowRetry` overload** — Backwards-compatible. Converts `allowRetry = true` to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
 - **`RetryOptions?` overload** — Primary implementation. When `retryOptions` is provided, wraps the event store container with `RetryableContainer` via `container.WithRetry(retryOptions)` and uses `retryable.CreateItemAsync` for each event. When `null`, falls through to direct `CreateItemAsync` with try/catch error handling.
 - Both overloads write failed events to the undeliverable events container via `HandleUndeliverableAsync`.
 - When `publishErrorEvents = true`, error commands (`ErrorCommand.BulkPersistEvent`) are also published to Kafka.

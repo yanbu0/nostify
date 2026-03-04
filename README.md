@@ -72,8 +72,8 @@
 ### Updates
 
 - 4.4.3
-  - **BulkPersistEventAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkPersistEventAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with default `RetryOptions` (maxRetries: 1, delay: 1s).
-  - **BulkApplyAndPersistAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkApplyAndPersistAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with default `RetryOptions` (maxRetries: 1, delay: 1s).
+  - **BulkPersistEventAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkPersistEventAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with `new RetryOptions()` defaults (maxRetries: 3, delay: 1s, exponential backoff 2x).
+  - **BulkApplyAndPersistAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkApplyAndPersistAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with `new RetryOptions()` defaults (maxRetries: 3, delay: 1s, exponential backoff 2x).
   - **DefaultCommandHandler RetryOptions Overloads**: Added `RetryOptions?` overloads to all 4 bulk command handlers (`HandleBulkCreate`, `HandleBulkUpdate`, and both `HandleBulkDelete` overloads) so callers can pass custom retry configuration through to `BulkPersistEventAsync`. Bool overloads now delegate to the `RetryOptions` overload (DRY).
 
 - 4.4.2
