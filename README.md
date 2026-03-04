@@ -72,10 +72,13 @@
 ### Updates
 
 - 4.4.2
-  - **Runtime / API Changes**: Enhanced retry infrastructure and handler contracts.
-    - Extended `RetryOptions` with additional parameters for finer-grained retry behavior configuration
-    - Added bulk retry helpers to simplify applying consistent retry policies across bulk operations
-    - Updated relevant handler signatures to accept retry-related options, enabling consumers to opt into the new behavior
+  - **RetryableContainer Bulk Methods**: New `DoBulkCreateAsync<T>` and `DoBulkUpsertAsync<T>` methods on `IRetryableContainer` providing per-item 429 retry for bulk operations. Container bulk operations must have bulk enabled.
+  - **RetryOptions Plumbing in All Handlers**: All `DefaultEventHandlers` methods that accept `RetryOptions` now automatically wire `nostify.Logger` into `retryOptions.Logger` (if not already set) and enable `retryOptions.LogRetries = true` — callers no longer need to configure logging manually.
+  - **ILogger Parameter Removed**: `HandleAggregateEventAsync<T>` and `HandleProjectionEventAsync<P>` no longer accept an explicit `ILogger` parameter; logging is now handled automatically via `nostify.Logger` when `RetryOptions` is provided.
+  - **MultiApplyAndPersistAsync RetryOptions Support**: `INostify.MultiApplyAndPersistAsync` and `ContainerExtensions.MultiApplyAndPersistAsync` now accept an optional `RetryOptions?` parameter for per-item retry during multi-apply operations.
+  - **HandleMultiApplyEventAsync RetryOptions Support**: `DefaultEventHandlers.HandleMultiApplyEventAsync<P>` now accepts an optional `RetryOptions?` parameter.
+  - **BulkCreate RetryOptions Support**: `HandleAggregateBulkCreateEventAsync<T>` and `HandleProjectionBulkCreateEventAsync<P>` now support `RetryOptions` in all overloads via `RetryableContainer.DoBulkCreateAsync`.
+  - **Container.DoBulkUpsertAsync Signature Update**: Removed `bool allowRetry` parameter — use `IRetryableContainer.DoBulkUpsertAsync<T>` for retry-enabled bulk upserts.
   - **Documentation Updates**: Synchronized README and copilot-instructions with current codebase state.
     - Added .NET 10 SDK to Getting Started prerequisites
     - Updated Setup `Program.cs` code block to match actual template (UseNewtonsoftJson, WithLogger, PascalCase config keys)
@@ -1373,6 +1376,13 @@ await DefaultEventHandlers.HandleAggregateEvent<Test>(
     idToApplyToPropertyName: "targetAggregateId",  // Property name in event payload containing target ID
     eventTypeFilter: "Update_Test"
 );
+
+// With RetryOptions for retry support (logger auto-wired from nostify.Logger)
+await DefaultEventHandlers.HandleAggregateEventAsync<Test>(
+    _nostify,
+    triggerEvent,
+    retryOptions: new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true)
+);
 ```
 
 **HandleProjectionEvent** - Applies events to projections with external data initialization:
@@ -1422,6 +1432,14 @@ public async Task Run([KafkaTrigger("BrokerList", "Update_Aggregate", ...)] Nost
         batchSize: 100  // Optional batch size for processing
     );
 }
+
+// With RetryOptions for per-item retry (logger auto-wired from nostify.Logger)
+await DefaultEventHandlers.HandleMultiApplyEventAsync<RelatedProjection>(
+    _nostify,
+    triggerEvent,
+    foreignIdSelector: projection => projection.foreignAggregateId,
+    retryOptions: new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true)
+);
 ```
 
 **When to Use Each Handler:**
@@ -1470,6 +1488,14 @@ await DefaultEventHandlers.HandleAggregateBulkCreateEvent<Test>(
     _nostify, 
     events, 
     new List<string> { "BulkCreate_Test", "BulkImport_Test" }
+);
+
+// With RetryOptions for per-item 429 retry during bulk create
+await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<Test>(
+    _nostify,
+    events,
+    new List<string> { "BulkCreate_Test" },
+    retryOptions: new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false)
 );
 ```
 
@@ -1746,6 +1772,8 @@ If a callback is null, the default behavior applies: exhausted/notFound return `
 | `ReadItemAsync<T>(id, partitionKey, ...)` | Read a single item by ID |
 | `CreateItemAsync<T>(item, ...)` | Create a new item |
 | `UpsertItemAsync<T>(item, ...)` | Create or replace an item |
+| `DoBulkCreateAsync<T>(items, ...)` | Bulk create items with per-item 429 retry; container must have bulk enabled |
+| `DoBulkUpsertAsync<T>(items, ...)` | Bulk upsert items with per-item 429 retry; container must have bulk enabled |
 
 #### RetryOptions Properties Reference
 
@@ -1842,8 +1870,8 @@ public static Task<int> BulkDeleteFromEventsAsync<P>(this Container container, s
 public static Task<int> DeleteAllBulkAsync<P>(this Container container)
     where P : NostifyObject;
 
-// Bulk upsert items
-public static Task DoBulkUpsertAsync<T>(this Container container, List<T> itemList, bool allowRetry = false)
+// Bulk upsert items (no retry; for retry support use IRetryableContainer.DoBulkUpsertAsync)
+public static Task DoBulkUpsertAsync<T>(this Container container, List<T> itemList)
     where T : IApplyable;
 ```
 
@@ -1866,6 +1894,15 @@ await _nostify.MultiApplyAndPersistAsync<TestProjection>(
     eventToApply, 
     projectionsToUpdate, 
     batchSize: 100
+);
+
+// With RetryOptions for per-item retry
+await _nostify.MultiApplyAndPersistAsync<TestProjection>(
+    bulkContainer,
+    eventToApply,
+    projectionIds,
+    batchSize: 100,
+    retryOptions: new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true)
 );
 ```
 
