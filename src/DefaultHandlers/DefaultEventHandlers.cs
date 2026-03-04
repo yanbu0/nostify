@@ -243,6 +243,19 @@ public static class DefaultEventHandlers
     }
 
     /// <summary>
+    /// Handles bulk creation of aggregate events from Kafka trigger events without event type filtering, with retry options.
+    /// </summary>
+    /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
+    /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
+    /// <param name="events">Array of Kafka trigger event strings to process.</param>
+    /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
+    /// <returns>A task containing the number of successfully created records.</returns>
+    public async static Task<int> HandleAggregateBulkCreateEventAsync<T>(INostify nostify, string[] events, RetryOptions retryOptions) where T : NostifyObject, IAggregate, new()
+    {
+        return await HandleAggregateBulkCreateEventAsync<T>(nostify, events, new List<string>(), retryOptions);
+    }
+
+    /// <summary>
     /// Handles bulk creation of aggregate events from Kafka trigger events with a single event type filter.
     /// </summary>
     /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
@@ -258,15 +271,27 @@ public static class DefaultEventHandlers
     /// <summary>
     /// Handles bulk creation of aggregate events from Kafka trigger events with multiple event type filters.
     /// Processes events in bulk to create or update current state projections for the specified aggregate type.
+    /// Supports configurable retry behavior for handling transient errors (429 TooManyRequests).
     /// </summary>
     /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
+    /// <param name="retryOptions">Optional retry options for configuring retry behavior on transient errors. When provided, per-item retry is applied.</param>
+    /// <param name="logger">Optional logger for structured logging of retry operations. When provided, automatically enables logging on RetryOptions.</param>
     /// <returns>A task containing the number of successfully created records.</returns>
-    public async static Task<int> HandleAggregateBulkCreateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter) where T : NostifyObject, IAggregate, new()
+    public async static Task<int> HandleAggregateBulkCreateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null, ILogger? logger = null) where T : NostifyObject, IAggregate, new()
     {
-        
+        // Wire logger into retryOptions if provided
+        if (retryOptions != null)
+        {
+            logger ??= nostify.Logger;
+            if (logger != null)
+            {
+                retryOptions.Logger ??= logger;
+                retryOptions.LogRetries = true;
+            }
+        }
         try
         {
             // Count events that match the filter (BulkCreate is all-or-nothing on success)
@@ -277,7 +302,7 @@ public static class DefaultEventHandlers
             });
 
             Container currentStateContainer = await nostify.GetBulkCurrentStateContainerAsync<T>();
-            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, eventTypeFilter);
+            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, eventTypeFilter, retryOptions);
 
             return matchingEventCount;
         }
@@ -308,6 +333,19 @@ public static class DefaultEventHandlers
     }
 
     /// <summary>
+    /// Handles bulk creation of projection events from Kafka trigger events without event type filtering, with retry options.
+    /// </summary>
+    /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
+    /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
+    /// <param name="events">Array of Kafka trigger event strings to process.</param>
+    /// <param name="retryOptions">Options to configure retry behavior for the operation.</param>
+    /// <returns>A task containing the number of successfully created records.</returns>
+    public async static Task<int> HandleProjectionBulkCreateEventAsync<P>(INostify nostify, string[] events, RetryOptions retryOptions) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        return await HandleProjectionBulkCreateEventAsync<P>(nostify, events, new List<string>(), retryOptions);
+    }
+
+    /// <summary>
     /// Handles bulk creation of projection events from Kafka trigger events with a single event type filter.
     /// </summary>
     /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
@@ -323,15 +361,27 @@ public static class DefaultEventHandlers
     /// <summary>
     /// Handles bulk creation of projection events from Kafka trigger events with multiple event type filters.
     /// Processes events in bulk to create or update projections for the specified projection type.
+    /// Supports configurable retry behavior for handling transient errors (429 TooManyRequests).
     /// </summary>
     /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
     /// <param name="eventTypeFilter">List of event type filters to specify which event types to process.</param>
+    /// <param name="retryOptions">Optional retry options for configuring retry behavior on transient errors. When provided, per-item retry is applied.</param>
+    /// <param name="logger">Optional logger for structured logging of retry operations. When provided, automatically enables logging on RetryOptions.</param>
     /// <returns>A task containing the number of successfully created records.</returns>
-    public async static Task<int> HandleProjectionBulkCreateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task<int> HandleProjectionBulkCreateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null, ILogger? logger = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
-        
+        // Wire logger into retryOptions if provided
+        if (retryOptions != null)
+        {
+            logger ??= nostify.Logger;
+            if (logger != null)
+            {
+                retryOptions.Logger ??= logger;
+                retryOptions.LogRetries = true;
+            }
+        }
         try
         {
             // Count events that match the filter (BulkCreate is all-or-nothing on success)
@@ -342,7 +392,7 @@ public static class DefaultEventHandlers
             });
 
             Container currentStateContainer = await nostify.GetBulkProjectionContainerAsync<P>();
-            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<P>(events, eventTypeFilter);
+            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<P>(events, eventTypeFilter, retryOptions);
             await nostify.InitAllUninitializedAsync<P>();
 
             return matchingEventCount;

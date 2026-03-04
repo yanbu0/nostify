@@ -100,6 +100,15 @@ public Task<T?> UpsertItemAsync<T>(T item, PartitionKey? partitionKey = null, ..
 
 Simulate create/upsert operations with the same behavior patterns.
 
+### DoBulkCreateAsync / DoBulkUpsertAsync
+
+```csharp
+public Task DoBulkCreateAsync<T>(List<T> itemList, Func<Exception, Task>? onException = null) where T : IApplyable
+public Task DoBulkUpsertAsync<T>(List<T> itemList, Func<Exception, Task>? onException = null) where T : IApplyable
+```
+
+Simulate bulk create/upsert operations. In exception mode, invokes `onException` callback or throws. Otherwise completes successfully.
+
 ## Usage Examples
 
 ### Testing Successful Event Application

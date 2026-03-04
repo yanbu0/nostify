@@ -31,10 +31,10 @@
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
-| `HandleAggregateBulkCreateEventAsync<T>` | `Task<int>` | Bulk creates aggregate current state projections from Kafka trigger events. Returns count of matching events processed. |
-| `HandleProjectionBulkCreateEventAsync<P>` | `Task<int>` | Bulk creates projections from Kafka trigger events and initializes uninitialized projections. Returns count of matching events processed. |
+| `HandleAggregateBulkCreateEventAsync<T>` | `Task<int>` | Bulk creates aggregate current state projections from Kafka trigger events. Returns count of matching events processed. Supports optional `RetryOptions` for per-item 429 retry. |
+| `HandleProjectionBulkCreateEventAsync<P>` | `Task<int>` | Bulk creates projections from Kafka trigger events and initializes uninitialized projections. Returns count of matching events processed. Supports optional `RetryOptions` for per-item 429 retry. |
 
-Each has 3 overloads: no filter, single string filter, `List<string>` filter.
+Each has 4 overloads: no filter, `RetryOptions` only, single string filter, `List<string>` filter + optional `RetryOptions` and `ILogger`.
 
 ### Bulk Update Handlers
 
@@ -58,7 +58,7 @@ Each has 3 overloads: no filter, single string filter, `List<string>` filter.
 
 - **Single-event handlers**: Return the entity instance on success, `null` on not-found/failure. Exceptions are caught, reported to undeliverable, and re-thrown.
 - **Bulk update handlers**: Return count of entities where `ApplyAndPersistAsync` returned non-null. Failed items are reported to `HandleUndeliverableAsync` individually but do not prevent other items from succeeding.
-- **Bulk create handlers**: Return count of events matching the filter. The underlying `BulkCreateFromKafkaTriggerEventsAsync` is all-or-nothing — on success all matching events are created; on failure the exception is caught, all events are reported as undeliverable, and the exception is re-thrown.
+- **Bulk create handlers**: Return count of events matching the filter. The underlying `BulkCreateFromKafkaTriggerEventsAsync` is all-or-nothing — on success all matching events are created; on failure the exception is caught, all events are reported as undeliverable, and the exception is re-thrown. When `RetryOptions` is provided, per-item 429 retry is applied through `RetryableContainer.DoBulkCreateAsync`.
 - **Bulk delete handlers**: Return the count directly from `BulkDeleteFromEventsAsync<T>`, which reports the number of successfully deleted items.
 - **Multi-apply handler**: Returns `List<P>.Count` from `MultiApplyAndPersistAsync`. Returns `0` when the trigger event doesn't match the filter.
 
@@ -69,9 +69,9 @@ All methods without the `Async` suffix are deprecated via `[Obsolete]` attribute
 ## Key Relationships
 
 - **`INostify`** — Used for container access (`GetCurrentStateContainerAsync`, `GetProjectionContainerAsync`, `GetBulkCurrentStateContainerAsync`, `GetBulkProjectionContainerAsync`), undeliverable handling, and projection initialization. Also provides `Logger` property as fallback for retry logging.
-- **`ILogger`** — Optional logger parameter on main handler methods (`HandleAggregateEventAsync`, `HandleProjectionEventAsync`, `HandleAggregateBulkUpdateEventAsync`, `HandleProjectionBulkUpdateEventAsync`). When provided (or when `nostify.Logger` is set), automatically wired into `RetryOptions.Logger` with `LogRetries = true`. Falls back to `nostify.Logger` when the explicit parameter is null.
-- **`RetryableContainer`** — Created via `container.WithRetry(retryOptions)` for retry-enabled update operations.
-- **`ContainerExtensions`** — Provides `BulkCreateFromKafkaTriggerEventsAsync`, `BulkDeleteFromEventsAsync`, `ApplyAndPersistAsync`.
+- **`ILogger`** — Optional logger parameter on main handler methods (`HandleAggregateEventAsync`, `HandleProjectionEventAsync`, `HandleAggregateBulkUpdateEventAsync`, `HandleProjectionBulkUpdateEventAsync`, `HandleAggregateBulkCreateEventAsync`, `HandleProjectionBulkCreateEventAsync`). When provided (or when `nostify.Logger` is set), automatically wired into `RetryOptions.Logger` with `LogRetries = true`. Falls back to `nostify.Logger` when the explicit parameter is null.
+- **`RetryableContainer`** — Created via `container.WithRetry(retryOptions)` for retry-enabled update and create operations.
+- **`ContainerExtensions`** — Provides `BulkCreateFromKafkaTriggerEventsAsync` (with optional `RetryOptions`), `BulkDeleteFromEventsAsync`, `ApplyAndPersistAsync`.
 - **`NostifyKafkaTriggerEvent`** — Deserialized from Kafka trigger event strings; provides `GetEvent()` for event extraction and filtering.
 - **`EventFactory`** — Used for creating null-payload error events when exception handling requires an event reference.
 

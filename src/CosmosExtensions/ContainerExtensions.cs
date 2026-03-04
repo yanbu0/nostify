@@ -362,10 +362,10 @@ public static class ContainerExtensions
     /// <typeparam name="T">The type of NostifyObject to create.</typeparam>
     /// <param name="bulkContainer">The Cosmos DB container with bulk operations enabled.</param>
     /// <param name="events">Array of strings from KafkaTrigger.</param>
-    /// <param name="allowRetry">Whether to allow retry on failure, which can help with transient errors. If true, will retry using default retry options.</param>
-    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, bool allowRetry = false) where T : NostifyObject, new()
+    /// <param name="retryOptions">Optional retry options for handling transient errors. When provided, per-item retry is applied via <see cref="IRetryableContainer"/>.</param>
+    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, RetryOptions? retryOptions = null) where T : NostifyObject, new()
     {
-        await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, new List<string>(), allowRetry);
+        await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, new List<string>(), retryOptions);
     }
 
     /// <summary>
@@ -375,10 +375,10 @@ public static class ContainerExtensions
     /// <param name="bulkContainer">The Cosmos DB container with bulk operations enabled.</param>
     /// <param name="events">Array of strings from KafkaTrigger.</param>
     /// <param name="eventTypeFilter">Event type name to filter when creating items; only events matching this type will be processed.</param>
-    /// <param name="allowRetry">Whether to allow retry on failure, which can help with transient errors. If true, will retry using default retry options.</param>
-    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string eventTypeFilter, bool allowRetry = false) where T : NostifyObject, new()
+    /// <param name="retryOptions">Optional retry options for handling transient errors. When provided, per-item retry is applied via <see cref="IRetryableContainer"/>.</param>
+    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, new()
     {
-        await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, new List<string>(){eventTypeFilter}, allowRetry);
+        await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, new List<string>(){eventTypeFilter}, retryOptions);
     }
 
     /// <summary>
@@ -388,9 +388,9 @@ public static class ContainerExtensions
     /// <param name="bulkContainer">Must have bulk operations set to true</param>
     /// <param name="events">Array of strings from KafkaTrigger</param>
     /// <param name="eventTypeFilters">List of event type names to include when creating items; if null or empty, all events are processed.</param>
-    /// <param name="allowRetry">Whether to allow retry on failure, which can help with transient errors. If true, will retry using default retry options.</param>
+    /// <param name="retryOptions">Optional retry options for handling transient errors. When provided, per-item retry is applied via <see cref="IRetryableContainer"/>.</param>
     /// <exception cref="NostifyException"></exception>
-    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, List<string> eventTypeFilters, bool allowRetry = false) where T : NostifyObject, new()
+    public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, List<string> eventTypeFilters, RetryOptions? retryOptions = null) where T : NostifyObject, new()
     {
         bulkContainer.ValidateBulkEnabled(true);
 
@@ -417,7 +417,14 @@ public static class ContainerExtensions
 
         if (objToUpsertList.Count > 0)
         {
-            await bulkContainer.DoBulkCreateAsync<T>(objToUpsertList, allowRetry);
+            if (retryOptions != null)
+            {
+                await bulkContainer.WithRetry(retryOptions).DoBulkCreateAsync<T>(objToUpsertList);
+            }
+            else
+            {
+                await bulkContainer.DoBulkCreateAsync<T>(objToUpsertList);
+            }
         }
 
     }
@@ -466,67 +473,37 @@ public static class ContainerExtensions
     }
 
     /// <summary>
-    /// Bulk upserts a list of items
+    /// Bulk upserts a list of items without retry. For retry support, use <see cref="IRetryableContainer.DoBulkUpsertAsync{T}"/>.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="bulkContainer">Container to upsert items to</param>
-    /// <param name="itemList">List of items to upsert</param>
-    /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
-    /// <param name="logger">Optional logger for structured logging of retry operations.</param>
+    /// <typeparam name="T">Must implement <see cref="IApplyable"/>.</typeparam>
+    /// <param name="bulkContainer">Container to upsert items to, must have bulk enabled.</param>
+    /// <param name="itemList">List of items to upsert.</param>
     /// <returns></returns>
-    public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false, ILogger? logger = null) where T : IApplyable
+    public static async Task DoBulkUpsertAsync<T>(this Container bulkContainer, List<T> itemList) where T : IApplyable
     {
         //throw if bulk not enabled
         bulkContainer.ValidateBulkEnabled(true);
 
-        if (allowRetry)
-        {
-            var retryable = bulkContainer.WithRetry();
-            List<Task> taskList = new List<Task>();
-            itemList.ForEach(i => taskList.Add(retryable.UpsertItemAsync(
-                i,
-                onException: (ex) => Task.FromException(new NostifyException($"Bulk Upsert Error {ex.Message}"))
-            )));
-            await Task.WhenAll(taskList);
-        }
-        else
-        {
-            List<Task> taskList = new List<Task>();
-            itemList.ForEach(i => taskList.Add(bulkContainer.UpsertItemAsync(i)));
-            await Task.WhenAll(taskList);
-        }
+        List<Task> taskList = new List<Task>();
+        itemList.ForEach(i => taskList.Add(bulkContainer.UpsertItemAsync(i)));
+        await Task.WhenAll(taskList);
     }
 
     /// <summary>
-    /// Bulk creates a list of items
+    /// Bulk creates a list of items without retry. For retry support, use <see cref="IRetryableContainer.DoBulkCreateAsync{T}"/>.
     /// </summary>
-    /// <typeparam name="T">Must be able to Apply an Event</typeparam>
-    /// <param name="bulkContainer">Container to create items in, must have bulk enabled</param>
-    /// <param name="itemList">List of items to create</param>
-    /// <param name="allowRetry">Optional. If true will retry on 429 too many requests errors. Default is false</param>
-    /// <param name="logger">Optional logger for structured logging of retry operations.</param>
+    /// <typeparam name="T">Must implement <see cref="IApplyable"/>.</typeparam>
+    /// <param name="bulkContainer">Container to create items in, must have bulk enabled.</param>
+    /// <param name="itemList">List of items to create.</param>
     /// <returns></returns>
-    public static async Task DoBulkCreateAsync<T>(this Container bulkContainer, List<T> itemList, bool allowRetry = false, ILogger? logger = null) where T : IApplyable
+    public static async Task DoBulkCreateAsync<T>(this Container bulkContainer, List<T> itemList) where T : IApplyable
     {
         //throw if bulk not enabled
         bulkContainer.ValidateBulkEnabled(true);
 
-        if (allowRetry)
-        {
-            var retryable = bulkContainer.WithRetry();
-            List<Task> taskList = new List<Task>();
-            itemList.ForEach(i => taskList.Add(retryable.CreateItemAsync(
-                i,
-                onException: (ex) => Task.FromException(new NostifyException($"Bulk Create Error {ex.Message}"))
-            )));
-            await Task.WhenAll(taskList);
-        }
-        else
-        {
-            List<Task> taskList = new List<Task>();
-            itemList.ForEach(i => taskList.Add(bulkContainer.CreateItemAsync(i)));
-            await Task.WhenAll(taskList);
-        }
+        List<Task> taskList = new List<Task>();
+        itemList.ForEach(i => taskList.Add(bulkContainer.CreateItemAsync(i)));
+        await Task.WhenAll(taskList);
     }
 
 }

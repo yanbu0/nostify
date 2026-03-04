@@ -161,4 +161,28 @@ public interface IRetryableContainer
     /// <param name="requestOptions">Optional query request options.</param>
     /// <returns>A <see cref="RetryableQuery{T}"/> with retry-aware terminal operations.</returns>
     RetryableQuery<T> GetItemLinqQueryable<T>(QueryRequestOptions? requestOptions = null);
+
+    /// <summary>
+    /// Bulk creates a list of items with per-item retry on 429 TooManyRequests.
+    /// The underlying container must have bulk operations enabled.
+    /// </summary>
+    /// <typeparam name="T">The type of items to create, must implement <see cref="IApplyable"/>.</typeparam>
+    /// <param name="itemList">List of items to create.</param>
+    /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual item.</param>
+    /// <returns>A task representing the asynchronous bulk create operation.</returns>
+    Task DoBulkCreateAsync<T>(
+        List<T> itemList,
+        Func<Exception, Task>? onException = null) where T : IApplyable;
+
+    /// <summary>
+    /// Bulk upserts a list of items with per-item retry on 429 TooManyRequests.
+    /// The underlying container must have bulk operations enabled.
+    /// </summary>
+    /// <typeparam name="T">The type of items to upsert, must implement <see cref="IApplyable"/>.</typeparam>
+    /// <param name="itemList">List of items to upsert.</param>
+    /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual item.</param>
+    /// <returns>A task representing the asynchronous bulk upsert operation.</returns>
+    Task DoBulkUpsertAsync<T>(
+        List<T> itemList,
+        Func<Exception, Task>? onException = null) where T : IApplyable;
 }

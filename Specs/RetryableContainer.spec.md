@@ -27,6 +27,8 @@ public interface IRetryableContainer
 | `CreateItemAsync<T>(T, PartitionKey?, ...)` | `Task<ItemResponse<T>?>` | Create item with 429 retry; when partition key is null, Cosmos SDK infers it from the item |
 | `CreateItemAsync<T>(T, ...)` | `Task<ItemResponse<T>?>` | Create item with 429 retry; partition key inferred by Cosmos SDK |
 | `UpsertItemAsync<T>(T, ...)` | `Task<ItemResponse<T>?>` | Upsert item with 429 retry |
+| `DoBulkCreateAsync<T>(List<T>, ...)` | `Task` | Bulk creates items with per-item 429 retry; container must have bulk enabled |
+| `DoBulkUpsertAsync<T>(List<T>, ...)` | `Task` | Bulk upserts items with per-item 429 retry; container must have bulk enabled |
 
 ### Callback Parameters
 
