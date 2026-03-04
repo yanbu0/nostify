@@ -71,6 +71,20 @@ public interface INostify
 | `GetProjectionAsync<P>` | `Task<P?> GetProjectionAsync<P>(Guid id) where P : IProjection` | Retrieves a projection by ID |
 | `DeleteProjectionAsync<P>` | `Task DeleteProjectionAsync<P>(Guid id) where P : IProjection` | Deletes a projection by ID |
 
+### Bulk Apply and Persist
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `BulkApplyAndPersistAsync<P>` | `Task<List<P>> BulkApplyAndPersistAsync<P>(Container, string, string[], bool, bool)` | Applies and persists a bulk array of Kafka events. The `bool allowRetry` overload converts to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions` overload. |
+| `BulkApplyAndPersistAsync<P>` | `Task<List<P>> BulkApplyAndPersistAsync<P>(Container, string, string[], RetryOptions?, bool)` | Applies and persists a bulk array of Kafka events with configurable retry. When `retryOptions` is provided, uses `RetryableContainer` for per-item retry. |
+
+### Bulk Event Persistence
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `BulkPersistEventAsync` | `Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)` | Persists all events in bulk. The `bool allowRetry` overload converts to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions` overload. |
+| `BulkPersistEventAsync` | `Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false)` | Persists all events in bulk with configurable retry. `retryOptions` and `batchSize` are required (no defaults) to avoid ambiguity with the `bool allowRetry` overload. |
+
 ### Saga Operations
 
 | Method | Signature | Description |

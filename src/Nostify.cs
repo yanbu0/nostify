@@ -181,8 +181,20 @@ public class Nostify : INostify
         return await MultiApplyAndPersistAsync<P>(bulkContainer, eventToApply, projectionsToUpdate.Select(p => p.id).ToList(), batchSize, retryOptions);
     }
 
+    /// <summary>
+    /// Backwards-compatible overload that converts bool allowRetry to RetryOptions.
+    /// </summary>
     ///<inheritdoc />
     public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new()
+    {
+        RetryOptions? retryOptions = allowRetry
+            ? new RetryOptions()
+            : null;
+        return await BulkApplyAndPersistAsync<P>(bulkContainer, idPropertyName, events, retryOptions, publishErrorEvents);
+    }
+
+    ///<inheritdoc />
+    public async Task<List<P>> BulkApplyAndPersistAsync<P>(Container bulkContainer, string idPropertyName, string[] events, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new()
     {
         //Throw if not bulk container
         bulkContainer.ValidateBulkEnabled(true);
@@ -191,7 +203,7 @@ public class Nostify : INostify
         List<Guid> partitionKeys = eventList.Select(e => e.partitionKey).Distinct().ToList();
 
         List<Task> tasks = new List<Task>();
-        List<P> succesfulTasks = new List<P>();
+        ConcurrentBag<P> succesfulTasks = new ConcurrentBag<P>();
 
         //For each partition, create a list of tasks to apply and persist the events based off the list of ids in the property specified
         partitionKeys.ForEach(pk =>
@@ -207,7 +219,7 @@ public class Nostify : INostify
                 if (pe.payload.TryGetValue<List<Guid>>(idPropertyName, out ids))
                 {
                     ids.ForEach(id => tasks.Add(
-                        CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, id, allowRetry, publishErrorEvents)
+                        CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, id, retryOptions, publishErrorEvents)
                             .ContinueWith(itemResponse =>
                             {
                                 if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
@@ -219,7 +231,7 @@ public class Nostify : INostify
                     if (pe.payload.TryGetValue<Guid>(idPropertyName, out idToApplyTo))
                     {
                         tasks.Add(
-                            CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, idToApplyTo, allowRetry, publishErrorEvents)
+                            CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, idToApplyTo, retryOptions, publishErrorEvents)
                                 .ContinueWith(itemResponse =>
                                 {
                                     if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
@@ -234,17 +246,6 @@ public class Nostify : INostify
 
         //Only return first 1000 results to avoid overwhelming caller
         return succesfulTasks.Take(1000).ToList();
-    }
-
-    /// <summary>
-    /// Backwards-compatible overload that converts bool allowRetry to RetryOptions.
-    /// </summary>
-    private async Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, bool allowRetry, bool publishErrorEvents) where P : NostifyObject, new()
-    {
-        RetryOptions? retryOptions = allowRetry
-            ? new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: Logger)
-            : null;
-        return await CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, id, retryOptions, publishErrorEvents);
     }
 
     /// <summary>
@@ -279,8 +280,20 @@ public class Nostify : INostify
         }
     }
 
+    /// <summary>
+    /// Backwards-compatible overload that converts bool allowRetry to RetryOptions.
+    /// </summary>
     ///<inheritdoc />
     public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
+    {
+        RetryOptions? retryOptions = allowRetry
+            ? new RetryOptions()
+            : null;
+        await BulkPersistEventAsync(events, batchSize, retryOptions, publishErrorEvents);
+    }
+
+    ///<inheritdoc />
+    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false)
     {
         var eventContainer = await GetEventStoreContainerAsync(true);
 
@@ -292,9 +305,8 @@ public class Nostify : INostify
         {
             var eventBatch = events.Skip(i).Take(loopSize).ToList();
 
-            if (allowRetry)
+            if (retryOptions != null)
             {
-                var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: false, logger: Logger);
                 var retryable = eventContainer.WithRetry(retryOptions);
                 List<Task> taskList = new List<Task>();
                 eventBatch.ForEach(pe =>

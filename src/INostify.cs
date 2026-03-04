@@ -100,6 +100,7 @@ public interface INostify
 
     ///<summary>
     ///Applies and persists a bulk array of events from Kafka to the specified container.
+    ///This overload converts the boolean allowRetry into default RetryOptions and delegates to the RetryOptions overload.
     ///</summary>
     ///<param name="container">The container to which the events will be applied and persisted.</param>
     ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List<Guid> to find the projection to apply to</param>
@@ -111,14 +112,39 @@ public interface INostify
     public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, bool allowRetry = false, bool publishErrorEvents = false) where P : NostifyObject, new();
 
     ///<summary>
+    ///Applies and persists a bulk array of events from Kafka to the specified container.
+    ///When retryOptions is provided, each projection update uses RetryableContainer with the specified retry policy.
+    ///</summary>
+    ///<param name="container">The container to which the events will be applied and persisted.</param>
+    ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List<Guid> to find the projection to apply to</param>
+    ///<param name="events">The events to be applied and persisted.</param>
+    ///<param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each projection is updated using RetryableContainer with retry logic. When null, no retry is performed.</param>
+    ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container. Default is false.</param>
+    ///<typeparam name="P">The type of the Nostify object.</typeparam>
+    ///<returns>The nostify objects after Events are Applied</returns>   
+    public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new();
+
+    ///<summary>
     /// Persist all events in bulk, with optional retry and error handling. 
     /// This will write to the undeliverable events container if any events fail to persist, and will retry if allowed.
+    /// This overload converts the boolean allowRetry into default RetryOptions and delegates to the RetryOptions overload.
     ///</summary>        
     ///<param name="events">Events to apply and persist in event store</param>
     ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
     ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error.  Default is false.</param>
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container.  Default is false.</param>
     public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
+
+    ///<summary>
+    /// Persist all events in bulk, with configurable retry options and error handling.
+    /// This will write to the undeliverable events container if any events fail to persist.
+    /// When retryOptions is provided, each event write uses RetryableContainer with the specified retry policy.
+    ///</summary>
+    ///<param name="events">Events to apply and persist in event store</param>
+    ///<param name="batchSize">Optional. Number of events to write in a batch.  If null, writes all events in one batch.</param>
+    ///<param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic. When null, no retry is performed.</param>
+    ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container.  Default is false.</param>
+    public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false);
 
     ///<summary>
     ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
