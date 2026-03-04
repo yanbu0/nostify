@@ -84,7 +84,7 @@
     - Updated Setup `Program.cs` code block to match actual template (UseNewtonsoftJson, WithLogger, PascalCase config keys)
     - Fixed Architecture section to remove inaccurate Redis reference
     - Updated copilot-instructions: version, framework (net10.0), test count (797), warning count (~107), file structure, expected outputs
-  - **Template Updates**: All template project files updated to reference nostify 4.4.2
+  - **Template Updates**: All template project files updated to reference nostify 4.4.2 and surface the new retry helpers/handler signatures in generated services
 
 - 4.4.1
   - **RetryableContainer**: New `IRetryableContainer` interface and `RetryableContainer` implementation that wraps a Cosmos DB `Container` with configurable retry logic.
