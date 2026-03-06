@@ -616,8 +616,20 @@ public static class DefaultEventHandlers
                                 {
                                     updatedProjections.Add(result);
                                 }
+                                else
+                                {
+                                    nostify.Logger.LogWarning($"Failed to update projection for event: {newEvent}");
+                                }
                             }));
                     }
+                    else
+                    {
+                        nostify.Logger.LogWarning($"Unable to get event from trigger event: {triggerEvent}");
+                    }
+                }
+                else
+                {
+                    nostify.Logger.LogWarning($"Failed to deserialize event: {eventStr}");
                 }
             }
 

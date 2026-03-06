@@ -280,6 +280,8 @@ public static class ContainerExtensions
                 }
                 catch (CosmosException ex)
                 {
+                    if (logger != null) logger.LogError(ex, "Update failed for {ContainerId} {IdToMatch}, tenantId: {PartitionKey}", container.Id, idToMatch, partitionKey);
+                    else Console.Error.WriteLine($"Update failed for {container.Id} {idToMatch}, tenantId: {partitionKey} || {ex.Message} || {ex.InnerException?.Message}");
                     throw new NostifyException($"Update failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
                 }
             }

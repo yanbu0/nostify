@@ -243,6 +243,7 @@ public class RetryableContainer : IRetryableContainer
             }
             catch (Exception ex)
             {
+                Options.LogRetry($"{operationDescription}: Exception {ex.Message}");
                 if (onException != null) await onException(ex);
                 else throw;
                 return default;
