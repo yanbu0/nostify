@@ -585,6 +585,275 @@ public class NostifyFactoryTests
         Assert.Equal(connectionString, config.producerConfig.SaslPassword);
     }
 
+    #region WithAsyncEventRequest Tests
+
+    [Fact]
+    public void NostifyConfig_AutoCreateEventRequestTopics_DefaultsToFalse()
+    {
+        // Act
+        var config = new NostifyConfig();
+
+        // Assert
+        Assert.False(config.autoCreateEventRequestTopics);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_ShouldSetFlagToTrue()
+    {
+        // Arrange
+        var config = new NostifyConfig();
+
+        // Act
+        config.WithAsyncEventRequest();
+
+        // Assert
+        Assert.True(config.autoCreateEventRequestTopics);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_ShouldReturnSameConfigInstance()
+    {
+        // Arrange
+        var config = new NostifyConfig();
+
+        // Act
+        var result = config.WithAsyncEventRequest();
+
+        // Assert
+        Assert.Same(config, result);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_ShouldChainWithKafka()
+    {
+        // Act
+        var config = NostifyFactory
+            .WithKafka("localhost:9092")
+            .WithAsyncEventRequest();
+
+        // Assert
+        Assert.True(config.autoCreateEventRequestTopics);
+        Assert.Equal("localhost:9092", config.kafkaUrl);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_ShouldChainWithEventHubs()
+    {
+        // Arrange
+        var connectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+
+        // Act
+        var config = NostifyFactory
+            .WithEventHubs(connectionString)
+            .WithAsyncEventRequest();
+
+        // Assert
+        Assert.True(config.autoCreateEventRequestTopics);
+        Assert.Equal("test-namespace.servicebus.windows.net:9093", config.kafkaUrl);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_ShouldChainWithHttp()
+    {
+        // Arrange
+        var mockHttpClientFactory = new Mock<IHttpClientFactory>();
+
+        // Act
+        var config = new NostifyConfig()
+            .WithAsyncEventRequest()
+            .WithHttp(mockHttpClientFactory.Object);
+
+        // Assert
+        Assert.True(config.autoCreateEventRequestTopics);
+        Assert.Equal(mockHttpClientFactory.Object, config.httpClientFactory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_ShouldChainWithLogger()
+    {
+        // Arrange
+        var mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+
+        // Act
+        var config = new NostifyConfig()
+            .WithAsyncEventRequest()
+            .WithLogger(mockLogger.Object);
+
+        // Assert
+        Assert.True(config.autoCreateEventRequestTopics);
+        Assert.Equal(mockLogger.Object, config.logger);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_CalledMultipleTimes_ShouldBeIdempotent()
+    {
+        // Arrange
+        var config = new NostifyConfig();
+
+        // Act
+        config.WithAsyncEventRequest().WithAsyncEventRequest().WithAsyncEventRequest();
+
+        // Assert
+        Assert.True(config.autoCreateEventRequestTopics);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_ShouldNotAffectOtherProperties()
+    {
+        // Arrange
+        var config = NostifyFactory
+            .WithCosmos("key", "db", "https://test.documents.azure.com:443/", true, 1000, true)
+            .WithKafka("localhost:9092", "user", "pass");
+
+        // Snapshot values before
+        var cosmosKey = config.cosmosApiKey;
+        var dbName = config.cosmosDbName;
+        var endpoint = config.cosmosEndpointUri;
+        var create = config.createContainers;
+        var throughput = config.containerThroughput;
+        var gateway = config.useGatewayConnection;
+        var kafkaUrl = config.kafkaUrl;
+        var kafkaUser = config.kafkaUserName;
+        var kafkaPass = config.kafkaPassword;
+
+        // Act
+        config.WithAsyncEventRequest();
+
+        // Assert - all previous values unchanged
+        Assert.True(config.autoCreateEventRequestTopics);
+        Assert.Equal(cosmosKey, config.cosmosApiKey);
+        Assert.Equal(dbName, config.cosmosDbName);
+        Assert.Equal(endpoint, config.cosmosEndpointUri);
+        Assert.Equal(create, config.createContainers);
+        Assert.Equal(throughput, config.containerThroughput);
+        Assert.Equal(gateway, config.useGatewayConnection);
+        Assert.Equal(kafkaUrl, config.kafkaUrl);
+        Assert.Equal(kafkaUser, config.kafkaUserName);
+        Assert.Equal(kafkaPass, config.kafkaPassword);
+    }
+
+    [Fact]
+    public void Build_WithoutAsyncEventRequest_ShouldLeaveAutoCreateFalse()
+    {
+        // Arrange
+        var config = NostifyFactory
+            .WithCosmos("test-key", "test-db", "https://test.documents.azure.com:443/")
+            .WithKafka("localhost:9092");
+
+        // Assert
+        Assert.False(config.autoCreateEventRequestTopics);
+
+        // Act - Build without Build<T> to avoid needing Kafka
+        var nostify = config.Build();
+
+        // Assert
+        Assert.NotNull(nostify);
+    }
+
+    [Fact]
+    public void Build_WithAsyncEventRequest_ShouldCreateNostifyInstance()
+    {
+        // Arrange
+        var config = NostifyFactory
+            .WithCosmos("test-key", "test-db", "https://test.documents.azure.com:443/")
+            .WithKafka("localhost:9092")
+            .WithAsyncEventRequest();
+
+        // Assert flag set
+        Assert.True(config.autoCreateEventRequestTopics);
+
+        // Act - Build (non-generic) still works - it doesn't create topics
+        var nostify = config.Build();
+
+        // Assert
+        Assert.NotNull(nostify);
+        Assert.IsAssignableFrom<INostify>(nostify);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequest_OrderIndependence_BeforeKafka()
+    {
+        // Act - WithAsyncEventRequest before WithKafka
+        var config = new NostifyConfig()
+            .WithAsyncEventRequest()
+            .WithKafka("localhost:9092");
+
+        // Assert
+        Assert.True(config.autoCreateEventRequestTopics);
+        Assert.Equal("localhost:9092", config.kafkaUrl);
+    }
+
+    [Fact]
+    public void FluentApi_FullChain_WithAsyncEventRequest()
+    {
+        // Arrange
+        var mockHttpClientFactory = new Mock<IHttpClientFactory>();
+        var mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+
+        // Act
+        var config = NostifyFactory
+            .WithCosmos("test-key", "test-db", "https://test.documents.azure.com:443/", true, 1000)
+            .WithKafka("localhost:9092", "user", "pass")
+            .WithAsyncEventRequest()
+            .WithHttp(mockHttpClientFactory.Object)
+            .WithLogger(mockLogger.Object);
+
+        // Assert - all properties set correctly
+        Assert.Equal("test-key", config.cosmosApiKey);
+        Assert.Equal("test-db", config.cosmosDbName);
+        Assert.Equal("https://test.documents.azure.com:443/", config.cosmosEndpointUri);
+        Assert.True(config.createContainers);
+        Assert.Equal(1000, config.containerThroughput);
+        Assert.Equal("localhost:9092", config.kafkaUrl);
+        Assert.Equal("user", config.kafkaUserName);
+        Assert.Equal("pass", config.kafkaPassword);
+        Assert.True(config.autoCreateEventRequestTopics);
+        Assert.Equal(mockHttpClientFactory.Object, config.httpClientFactory);
+        Assert.Equal(mockLogger.Object, config.logger);
+    }
+
+    [Fact]
+    public void FluentApi_FullChain_WithoutAsyncEventRequest()
+    {
+        // Arrange
+        var mockHttpClientFactory = new Mock<IHttpClientFactory>();
+        var mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+
+        // Act
+        var config = NostifyFactory
+            .WithCosmos("test-key", "test-db", "https://test.documents.azure.com:443/", true, 1000)
+            .WithKafka("localhost:9092", "user", "pass")
+            .WithHttp(mockHttpClientFactory.Object)
+            .WithLogger(mockLogger.Object);
+
+        // Assert - no async event request
+        Assert.False(config.autoCreateEventRequestTopics);
+        Assert.Equal("test-key", config.cosmosApiKey);
+        Assert.Equal("localhost:9092", config.kafkaUrl);
+    }
+
+    [Fact]
+    public void FluentApi_EventHubs_WithAsyncEventRequest()
+    {
+        // Arrange
+        var connectionString = "Endpoint=sb://test-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+        var mockHttpClientFactory = new Mock<IHttpClientFactory>();
+
+        // Act
+        var config = NostifyFactory
+            .WithCosmos("test-key", "test-db", "https://test.documents.azure.com:443/", true, 1000)
+            .WithEventHubs(connectionString)
+            .WithAsyncEventRequest()
+            .WithHttp(mockHttpClientFactory.Object);
+
+        // Assert
+        Assert.True(config.autoCreateEventRequestTopics);
+        Assert.Equal("test-namespace.servicebus.windows.net:9093", config.kafkaUrl);
+        Assert.Equal(mockHttpClientFactory.Object, config.httpClientFactory);
+    }
+
+    #endregion
+
 }
 
 

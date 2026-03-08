@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Newtonsoft.Json;
 using Xunit;
@@ -17,6 +18,9 @@ public class DefaultEventHandlersTests
     public DefaultEventHandlersTests()
     {
         _mockNostify = new Mock<INostify>();
+        _mockNostify
+            .Setup(n => n.Logger)
+            .Returns(Mock.Of<ILogger>());
         _mockNostify
             .Setup(n => n.HandleUndeliverableAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()))
             .Returns(Task.CompletedTask);

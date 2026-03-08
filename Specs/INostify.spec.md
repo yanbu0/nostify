@@ -16,12 +16,19 @@ public interface INostify
 |----------|------|-------------|
 | `Repository` | `NostifyCosmosClient` | Cosmos DB client wrapper for database operations |
 | `BulkPublisher` | `IProducer<string, string>` | Kafka producer for bulk event publishing |
+| `KafkaProducer` | `IProducer<string, string>` | Alias for `BulkPublisher` |
 | `DefaultUserId` | `Guid` | Default user ID for events without explicit user |
 | `kafkaUrl` | `string` | Kafka broker connection URL |
 | `eventStoreContainerName` | `string` | Name of the container storing all events |
 | `Logger` | `ILogger?` | Optional structured logger. Set via `NostifyFactory.WithLogger()`. When non-null, used by internal retry logic and diagnostic output instead of `Console.WriteLine`. |
 
 ## Methods
+
+### Kafka Consumer Management
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `GetOrCreateKafkaConsumer` | `IConsumer<string, string> GetOrCreateKafkaConsumer(string consumerGroup)` | Returns a singleton Kafka consumer for the given consumer group. Creates lazily on first call, cached for subsequent calls. |
 
 ### Event Publishing
 

@@ -2,8 +2,8 @@
 
 ## Template System
 
-- Package first: `dotnet pack` to create `bin/Release/nostify.4.4.2.nupkg`
-- Install templates locally: `dotnet new install bin/Release/nostify.4.4.2.nupkg`
+- Package first: `dotnet pack` to create `bin/Release/nostify.4.5.0.nupkg`
+- Install templates locally: `dotnet new install bin/Release/nostify.4.5.0.nupkg`
 - Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>`
   - Example: `dotnet new nostify -ag TestItem -p 7999`
 - Template validation: After installation, verify templates are available with:
@@ -30,8 +30,8 @@ Always reference these instructions first and fallback to search or bash command
 - Use `dotnet format` to fix whitespace formatting issues before committing
 
 ### Template System
-- Package first: `dotnet pack` to create bin/Release/nostify.4.4.2.nupkg
-- Install templates locally: `dotnet new install bin/Release/nostify.4.4.2.nupkg`
+- Package first: `dotnet pack` to create bin/Release/nostify.4.5.0.nupkg
+- Install templates locally: `dotnet new install bin/Release/nostify.4.5.0.nupkg`
 - Create new service: `dotnet new nostify -ag <AggregateRootName> -p <PortNumber>`
   - This creates a complete Azure Functions project with CQRS/Event Sourcing pattern
   - Example: `dotnet new nostify -ag InventoryItem -p 7072`
@@ -98,7 +98,7 @@ After making changes to the nostify library, validate by:
 2. **Test validation**: All 797 tests pass (1 skipped expected) in `dotnet test nostify.Tests/`
 3. **Template validation**: 
    - `dotnet pack` to create the NuGet package
-   - `dotnet new install bin/Release/nostify.4.4.2.nupkg` to install templates
+   - `dotnet new install bin/Release/nostify.4.5.0.nupkg` to install templates
    - Create test service: `mkdir /tmp/test && cd /tmp/test && dotnet new nostify -ag TestItem -p 7999`
    - `cd TestItem && dotnet restore && dotnet build` -- should succeed with warnings but no errors
 4. **Integration validation**: Start Cosmos DB emulator and Kafka, run generated service with `func start`
@@ -279,8 +279,8 @@ Passed!  - Failed:     0, Passed:   796, Skipped:     1, Total:   797, Duration:
 
 ### Template Installation
 ```bash
-$ dotnet new install bin/Release/nostify.4.4.2.nupkg
-Success: nostify::4.4.2 installed the following templates:
+$ dotnet new install bin/Release/nostify.4.5.0.nupkg
+Success: nostify::4.5.0 installed the following templates:
 Template Name       Short Name         Language  Tags              
 ------------------  -----------------  --------  ------------------
 Nostify Aggregate   nostifyAggregate             Azure/Microservice

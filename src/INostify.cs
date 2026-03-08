@@ -44,6 +44,15 @@ public interface INostify
     IProducer<string, string> KafkaProducer { get; }
 
     ///<summary>
+    /// Gets or creates a singleton Kafka consumer for the given consumer group.
+    /// Consumers are cached per consumer group and reused for the lifetime of the application.
+    /// Typically called with the projection's containerName as the consumer group.
+    ///</summary>
+    ///<param name="consumerGroup">The consumer group ID (e.g. projection containerName)</param>
+    ///<returns>A cached IConsumer instance for the given consumer group</returns>
+    IConsumer<string, string> GetOrCreateKafkaConsumer(string consumerGroup);
+
+    ///<summary>
     /// Projection initializer for Projections that require external data to be queried to update the projection.
     /// This property is used to initialize projections with external data events.
     ///</summary>

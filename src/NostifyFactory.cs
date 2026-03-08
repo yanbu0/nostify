@@ -93,6 +93,14 @@ public class NostifyConfig
     /// </summary>
     public ILogger? logger { get; set; } = null;
 
+    /// <summary>
+    /// When true, <see cref="NostifyFactory.Build{T}"/> will auto-create
+    /// <c>{aggregateType}_EventRequest</c> Kafka topics for every <see cref="IAggregate"/>
+    /// found in the assembly.  Set via <see cref="NostifyFactory.WithAsyncEventRequest"/>.
+    /// Default is <c>false</c>.
+    /// </summary>
+    public bool autoCreateEventRequestTopics { get; set; } = false;
+
 }
 
 ///<summary>
@@ -242,6 +250,21 @@ public static class NostifyFactory
     }
 
     /// <summary>
+    /// Enables automatic creation of <c>{aggregateType}_EventRequest</c> Kafka topics
+    /// for every <see cref="IAggregate"/> found in the assembly when
+    /// <see cref="Build{T}"/> is called.  Required when using
+    /// <c>AsyncEventRequester&lt;T&gt;</c> / <c>ExternalDataEventFactory</c>
+    /// Kafka-based async event request/response.
+    /// </summary>
+    /// <param name="config">The Nostify configuration settings.</param>
+    /// <returns>The configuration instance for fluent chaining.</returns>
+    public static NostifyConfig WithAsyncEventRequest(this NostifyConfig config)
+    {
+        config.autoCreateEventRequestTopics = true;
+        return config;
+    }
+
+    /// <summary>
     /// Builds the Nostify instance. Use generic method if wanting verbose output and/or autocreate topics.
     /// </summary>
     public static INostify Build(this NostifyConfig config)
@@ -260,6 +283,36 @@ public static class NostifyFactory
         var KafkaProducer = new ProducerBuilder<string, string>(config.producerConfig).Build();
         var HttpClientFactory = config.httpClientFactory;
 
+        // Build base consumer config from producer settings (without GroupId — set per consumer)
+        ConsumerConfig? baseConsumerConfig = null;
+        if (!string.IsNullOrEmpty(config.kafkaUrl))
+        {
+            baseConsumerConfig = new ConsumerConfig
+            {
+                BootstrapServers = config.producerConfig.BootstrapServers,
+                AutoOffsetReset = AutoOffsetReset.Latest,
+                EnableAutoCommit = true
+            };
+
+            // Mirror SASL settings from producer config if present
+            if (config.producerConfig.SecurityProtocol.HasValue)
+            {
+                baseConsumerConfig.SecurityProtocol = config.producerConfig.SecurityProtocol;
+            }
+            if (config.producerConfig.SaslMechanism.HasValue)
+            {
+                baseConsumerConfig.SaslMechanism = config.producerConfig.SaslMechanism;
+            }
+            if (!string.IsNullOrEmpty(config.producerConfig.SaslUsername))
+            {
+                baseConsumerConfig.SaslUsername = config.producerConfig.SaslUsername;
+            }
+            if (!string.IsNullOrEmpty(config.producerConfig.SaslPassword))
+            {
+                baseConsumerConfig.SaslPassword = config.producerConfig.SaslPassword;
+            }
+        }
+
         return new Nostify(
             Repository,
             DefaultPartitionKeyPath,
@@ -267,7 +320,8 @@ public static class NostifyFactory
             KafkaUrl,
             KafkaProducer,
             HttpClientFactory,
-            config.logger
+            config.logger,
+            baseConsumerConfig
         );
     }
 
@@ -311,6 +365,28 @@ public static class NostifyFactory
                 var topicSpec = new TopicSpecification { Name = topic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 };
                 topics.Add(topicSpec);
             }
+
+            // Also create _EventRequest topics for each IAggregate in the assembly (opt-in via WithAsyncEventRequest)
+            if (config.autoCreateEventRequestTopics)
+            {
+                var aggregateTypes = assembly.GetTypes().Where(t => typeof(IAggregate).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+                foreach (var aggType in aggregateTypes)
+                {
+                    var aggTypeProp = aggType.GetProperty("aggregateType", BindingFlags.Public | BindingFlags.Static);
+                    if (aggTypeProp != null)
+                    {
+                        var aggTypeName = aggTypeProp.GetValue(null)?.ToString();
+                        if (!string.IsNullOrEmpty(aggTypeName))
+                        {
+                            var eventRequestTopic = $"{aggTypeName}_EventRequest";
+                            topics.Add(new TopicSpecification { Name = eventRequestTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
+                            if (config.logger != null) config.logger.LogDebug("Adding EventRequest topic: {Topic}", eventRequestTopic);
+                            else if (verbose) Console.WriteLine($"Adding EventRequest topic: {eventRequestTopic}");
+                        }
+                    }
+                }
+            }
+
             //Filter topics to only create new topics
             var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
             topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();

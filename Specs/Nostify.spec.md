@@ -7,7 +7,7 @@
 ## Class Definition
 
 ```csharp
-public class Nostify : INostify
+public class Nostify : INostify, IDisposable
 ```
 
 ## Constructor
@@ -40,6 +40,26 @@ public Nostify(
 | `kafkaUrl` | `string` | Kafka connection URL |
 | `eventStoreContainerName` | `string` | Event store container name |
 | `Logger` | `ILogger?` | Optional structured logger for diagnostic output and retry logging. Set via `NostifyFactory.WithLogger()`. Falls back to `Console.WriteLine` when null. |
+
+## Kafka Consumer Cache
+
+The `Nostify` class maintains a `ConcurrentDictionary<string, IConsumer<string, string>>` for singleton Kafka consumers keyed by consumer group ID.
+
+### GetOrCreateKafkaConsumer
+
+```csharp
+public IConsumer<string, string> GetOrCreateKafkaConsumer(string consumerGroup)
+```
+
+Returns a cached Kafka consumer for the given consumer group. Creates one lazily on first call using the base `ConsumerConfig` (built by `NostifyFactory`) with the specified `GroupId`. Uses `ConcurrentDictionary.GetOrAdd` for thread safety.
+
+### Dispose
+
+```csharp
+public void Dispose()
+```
+
+Disposes all cached Kafka consumers (calls `Close()` then `Dispose()` on each). Implements `IDisposable`.
 
 ## Key Method Implementations
 

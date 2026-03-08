@@ -104,6 +104,21 @@ var producerConfig = new ProducerConfig
 };
 ```
 
+### Kafka Consumer Base Configuration
+
+The `Build` method also creates a base `ConsumerConfig` used by `Nostify.GetOrCreateKafkaConsumer()`:
+
+```csharp
+var baseConsumerConfig = new ConsumerConfig
+{
+    BootstrapServers = kafkaUrl,
+    AutoOffsetReset = AutoOffsetReset.Latest,
+    EnableAutoCommit = true
+};
+// SASL settings (SecurityProtocol, SaslMechanism, SaslUsername, SaslPassword)
+// are mirrored from the ProducerConfig when present.
+```
+
 ## Usage Examples
 
 ### Basic Setup
@@ -192,6 +207,22 @@ When a logger is provided:
 - The logger is automatically propagated to `RetryOptions` in `DefaultEventHandlers` and internal retry sites
 - If no logger is set, the framework falls back to `Console.WriteLine` for backwards compatibility
 
+### WithAsyncEventRequest
+
+The `.WithAsyncEventRequest()` fluent method opts-in to automatic creation of `{aggregateType}_EventRequest` Kafka topics when `Build<T>()` is called. Required when using `AsyncEventRequester<T>` / `ExternalDataEventFactory` Kafka-based async event request/response.
+
+```csharp
+var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
+    .WithKafka(kafka)
+    .WithAsyncEventRequest()   // opt-in: creates _EventRequest topics
+    .WithHttp(httpClientFactory)
+    .Build<MyAggregate>(verbose: true);
+```
+
+- Sets `NostifyConfig.autoCreateEventRequestTopics = true`
+- Without this call, `Build<T>()` creates only command topics (no `_EventRequest` topics)
+- Position in the fluent chain does not matter
+
 ## Internal Behavior
 
 The `Build` method performs these steps:
@@ -200,7 +231,19 @@ The `Build` method performs these steps:
 2. **Create Cosmos Client** - Initializes `CosmosClient` with connection string and options
 3. **Create NostifyCosmosClient** - Wraps the Cosmos client for nostify operations
 4. **Create Kafka Producer** - Initializes Kafka producer with idempotence enabled
-5. **Return Nostify Instance** - Returns configured `Nostify` implementation
+5. **Create Kafka Consumer Config** - Creates base `ConsumerConfig` with SASL settings mirrored from producer
+6. **Return Nostify Instance** - Returns configured `Nostify` implementation (with consumer config for lazy consumer creation)
+
+### Build<T>() Auto-Topic Creation
+
+The generic `Build<T>()` method (where `T : IAggregate`) performs all steps above plus automatic topic creation:
+
+1. **Scan for NostifyCommand types** - Finds all `NostifyCommand` subclasses in the assembly of `T` and creates a Kafka topic for each static command field.
+2. **Scan for IAggregate types (opt-in)** - When `config.autoCreateEventRequestTopics` is `true` (set via `.WithAsyncEventRequest()`), finds all concrete `IAggregate` implementations in the same assembly and creates an `{aggregateType}_EventRequest` topic for each. Without `.WithAsyncEventRequest()`, this step is skipped entirely.
+3. **Filter existing topics** - Queries the Kafka AdminClient for existing topics and only creates new ones.
+4. **Create topics** - Calls `CreateTopicsAsync` for all new topics.
+
+The `_EventRequest` topics use the same partition count (`kafkaTopicAutoCreatePartitions`) and replication factor as command topics. For Event Hubs, this requires `WithEventHubsManagement()` credentials (same as command topic auto-creation).
 
 ## Error Handling
 

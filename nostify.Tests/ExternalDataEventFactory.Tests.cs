@@ -396,6 +396,340 @@ public class ExternalDataEventFactoryTests
 
     #endregion
 
+    #region WithAsyncEventRequestor Tests
+
+    [Fact]
+    public void WithAsyncEventRequestor_NullableGuidSelector_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act - should not throw
+        factory.WithAsyncEventRequestor("InventoryService", p => p.externalId);
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_NonNullableGuidSelector_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithAsyncEventRequestor("SiteService", (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_NullableGuidListSelector_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithAsyncEventRequestor("TagService",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.tagIds.Cast<Guid?>().ToList()));
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_NonNullableGuidListSelector_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithAsyncEventRequestor("TagService",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.tagIds));
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_MixedNullableSelectors_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithAsyncEventRequestor("MixedService",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.externalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.tagIds.Cast<Guid?>().ToList() });
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_MixedNonNullableSelectors_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithAsyncEventRequestor("MixedService",
+            new Func<FactoryTestProjection, Guid>[] { p => p.siteId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.tagIds });
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_CalledMultipleTimes_AccumulatesRequestors()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act - should not throw
+        factory.WithAsyncEventRequestor("Service1", p => p.externalId);
+        factory.WithAsyncEventRequestor("Service2", p => p.anotherExternalId);
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_ReturnsSameFactory_ForFluentChaining()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        var result = factory.WithAsyncEventRequestor("Service1", p => p.externalId);
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void AddAsyncEventRequestors_AddsMultipleRequestors()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        var requestor1 = new AsyncEventRequester<FactoryTestProjection>("Service1", (Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+        var requestor2 = new AsyncEventRequester<FactoryTestProjection>("Service2", (Func<FactoryTestProjection, Guid?>)(p => p.anotherExternalId));
+
+        // Act
+        var result = factory.AddAsyncEventRequestors(requestor1, requestor2);
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    #endregion
+
+    #region WithDependantAsyncEventRequestor Tests
+
+    [Fact]
+    public void WithDependantAsyncEventRequestor_NullableGuidSelector_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithDependantAsyncEventRequestor("DependentService", p => p.dependentExternalId);
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithDependantAsyncEventRequestor_NonNullableGuidSelector_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithDependantAsyncEventRequestor("DependentService", (Func<FactoryTestProjection, Guid>)(p => p.dependentId));
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithDependantAsyncEventRequestor_NullableListSelector_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithDependantAsyncEventRequestor("DependentService",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.dependentExternalIds.Cast<Guid?>().ToList()));
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithDependantAsyncEventRequestor_NonNullableListSelector_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithDependantAsyncEventRequestor("DependentService",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.dependentExternalIds));
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithDependantAsyncEventRequestor_MixedNullableSelectors_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithDependantAsyncEventRequestor("DependentService",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.dependentExternalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.dependentExternalIds.Cast<Guid?>().ToList() });
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithDependantAsyncEventRequestor_MixedNonNullableSelectors_AddsRequestor()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        factory.WithDependantAsyncEventRequestor("DependentService",
+            new Func<FactoryTestProjection, Guid>[] { p => p.dependentId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.dependentExternalIds });
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithDependantAsyncEventRequestor_ReturnsSameFactory_ForFluentChaining()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act
+        var result = factory.WithDependantAsyncEventRequestor("Service1", p => p.dependentExternalId);
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void AddDependantAsyncEventRequestors_AddsMultipleRequestors()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        var requestor1 = new AsyncEventRequester<FactoryTestProjection>("Service1", (Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId));
+        var requestor2 = new AsyncEventRequester<FactoryTestProjection>("Service2", (Func<FactoryTestProjection, Guid?>)(p => p.anotherDependentExternalId));
+
+        // Act
+        var result = factory.AddDependantAsyncEventRequestors(requestor1, requestor2);
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void WithAsyncAndDependantAsyncEventRequestors_CanBeCombined()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        // Act - both types can be added to the same factory
+        factory
+            .WithAsyncEventRequestor("Service1", p => p.externalId)
+            .WithDependantAsyncEventRequestor("DependentService1", p => p.dependentExternalId);
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_DoesNotRequireHttpClient()
+    {
+        // Arrange - no HTTP client provided
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            null);
+
+        // Act - should NOT throw (unlike WithEventRequestor which requires HttpClient)
+        factory.WithAsyncEventRequestor("Service1", p => p.externalId);
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    [Fact]
+    public void WithAsyncEventRequestor_CanCombineWithHttpEventRequestors()
+    {
+        // Arrange
+        using var httpClient = new HttpClient();
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            httpClient);
+
+        // Act - combine HTTP and Kafka requestors
+        factory
+            .WithEventRequestor("https://external-service.com/events", p => p.externalId)
+            .WithAsyncEventRequestor("AsyncService", p => p.anotherExternalId);
+
+        // Assert
+        Assert.NotNull(factory);
+    }
+
+    #endregion
+
     #region GetEventsAsync Tests - Integration with ExternalDataEvent
 
     [Fact]

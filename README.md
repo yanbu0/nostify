@@ -71,6 +71,15 @@
 
 ### Updates
 
+- 4.5.0
+  - **Kafka Async Event Requests**: New `WithAsyncEventRequestor` and `WithDependantAsyncEventRequestor` methods on `ExternalDataEventFactory<P>` for fetching events from external services via Kafka instead of HTTP. Includes 6 overloads each (nullable/non-nullable single, nullable/non-nullable list, mixed nullable, mixed non-nullable) plus `AddAsyncEventRequestors` and `AddDependantAsyncEventRequestors` batch methods.
+  - **AsyncEventRequester<T>**: New configuration class mirroring `EventRequester<T>` for Kafka-based event requests. Uses `ServiceName` instead of `Url` to derive Kafka topic (`{ServiceName}_EventRequest`). Includes `GetAllForeignIdSelectors()` for list expansion.
+  - **AsyncEventRequest / AsyncEventRequestResponse**: New POCOs for Kafka request-response messaging. `AsyncEventRequestResponse.ChunkEvents()` splits large event lists into message-size-safe chunks with correlation IDs.
+  - **Singleton Kafka Consumer Cache**: `Nostify` now implements `IDisposable` and maintains a `ConcurrentDictionary<string, IConsumer>` for singleton-per-projection Kafka consumers. New `GetOrCreateKafkaConsumer(string consumerGroup)` method on `INostify` creates consumers lazily using base `ConsumerConfig` built by `NostifyFactory`.
+  - **Template AsyncEventRequestHandler**: New template event handler (`Events/AsyncEventRequestHandler.cs`) that listens to the `_EventRequest` Kafka topic, queries the event store, chunks responses, and produces them back. Supports both Kafka and EventHubs via `#if (eventHubs)` conditional.
+  - **Auto-Creation of EventRequest Topics (opt-in)**: When `.WithAsyncEventRequest()` is included in the `NostifyFactory` fluent chain, `Build<T>()` automatically creates `{aggregateType}_EventRequest` Kafka topics for every `IAggregate` in the assembly, alongside the existing command topic auto-creation. Works with both Kafka (AdminClient) and Event Hubs (with `WithEventHubsManagement()` credentials). Without `.WithAsyncEventRequest()`, no `_EventRequest` topics are created.
+  - **Environment Variables**: `AsyncEventRequestTimeoutSeconds` (default: 30) controls consumer timeout per request. `AsyncEventRequestMaxMessageBytes` (default: 900000) controls max response chunk size.
+
 - 4.4.3
   - **BulkPersistEventAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkPersistEventAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with `new RetryOptions()` defaults (maxRetries: 3, delay: 1s, exponential backoff 2x).
   - **BulkApplyAndPersistAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkApplyAndPersistAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with `new RetryOptions()` defaults (maxRetries: 3, delay: 1s, exponential backoff 2x).
@@ -726,6 +735,20 @@ If you don't provide Azure credentials with `WithEventHubsManagement()`, the `Bu
 - Terraform or other IaC tools
 
 For Kafka, topic auto-creation works without additional configuration as it uses the Kafka AdminClient.
+
+In addition to command topics, `Build<T>()` can optionally auto-create `{aggregateType}_EventRequest` topics for every `IAggregate` found in the assembly. To enable this, include `.WithAsyncEventRequest()` in the fluent chain:
+
+```csharp
+var nostify = NostifyFactory
+    .WithCosmos(apiKey, dbName, endPoint, autoCreateContainers, defaultThroughput)
+    .WithKafka(kafka)
+    .WithAsyncEventRequest()   // opt-in: creates _EventRequest topics
+    .WithHttp(httpClientFactory)
+    .WithLogger(logger)
+    .Build<InventoryItem>(verbose: true);
+```
+
+Without `.WithAsyncEventRequest()`, no `_EventRequest` topics are created. These topics are used by the async event request/response feature (`AsyncEventRequester<T>` / `ExternalDataEventFactory`) for cross-service Kafka-based event retrieval. See [Projection Initialization and External Data](#projection-initialization-and-external-data) for details.
 
 By default, the template will contain the single Aggregate specified. In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out. The AggregateCommand base class contains default implementations for Create, Update, and Delete. The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name. Note that `UpdateProperties<T>()` uses reflection, so extremely high performance may require writing code to directly handle the updates for your Aggregate's specific properties.
 
@@ -2605,6 +2628,48 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
 }
 ```
 
+**Async Kafka Event Requestors (v4.5.0+):**
+
+For services that expose a Kafka-based event request topic instead of (or in addition to) HTTP, use `WithAsyncEventRequestor` and `WithDependantAsyncEventRequestor`. These work identically to their HTTP counterparts but communicate over Kafka instead:
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient? httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify,
+        projectionsToInit,
+        httpClient,
+        pointInTime);
+
+    // Step 1: Local events
+    factory.WithSameServiceIdSelectors(p => p.customerId);
+
+    // Step 2: Async Kafka requestors (no HTTP client required)
+    // Sends request to "InventoryService_EventRequest" Kafka topic
+    factory.WithAsyncEventRequestor(
+        "InventoryService",
+        p => p.warehouseId
+    );
+
+    // Step 3: Dependent async requestors - uses IDs populated by Steps 1-2
+    factory.WithDependantAsyncEventRequestor(
+        "ShippingService",
+        p => p.shippingProviderId  // Populated by inventory events
+    );
+
+    return await factory.GetEventsAsync();
+}
+```
+
+> **Note:** Async requestors require the target service to have an `AsyncEventRequestHandler` Kafka trigger that 
+> listens on the `{ServiceName}_EventRequest` topic. The nostify template (`dotnet new nostify`) generates this 
+> handler automatically. Timeout is configurable via the `AsyncEventRequestTimeoutSeconds` environment variable 
+> (default: 30 seconds).
+
 **Complete Example with All Features:**
 
 ```C#
@@ -2633,7 +2698,7 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
         p => p.lineItemIds
     );
 
-    // External service requestors
+    // External HTTP service requestors
     if (httpClient != null)
     {
         factory.WithEventRequestor(
@@ -2642,6 +2707,12 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
         );
     }
 
+    // External Kafka async requestors (no HTTP client needed)
+    factory.WithAsyncEventRequestor(
+        "PaymentService",
+        p => p.paymentId
+    );
+
     // === Dependent Selectors (run after initial events are applied) ===
     
     // Same-service dependent IDs (populated by primary events)
@@ -2649,7 +2720,7 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
         p => p.assignedCarrierId
     );
 
-    // External dependent requestors (populated by primary events)
+    // External dependent HTTP requestors (populated by primary events)
     if (httpClient != null)
     {
         factory.WithDependantEventRequestor(
@@ -2657,6 +2728,12 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
             p => p.carrierAccountId  // Populated by carrier assignment event
         );
     }
+
+    // External dependent Kafka async requestors (populated by primary events)
+    factory.WithDependantAsyncEventRequestor(
+        "FulfillmentService",
+        p => p.fulfillmentCenterId  // Populated by payment/carrier events
+    );
 
     return await factory.GetEventsAsync();
 }
