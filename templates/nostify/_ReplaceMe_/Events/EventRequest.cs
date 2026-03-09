@@ -1,6 +1,5 @@
 
 using Microsoft.Extensions.Logging;
-using Microsoft.Azure.Cosmos;
 using nostify;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -27,23 +26,7 @@ public class EventRequest
         DateTime? pointInTime,
         FunctionContext context)
     {
-        Container eventStore = await _nostify.GetEventStoreContainerAsync();
-        
-        var eventsQuery = eventStore
-            .GetItemLinqQueryable<Event>()
-            .Where(x => aggregateRootIds.Contains(x.aggregateRootId));
-
-        // Filter by pointInTime if provided
-        if (pointInTime.HasValue)
-        {
-            eventsQuery = eventsQuery.Where(e => e.timestamp <= pointInTime.Value);
-        }
-
-        List<Event> allEvents = await eventsQuery
-            .OrderBy(e => e.timestamp)
-            .ReadAllAsync();
-
-        return allEvents;
+        return await DefaultEventRequestHandlers.HandleEventRequestAsync(_nostify, aggregateRootIds, pointInTime, _logger);
     }
 }
 
