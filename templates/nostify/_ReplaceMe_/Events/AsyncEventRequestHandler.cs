@@ -20,10 +20,12 @@ namespace _ReplaceMe__Service;
 public class AsyncEventRequestHandler
 {
     private readonly INostify _nostify;
+    private readonly ILogger<AsyncEventRequestHandler> _logger;
 
-    public AsyncEventRequestHandler(INostify nostify)
+    public AsyncEventRequestHandler(INostify nostify, ILogger<AsyncEventRequestHandler> logger)
     {
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(AsyncEventRequestHandler))]
@@ -52,13 +54,12 @@ public class AsyncEventRequestHandler
 //+:cnd:noEmit
                 ConsumerGroup = "_ReplaceMe__AsyncEventRequestHandler")
 #endif
-                ] NostifyKafkaTriggerEvent triggerEvent,
-        ILogger log)
+                ] NostifyKafkaTriggerEvent triggerEvent)
     {
         string messageValue = triggerEvent.Value;
         if (string.IsNullOrWhiteSpace(messageValue))
         {
-            log.LogWarning("Received empty Kafka message on _ReplaceMe__EventRequest topic");
+            _logger.LogWarning("Received empty Kafka message on _ReplaceMe__EventRequest topic");
             return;
         }
 
@@ -75,17 +76,17 @@ public class AsyncEventRequestHandler
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "Failed to deserialize AsyncEventRequest: {Message}", messageValue);
+            _logger.LogError(ex, "Failed to deserialize AsyncEventRequest: {Message}", messageValue);
             return;
         }
 
         if (request == null || request.aggregateRootIds == null || request.aggregateRootIds.Count == 0)
         {
-            log.LogWarning("Received invalid AsyncEventRequest: missing aggregateRootIds");
+            _logger.LogWarning("Received invalid AsyncEventRequest: missing aggregateRootIds");
             return;
         }
 
-        log.LogInformation("Processing AsyncEventRequest for {Count} aggregate root IDs, correlationId: {CorrelationId}",
+        _logger.LogInformation("Processing AsyncEventRequest for {Count} aggregate root IDs, correlationId: {CorrelationId}",
             request.aggregateRootIds.Count, request.correlationId);
 
         try
@@ -115,7 +116,7 @@ public class AsyncEventRequestHandler
                 request.correlationId
             );
 
-            log.LogInformation("Sending {ChunkCount} response chunk(s) with {EventCount} total events for correlationId: {CorrelationId}",
+            _logger.LogInformation("Sending {ChunkCount} response chunk(s) with {EventCount} total events for correlationId: {CorrelationId}",
                 chunks.Count, allEvents.Count, request.correlationId);
 
             foreach (var chunk in chunks)
@@ -129,7 +130,7 @@ public class AsyncEventRequestHandler
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "Error processing AsyncEventRequest for correlationId: {CorrelationId}", request.correlationId);
+            _logger.LogError(ex, "Error processing AsyncEventRequest for correlationId: {CorrelationId}", request.correlationId);
 
             // Send an error response so the requester doesn't hang waiting
             var errorResponse = new AsyncEventRequestResponse

@@ -11,18 +11,19 @@ public class Delete_ReplaceMe_
 
     private readonly HttpClient _httpClient;
     private readonly INostify _nostify;
-    public Delete_ReplaceMe_(HttpClient httpClient, INostify nostify)
+    private readonly ILogger<Delete_ReplaceMe_> _logger;
+    public Delete_ReplaceMe_(HttpClient httpClient, INostify nostify, ILogger<Delete_ReplaceMe_> logger)
     {
         this._httpClient = httpClient;
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(Delete_ReplaceMe_))]
     public async Task<Guid> Run(
         [HttpTrigger("delete", Route = "_ReplaceMe_/{aggregateId:guid}")] HttpRequestData req,
         FunctionContext context,
-        Guid aggregateId,
-        ILogger log)
+        Guid aggregateId)
     {
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic

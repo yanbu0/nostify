@@ -15,17 +15,18 @@ public class BulkUpdate_ReplaceMe_
 
     private readonly HttpClient _httpClient;
     private readonly INostify _nostify;
-    public BulkUpdate_ReplaceMe_(HttpClient httpClient, INostify nostify)
+    private readonly ILogger<BulkUpdate_ReplaceMe_> _logger;
+    public BulkUpdate_ReplaceMe_(HttpClient httpClient, INostify nostify, ILogger<BulkUpdate_ReplaceMe_> logger)
     {
         this._httpClient = httpClient;
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(BulkUpdate_ReplaceMe_))]
     public async Task<int> Run(
         [HttpTrigger("patch", Route = "_ReplaceMe_/BulkUpdate")] HttpRequestData req,
-        FunctionContext context,
-        ILogger log)
+        FunctionContext context)
     {
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic

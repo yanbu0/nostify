@@ -22,6 +22,10 @@ public class Program
         .ConfigureServices((context, services) =>
         {
             services.AddHttpClient();
+            services.AddLogging(loggingBuilder =>
+            {
+                loggingBuilder.AddConsole(); // Explicitly add the console logger, update this if needed
+            });
 
             var config = context.Configuration;
 
