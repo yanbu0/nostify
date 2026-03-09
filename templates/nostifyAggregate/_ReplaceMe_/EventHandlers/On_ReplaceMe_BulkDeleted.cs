@@ -10,10 +10,12 @@ namespace _ServiceName__Service;
 public class On_ReplaceMe_BulkDeleted
 {
     private readonly INostify _nostify;
+    private readonly ILogger<On_ReplaceMe_BulkDeleted> _logger;
     
-    public On_ReplaceMe_BulkDeleted(INostify nostify)
+    public On_ReplaceMe_BulkDeleted(INostify nostify, ILogger<On_ReplaceMe_BulkDeleted> logger)
     {
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(On_ReplaceMe_BulkDeleted))]
@@ -31,10 +33,9 @@ public class On_ReplaceMe_BulkDeleted
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                IsBatched = true)] string[] events,
-        ILogger log)
+                IsBatched = true)] string[] events)
     {
         int deletedCount = await DefaultEventHandlers.HandleAggregateBulkDeleteEventAsync<_ReplaceMe_>(_nostify, events);
-        log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkDeleted), deletedCount);
+        _logger.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkDeleted), deletedCount);
     }
 }

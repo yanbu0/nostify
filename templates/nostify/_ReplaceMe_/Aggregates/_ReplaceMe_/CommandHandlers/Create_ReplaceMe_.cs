@@ -15,17 +15,18 @@ public class Create_ReplaceMe_
 
     private readonly HttpClient _httpClient;
     private readonly INostify _nostify;
-    public Create_ReplaceMe_(HttpClient httpClient, INostify nostify)
+    private readonly ILogger<Create_ReplaceMe_> _logger;
+    public Create_ReplaceMe_(HttpClient httpClient, INostify nostify, ILogger<Create_ReplaceMe_> logger)
     {
         this._httpClient = httpClient;
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(Create_ReplaceMe_))]
     public async Task<Guid> Run(
         [HttpTrigger("post", Route = "_ReplaceMe_")] HttpRequestData req,
-        FunctionContext context,
-        ILogger log)
+        FunctionContext context)
     {
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic

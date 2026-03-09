@@ -12,10 +12,12 @@ public class EventRequest
 
     private readonly HttpClient _client;
     private readonly INostify _nostify;
-    public EventRequest(HttpClient httpClient, INostify nostify)
+    private readonly ILogger<EventRequest> _logger;
+    public EventRequest(HttpClient httpClient, INostify nostify, ILogger<EventRequest> logger)
     {
         this._client = httpClient;
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(EventRequest))]
@@ -23,8 +25,7 @@ public class EventRequest
         [HttpTrigger("post", Route = "EventRequest/{pointInTime:datetime?}")] HttpRequestData req,
         [FromBody] List<Guid> aggregateRootIds,
         DateTime? pointInTime,
-        FunctionContext context,
-        ILogger log)
+        FunctionContext context)
     {
         Container eventStore = await _nostify.GetEventStoreContainerAsync();
         

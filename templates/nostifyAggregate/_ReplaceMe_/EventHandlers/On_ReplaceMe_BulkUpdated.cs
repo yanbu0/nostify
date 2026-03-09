@@ -10,10 +10,12 @@ namespace _ServiceName__Service;
 public class On_ReplaceMe_BulkUpdated
 {
     private readonly INostify _nostify;
+    private readonly ILogger<On_ReplaceMe_BulkUpdated> _logger;
     
-    public On_ReplaceMe_BulkUpdated(INostify nostify)
+    public On_ReplaceMe_BulkUpdated(INostify nostify, ILogger<On_ReplaceMe_BulkUpdated> logger)
     {
         this._nostify = nostify;
+        this._logger = logger;
     }
 
     [Function(nameof(On_ReplaceMe_BulkUpdated))]
@@ -31,14 +33,13 @@ public class On_ReplaceMe_BulkUpdated
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                IsBatched = true)] string[] events,
-        ILogger log)
+                IsBatched = true)] string[] events)
     {
         // Optional: Add retry options for eventual consistency scenarios
         // var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true);
         // int updatedCount = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<_ReplaceMe_>(_nostify, events, retryOptions: retryOptions);
         // Note: If WithLogger() was called during Nostify setup, the logger is passed automatically via nostify.Logger
         int updatedCount = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<_ReplaceMe_>(_nostify, events);
-        log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkUpdated), updatedCount);
+        _logger.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkUpdated), updatedCount);
     }
 }
