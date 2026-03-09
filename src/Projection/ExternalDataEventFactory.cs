@@ -838,12 +838,12 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 continue;
             }
 
-            // Ensure consumer is subscribed to this topic
-            var topic = requestor.TopicName;
+            // Ensure consumer is subscribed to the response topic
+            var responseTopic = requestor.ResponseTopicName;
             var currentSubscription = consumer.Subscription ?? new List<string>();
-            if (!currentSubscription.Contains(topic))
+            if (!currentSubscription.Contains(responseTopic))
             {
-                var newSubscription = currentSubscription.Concat(new[] { topic }).Distinct().ToList();
+                var newSubscription = currentSubscription.Concat(new[] { responseTopic }).Distinct().ToList();
                 consumer.Subscribe(newSubscription);
                 // Poll briefly to trigger partition assignment
                 consumer.Consume(TimeSpan.FromMilliseconds(100));
@@ -855,14 +855,15 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             // Produce the request
             var request = new AsyncEventRequest
             {
-                topic = topic,
+                topic = requestor.TopicName,
+                responseTopic = responseTopic,
                 subtopic = "",
                 aggregateRootIds = foreignIds,
                 pointInTime = _pointInTime,
                 correlationId = correlationId
             };
             var requestJson = JsonConvert.SerializeObject(request);
-            await _nostify.KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = requestJson });
+            await _nostify.KafkaProducer.ProduceAsync(requestor.TopicName, new Message<string, string> { Value = requestJson });
 
             // Consume responses until complete or timeout
             var accumulatedEvents = new List<Event>();

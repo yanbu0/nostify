@@ -18,8 +18,9 @@ public class AsyncEventRequester<TProjection> where TProjection : IUniquelyIdent
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `ServiceName` | `string` | The name of the external service. Used to derive the Kafka topic. |
-| `TopicName` | `string` | Computed: `{ServiceName}_EventRequest`. The Kafka topic for request/response. |
+| `ServiceName` | `string` | The name of the external service. Used to derive the Kafka topics. |
+| `TopicName` | `string` | Computed: `{ServiceName}_EventRequest`. The Kafka topic for sending requests. |
+| `ResponseTopicName` | `string` | Computed: `{ServiceName}_EventRequestResponse`. The Kafka topic for receiving responses. |
 | `ForeignIdSelectors` | `Func<TProjection, Guid?>[]` | Functions to get foreign IDs for aggregates |
 | `SingleSelectors` | `Func<TProjection, Guid?>[]` | Single ID selectors |
 | `ListSelectors` | `Func<TProjection, List<Guid?>>[]` | List ID selectors for expanding lists |
@@ -114,8 +115,9 @@ var requester = new AsyncEventRequester<OrderProjection>(
 | Transport | HTTP (synchronous) | Kafka (asynchronous) |
 | Key Property | `Url` | `ServiceName` |
 | Requires | `HttpClient` | Kafka consumer/producer |
-| Topic Derivation | N/A | `{ServiceName}_EventRequest` |
+| Topic Derivation | N/A | `{ServiceName}_EventRequest` (request), `{ServiceName}_EventRequestResponse` (response) |
 
 ## Version History
 
 - **4.5.0** - Initial release
+- **4.5.0** - Added `ResponseTopicName` property to separate request and response topics

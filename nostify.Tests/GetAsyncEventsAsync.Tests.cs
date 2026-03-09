@@ -1392,9 +1392,9 @@ public class GetAsyncEventsAsyncTests : IDisposable
         // Act
         await factory.GetEventsAsync();
 
-        // Assert - consumer should have been subscribed to the topic
+        // Assert - consumer should have been subscribed to the response topic
         Assert.NotNull(subscribedTopics);
-        Assert.Contains("SvcA_EventRequest", subscribedTopics);
+        Assert.Contains("SvcA_EventRequestResponse", subscribedTopics);
     }
 
     [Fact]

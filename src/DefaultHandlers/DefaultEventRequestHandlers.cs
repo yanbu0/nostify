@@ -41,12 +41,6 @@ public static class DefaultEventRequestHandlers
             return;
         }
 
-        // Ignore response messages (they have the "complete" property)
-        if (messageValue.Contains("\"complete\""))
-        {
-            return;
-        }
-
         AsyncEventRequest request;
         try
         {
@@ -66,6 +60,9 @@ public static class DefaultEventRequestHandlers
 
         logger?.LogInformation("Processing AsyncEventRequest for {Count} aggregate root IDs, correlationId: {CorrelationId}",
             request.aggregateRootIds.Count, request.correlationId);
+
+        // Determine the response topic (falls back to request topic for backward compatibility)
+        string responseTopic = !string.IsNullOrEmpty(request.responseTopic) ? request.responseTopic : request.topic;
 
         try
         {
@@ -90,7 +87,7 @@ public static class DefaultEventRequestHandlers
             var chunks = AsyncEventRequestResponse.ChunkEvents(
                 allEvents,
                 maxBytes,
-                request.topic,
+                responseTopic,
                 request.subtopic ?? string.Empty,
                 request.correlationId
             );
@@ -102,7 +99,7 @@ public static class DefaultEventRequestHandlers
             {
                 var responseJson = JsonConvert.SerializeObject(chunk);
                 await nostify.KafkaProducer.ProduceAsync(
-                    request.topic,
+                    responseTopic,
                     new Message<string, string> { Value = responseJson }
                 );
             }
@@ -120,7 +117,7 @@ public static class DefaultEventRequestHandlers
             // Send an error response so the requester doesn't hang waiting
             var errorResponse = new AsyncEventRequestResponse
             {
-                topic = request.topic,
+                topic = responseTopic,
                 subtopic = request.subtopic ?? string.Empty,
                 correlationId = request.correlationId,
                 events = new List<Event>(),
@@ -128,7 +125,7 @@ public static class DefaultEventRequestHandlers
             };
             var errorJson = JsonConvert.SerializeObject(errorResponse);
             await nostify.KafkaProducer.ProduceAsync(
-                request.topic,
+                responseTopic,
                 new Message<string, string> { Value = errorJson }
             );
         }

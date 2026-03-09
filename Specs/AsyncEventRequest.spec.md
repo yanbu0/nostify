@@ -14,7 +14,8 @@ public class AsyncEventRequest
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `topic` | `string` | The Kafka topic to publish the request to and listen for the response on. Format: `{ServiceName}_EventRequest` |
+| `topic` | `string` | The Kafka topic the request is published to. Format: `{ServiceName}_EventRequest` |
+| `responseTopic` | `string` | The Kafka topic to publish responses to. Format: `{ServiceName}_EventRequestResponse`. If null, falls back to `topic` for backward compatibility. |
 | `subtopic` | `string` | Reserved for future use. Subtopic for more granular filtering. |
 | `aggregateRootIds` | `List<Guid>` | The aggregate root IDs to request events for. Defaults to empty list. |
 | `pointInTime` | `DateTime?` | Optional point in time to query events up to. If null, queries all events. |
@@ -30,6 +31,7 @@ Serialized with `Newtonsoft.Json` for Kafka transport. All properties use camelC
 var request = new AsyncEventRequest
 {
     topic = "InventoryService_EventRequest",
+    responseTopic = "InventoryService_EventRequestResponse",
     subtopic = "",
     aggregateRootIds = new List<Guid> { productId1, productId2 },
     pointInTime = DateTime.UtcNow.AddHours(-1),
@@ -46,3 +48,4 @@ var request = new AsyncEventRequest
 ## Version History
 
 - **4.5.0** - Initial release
+- **4.5.0** - Added `responseTopic` property to separate request and response topics

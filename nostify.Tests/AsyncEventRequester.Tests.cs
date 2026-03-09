@@ -207,6 +207,28 @@ public class AsyncEventRequesterTests
         Assert.Equal("ServiceB_EventRequest", requester2.TopicName);
     }
 
+    [Fact]
+    public void ResponseTopicName_ReturnsServiceNameWithResponseSuffix()
+    {
+        // Arrange
+        var requester = new AsyncEventRequester<FactoryTestProjection>("InventoryService", Array.Empty<Func<FactoryTestProjection, Guid?>>());
+
+        // Act & Assert
+        Assert.Equal("InventoryService_EventRequestResponse", requester.ResponseTopicName);
+    }
+
+    [Fact]
+    public void ResponseTopicName_DifferentServiceNames()
+    {
+        // Arrange & Act
+        var requester1 = new AsyncEventRequester<FactoryTestProjection>("ServiceA", Array.Empty<Func<FactoryTestProjection, Guid?>>());
+        var requester2 = new AsyncEventRequester<FactoryTestProjection>("ServiceB", Array.Empty<Func<FactoryTestProjection, Guid?>>());
+
+        // Assert
+        Assert.Equal("ServiceA_EventRequestResponse", requester1.ResponseTopicName);
+        Assert.Equal("ServiceB_EventRequestResponse", requester2.ResponseTopicName);
+    }
+
     #endregion
 
     #region Validation Tests

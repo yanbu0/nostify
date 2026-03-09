@@ -185,6 +185,7 @@ public class AsyncEventRequestResponseTests
         var request = new AsyncEventRequest
         {
             topic = "TestService_EventRequest",
+            responseTopic = "TestService_EventRequestResponse",
             subtopic = "",
             aggregateRootIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() },
             pointInTime = DateTime.UtcNow.AddHours(-1),
@@ -198,6 +199,7 @@ public class AsyncEventRequestResponseTests
         // Assert
         Assert.NotNull(deserialized);
         Assert.Equal(request.topic, deserialized.topic);
+        Assert.Equal(request.responseTopic, deserialized.responseTopic);
         Assert.Equal(request.subtopic, deserialized.subtopic);
         Assert.Equal(request.aggregateRootIds.Count, deserialized.aggregateRootIds.Count);
         Assert.Equal(request.correlationId, deserialized.correlationId);

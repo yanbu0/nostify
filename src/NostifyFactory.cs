@@ -382,6 +382,11 @@ public static class NostifyFactory
                             topics.Add(new TopicSpecification { Name = eventRequestTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
                             if (config.logger != null) config.logger.LogDebug("Adding EventRequest topic: {Topic}", eventRequestTopic);
                             else if (verbose) Console.WriteLine($"Adding EventRequest topic: {eventRequestTopic}");
+
+                            var eventRequestResponseTopic = $"{aggTypeName}_EventRequestResponse";
+                            topics.Add(new TopicSpecification { Name = eventRequestResponseTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
+                            if (config.logger != null) config.logger.LogDebug("Adding EventRequestResponse topic: {Topic}", eventRequestResponseTopic);
+                            else if (verbose) Console.WriteLine($"Adding EventRequestResponse topic: {eventRequestResponseTopic}");
                         }
                     }
                 }

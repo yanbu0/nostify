@@ -10,10 +10,17 @@ namespace nostify;
 public class AsyncEventRequest
 {
     /// <summary>
-    /// The Kafka topic to publish the request to and listen for the response on.
+    /// The Kafka topic the request is published to.
     /// Format: {serviceName}_EventRequest
     /// </summary>
     public string topic { get; set; }
+
+    /// <summary>
+    /// The Kafka topic to publish the response to.
+    /// Format: {serviceName}_EventRequestResponse
+    /// If null, falls back to <see cref="topic"/> for backward compatibility.
+    /// </summary>
+    public string responseTopic { get; set; }
 
     /// <summary>
     /// Reserved for future use. Subtopic for more granular filtering.

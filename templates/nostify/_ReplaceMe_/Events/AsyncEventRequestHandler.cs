@@ -9,7 +9,7 @@ namespace _ReplaceMe__Service;
 /// <summary>
 /// Kafka trigger that handles incoming <see cref="AsyncEventRequest"/> messages.
 /// Queries the event store for the requested aggregate root IDs and publishes
-/// <see cref="AsyncEventRequestResponse"/> chunks back to the same topic.
+/// <see cref="AsyncEventRequestResponse"/> chunks to the response topic specified in the request.
 /// </summary>
 public class AsyncEventRequestHandler
 {

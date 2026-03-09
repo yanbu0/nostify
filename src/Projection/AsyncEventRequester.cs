@@ -18,9 +18,14 @@ public class AsyncEventRequester<TProjection> where TProjection : IUniquelyIdent
     public string ServiceName { get; }
 
     /// <summary>
-    /// The Kafka topic name derived from the service name.
+    /// The Kafka topic name for sending requests, derived from the service name.
     /// </summary>
     public string TopicName => $"{ServiceName}_EventRequest";
+
+    /// <summary>
+    /// The Kafka topic name for receiving responses, derived from the service name.
+    /// </summary>
+    public string ResponseTopicName => $"{ServiceName}_EventRequestResponse";
 
     /// <summary>
     /// Functions to get the foreign id for the aggregates required to populate one or more fields in the projection.
