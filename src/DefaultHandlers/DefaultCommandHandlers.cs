@@ -192,7 +192,48 @@ public static class DefaultCommandHandler
     /// <returns>The count of aggregate roots that were created</returns>
     public async static Task<int> HandleBulkCreate<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
-        List<dynamic> newObjects = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync()) ?? new List<dynamic>();
+        List<T> newObjects = JsonConvert.DeserializeObject<List<T>>(await new StreamReader(req.Body).ReadToEndAsync()) 
+            ?? throw new NostifyException($"Failed to deserialize request body to list of objects of type {typeof(T).Name}.");
+        return await HandleBulkCreate<T>(nostify, command, newObjects, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
+    }
+
+    /// <summary>
+    /// Handles bulk POST operations for aggregate roots by creating and persisting multiple events from request data.
+    /// Uses configurable RetryOptions for per-item retry behavior.
+    /// </summary>
+    /// <typeparam name="T">The aggregate type that implements IAggregate</typeparam>
+    /// <param name="nostify">The Nostify instance for event persistence</param>
+    /// <param name="command">The command to execute for each item</param>
+    /// <param name="newObjects">The list of objects to create</param>
+    /// <param name="userId">Optional user identifier for the operations</param>
+    /// <param name="partitionKey">Optional tenant identifier for the operations</param>
+    /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
+    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic.</param>
+    /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
+    /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
+    /// <returns>The count of aggregate roots that were created</returns>
+    public async static Task<int> HandleBulkCreate<T>(INostify nostify, NostifyCommand command, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, bool allowRetry = false, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
+    {
+        return await HandleBulkCreate<T>(nostify, command, newObjects, userId, partitionKey, batchSize, allowRetry ? new RetryOptions() : null, publishErrorEvents, partitionKeyName);
+    }
+
+    /// <summary>
+    /// Handles bulk POST operations for aggregate roots by creating and persisting multiple events from request data.
+    /// Uses configurable RetryOptions for per-item retry behavior.
+    /// </summary>
+    /// <typeparam name="T">The aggregate type that implements IAggregate</typeparam>
+    /// <param name="nostify">The Nostify instance for event persistence</param>
+    /// <param name="command">The command to execute for each item</param>
+    /// <param name="newObjects">The list of objects to create</param>
+    /// <param name="userId">Optional user identifier for the operations</param>
+    /// <param name="partitionKey">Optional tenant identifier for the operations</param>
+    /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
+    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic.</param>
+    /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
+    /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
+    /// <returns>The count of aggregate roots that were created</returns>
+    public async static Task<int> HandleBulkCreate<T>(INostify nostify, NostifyCommand command, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
+    {
         List<IEvent> peList = new List<IEvent>();
 
         newObjects.ForEach(e =>
@@ -200,7 +241,7 @@ public static class DefaultCommandHandler
             Guid newId = Guid.NewGuid();
             e.id = newId;
 
-            e[partitionKeyName] = partitionKey;
+            ((dynamic)e)[partitionKeyName] = partitionKey;
             
             IEvent pe = new EventFactory().Create<T>(command, newId, e, userId, partitionKey);
             peList.Add(pe);
