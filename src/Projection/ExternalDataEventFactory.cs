@@ -829,7 +829,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 from p in projections
                 from f in allSelectors
                 let foreignId = f(p)
-                where foreignId.HasValue
+                where foreignId.HasValue && foreignId.Value != Guid.Empty
                 select foreignId!.Value
             ).Distinct().ToList();
 

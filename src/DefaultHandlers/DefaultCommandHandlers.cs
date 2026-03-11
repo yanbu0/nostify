@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -241,7 +242,9 @@ public static class DefaultCommandHandler
             Guid newId = Guid.NewGuid();
             e.id = newId;
 
-            ((dynamic)e)[partitionKeyName] = partitionKey;
+            var propertyInfo = e.GetType().GetProperty(partitionKeyName) 
+                ?? throw new InvalidOperationException($"Property '{partitionKeyName}' not found on type '{typeof(T).Name}'");
+            propertyInfo.SetValue(e, partitionKey);
             
             IEvent pe = new EventFactory().Create<T>(command, newId, e, userId, partitionKey);
             peList.Add(pe);
