@@ -19,6 +19,8 @@
 
 - Multi-tenant by default, ideal for SaaS applications
 
+- Flexible Cross-Service Event Requests: Fetch events from external microservices via **HTTP**, **Kafka**, or **gRPC** using a unified fluent API (`ExternalDataEventFactory`). Choose the transport that fits your architecture — synchronous HTTP for simplicity, async Kafka for decoupled high-throughput message streaming, or gRPC for low-latency binary streaming between services.
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -81,6 +83,13 @@
   - **Template AsyncEventRequestHandler**: New template event handler (`Events/AsyncEventRequestHandler.cs`) that listens to the `_EventRequest` Kafka topic and delegates to `DefaultEventRequestHandlers.HandleAsyncEventRequestAsync`. Supports both Kafka and EventHubs via `#if (eventHubs)` conditional.
   - **Auto-Creation of EventRequest Topics (opt-in)**: When `.WithAsyncEventRequest()` is included in the `NostifyFactory` fluent chain, `Build<T>()` automatically creates `{aggregateType}_EventRequest` and `{aggregateType}_EventRequestResponse` Kafka topics for every `IAggregate` in the assembly, alongside the existing command topic auto-creation. Works with both Kafka (AdminClient) and Event Hubs (with `WithEventHubsManagement()` credentials). Without `.WithAsyncEventRequest()`, no `_EventRequest` topics are created.
   - **Environment Variables**: `AsyncEventRequestTimeoutSeconds` (default: 30) controls consumer timeout per request. `AsyncEventRequestMaxMessageBytes` (default: 900000) controls max response chunk size.
+  - **gRPC Event Requests**: New `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` methods on `ExternalDataEventFactory<P>` for fetching events from external services via gRPC (unary RPC). Includes overloads for nullable/non-nullable single selectors, list selectors, and mixed selectors, plus `AddGrpcEventRequestors` and `AddDependantGrpcEventRequestors` batch methods.
+  - **GrpcEventRequester<T>**: New configuration class mirroring `EventRequester<T>` and `AsyncEventRequester<T>` for gRPC-based event requests. Uses `Address` (e.g., `https://order-service:5001`) to connect to the target service's gRPC endpoint. Includes `GetAllForeignIdSelectors()` for list expansion.
+  - **GrpcEventMapping**: Static helper class for converting between nostify `Event` objects and protobuf `EventMessage` messages. Handles Guid↔string, DateTime↔Timestamp, NostifyCommand↔CommandMessage, and payload serialization via Newtonsoft.Json.
+  - **Proto Contract**: New `event_request.proto` defines the `EventRequestService` with a `RequestEvents` unary RPC. Messages include `EventRequestMessage` (aggregate root IDs, optional point-in-time), `EventResponseMessage` (repeated events), `EventMessage` (full event data), and `CommandMessage`.
+  - **DefaultEventRequestHandlers.HandleGrpcEventRequestAsync**: New server-side handler that processes gRPC `EventRequestMessage` requests. Parses aggregate root IDs, delegates to the existing `HandleEventRequestAsync`, and maps results to protobuf via `GrpcEventMapping`.
+  - **Template GrpcEventRequestService**: New template file (`Events/GrpcEventRequestService.cs`) that extends `EventRequestService.EventRequestServiceBase` and delegates to `DefaultEventRequestHandlers.HandleGrpcEventRequestAsync`.
+  - **New NuGet Dependencies**: `Google.Protobuf` 3.29.3, `Grpc.Net.Client` 2.67.0, `Grpc.Tools` 2.69.0 (private assets, build-time only).
 
 - 4.4.3
   - **BulkPersistEventAsync RetryOptions Support**: Added a new `RetryOptions?` overload to `BulkPersistEventAsync` (on both `INostify` and `Nostify`) for configurable per-item retry behavior. The existing `bool allowRetry` overload is preserved and delegates to the new overload with `new RetryOptions()` defaults (maxRetries: 3, delay: 1s, exponential backoff 2x).
@@ -2672,7 +2681,89 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
 > handler automatically. Timeout is configurable via the `AsyncEventRequestTimeoutSeconds` environment variable 
 > (default: 30 seconds).
 
-**Complete Example with All Features:**
+**gRPC Event Requestors (v4.5.0+):**
+
+For services that expose a gRPC endpoint, use `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor`. gRPC uses Protocol Buffers for binary serialization and HTTP/2 for transport, providing lower latency and smaller payloads than HTTP/JSON — ideal for high-throughput service-to-service communication:
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient? httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify,
+        projectionsToInit,
+        httpClient,
+        pointInTime);
+
+    // Step 1: Local events
+    factory.WithSameServiceIdSelectors(p => p.customerId);
+
+    // Step 2: gRPC requestors (no HTTP client required)
+    // Connects to the target service's gRPC endpoint
+    factory.WithGrpcEventRequestor(
+        "https://inventory-service:5001",
+        p => p.warehouseId
+    );
+
+    // Multiple foreign IDs from the same gRPC service
+    factory.WithGrpcEventRequestor(
+        "https://payment-service:5002",
+        p => p.paymentMethodId,
+        p => p.billingAccountId
+    );
+
+    // Step 3: Dependent gRPC requestors - uses IDs populated by Steps 1-2
+    factory.WithDependantGrpcEventRequestor(
+        "https://shipping-service:5003",
+        p => p.shippingProviderId  // Populated by inventory events
+    );
+
+    return await factory.GetEventsAsync();
+}
+```
+
+**Bulk-adding pre-built gRPC requestors:**
+
+```C#
+// Pre-build requestor objects and add them all at once
+var grpcRequestors = new GrpcEventRequester<OrderProjection>[]
+{
+    new GrpcEventRequester<OrderProjection>("https://inventory-service:5001", p => p.warehouseId),
+    new GrpcEventRequester<OrderProjection>("https://payment-service:5002", p => p.paymentMethodId)
+};
+
+var factory = new ExternalDataEventFactory<OrderProjection>(
+    nostify, projectionsToInit, httpClient, pointInTime);
+factory.AddGrpcEventRequestors(grpcRequestors);
+var events = await factory.GetEventsAsync();
+```
+
+**gRPC with list selectors (one-to-many relationships):**
+
+```C#
+// When a projection has a list of foreign IDs
+factory.WithGrpcEventRequestor(
+    "https://tag-service:5004",
+    new Func<OrderProjection, List<Guid?>>[] { p => p.tagIds }
+);
+
+// Mixed single and list selectors
+factory.WithGrpcEventRequestor(
+    "https://fulfillment-service:5005",
+    singleSelectors: new Func<OrderProjection, Guid?>[] { p => p.primaryWarehouseId },
+    listSelectors: new Func<OrderProjection, List<Guid?>>[] { p => p.backupWarehouseIds }
+);
+```
+
+> **Note:** gRPC requestors require the target service to implement `EventRequestService.EventRequestServiceBase`
+> and register the gRPC service in its `Program.cs`. The nostify template (`dotnet new nostify`) generates
+> `GrpcEventRequestService.cs` and the `event_request.proto` file automatically. The service delegates to
+> `DefaultEventRequestHandlers.HandleGrpcEventRequestAsync` for event store queries.
+
+**Complete Example with All Features (HTTP + Kafka + gRPC):**
 
 ```C#
 public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
@@ -2715,6 +2806,12 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
         p => p.paymentId
     );
 
+    // External gRPC requestors (no HTTP client needed)
+    factory.WithGrpcEventRequestor(
+        "https://pricing-service:5001",
+        p => p.pricingRuleId
+    );
+
     // === Dependent Selectors (run after initial events are applied) ===
     
     // Same-service dependent IDs (populated by primary events)
@@ -2735,6 +2832,12 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
     factory.WithDependantAsyncEventRequestor(
         "FulfillmentService",
         p => p.fulfillmentCenterId  // Populated by payment/carrier events
+    );
+
+    // External dependent gRPC requestors (populated by primary events)
+    factory.WithDependantGrpcEventRequestor(
+        "https://logistics-service:5002",
+        p => p.logisticsPartnerId  // Populated by fulfillment events
     );
 
     return await factory.GetEventsAsync();
