@@ -246,6 +246,9 @@
 - Better support for non-command events
 - Enhanced saga orchestration patterns
 - Additional query optimization features
+- Additional messaging bus support (currently just Kafka or Event Hubs)
+    - RabbitMQ
+    - Redis streams
 
 
 ## Getting Started
