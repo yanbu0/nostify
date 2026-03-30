@@ -34,6 +34,8 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 | [AsyncEventRequester](AsyncEventRequester.spec.md) | External service event configuration (Kafka) |
 | [AsyncEventRequest](AsyncEventRequest.spec.md) | Kafka async event request message |
 | [AsyncEventRequestResponse](AsyncEventRequestResponse.spec.md) | Kafka async event response message with chunking |
+| [GrpcEventRequester](GrpcEventRequester.spec.md) | External service event configuration (gRPC) |
+| [GrpcEventMapping](GrpcEventMapping.spec.md) | Proto ↔ Event bidirectional mapping helpers |
 
 ## Projection Module
 
@@ -133,7 +135,7 @@ var order = await nostify.RehydrateAsync<Order>(orderId);
 
 ## Version History
 
-- **4.5.0** - Kafka async event request/response for ExternalDataEventFactory, singleton consumer cache, AsyncEventRequester, template AsyncEventRequestHandler
+- **4.5.0** - Kafka async event request/response for ExternalDataEventFactory, singleton consumer cache, AsyncEventRequester, template AsyncEventRequestHandler. gRPC transport: GrpcEventRequester, GrpcEventMapping, ExternalDataEvent gRPC overloads, factory WithGrpcEventRequestor/WithDependantGrpcEventRequestor, HandleGrpcEventRequestAsync handler, GrpcEventRequestService template
 - **4.4.2** - RetryOptions plumbing, new bulk retry methods, signature updates, and documentation updates (README, copilot-instructions sync with codebase)
 - **4.4.1** - Unified retry logic via RetryableContainer, exponential backoff, ILogger support, ContinueWith replacement, bug fixes
 - **4.3.0** - Added nullable Guid? selector support in ExternalDataEventFactory, fluent API chaining

@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+option csharp_namespace = "nostify.Grpc";
+
+package nostify;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+/// Service for requesting events from an external microservice's event store.
+/// This is the gRPC equivalent of the HTTP EventRequest endpoint and the Kafka AsyncEventRequest pattern.
+service EventRequestService {
+  /// Requests events for a set of aggregate root IDs, optionally filtered to a point in time.
+  rpc RequestEvents (EventRequestMessage) returns (EventResponseMessage);
+}
+
+/// Request message containing the aggregate root IDs to query events for.
+message EventRequestMessage {
+  /// The aggregate root IDs to request events for (GUID strings).
+  repeated string aggregate_root_ids = 1;
+
+  /// Optional point in time to query events up to. If not set, queries all events.
+  google.protobuf.Timestamp point_in_time = 2;
+
+  /// Whether point_in_time was explicitly set (since Timestamp has a zero default).
+  bool has_point_in_time = 3;
+}
+
+/// Response message containing the events retrieved from the event store.
+message EventResponseMessage {
+  /// The events matching the requested aggregate root IDs.
+  repeated EventMessage events = 1;
+}
+
+/// Represents a single event from the event store.
+message EventMessage {
+  /// Unique ID of this event (GUID string).
+  string id = 1;
+
+  /// The aggregate root ID this event belongs to (GUID string).
+  string aggregate_root_id = 2;
+
+  /// The command that produced this event.
+  CommandMessage command = 3;
+
+  /// The event payload serialized as JSON.
+  string payload_json = 4;
+
+  /// Timestamp when the event was created.
+  google.protobuf.Timestamp timestamp = 5;
+
+  /// Partition key (GUID string).
+  string partition_key = 6;
+
+  /// User ID responsible for this event (GUID string).
+  string user_id = 7;
+
+  /// Schema version of the event.
+  int32 schema_version = 8;
+}
+
+/// Represents a NostifyCommand.
+message CommandMessage {
+  /// The command name (e.g. "Create_User").
+  string name = 1;
+
+  /// Whether this command creates a new aggregate.
+  bool is_new = 2;
+
+  /// Whether this command allows null payloads.
+  bool allow_null_payload = 3;
+}

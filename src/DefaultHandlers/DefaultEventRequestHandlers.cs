@@ -167,4 +167,52 @@ public static class DefaultEventRequestHandlers
 
         return allEvents;
     }
+
+    /// <summary>
+    /// Handles a gRPC event request by querying the event store for the specified
+    /// aggregate root IDs, optionally filtered to a point in time, and returns a protobuf response.
+    /// This method is intended to be called from a gRPC service implementation that extends
+    /// <c>EventRequestService.EventRequestServiceBase</c>.
+    /// </summary>
+    /// <param name="nostify">The nostify instance for accessing the event store.</param>
+    /// <param name="request">The gRPC request message containing aggregate root IDs and optional point in time.</param>
+    /// <param name="logger">Optional logger. Falls back to <c>nostify.Logger</c> if null.</param>
+    /// <returns>A gRPC response message containing the matching events.</returns>
+    public static async Task<nostify.Grpc.EventResponseMessage> HandleGrpcEventRequestAsync(
+        INostify nostify,
+        nostify.Grpc.EventRequestMessage request,
+        ILogger? logger = null)
+    {
+        logger ??= nostify.Logger;
+        var sw = Stopwatch.StartNew();
+
+        if (request == null || request.AggregateRootIds == null || request.AggregateRootIds.Count == 0)
+        {
+            logger?.LogWarning("Received invalid gRPC EventRequest: missing aggregateRootIds");
+            return new nostify.Grpc.EventResponseMessage();
+        }
+
+        var aggregateRootIds = request.AggregateRootIds
+            .Where(id => Guid.TryParse(id, out _))
+            .Select(id => Guid.Parse(id))
+            .ToList();
+
+        DateTime? pointInTime = request.HasPointInTime && request.PointInTime != null
+            ? request.PointInTime.ToDateTime()
+            : null;
+
+        logger?.LogInformation("Processing gRPC EventRequest for {Count} aggregate root IDs",
+            aggregateRootIds.Count);
+
+        List<Event> allEvents = await HandleEventRequestAsync(nostify, aggregateRootIds, pointInTime, logger);
+
+        var response = new nostify.Grpc.EventResponseMessage();
+        response.Events.AddRange(GrpcEventMapping.MapToProto(allEvents));
+
+        sw.Stop();
+        logger?.LogInformation("HandleGrpcEventRequestAsync completed in {ElapsedMs}ms, returned {EventCount} events",
+            sw.ElapsedMilliseconds, allEvents.Count);
+
+        return response;
+    }
 }

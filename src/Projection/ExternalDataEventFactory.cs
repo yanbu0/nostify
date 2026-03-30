@@ -30,6 +30,8 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     private EventRequester<P>[] _dependantEventRequestors = new EventRequester<P>[0];
     private AsyncEventRequester<P>[] _asyncEventRequestors = new AsyncEventRequester<P>[0];
     private AsyncEventRequester<P>[] _dependantAsyncEventRequestors = new AsyncEventRequester<P>[0];
+    private GrpcEventRequester<P>[] _grpcEventRequestors = new GrpcEventRequester<P>[0];
+    private GrpcEventRequester<P>[] _dependantGrpcEventRequestors = new GrpcEventRequester<P>[0];
     private List<P> _projectionsToInit = new List<P>();
     private DateTime? _pointInTime;
 
@@ -381,6 +383,166 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
     #endregion
 
+    #region gRPC Event Requestors
+
+    /// <summary>
+    /// Adds gRPC event requestors for fetching events from external services via gRPC.
+    /// </summary>
+    /// <param name="grpcEventRequestors">gRPC event requestors containing addresses and ID selectors</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> AddGrpcEventRequestors(params GrpcEventRequester<P>[] grpcEventRequestors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Concat(grpcEventRequestors).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address (e.g. "https://localhost:5001")</param>
+    /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, foreignIdSelectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using non-nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, Guid>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using non-nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, List<Guid>>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor using a mix of single nullable and list nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="single">Functions that return a single nullable foreign id</param>
+    /// <param name="list">Functions that return a list of nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor using a mix of single non-nullable and list non-nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="single">Functions that return a single non-nullable foreign id</param>
+    /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds dependent gRPC event requestors. Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="grpcEventRequestors">gRPC event requestors for external services with dependent ID selectors</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> AddDependantGrpcEventRequestors(params GrpcEventRequester<P>[] grpcEventRequestors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Concat(grpcEventRequestors).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor via gRPC, using nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, foreignIdSelectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor via gRPC, using non-nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, Guid>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor via gRPC, using nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor via gRPC, using non-nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, List<Guid>>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor using a mix of single nullable and list nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor using a mix of single non-nullable and list non-nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    #endregion
+
     public async Task<List<ExternalDataEvent>> GetEventsAsync()
     {
         var result = new List<ExternalDataEvent>();
@@ -455,6 +617,16 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             result.AddRange(asyncEvents);
         }
 
+        // Handle gRPC event requestors
+        if (_grpcEventRequestors.Any())
+        {
+            var grpcEvents = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync<P>(
+                this._projectionsToInit,
+                this._pointInTime,
+                this._grpcEventRequestors);
+            result.AddRange(grpcEvents);
+        }
+
         // Handle dependent selectors - these require applying ALL initial events first to get the IDs
         // This runs after both local and external events have been collected
         if (_dependantIdSelectors.Any() || _dependantListIdSelectors.Any() || _nullableDependantIdSelectors.Any() || _nullableDependantListIdSelectors.Any())
@@ -475,6 +647,13 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         {
             var dependantAsyncEvents = await GetDependantAsyncEventsAsync(result);
             result.AddRange(dependantAsyncEvents);
+        }
+
+        // Handle dependent gRPC event requestors - these also require applying initial events first
+        if (_dependantGrpcEventRequestors.Any())
+        {
+            var dependantGrpcEvents = await GetDependantGrpcEventsAsync(result);
+            result.AddRange(dependantGrpcEvents);
         }
 
         return result; 
@@ -790,6 +969,47 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
         // Map the results back to the original projection IDs (they should already match since we use projection.id)
         return asyncEvents;
+    }
+
+    /// <summary>
+    /// Gets events from external services for dependent gRPC requestors by first applying the initial events
+    /// to projections, then using the dependent gRPC event requestors to fetch events via gRPC.
+    /// </summary>
+    private async Task<List<ExternalDataEvent>> GetDependantGrpcEventsAsync(List<ExternalDataEvent> initialEvents)
+    {
+        // Create temporary copies of projections and apply initial events
+        var projectionsWithAppliedEvents = new List<P>();
+        foreach (var projection in _projectionsToInit)
+        {
+            var json = JsonConvert.SerializeObject(projection);
+            var projectionCopy = JsonConvert.DeserializeObject<P>(json);
+
+            if (projectionCopy == null)
+            {
+                continue;
+            }
+
+            var eventsForProjection = initialEvents
+                .Where(e => e.aggregateRootId == projection.id)
+                .SelectMany(e => e.events)
+                .OrderBy(e => e.timestamp);
+
+            foreach (var evt in eventsForProjection)
+            {
+                projectionCopy.Apply(evt);
+            }
+
+            projectionsWithAppliedEvents.Add(projectionCopy);
+        }
+
+        // Use the updated projections with the dependent gRPC event requestors
+        var grpcEvents = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync<P>(
+            projectionsWithAppliedEvents,
+            _pointInTime,
+            _dependantGrpcEventRequestors);
+
+        // Map the results back to the original projection IDs (they should already match since we use projection.id)
+        return grpcEvents;
     }
 
     /// <summary>

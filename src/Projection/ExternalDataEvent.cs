@@ -414,6 +414,128 @@ public class ExternalDataEvent
     {
         return await GetMultiServiceEventsAsync(httpClient, projectionsToInit, null, eventRequests);
     }
+
+    #region gRPC Methods
+
+    /// <summary>
+    /// Gets the events needed to initialize a list of projections from an external service via gRPC.
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="channel">The gRPC channel to use for the call</param>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
+    /// <returns>List of ExternalDataEvent</returns>
+    public async static Task<List<ExternalDataEvent>> GetEventsViaGrpcAsync<TProjection>(
+        global::Grpc.Net.Client.GrpcChannel channel,
+        List<TProjection> projectionsToInit,
+        DateTime? pointInTime = null,
+        params Func<TProjection, Guid?>[] foreignIdSelectors)
+        where TProjection : IUniquelyIdentifiable
+    {
+        if (channel == null)
+        {
+            throw new NostifyException("gRPC channel is required to get events from an external service");
+        }
+
+        var result = new List<ExternalDataEvent>();
+
+        var foreignIds =
+            from p in projectionsToInit
+            from f in foreignIdSelectors
+            let foreignId = f(p)
+            where foreignId.HasValue
+            select foreignId!.Value;
+
+        if (foreignIds.Any())
+        {
+            var client = new nostify.Grpc.EventRequestService.EventRequestServiceClient(channel);
+
+            var request = new nostify.Grpc.EventRequestMessage();
+            request.AggregateRootIds.AddRange(foreignIds.Distinct().Select(id => id.ToString()));
+
+            if (pointInTime.HasValue)
+            {
+                request.HasPointInTime = true;
+                request.PointInTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(
+                    DateTime.SpecifyKind(pointInTime.Value, DateTimeKind.Utc));
+            }
+
+            var response = await client.RequestEventsAsync(request);
+
+            var events = GrpcEventMapping.MapFromProto(response.Events)
+                .ToLookup(e => e.aggregateRootId);
+
+            result = (
+                from p in projectionsToInit
+                from f in foreignIdSelectors
+                let foreignId = f(p)
+                where foreignId.HasValue
+                let eventList = events[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
+                where eventList.Any()
+                select new ExternalDataEvent(p.id, eventList)
+            ).ToList();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets events from multiple external services via gRPC in parallel.
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="grpcRequestors">Array of GrpcEventRequester objects containing addresses and foreign ID selectors</param>
+    /// <returns>Combined list of ExternalDataEvent from all gRPC services</returns>
+    public async static Task<List<ExternalDataEvent>> GetMultiServiceEventsViaGrpcAsync<TProjection>(
+        List<TProjection> projectionsToInit,
+        DateTime? pointInTime = null,
+        params GrpcEventRequester<TProjection>[] grpcRequestors)
+        where TProjection : IUniquelyIdentifiable
+    {
+        if (grpcRequestors == null || grpcRequestors.Length == 0)
+        {
+            return new List<ExternalDataEvent>();
+        }
+
+        var tasks = grpcRequestors.Select(requestor =>
+        {
+            var allSelectors = requestor.ListSelectors.Any()
+                ? requestor.GetAllForeignIdSelectors(projectionsToInit)
+                : requestor.ForeignIdSelectors;
+
+            var channel = global::Grpc.Net.Client.GrpcChannel.ForAddress(requestor.Address);
+            return GetEventsViaGrpcAsync(channel, projectionsToInit, pointInTime, allSelectors);
+        }).ToArray();
+
+        var results = await Task.WhenAll(tasks);
+
+        var combinedResults = new List<ExternalDataEvent>();
+        foreach (var r in results)
+        {
+            combinedResults.AddRange(r);
+        }
+
+        return combinedResults;
+    }
+
+    /// <summary>
+    /// Gets events from multiple external services via gRPC in parallel (backward compatibility overload without pointInTime).
+    /// </summary>
+    /// <typeparam name="TProjection">Type of the projection</typeparam>
+    /// <param name="projectionsToInit">List of projections to initialize</param>
+    /// <param name="grpcRequestors">Array of GrpcEventRequester objects containing addresses and foreign ID selectors</param>
+    /// <returns>Combined list of ExternalDataEvent from all gRPC services</returns>
+    public async static Task<List<ExternalDataEvent>> GetMultiServiceEventsViaGrpcAsync<TProjection>(
+        List<TProjection> projectionsToInit,
+        params GrpcEventRequester<TProjection>[] grpcRequestors)
+        where TProjection : IUniquelyIdentifiable
+    {
+        return await GetMultiServiceEventsViaGrpcAsync(projectionsToInit, null, grpcRequestors);
+    }
+
+    #endregion
 }
 
 class ProjectionToEventGuid<TProjection>
