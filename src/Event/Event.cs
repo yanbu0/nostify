@@ -125,7 +125,7 @@ public class Event : IEvent
     public Guid aggregateRootId { get; set; }
 
     /// <inheritdoc />
-    public int schemaVersion { get; } = 1; //Update to reflect schema changes in Event
+    public int schemaVersion { get; init; } = 1; //Update to reflect schema changes in Event
 
     /// <inheritdoc />
     public object payload { get; set; }

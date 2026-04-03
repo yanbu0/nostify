@@ -424,12 +424,14 @@ public class ExternalDataEvent
     /// <param name="channel">The gRPC channel to use for the call</param>
     /// <param name="projectionsToInit">List of projections to initialize</param>
     /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server (empty string for single-service servers)</param>
     /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
     /// <returns>List of ExternalDataEvent</returns>
     public async static Task<List<ExternalDataEvent>> GetEventsViaGrpcAsync<TProjection>(
         global::Grpc.Net.Client.GrpcChannel channel,
         List<TProjection> projectionsToInit,
         DateTime? pointInTime = null,
+        string serviceName = "",
         params Func<TProjection, Guid?>[] foreignIdSelectors)
         where TProjection : IUniquelyIdentifiable
     {
@@ -453,6 +455,11 @@ public class ExternalDataEvent
 
             var request = new nostify.Grpc.EventRequestMessage();
             request.AggregateRootIds.AddRange(foreignIds.Distinct().Select(id => id.ToString()));
+
+            if (!string.IsNullOrEmpty(serviceName))
+            {
+                request.ServiceName = serviceName;
+            }
 
             if (pointInTime.HasValue)
             {
@@ -506,7 +513,7 @@ public class ExternalDataEvent
                 : requestor.ForeignIdSelectors;
 
             var channel = global::Grpc.Net.Client.GrpcChannel.ForAddress(requestor.Address);
-            return GetEventsViaGrpcAsync(channel, projectionsToInit, pointInTime, allSelectors);
+            return GetEventsViaGrpcAsync(channel, projectionsToInit, pointInTime, requestor.ServiceName, allSelectors);
         }).ToArray();
 
         var results = await Task.WhenAll(tasks);
