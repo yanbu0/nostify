@@ -94,6 +94,7 @@ public class NostifyCommand
     ///</summary>
     public static bool operator ==(NostifyCommand a, NostifyCommand b)
     {
+        if (a is null) return b is null;
         return a.Equals(b);
     }
 
@@ -102,6 +103,7 @@ public class NostifyCommand
     ///</summary>
     public static bool operator !=(NostifyCommand a, NostifyCommand b)
     {
+        if (a is null) return b is not null;
         return !a.Equals(b);
     }
 }

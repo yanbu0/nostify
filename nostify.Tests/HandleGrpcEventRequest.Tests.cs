@@ -42,7 +42,7 @@ public class HandleGrpcEventRequestTests
 
         // Act
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, null!, _mockLogger.Object);
+            _mockNostify.Object, null!, InMemoryQueryExecutor.Default, _mockLogger.Object);
 
         // Assert
         Assert.NotNull(response);
@@ -58,7 +58,7 @@ public class HandleGrpcEventRequestTests
 
         // Act
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, request, _mockLogger.Object);
+            _mockNostify.Object, request, InMemoryQueryExecutor.Default, _mockLogger.Object);
 
         // Assert
         Assert.NotNull(response);
@@ -89,7 +89,7 @@ public class HandleGrpcEventRequestTests
 
         // Act
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, request, _mockLogger.Object);
+            _mockNostify.Object, request, InMemoryQueryExecutor.Default, _mockLogger.Object);
 
         // Assert
         Assert.NotNull(response);
@@ -131,7 +131,7 @@ public class HandleGrpcEventRequestTests
 
         // Act
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, request, _mockLogger.Object);
+            _mockNostify.Object, request, InMemoryQueryExecutor.Default, _mockLogger.Object);
 
         // Assert
         Assert.Equal(2, response.Events.Count);
@@ -173,7 +173,7 @@ public class HandleGrpcEventRequestTests
 
         // Act
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, request, _mockLogger.Object);
+            _mockNostify.Object, request, InMemoryQueryExecutor.Default, _mockLogger.Object);
 
         // Assert
         Assert.NotNull(response);
@@ -216,7 +216,7 @@ public class HandleGrpcEventRequestTests
 
         // Act
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, request, _mockLogger.Object);
+            _mockNostify.Object, request, InMemoryQueryExecutor.Default, _mockLogger.Object);
 
         // Assert
         Assert.Equal(2, response.Events.Count);
@@ -247,7 +247,7 @@ public class HandleGrpcEventRequestTests
 
         // Act
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, request, _mockLogger.Object);
+            _mockNostify.Object, request, InMemoryQueryExecutor.Default, _mockLogger.Object);
 
         // Assert - should only process valid GUIDs
         Assert.NotNull(response);
@@ -265,7 +265,7 @@ public class HandleGrpcEventRequestTests
 
         // Act
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, request, _mockLogger.Object);
+            _mockNostify.Object, request, InMemoryQueryExecutor.Default, _mockLogger.Object);
 
         // Assert
         Assert.NotNull(response);
@@ -280,9 +280,9 @@ public class HandleGrpcEventRequestTests
         var request = new EventRequestMessage();
         request.AggregateRootIds.Add(Guid.NewGuid().ToString());
 
-        // Act - pass null logger
+        // Act - pass null logger, use InMemoryQueryExecutor
         var response = await DefaultEventRequestHandlers.HandleGrpcEventRequestAsync(
-            _mockNostify.Object, request, null);
+            _mockNostify.Object, request, InMemoryQueryExecutor.Default, null);
 
         // Assert - should not throw, falls back to nostify.Logger
         Assert.NotNull(response);

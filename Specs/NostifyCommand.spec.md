@@ -171,6 +171,20 @@ The `name` property is used directly as the Kafka topic name. This enables:
 3. **Consistent Naming** - Follow `{Action}{AggregateType}` pattern
 4. **Validation Integration** - Use `[RequiredFor]` attributes with command names
 
+## Equality Operators
+
+The `==` and `!=` operators are overloaded and properly handle null references:
+
+```csharp
+NostifyCommand a = null;
+NostifyCommand b = null;
+// a == b → true  (both null)
+// a != b → false
+// a == someCommand → false  (null vs non-null)
+```
+
+Equality is based on the `name` property — two commands with the same name are considered equal.
+
 ## Related Types
 
 - [Event](Event.spec.md) - Events contain commands
