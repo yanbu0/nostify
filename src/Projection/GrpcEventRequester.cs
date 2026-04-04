@@ -24,6 +24,13 @@ public class GrpcEventRequester<TProjection> where TProjection : IUniquelyIdenti
     public string ServiceName { get; }
 
     /// <summary>
+    /// Optional authentication token sent as "Authorization" gRPC metadata.
+    /// When non-empty, the value is attached as a "Bearer {token}" header on every gRPC call.
+    /// Defaults to empty string (no auth header).
+    /// </summary>
+    public string AuthToken { get; set; } = "";
+
+    /// <summary>
     /// Functions to get the foreign id for the aggregates required to populate one or more fields in the projection.
     /// </summary>
     public Func<TProjection, Guid?>[] ForeignIdSelectors { get; }

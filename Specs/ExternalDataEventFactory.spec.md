@@ -182,6 +182,83 @@ Adds dependant async event requestors evaluated after first-round events are app
 
 Six overloads matching `WithAsyncEventRequestor` patterns.
 
+### gRPC Event Requestors
+
+#### AddGrpcEventRequestors
+
+```csharp
+public ExternalDataEventFactory<P> AddGrpcEventRequestors(params GrpcEventRequester<P>[] grpcEventRequestors)
+```
+
+Adds pre-configured gRPC event requestors. Useful when constructing `GrpcEventRequester<P>` instances directly (e.g. when setting `AuthToken` via object initializer).
+
+#### WithGrpcEventRequestor (address-only)
+
+Six overloads mirroring `GrpcEventRequester<P>` constructor families (address-only, no service name or auth token):
+
+```csharp
+// Nullable Guid selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, Guid?>[] foreignIdSelectors)
+
+// Non-nullable Guid selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, Guid>[] selectors)
+
+// Nullable Guid list selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, List<Guid?>>[] selectors)
+
+// Non-nullable Guid list selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, List<Guid>>[] selectors)
+
+// Mixed nullable
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+
+// Mixed non-nullable
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+```
+
+#### WithGrpcEventRequestor (with serviceName + authToken)
+
+Six overloads that additionally accept a `serviceName` for multi-service gRPC routing and an optional `authToken` sent as Bearer authorization metadata:
+
+```csharp
+// Nullable Guid selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid?>[] foreignIdSelectors)
+
+// Non-nullable Guid selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid>[] selectors)
+
+// Nullable Guid list selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid?>>[] selectors)
+
+// Non-nullable Guid list selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid>>[] selectors)
+
+// Mixed nullable
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+
+// Mixed non-nullable
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+```
+
+- `serviceName` is forwarded to `GrpcEventRequester<P>` and included in the `service_name` proto field on every gRPC call.
+- `authToken` (nullable) is coerced to `""` when null and set on `GrpcEventRequester<P>.AuthToken`. When non-empty, the value is sent as `"Bearer {token}"` in gRPC metadata.
+
+#### AddDependantGrpcEventRequestors
+
+```csharp
+public ExternalDataEventFactory<P> AddDependantGrpcEventRequestors(params GrpcEventRequester<P>[] grpcEventRequestors)
+```
+
+Adds pre-configured dependent gRPC event requestors. Evaluated after the first round of events are applied.
+
+#### WithDependantGrpcEventRequestor (address-only)
+
+Six overloads matching the primary address-only `WithGrpcEventRequestor` patterns.
+
+#### WithDependantGrpcEventRequestor (with serviceName + authToken)
+
+Six overloads matching the primary `WithGrpcEventRequestor(address, serviceName, authToken, ...)` patterns. Evaluated after the first round of events are applied.
+
 ### GetEventsAsync
 
 ```csharp
@@ -301,6 +378,30 @@ var events = await new ExternalDataEventFactory<OrderProjection>(nostify, projec
     .GetEventsAsync();
 ```
 
+### With gRPC Event Requestors
+
+```csharp
+// Fetch events from external services via gRPC (address-only)
+var events = await new ExternalDataEventFactory<OrderProjection>(nostify, projections)
+    .WithSameServiceIdSelectors(p => p.CustomerId)
+    .WithGrpcEventRequestor("https://inventory-grpc:5001", (Func<OrderProjection, Guid>)(p => p.ProductId))
+    .WithDependantGrpcEventRequestor("https://shipping-grpc:5002", (Func<OrderProjection, Guid?>)(p => p.ShippingMethodId))
+    .GetEventsAsync();
+```
+
+### With gRPC Event Requestors (serviceName + authToken)
+
+```csharp
+// Fetch events via gRPC with service routing and authentication
+var events = await new ExternalDataEventFactory<OrderProjection>(nostify, projections)
+    .WithSameServiceIdSelectors(p => p.CustomerId)
+    .WithGrpcEventRequestor("https://unified-grpc:5001", "InventoryService", authToken,
+        (Func<OrderProjection, Guid>)(p => p.ProductId))
+    .WithDependantGrpcEventRequestor("https://unified-grpc:5001", "ShippingService", authToken,
+        (Func<OrderProjection, Guid?>)(p => p.ShippingMethodId))
+    .GetEventsAsync();
+```
+
 ### Combining HTTP and Kafka Requestors
 
 ```csharp
@@ -338,12 +439,13 @@ var factory = new ExternalDataEventFactory<TestProjection>(
 - [`ExternalDataEvent`](ExternalDataEvent.spec.md) - The data structure returned by this factory
 - [`EventRequester<P>`](EventRequester.spec.md) - Configuration for external service HTTP requests
 - [`AsyncEventRequester<P>`](AsyncEventRequester.spec.md) - Configuration for external service Kafka requests
+- [`GrpcEventRequester<P>`](GrpcEventRequester.spec.md) - Configuration for external service gRPC requests (address, serviceName, authToken, selectors)
 - [`AsyncEventRequest`](AsyncEventRequest.spec.md) - The Kafka message sent to request events
 - [`AsyncEventRequestResponse`](AsyncEventRequestResponse.spec.md) - The Kafka message received with events
 - [`EventFactory`](EventFactory.spec.md) - Factory for creating Event instances (different purpose)
 
 ## Version History
 
-- **4.5.0** - Added `WithAsyncEventRequestor`, `WithDependantAsyncEventRequestor`, `AddAsyncEventRequestors`, `AddDependantAsyncEventRequestors` for Kafka-based async event fetching
+- **4.5.0** - Added `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads with `serviceName` + `authToken` parameters (12 new overloads). Added address-only gRPC overloads (12 overloads), `AddGrpcEventRequestors`, `AddDependantGrpcEventRequestors`. Added `WithAsyncEventRequestor`, `WithDependantAsyncEventRequestor`, `AddAsyncEventRequestors`, `AddDependantAsyncEventRequestors` for Kafka-based async event fetching
 - **4.3.0** - Added nullable `Guid?` overloads for all selector methods; all methods now return `this` for fluent chaining
 - **4.1.0** - Initial release with basic selector support

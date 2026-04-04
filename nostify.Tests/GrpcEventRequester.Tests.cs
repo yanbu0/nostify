@@ -284,4 +284,110 @@ public class GrpcEventRequesterTests
     }
 
     #endregion
+
+    #region AuthToken Property Tests
+
+    [Fact]
+    public void AuthToken_DefaultsToEmptyString()
+    {
+        // Arrange & Act
+        var requester = new GrpcEventRequester<FactoryTestProjection>(
+            "https://localhost:5001", (Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+
+        // Assert
+        Assert.Equal("", requester.AuthToken);
+    }
+
+    [Fact]
+    public void AuthToken_CanBeSetAfterConstruction()
+    {
+        // Arrange
+        var requester = new GrpcEventRequester<FactoryTestProjection>(
+            "https://localhost:5001", (Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+
+        // Act
+        requester.AuthToken = "my-secret-token";
+
+        // Assert
+        Assert.Equal("my-secret-token", requester.AuthToken);
+    }
+
+    [Fact]
+    public void AuthToken_DefaultsToEmptyString_WithServiceNameConstructor()
+    {
+        // Arrange & Act
+        var requester = new GrpcEventRequester<FactoryTestProjection>(
+            "https://localhost:5001", "MyService", (Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+
+        // Assert
+        Assert.Equal("", requester.AuthToken);
+        Assert.Equal("MyService", requester.ServiceName);
+    }
+
+    #endregion
+
+    #region ServiceName Constructor Tests - All Families
+
+    [Fact]
+    public void Constructor_ServiceName_NonNullableGuid_SetsProperties()
+    {
+        var requester = new GrpcEventRequester<FactoryTestProjection>(
+            "https://localhost:5001", "SvcA", (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Equal("https://localhost:5001", requester.Address);
+        Assert.Equal("SvcA", requester.ServiceName);
+        Assert.Single(requester.SingleSelectors);
+    }
+
+    [Fact]
+    public void Constructor_ServiceName_NullableList_SetsProperties()
+    {
+        var requester = new GrpcEventRequester<FactoryTestProjection>(
+            "https://localhost:5001", "SvcB",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.tagIds.Cast<Guid?>().ToList()));
+
+        Assert.Equal("SvcB", requester.ServiceName);
+        Assert.Single(requester.ListSelectors);
+        Assert.Empty(requester.SingleSelectors);
+    }
+
+    [Fact]
+    public void Constructor_ServiceName_NonNullableList_SetsProperties()
+    {
+        var requester = new GrpcEventRequester<FactoryTestProjection>(
+            "https://localhost:5001", "SvcC",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.tagIds));
+
+        Assert.Equal("SvcC", requester.ServiceName);
+        Assert.Single(requester.ListSelectors);
+        Assert.Empty(requester.SingleSelectors);
+    }
+
+    [Fact]
+    public void Constructor_ServiceName_MixedNullable_SetsProperties()
+    {
+        var requester = new GrpcEventRequester<FactoryTestProjection>(
+            "https://localhost:5001", "SvcD",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.externalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.tagIds.Cast<Guid?>().ToList() });
+
+        Assert.Equal("SvcD", requester.ServiceName);
+        Assert.Single(requester.SingleSelectors);
+        Assert.Single(requester.ListSelectors);
+    }
+
+    [Fact]
+    public void Constructor_ServiceName_MixedNonNullable_SetsProperties()
+    {
+        var requester = new GrpcEventRequester<FactoryTestProjection>(
+            "https://localhost:5001", "SvcE",
+            new Func<FactoryTestProjection, Guid>[] { p => p.siteId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.tagIds });
+
+        Assert.Equal("SvcE", requester.ServiceName);
+        Assert.Single(requester.SingleSelectors);
+        Assert.Single(requester.ListSelectors);
+    }
+
+    #endregion
 }

@@ -470,6 +470,94 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         return this;
     }
 
+    // ── WithGrpcEventRequestor overloads with serviceName + authToken ──
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address (e.g. "https://localhost:5001")</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, foreignIdSelectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using non-nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using non-nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid>>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using a mix of single nullable and list nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="single">Functions that return a single nullable foreign id</param>
+    /// <param name="list">Functions that return a list of nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, single, list) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using a mix of single non-nullable and list non-nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="single">Functions that return a single non-nullable foreign id</param>
+    /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, single, list) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
     /// <summary>
     /// Adds dependent gRPC event requestors. Evaluated after the first round of events are applied.
     /// </summary>
@@ -538,6 +626,100 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
     {
         this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    // ── WithDependantGrpcEventRequestor overloads with serviceName + authToken ──
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, foreignIdSelectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using non-nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using non-nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid>>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using a mix of single nullable and list nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="single">Functions that return a single nullable foreign id</param>
+    /// <param name="list">Functions that return a list of nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, single, list) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using a mix of single non-nullable and list non-nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="single">Functions that return a single non-nullable foreign id</param>
+    /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, single, list) { AuthToken = authToken ?? "" }).ToArray();
         return this;
     }
 

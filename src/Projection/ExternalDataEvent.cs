@@ -425,6 +425,7 @@ public class ExternalDataEvent
     /// <param name="projectionsToInit">List of projections to initialize</param>
     /// <param name="pointInTime">Point in time to query events up to. If null, queries all events.</param>
     /// <param name="serviceName">The target service name for routing in a unified gRPC server (empty string for single-service servers)</param>
+    /// <param name="authToken">Optional auth token. When non-empty, sent as "Bearer {token}" in the "authorization" gRPC metadata header.</param>
     /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
     /// <returns>List of ExternalDataEvent</returns>
     public async static Task<List<ExternalDataEvent>> GetEventsViaGrpcAsync<TProjection>(
@@ -432,6 +433,7 @@ public class ExternalDataEvent
         List<TProjection> projectionsToInit,
         DateTime? pointInTime = null,
         string serviceName = "",
+        string authToken = "",
         params Func<TProjection, Guid?>[] foreignIdSelectors)
         where TProjection : IUniquelyIdentifiable
     {
@@ -468,7 +470,9 @@ public class ExternalDataEvent
                     DateTime.SpecifyKind(pointInTime.Value, DateTimeKind.Utc));
             }
 
-            var response = await client.RequestEventsAsync(request);
+            var callOptions = BuildGrpcCallOptions(authToken);
+
+            var response = await client.RequestEventsAsync(request, callOptions);
 
             var events = GrpcEventMapping.MapFromProto(response.Events)
                 .ToLookup(e => e.aggregateRootId);
@@ -513,7 +517,7 @@ public class ExternalDataEvent
                 : requestor.ForeignIdSelectors;
 
             var channel = global::Grpc.Net.Client.GrpcChannel.ForAddress(requestor.Address);
-            return GetEventsViaGrpcAsync(channel, projectionsToInit, pointInTime, requestor.ServiceName, allSelectors);
+            return GetEventsViaGrpcAsync(channel, projectionsToInit, pointInTime, requestor.ServiceName, requestor.AuthToken ?? "", allSelectors);
         }).ToArray();
 
         var results = await Task.WhenAll(tasks);
@@ -543,6 +547,26 @@ public class ExternalDataEvent
     }
 
     #endregion
+
+    /// <summary>
+    /// Builds a <see cref="global::Grpc.Core.CallOptions"/> instance, optionally attaching
+    /// an "authorization" metadata header when <paramref name="authToken"/> is non-empty.
+    /// </summary>
+    /// <param name="authToken">The bearer token. When null or empty, no header is added.</param>
+    /// <returns>A <see cref="global::Grpc.Core.CallOptions"/> ready for use in a gRPC call.</returns>
+    public static global::Grpc.Core.CallOptions BuildGrpcCallOptions(string authToken = "")
+    {
+        var callOptions = new global::Grpc.Core.CallOptions();
+        if (!string.IsNullOrEmpty(authToken))
+        {
+            var metadata = new global::Grpc.Core.Metadata
+            {
+                { "authorization", $"Bearer {authToken}" }
+            };
+            callOptions = callOptions.WithHeaders(metadata);
+        }
+        return callOptions;
+    }
 }
 
 class ProjectionToEventGuid<TProjection>
