@@ -25,7 +25,7 @@
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
-| `HandleMultiApplyEventAsync<P>` | `Task<int>` | Applies a single event to all projections matching a foreign key selector. Returns count of successfully updated projections. Returns `0` if the event is filtered out. Supports optional `RetryOptions` for per-item retry via `MultiApplyAndPersistAsync`. |
+| `HandleMultiApplyEventAsync<P>` | `Task<int>` | Applies a single event to all projections matching a foreign key selector. The `foreignIdSelector` parameter is `Expression<Func<P, Guid?>>` (not a raw `Func`) so the expression tree can be composed into a Cosmos-translatable filter without `Invoke` nodes. Returns count of successfully updated projections. Returns `0` if the event is filtered out. Supports optional `RetryOptions` for per-item retry via `MultiApplyAndPersistAsync`. |
 
 ### Bulk Create Handlers
 
@@ -88,7 +88,7 @@ For bulk update handlers with retry support, individual event failures are handl
 
 ## Test Coverage
 
-Tests are in `nostify.Tests/DefaultEventHandlers.Tests.cs` and cover:
+Tests are in `nostify.Tests/DefaultEventHandlers.Tests.cs` and `nostify.Tests/HandleMultiApplyExpression.Tests.cs` and cover:
 - Success on first attempt (returns expected count)
 - Retry paths: succeeds after 1 retry, succeeds after 3 retries
 - Exhausted retries → reports undeliverable (returns 0)

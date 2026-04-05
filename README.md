@@ -33,11 +33,12 @@
 6. [Why????](#why)
 7. [Concepts](#concepts)
    - 7.1 [Service](#service)
-   - 7.2 [Aggregate](#aggregate)
-   - 7.3 [Projection](#projection)
-   - 7.4 [Event](#event)
-   - 7.5 [Command](#command)
-   - 7.6 [Saga](#saga)
+   - 7.2 [gRPC Event Request Server](#grpc-event-request-server)
+   - 7.3 [Aggregate](#aggregate)
+   - 7.4 [Projection](#projection)
+   - 7.5 [Event](#event)
+   - 7.6 [Command](#command)
+   - 7.7 [Saga](#saga)
 8. [Setup](#setup)
 9. [Basic Tasks](#basic-tasks)
    - 9.1 [Initializing Current State Container](#initializing-current-state-container)
@@ -88,7 +89,11 @@
   - **GrpcEventMapping**: Static helper class for converting between nostify `Event` objects and protobuf `EventMessage` messages. Handles Guid↔string, DateTime↔Timestamp, NostifyCommand↔CommandMessage, and payload serialization via Newtonsoft.Json.
   - **Proto Contract**: New `event_request.proto` defines the `EventRequestService` with a `RequestEvents` unary RPC. Messages include `EventRequestMessage` (aggregate root IDs, optional point-in-time), `EventResponseMessage` (repeated events), `EventMessage` (full event data), and `CommandMessage`.
   - **DefaultEventRequestHandlers.HandleGrpcEventRequestAsync**: New server-side handler that processes gRPC `EventRequestMessage` requests. Parses aggregate root IDs, delegates to the existing `HandleEventRequestAsync`, and maps results to protobuf via `GrpcEventMapping`.
-  - **Template GrpcEventRequestService**: New template file (`Events/GrpcEventRequestService.cs`) that extends `EventRequestService.EventRequestServiceBase` and delegates to `DefaultEventRequestHandlers.HandleGrpcEventRequestAsync`.
+  - **GrpcEventRequester.ServiceName**: Optional `ServiceName` property on `GrpcEventRequester<T>` that maps to the proto `service_name` field. Used by centralized gRPC gateway servers to route requests to the correct backend service's event store. When not set, the gateway uses its own default `INostify` instance.
+  - **GrpcEventRequester.AuthToken**: Optional `AuthToken` property on `GrpcEventRequester<T>` for passing authentication credentials as gRPC call metadata (`authorization` header). Used when the target gRPC server requires API key or bearer token authentication.
+  - **ExternalDataEvent.BuildGrpcCallOptions**: New `public static` helper that constructs `Grpc.Core.CallOptions` with an `authorization` metadata header when a non-empty `authToken` is provided. Extracted for testability.
+  - **Enhanced gRPC Factory Overloads**: `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` now have additional overloads accepting `serviceName` and `authToken` parameters (6 overloads each), enabling fluent configuration of authentication and routing without manually constructing `GrpcEventRequester<T>` objects.
+  - **nostifyGrpc Template**: New `dotnet new nostifyGrpc` template for creating a centralized gRPC event-request gateway server. Generates a complete ASP.NET Core gRPC project with `UnifiedGrpcEventRequestService` (routes by `service_name`), optional API key interceptor, and dynamic service registration via `appsettings.json`. See [gRPC Event Request Server](#grpc-event-request-server).
   - **New NuGet Dependencies**: `Google.Protobuf` 3.29.3, `Grpc.Net.Client` 2.67.0, `Grpc.Tools` 2.69.0 (private assets, build-time only).
 
 - 4.4.3
@@ -275,15 +280,22 @@ To install `nostify` and templates:
 dotnet new install nostify
 ```
 
-To spin up a nostify project:
+To spin up a nostify service:
 
 ```powershell
 dotnet new nostify -ag <Your_Aggregate_Name> -p <Port Number To Run on Locally>
-
 dotnet restore
 ```
 
 This will install the templates, create the default project based off your Aggregate, and install all the necessary libraries.
+
+To spin up a centralized gRPC event-request gateway (optional — see [gRPC Event Request Server](#grpc-event-request-server)):
+
+```powershell
+dotnet new nostifyGrpc -n <Project_Name> -s <First_Service_Name> -p <Port_Number>
+cd <Project_Name>
+dotnet restore
+```
 
 ## Architecture
 
@@ -316,6 +328,136 @@ A service template will contain the directory structure, class files, and code t
 ```powershell
 
 dotnet new nostify -ag <Your_Aggregate_Name> -p <Port Number To Run on Locally>
+```
+
+### gRPC Event Request Server
+
+When running multiple nostify microservices, you may want a **centralized gRPC gateway** that serves event-request queries for all backend services through a single endpoint. The `nostifyGrpc` template generates a complete ASP.NET Core gRPC server project that:
+
+- Implements `EventRequestService.EventRequestServiceBase` with a `UnifiedGrpcEventRequestService` that routes requests by `service_name` to the correct backend's event store
+- Dynamically registers services from `appsettings.json` — add new backends without changing code
+- Optionally secures the endpoint with API key validation via a gRPC interceptor
+
+#### Create
+
+```powershell
+dotnet new nostifyGrpc -n <Your_Project_Name> -s <First_Service_Name> -p <Port_Number>
+```
+
+Example:
+
+```powershell
+dotnet new nostifyGrpc -n MyApp.Grpc -s OrderService -p 5090
+cd MyApp.Grpc
+dotnet restore
+```
+
+#### Parameters
+
+| Parameter | Short | Default | Description |
+|-----------|-------|---------|-------------|
+| `--name` | `-n` | _GrpcServerName_ | Project name (used for namespace, folder, and csproj) |
+| `--service` | `-s` | MyService | Name of the first service to register |
+| `--port` | `-p` | 5090 | Kestrel HTTP/2 port the gRPC server listens on |
+
+#### Adding Services
+
+After creating the project, register additional backend services in `appsettings.json`:
+
+```json
+{
+  "Services": {
+    "OrderService": {
+      "CosmosDbName": "orders-db",
+      "CosmosEndPoint": "https://localhost:8081",
+      "CosmosApiKey": "your-key-here"
+    },
+    "InventoryService": {
+      "CosmosDbName": "inventory-db",
+      "CosmosEndPoint": "https://localhost:8081",
+      "CosmosApiKey": "your-key-here"
+    }
+  }
+}
+```
+
+Each entry creates an `INostify` instance at startup. The `UnifiedGrpcEventRequestService` looks up the correct instance using the `service_name` field from the incoming gRPC request.
+
+#### Enabling API Key Security
+
+Set `Security:Mode` to `apikey` and provide a key:
+
+```json
+{
+  "Security": {
+    "Mode": "apikey",
+    "ApiKey": "my-secret-api-key"
+  }
+}
+```
+
+Clients must then include the key as gRPC metadata:
+
+```csharp
+// Client-side: GrpcEventRequester passes AuthToken automatically
+factory.WithGrpcEventRequestor(
+    "https://grpc-gateway:5090",
+    serviceName: "OrderService",
+    authToken: "my-secret-api-key",
+    p => p.orderId
+);
+```
+
+The `ApiKeyInterceptor` validates the `x-api-key` metadata header on every incoming call and returns `Unauthenticated` if the key is missing or invalid.
+
+#### Generated Project Structure
+
+```
+MyApp.Grpc/
+├── MyApp.Grpc.csproj            # ASP.NET Core Web SDK + Grpc.AspNetCore + nostify
+├── Program.cs                    # DI setup, service map, gRPC registration
+├── appsettings.json              # Kestrel HTTP/2, service configs, security
+├── Services/
+│   └── UnifiedGrpcEventRequestService.cs  # Routes by service_name
+├── Security/
+│   └── ApiKeyInterceptor.cs      # Optional API key gRPC interceptor
+└── Properties/
+    └── launchSettings.json       # Development environment settings
+```
+
+#### Connecting Clients
+
+Microservices fetch events from the gateway using `WithGrpcEventRequestor` with `serviceName` and optional `authToken`:
+
+```csharp
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit,
+    INostify nostify,
+    HttpClient? httpClient = null,
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify, projectionsToInit, httpClient, pointInTime);
+
+    factory.WithSameServiceIdSelectors(p => p.customerId);
+
+    // Route through centralized gRPC gateway
+    factory.WithGrpcEventRequestor(
+        "https://grpc-gateway:5090",
+        serviceName: "InventoryService",
+        authToken: "my-secret-api-key",
+        p => p.warehouseId
+    );
+
+    factory.WithDependantGrpcEventRequestor(
+        "https://grpc-gateway:5090",
+        serviceName: "ShippingService",
+        authToken: "my-secret-api-key",
+        p => p.shippingProviderId
+    );
+
+    return await factory.GetEventsAsync();
+}
 ```
 
 ### Aggregate
@@ -2728,6 +2870,58 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
 }
 ```
 
+**gRPC with ServiceName and AuthToken (Centralized Gateway):**
+
+When using a centralized gRPC gateway (created via `dotnet new nostifyGrpc`), pass `serviceName` to route the request to the correct backend, and `authToken` if the gateway requires authentication:
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient? httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify,
+        projectionsToInit,
+        httpClient,
+        pointInTime);
+
+    factory.WithSameServiceIdSelectors(p => p.customerId);
+
+    // Route through a centralized gRPC gateway with API key auth
+    factory.WithGrpcEventRequestor(
+        "https://grpc-gateway:5090",          // Gateway address
+        serviceName: "InventoryService",       // Routes to InventoryService's event store
+        authToken: "my-secret-api-key",        // Sent as 'authorization' gRPC metadata
+        p => p.warehouseId
+    );
+
+    // Multiple selectors with serviceName + authToken
+    factory.WithGrpcEventRequestor(
+        "https://grpc-gateway:5090",
+        serviceName: "PaymentService",
+        authToken: "my-secret-api-key",
+        p => p.paymentMethodId,
+        p => p.billingAccountId
+    );
+
+    // Dependent requestors also support serviceName + authToken
+    factory.WithDependantGrpcEventRequestor(
+        "https://grpc-gateway:5090",
+        serviceName: "ShippingService",
+        authToken: "my-secret-api-key",
+        p => p.shippingProviderId
+    );
+
+    return await factory.GetEventsAsync();
+}
+```
+
+> **Note:** `serviceName` maps to the proto `service_name` field. The gateway uses it to look up the correct
+> `INostify` instance from its service dictionary. When connecting directly to a single-service endpoint
+> (not a gateway), `serviceName` can be omitted.
+
 **Bulk-adding pre-built gRPC requestors:**
 
 ```C#
@@ -2761,10 +2955,9 @@ factory.WithGrpcEventRequestor(
 );
 ```
 
-> **Note:** gRPC requestors require the target service to implement `EventRequestService.EventRequestServiceBase`
-> and register the gRPC service in its `Program.cs`. The nostify template (`dotnet new nostify`) generates
-> `GrpcEventRequestService.cs` and the `event_request.proto` file automatically. The service delegates to
-> `DefaultEventRequestHandlers.HandleGrpcEventRequestAsync` for event store queries.
+> **Note:** gRPC server endpoints require ASP.NET Core with HTTP/2 and cannot run inside Azure Functions.
+> Use `dotnet new nostifyGrpc` to create a standalone gRPC event-request gateway — see [gRPC Event Request Server](#grpc-event-request-server).
+> The gateway delegates to `DefaultEventRequestHandlers.HandleGrpcEventRequestAsync` for event store queries.
 
 **Complete Example with All Features (HTTP + Kafka + gRPC):**
 

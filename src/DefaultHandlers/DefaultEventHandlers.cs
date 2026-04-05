@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -100,12 +101,12 @@ public static class DefaultEventHandlers
     /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="triggerEvent">The Kafka trigger event containing the event data.</param>
-    /// <param name="foreignIdSelector">Function that extracts the foreign key from a projection to match against the event's aggregateRootId.</param>
+    /// <param name="foreignIdSelector">Expression that extracts the foreign key from a projection to match against the event's aggregateRootId.</param>
     /// <param name="eventTypeFilter">Optional filter specifying which event type to process.</param>
     /// <param name="batchSize">Maximum number of projections to apply per batch.</param>
     /// <param name="retryOptions">Optional retry options for configuring per-item retry behavior. When provided, each projection is updated with retry logic via RetryableContainer.</param>
     /// <returns>A task containing the number of successfully updated projections.</returns>
-    public async static Task<int> HandleMultiApplyEventAsync<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Func<P, Guid?> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async static Task<int> HandleMultiApplyEventAsync<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Expression<Func<P, Guid?>> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         Event? newEvent = triggerEvent.GetEvent(eventTypeFilter);
         try
@@ -122,8 +123,16 @@ public static class DefaultEventHandlers
                 //Update projection container
                 Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
                 //Get all projection ids that need to be updated
+                // Compose filter expression tree: p => foreignIdSelector(p) == aggregateRootId
+                // This avoids embedding a delegate Invoke node that Cosmos DB LINQ cannot translate
+                var selectorParam = foreignIdSelector.Parameters[0];
+                var equalsExpr = Expression.Equal(
+                    foreignIdSelector.Body,
+                    Expression.Constant((Guid?)newEvent.aggregateRootId, typeof(Guid?)));
+                var filterExpr = Expression.Lambda<Func<P, bool>>(equalsExpr, selectorParam);
+
                 List<Guid> projectionsToUpdate = await projectionContainer
-                    .FilteredQuery<P>(newEvent.partitionKey, p => foreignIdSelector(p) == newEvent.aggregateRootId)
+                    .FilteredQuery<P>(newEvent.partitionKey, filterExpr)
                     .Select(p => p.id)
                     .ReadAllAsync();
                 //Use MultiApplyAndPersist to update all projections in one go
@@ -794,13 +803,13 @@ public static class DefaultEventHandlers
     /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="triggerEvent">The Kafka trigger event containing the event data.</param>
-    /// <param name="foreignIdSelector">Function that extracts the foreign key from a projection to match against the event's aggregateRootId.</param>
+    /// <param name="foreignIdSelector">Expression that extracts the foreign key from a projection to match against the event's aggregateRootId.</param>
     /// <param name="eventTypeFilter">Optional filter specifying which event type to process.</param>
     /// <param name="batchSize">Maximum number of projections to apply per batch.</param>
     /// <param name="retryOptions">Optional retry options for configuring per-item retry behavior.</param>
     /// <returns>A task representing the asynchronous multi-apply operation.</returns>
     [Obsolete("Use HandleMultiApplyEventAsync instead. This method will be removed in a future version.")]
-    public static Task HandleMultiApplyEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Func<P, Guid?> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public static Task HandleMultiApplyEvent<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Expression<Func<P, Guid?>> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
         => HandleMultiApplyEventAsync<P>(nostify, triggerEvent, foreignIdSelector, eventTypeFilter, batchSize, retryOptions);
 
     /// <summary>

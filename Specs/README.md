@@ -135,7 +135,7 @@ var order = await nostify.RehydrateAsync<Order>(orderId);
 
 ## Version History
 
-- **4.5.0** - Kafka async event request/response for ExternalDataEventFactory, singleton consumer cache, AsyncEventRequester, template AsyncEventRequestHandler. gRPC transport: GrpcEventRequester, GrpcEventMapping, ExternalDataEvent gRPC overloads, factory WithGrpcEventRequestor/WithDependantGrpcEventRequestor, HandleGrpcEventRequestAsync handler, GrpcEventRequestService template
+- **4.5.0** - Kafka async event request/response for ExternalDataEventFactory, singleton consumer cache, AsyncEventRequester, template AsyncEventRequestHandler. gRPC transport: GrpcEventRequester, GrpcEventMapping, ExternalDataEvent gRPC overloads, factory WithGrpcEventRequestor/WithDependantGrpcEventRequestor, HandleGrpcEventRequestAsync handler, nostifyGrpc template
 - **4.4.2** - RetryOptions plumbing, new bulk retry methods, signature updates, and documentation updates (README, copilot-instructions sync with codebase)
 - **4.4.1** - Unified retry logic via RetryableContainer, exponential backoff, ILogger support, ContinueWith replacement, bug fixes
 - **4.3.0** - Added nullable Guid? selector support in ExternalDataEventFactory, fluent API chaining
