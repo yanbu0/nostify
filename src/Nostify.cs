@@ -17,7 +17,7 @@ namespace nostify;
 /// Base class to utilize nostify.  Inject this with NostifyFactory to use in your application.
 /// This class provides methods to persist and publish events, rehydrate aggregates, and manage containers.
 ///</summary>
-public class Nostify : INostify
+public class Nostify : INostify, IDisposable
 {
 
     /// <inheritdoc />
@@ -37,6 +37,9 @@ public class Nostify : INostify
     /// <inheritdoc />
     public ILogger? Logger { get; }
 
+    private readonly ConsumerConfig? _baseConsumerConfig;
+    private readonly ConcurrentDictionary<string, IConsumer<string, string>> _kafkaConsumers = new();
+
     ///<summary>
     /// Nostify constructor for development with no username and password for Kafka.
     ///</summary>
@@ -45,7 +48,7 @@ public class Nostify : INostify
     {
     }
 
-    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory, ILogger? logger = null)
+    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null)
     {
         Repository = repository;
         DefaultPartitionKeyPath = defaultPartitionKeyPath;
@@ -54,6 +57,7 @@ public class Nostify : INostify
         KafkaProducer = kafkaProducer;
         HttpClientFactory = httpClientFactory;
         Logger = logger;
+        _baseConsumerConfig = baseConsumerConfig;
     }
 
     ///<summary>
@@ -86,6 +90,73 @@ public class Nostify : INostify
             producerConfig.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
         }
         KafkaProducer = new ProducerBuilder<string, string>(producerConfig).Build();
+    }
+
+    /// <inheritdoc />
+    public IConsumer<string, string> GetOrCreateKafkaConsumer(string consumerGroup)
+    {
+        if (_baseConsumerConfig == null)
+        {
+            throw new NostifyException("Kafka consumer config is not available. Ensure WithKafka() or WithEventHubs() was called during configuration.");
+        }
+
+        return _kafkaConsumers.GetOrAdd(consumerGroup, group =>
+        {
+            var config = new ConsumerConfig(_baseConsumerConfig)
+            {
+                GroupId = group
+            };
+            var consumer = new ConsumerBuilder<string, string>(config).Build();
+            Logger?.LogDebug("Created Kafka consumer for group {ConsumerGroup}", group);
+            return consumer;
+        });
+    }
+
+    /// <inheritdoc />
+    public IConsumer<string, string> CreateKafkaConsumer(string consumerGroup)
+    {
+        if (_baseConsumerConfig == null)
+        {
+            throw new NostifyException("Kafka consumer config is not available. Ensure WithKafka() or WithEventHubs() was called during configuration.");
+        }
+
+        var config = new ConsumerConfig(_baseConsumerConfig)
+        {
+            GroupId = consumerGroup
+        };
+        var consumer = new ConsumerBuilder<string, string>(config).Build();
+        Logger?.LogDebug("Created dedicated Kafka consumer for group {ConsumerGroup}", consumerGroup);
+        return consumer;
+    }
+
+    /// <summary>
+    /// Disposes all cached Kafka consumers and the producer.
+    /// </summary>
+    public void Dispose()
+    {
+        foreach (var kvp in _kafkaConsumers)
+        {
+            try
+            {
+                kvp.Value?.Close();
+                kvp.Value?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogWarning(ex, "Error disposing Kafka consumer for group {ConsumerGroup}", kvp.Key);
+            }
+        }
+        _kafkaConsumers.Clear();
+
+        try
+        {
+            KafkaProducer?.Flush(TimeSpan.FromSeconds(5));
+            KafkaProducer?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogWarning(ex, "Error disposing Kafka producer");
+        }
     }
 
     /// <inheritdoc />

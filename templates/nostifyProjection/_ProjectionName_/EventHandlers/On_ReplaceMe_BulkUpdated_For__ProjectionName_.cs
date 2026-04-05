@@ -11,11 +11,13 @@ public class On_ReplaceMe_BulkUpdatedFor__ProjectionName_
 {
     private readonly INostify _nostify;
     private readonly HttpClient _httpClient;
+    private readonly ILogger<On_ReplaceMe_BulkUpdatedFor__ProjectionName_> _logger;
     
-    public On_ReplaceMe_BulkUpdatedFor__ProjectionName_(INostify nostify, HttpClient httpClient)
+    public On_ReplaceMe_BulkUpdatedFor__ProjectionName_(INostify nostify, HttpClient httpClient, ILogger<On_ReplaceMe_BulkUpdatedFor__ProjectionName_> logger)
     {
         this._nostify = nostify;
         _httpClient = httpClient;
+        this._logger = logger;
     }
 
     [Function(nameof(On_ReplaceMe_BulkUpdatedFor__ProjectionName_))]
@@ -33,15 +35,14 @@ public class On_ReplaceMe_BulkUpdatedFor__ProjectionName_
                 AuthenticationMode = BrokerAuthenticationMode.Plain,
                 #endif
 //+:cnd:noEmit
-                IsBatched = true)] string[] events,
-        ILogger log)
+                IsBatched = true)] string[] events)
     {
         // Optional: Add retry options for eventual consistency scenarios
         // var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromSeconds(1), retryWhenNotFound: true);
         // int updatedCount = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<_ProjectionName_>(_nostify, events, retryOptions: retryOptions);
         // Note: If WithLogger() was called during Nostify setup, the logger is passed automatically via nostify.Logger
         int updatedCount = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<_ProjectionName_>(_nostify, events);
-        log.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkUpdatedFor__ProjectionName_), updatedCount);
+        _logger.LogInformation("{Handler} processed {Count} records", nameof(On_ReplaceMe_BulkUpdatedFor__ProjectionName_), updatedCount);
     }
     
 }

@@ -22,6 +22,11 @@ public class Program
         .ConfigureServices((context, services) =>
         {
             services.AddHttpClient();
+            services.AddLogging(loggingBuilder =>
+            {
+                loggingBuilder.AddConsole(); // Explicitly add the console logger, update this if needed
+                loggingBuilder.SetMinimumLevel(LogLevel.Debug); // Set the minimum log level to Debug if you want to see detailed logs from Nostify
+            });
 
             var config = context.Configuration;
 

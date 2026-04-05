@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "_GrpcServerName_": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

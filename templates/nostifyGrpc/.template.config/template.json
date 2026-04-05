@@ -1,0 +1,28 @@
+{
+    "$schema": "http://json.schemastore.org/template",
+    "author": "Travis Boyle",
+    "classifications": [ "Azure", "Microservice", "gRPC" ],
+    "identity": "Nostify.Csharp.GrpcServer",
+    "name": "Nostify gRPC Server",
+    "shortName": "nostifyGrpc",
+    "sourceName": "_GrpcServerName_",
+    "placeholderFilename": ".placeholder",
+    "symbols": {
+        "service": {
+            "type": "parameter",
+            "isRequired": false,
+            "replaces": "_ServiceName_",
+            "description": "The name of the first service to register (e.g. 'OrderService'). Add more services in appsettings.json.",
+            "defaultValue": "MyService",
+            "shortName": "s"
+        },
+        "port": {
+            "type": "parameter",
+            "isRequired": false,
+            "replaces": "<ThePortNumber>",
+            "description": "The Kestrel HTTP/2 port the gRPC server will listen on",
+            "defaultValue": "5090",
+            "shortName": "p"
+        }
+    }
+}

@@ -1,0 +1,268 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace nostify;
+
+/// <summary>
+/// Represents a request configuration for fetching events from an external service via gRPC.
+/// Mirrors <see cref="EventRequester{TProjection}"/> (HTTP) and <see cref="AsyncEventRequester{TProjection}"/> (Kafka)
+/// but uses a gRPC endpoint address instead of a URL or Kafka service name.
+/// </summary>
+/// <typeparam name="TProjection">The type of projection that will be initialized</typeparam>
+public class GrpcEventRequester<TProjection> where TProjection : IUniquelyIdentifiable
+{
+    /// <summary>
+    /// The gRPC endpoint address (e.g. "https://localhost:5001").
+    /// </summary>
+    public string Address { get; }
+
+    /// <summary>
+    /// The name of the target service for routing in a unified gRPC server.
+    /// Single-service gRPC servers can ignore this (defaults to empty string).
+    /// </summary>
+    public string ServiceName { get; }
+
+    /// <summary>
+    /// Optional authentication token sent as "Authorization" gRPC metadata.
+    /// When non-empty, the value is attached as a "Bearer {token}" header on every gRPC call.
+    /// Defaults to empty string (no auth header).
+    /// </summary>
+    public string AuthToken { get; set; } = "";
+
+    /// <summary>
+    /// Functions to get the foreign id for the aggregates required to populate one or more fields in the projection.
+    /// </summary>
+    public Func<TProjection, Guid?>[] ForeignIdSelectors { get; }
+
+    /// <summary>
+    /// Single ID selectors.
+    /// </summary>
+    public Func<TProjection, Guid?>[] SingleSelectors { get; private set; } = Array.Empty<Func<TProjection, Guid?>>();
+
+    /// <summary>
+    /// List ID selectors for cases where we need to expand lists.
+    /// </summary>
+    public Func<TProjection, List<Guid?>>[] ListSelectors { get; private set; } = Array.Empty<Func<TProjection, List<Guid?>>>();
+
+    // ── Nullable Guid selectors ──────────────────────────────────────
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester with nullable Guid selectors and a service name for routing.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server (empty string for single-service servers)</param>
+    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
+    public GrpcEventRequester(string address, string serviceName, params Func<TProjection, Guid?>[] foreignIdSelectors)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            throw new NostifyException("gRPC endpoint address is required for GrpcEventRequester");
+        }
+
+        Address = address;
+        ServiceName = serviceName ?? "";
+        ForeignIdSelectors = foreignIdSelectors ?? Array.Empty<Func<TProjection, Guid?>>();
+        SingleSelectors = ForeignIdSelectors;
+    }
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester with nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="foreignIdSelectors">Functions to get the foreign id for the aggregates required to populate one or more fields in the projection</param>
+    public GrpcEventRequester(string address, params Func<TProjection, Guid?>[] foreignIdSelectors)
+        : this(address, "", foreignIdSelectors)
+    {
+    }
+
+    // ── Non-nullable Guid selectors ──────────────────────────────────
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester with non-nullable Guid selectors and a service name for routing.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server (empty string for single-service servers)</param>
+    /// <param name="singleIdSelectors">Functions that return a single foreign id (non-nullable) for the aggregates</param>
+    public GrpcEventRequester(string address, string serviceName, params Func<TProjection, Guid>[] singleIdSelectors)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            throw new NostifyException("gRPC endpoint address is required for GrpcEventRequester");
+        }
+
+        Address = address;
+        ServiceName = serviceName ?? "";
+        SingleSelectors = singleIdSelectors?.Select(selector => new Func<TProjection, Guid?>(p => selector(p))).ToArray() ?? Array.Empty<Func<TProjection, Guid?>>();
+        ListSelectors = Array.Empty<Func<TProjection, List<Guid?>>>();
+        ForeignIdSelectors = SingleSelectors;
+    }
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester with non-nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="singleIdSelectors">Functions that return a single foreign id (non-nullable) for the aggregates</param>
+    public GrpcEventRequester(string address, params Func<TProjection, Guid>[] singleIdSelectors)
+        : this(address, "", singleIdSelectors)
+    {
+    }
+
+    // ── Nullable Guid list selectors ─────────────────────────────────
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester with nullable Guid list selectors and a service name for routing.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server (empty string for single-service servers)</param>
+    /// <param name="listIdSelectors">Functions that return a list of foreign ids for the aggregates</param>
+    public GrpcEventRequester(string address, string serviceName, params Func<TProjection, List<Guid?>>[] listIdSelectors)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            throw new NostifyException("gRPC endpoint address is required for GrpcEventRequester");
+        }
+
+        Address = address;
+        ServiceName = serviceName ?? "";
+        SingleSelectors = Array.Empty<Func<TProjection, Guid?>>();
+        ListSelectors = listIdSelectors ?? Array.Empty<Func<TProjection, List<Guid?>>>();
+        ForeignIdSelectors = Array.Empty<Func<TProjection, Guid?>>();
+    }
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester with nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="listIdSelectors">Functions that return a list of foreign ids for the aggregates</param>
+    public GrpcEventRequester(string address, params Func<TProjection, List<Guid?>>[] listIdSelectors)
+        : this(address, "", listIdSelectors)
+    {
+    }
+
+    // ── Non-nullable Guid list selectors ─────────────────────────────
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester with non-nullable Guid list selectors and a service name for routing.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server (empty string for single-service servers)</param>
+    /// <param name="listIdSelectors">Functions that return a list of non-nullable foreign ids for the aggregates</param>
+    public GrpcEventRequester(string address, string serviceName, params Func<TProjection, List<Guid>>[] listIdSelectors)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            throw new NostifyException("gRPC endpoint address is required for GrpcEventRequester");
+        }
+
+        Address = address;
+        ServiceName = serviceName ?? "";
+        SingleSelectors = Array.Empty<Func<TProjection, Guid?>>();
+        ListSelectors = listIdSelectors?.Select(selector => new Func<TProjection, List<Guid?>>(p => selector(p).Select(g => (Guid?)g).ToList())).ToArray()
+            ?? Array.Empty<Func<TProjection, List<Guid?>>>();
+        ForeignIdSelectors = Array.Empty<Func<TProjection, Guid?>>();
+    }
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester with non-nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="listIdSelectors">Functions that return a list of non-nullable foreign ids for the aggregates</param>
+    public GrpcEventRequester(string address, params Func<TProjection, List<Guid>>[] listIdSelectors)
+        : this(address, "", listIdSelectors)
+    {
+    }
+
+    // ── Mixed single + list (nullable) ───────────────────────────────
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester that accepts a mix of single and list foreign ID selectors with a service name for routing.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server (empty string for single-service servers)</param>
+    /// <param name="singleIdSelectors">Functions that return a single foreign id for the aggregates</param>
+    /// <param name="listIdSelectors">Functions that return a list of foreign ids for the aggregates</param>
+    public GrpcEventRequester(string address, string serviceName, Func<TProjection, Guid?>[] singleIdSelectors, Func<TProjection, List<Guid?>>[] listIdSelectors)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            throw new NostifyException("gRPC endpoint address is required for GrpcEventRequester");
+        }
+
+        Address = address;
+        ServiceName = serviceName ?? "";
+        SingleSelectors = singleIdSelectors ?? Array.Empty<Func<TProjection, Guid?>>();
+        ListSelectors = listIdSelectors ?? Array.Empty<Func<TProjection, List<Guid?>>>();
+        ForeignIdSelectors = SingleSelectors;
+    }
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester that accepts a mix of single and list foreign ID selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="singleIdSelectors">Functions that return a single foreign id for the aggregates</param>
+    /// <param name="listIdSelectors">Functions that return a list of foreign ids for the aggregates</param>
+    public GrpcEventRequester(string address, Func<TProjection, Guid?>[] singleIdSelectors, Func<TProjection, List<Guid?>>[] listIdSelectors)
+        : this(address, "", singleIdSelectors, listIdSelectors)
+    {
+    }
+
+    // ── Mixed single + list (non-nullable) ───────────────────────────
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester that accepts a mix of single non-nullable and list non-nullable selectors with a service name for routing.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server (empty string for single-service servers)</param>
+    /// <param name="singleIdSelectors">Functions that return a single non-nullable foreign id</param>
+    /// <param name="listIdSelectors">Functions that return a list of non-nullable foreign ids</param>
+    public GrpcEventRequester(string address, string serviceName, Func<TProjection, Guid>[] singleIdSelectors, Func<TProjection, List<Guid>>[] listIdSelectors)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            throw new NostifyException("gRPC endpoint address is required for GrpcEventRequester");
+        }
+
+        Address = address;
+        ServiceName = serviceName ?? "";
+        SingleSelectors = singleIdSelectors?.Select(selector => new Func<TProjection, Guid?>(p => selector(p))).ToArray() ?? Array.Empty<Func<TProjection, Guid?>>();
+        ListSelectors = listIdSelectors?.Select(selector => new Func<TProjection, List<Guid?>>(p => selector(p).Select(g => (Guid?)g).ToList())).ToArray()
+            ?? Array.Empty<Func<TProjection, List<Guid?>>>();
+        ForeignIdSelectors = SingleSelectors;
+    }
+
+    /// <summary>
+    /// Constructor for GrpcEventRequester that accepts a mix of single non-nullable and list non-nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address. Must not be null or empty.</param>
+    /// <param name="singleIdSelectors">Functions that return a single non-nullable foreign id</param>
+    /// <param name="listIdSelectors">Functions that return a list of non-nullable foreign ids</param>
+    public GrpcEventRequester(string address, Func<TProjection, Guid>[] singleIdSelectors, Func<TProjection, List<Guid>>[] listIdSelectors)
+        : this(address, "", singleIdSelectors, listIdSelectors)
+    {
+    }
+
+    /// <summary>
+    /// Gets all foreign ID selectors by combining single selectors with expanded list selectors.
+    /// List selectors are expanded per-projection into individual single-ID selectors.
+    /// </summary>
+    /// <param name="projections">The projections to expand list selectors against</param>
+    /// <returns>Array of all foreign ID selectors</returns>
+    public Func<TProjection, Guid?>[] GetAllForeignIdSelectors(List<TProjection> projections)
+    {
+        if (!ListSelectors.Any())
+        {
+            return SingleSelectors;
+        }
+
+        // Expand list selectors into single selectors per projection per list item
+        var expandedSelectors = projections
+            .SelectMany(p => ListSelectors.SelectMany(selector => selector(p)),
+                (p, guidValue) => new { ProjectionId = p.id, Guid = guidValue })
+            .Where(x => x.Guid.HasValue)
+            .Select(x => new Func<TProjection, Guid?>(p => p.id == x.ProjectionId ? x.Guid : null))
+            .ToArray();
+
+        return SingleSelectors.Concat(expandedSelectors).ToArray();
+    }
+}

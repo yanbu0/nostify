@@ -143,7 +143,6 @@ public class ProjectionInitializer : IProjectionInitializer
         List<P> projections = await projectionContainer.GetItemLinqQueryable<P>().Where(x => x.initialized == false).ReadAllAsync();
 
         //Call InitAsync until all projections are initialized, must call in a loop due to async creation of projections
-        int i = 0;
         while (projections.Count > 0)
         {
             await InitAsync(projections, nostify, httpClient, pointInTime);
@@ -153,12 +152,6 @@ public class ProjectionInitializer : IProjectionInitializer
             {
                 await Task.Delay(1000);
                 projections = await projectionContainer.GetItemLinqQueryable<P>().Where(x => x.initialized == false).ReadAllAsync();
-            }
-            i++;
-            if (i > maxloopSize)
-            {
-                await nostify.HandleUndeliverableAsync("InitAllUninitialized", "Exceeded max loop size of " + maxloopSize, null);
-                break;
             }
         }
     }

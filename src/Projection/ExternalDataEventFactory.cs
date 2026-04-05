@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
+using Confluent.Kafka;
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 
@@ -26,6 +28,10 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     private List<Func<P, List<Guid?>>> _nullableDependantListIdSelectors = new List<Func<P, List<Guid?>>>();
     private EventRequester<P>[] _eventRequestors = new EventRequester<P>[0];
     private EventRequester<P>[] _dependantEventRequestors = new EventRequester<P>[0];
+    private AsyncEventRequester<P>[] _asyncEventRequestors = new AsyncEventRequester<P>[0];
+    private AsyncEventRequester<P>[] _dependantAsyncEventRequestors = new AsyncEventRequester<P>[0];
+    private GrpcEventRequester<P>[] _grpcEventRequestors = new GrpcEventRequester<P>[0];
+    private GrpcEventRequester<P>[] _dependantGrpcEventRequestors = new GrpcEventRequester<P>[0];
     private List<P> _projectionsToInit = new List<P>();
     private DateTime? _pointInTime;
 
@@ -212,6 +218,513 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         return this;
     }
 
+    #region Async Event Requestors (Kafka)
+
+    /// <summary>
+    /// Adds async event requestors for fetching events from external services via Kafka.
+    /// </summary>
+    /// <param name="asyncEventRequestors">Async event requestors containing service names and ID selectors</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> AddAsyncEventRequestors(params AsyncEventRequester<P>[] asyncEventRequestors)
+    {
+        this._asyncEventRequestors = this._asyncEventRequestors.Concat(asyncEventRequestors).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds dependent async event requestors for fetching events from external services via Kafka.
+    /// These requestors are evaluated after the first round of events are applied to projections.
+    /// </summary>
+    /// <param name="asyncEventRequestors">Async event requestors for external services with dependent ID selectors</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> AddDependantAsyncEventRequestors(params AsyncEventRequester<P>[] asyncEventRequestors)
+    {
+        this._dependantAsyncEventRequestors = this._dependantAsyncEventRequestors.Concat(asyncEventRequestors).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds an async event requestor for fetching events from an external service via Kafka, using nullable Guid selectors.
+    /// </summary>
+    /// <param name="serviceName">The name of the external service (used to derive Kafka topic)</param>
+    /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithAsyncEventRequestor(string serviceName, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._asyncEventRequestors = this._asyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, foreignIdSelectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds an async event requestor for fetching events from an external service via Kafka, using non-nullable Guid selectors.
+    /// </summary>
+    /// <param name="serviceName">The name of the external service (used to derive Kafka topic)</param>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithAsyncEventRequestor(string serviceName, params Func<P, Guid>[] selectors)
+    {
+        this._asyncEventRequestors = this._asyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds an async event requestor for fetching events from an external service via Kafka, using nullable Guid list selectors.
+    /// </summary>
+    /// <param name="serviceName">The name of the external service (used to derive Kafka topic)</param>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithAsyncEventRequestor(string serviceName, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._asyncEventRequestors = this._asyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds an async event requestor for fetching events from an external service via Kafka, using non-nullable Guid list selectors.
+    /// </summary>
+    /// <param name="serviceName">The name of the external service (used to derive Kafka topic)</param>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithAsyncEventRequestor(string serviceName, params Func<P, List<Guid>>[] selectors)
+    {
+        this._asyncEventRequestors = this._asyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds an async event requestor for fetching events from an external service via Kafka,
+    /// using a mix of single nullable and list nullable selectors.
+    /// </summary>
+    /// <param name="serviceName">The name of the external service (used to derive Kafka topic)</param>
+    /// <param name="single">Functions that return a single nullable foreign id</param>
+    /// <param name="list">Functions that return a list of nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithAsyncEventRequestor(string serviceName, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._asyncEventRequestors = this._asyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, single, list)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds an async event requestor for fetching events from an external service via Kafka,
+    /// using a mix of single non-nullable and list non-nullable selectors.
+    /// </summary>
+    /// <param name="serviceName">The name of the external service (used to derive Kafka topic)</param>
+    /// <param name="single">Functions that return a single non-nullable foreign id</param>
+    /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithAsyncEventRequestor(string serviceName, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._asyncEventRequestors = this._asyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, single, list)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent async event requestor via Kafka, using nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantAsyncEventRequestor(string serviceName, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._dependantAsyncEventRequestors = this._dependantAsyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, foreignIdSelectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent async event requestor via Kafka, using non-nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantAsyncEventRequestor(string serviceName, params Func<P, Guid>[] selectors)
+    {
+        this._dependantAsyncEventRequestors = this._dependantAsyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent async event requestor via Kafka, using nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantAsyncEventRequestor(string serviceName, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._dependantAsyncEventRequestors = this._dependantAsyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent async event requestor via Kafka, using non-nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantAsyncEventRequestor(string serviceName, params Func<P, List<Guid>>[] selectors)
+    {
+        this._dependantAsyncEventRequestors = this._dependantAsyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent async event requestor via Kafka,
+    /// using a mix of single nullable and list nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantAsyncEventRequestor(string serviceName, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._dependantAsyncEventRequestors = this._dependantAsyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, single, list)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent async event requestor via Kafka,
+    /// using a mix of single non-nullable and list non-nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantAsyncEventRequestor(string serviceName, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._dependantAsyncEventRequestors = this._dependantAsyncEventRequestors.Append(new AsyncEventRequester<P>(serviceName, single, list)).ToArray();
+        return this;
+    }
+
+    #endregion
+
+    #region gRPC Event Requestors
+
+    /// <summary>
+    /// Adds gRPC event requestors for fetching events from external services via gRPC.
+    /// </summary>
+    /// <param name="grpcEventRequestors">gRPC event requestors containing addresses and ID selectors</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> AddGrpcEventRequestors(params GrpcEventRequester<P>[] grpcEventRequestors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Concat(grpcEventRequestors).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address (e.g. "https://localhost:5001")</param>
+    /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, foreignIdSelectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using non-nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, Guid>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using non-nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, List<Guid>>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor using a mix of single nullable and list nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="single">Functions that return a single nullable foreign id</param>
+    /// <param name="list">Functions that return a list of nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor using a mix of single non-nullable and list non-nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="single">Functions that return a single non-nullable foreign id</param>
+    /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    // ── WithGrpcEventRequestor overloads with serviceName + authToken ──
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address (e.g. "https://localhost:5001")</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, foreignIdSelectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using non-nullable Guid selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using non-nullable Guid list selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid>>[] selectors)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using a mix of single nullable and list nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="single">Functions that return a single nullable foreign id</param>
+    /// <param name="list">Functions that return a list of nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, single, list) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a gRPC event requestor with a service name and auth token, using a mix of single non-nullable and list non-nullable selectors.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="single">Functions that return a single non-nullable foreign id</param>
+    /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, single, list) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds dependent gRPC event requestors. Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="grpcEventRequestors">gRPC event requestors for external services with dependent ID selectors</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> AddDependantGrpcEventRequestors(params GrpcEventRequester<P>[] grpcEventRequestors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Concat(grpcEventRequestors).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor via gRPC, using nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, foreignIdSelectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor via gRPC, using non-nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, Guid>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor via gRPC, using nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor via gRPC, using non-nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, List<Guid>>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor using a mix of single nullable and list nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor using a mix of single non-nullable and list non-nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        return this;
+    }
+
+    // ── WithDependantGrpcEventRequestor overloads with serviceName + authToken ──
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid?>[] foreignIdSelectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, foreignIdSelectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using non-nullable Guid selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, Guid>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid?>>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using non-nullable Guid list selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, params Func<P, List<Guid>>[] selectors)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, selectors) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using a mix of single nullable and list nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="single">Functions that return a single nullable foreign id</param>
+    /// <param name="list">Functions that return a list of nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, single, list) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a dependent gRPC event requestor with a service name and auth token, using a mix of single non-nullable and list non-nullable selectors.
+    /// Evaluated after the first round of events are applied.
+    /// </summary>
+    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="serviceName">The target service name for routing in a unified gRPC server</param>
+    /// <param name="authToken">Optional authentication token sent as Bearer authorization metadata</param>
+    /// <param name="single">Functions that return a single non-nullable foreign id</param>
+    /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
+    public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, string serviceName, string? authToken, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+    {
+        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, serviceName, single, list) { AuthToken = authToken ?? "" }).ToArray();
+        return this;
+    }
+
+    #endregion
+
     public async Task<List<ExternalDataEvent>> GetEventsAsync()
     {
         var result = new List<ExternalDataEvent>();
@@ -279,6 +792,23 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             result.AddRange(externalEvents);
         }
 
+        // Handle async (Kafka) event requestors
+        if (_asyncEventRequestors.Any())
+        {
+            var asyncEvents = await GetAsyncEventsAsync(_asyncEventRequestors, _projectionsToInit);
+            result.AddRange(asyncEvents);
+        }
+
+        // Handle gRPC event requestors
+        if (_grpcEventRequestors.Any())
+        {
+            var grpcEvents = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync<P>(
+                this._projectionsToInit,
+                this._pointInTime,
+                this._grpcEventRequestors);
+            result.AddRange(grpcEvents);
+        }
+
         // Handle dependent selectors - these require applying ALL initial events first to get the IDs
         // This runs after both local and external events have been collected
         if (_dependantIdSelectors.Any() || _dependantListIdSelectors.Any() || _nullableDependantIdSelectors.Any() || _nullableDependantListIdSelectors.Any())
@@ -292,6 +822,20 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         {
             var dependantExternalEvents = await GetDependantExternalEventsAsync(result);
             result.AddRange(dependantExternalEvents);
+        }
+
+        // Handle dependent async (Kafka) event requestors - these also require applying initial events first
+        if (_dependantAsyncEventRequestors.Any())
+        {
+            var dependantAsyncEvents = await GetDependantAsyncEventsAsync(result);
+            result.AddRange(dependantAsyncEvents);
+        }
+
+        // Handle dependent gRPC event requestors - these also require applying initial events first
+        if (_dependantGrpcEventRequestors.Any())
+        {
+            var dependantGrpcEvents = await GetDependantGrpcEventsAsync(result);
+            result.AddRange(dependantGrpcEvents);
         }
 
         return result; 
@@ -568,6 +1112,235 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
         }
 
+        return result;
+    }
+
+    /// <summary>
+    /// Gets events from external services for dependent async (Kafka) requestors by first applying the initial events
+    /// to projections, then using the dependent async event requestors to fetch events via Kafka.
+    /// </summary>
+    private async Task<List<ExternalDataEvent>> GetDependantAsyncEventsAsync(List<ExternalDataEvent> initialEvents)
+    {
+        // Create temporary copies of projections and apply initial events
+        var projectionsWithAppliedEvents = new List<P>();
+        foreach (var projection in _projectionsToInit)
+        {
+            var json = JsonConvert.SerializeObject(projection);
+            var projectionCopy = JsonConvert.DeserializeObject<P>(json);
+
+            if (projectionCopy == null)
+            {
+                continue;
+            }
+
+            var eventsForProjection = initialEvents
+                .Where(e => e.aggregateRootId == projection.id)
+                .SelectMany(e => e.events)
+                .OrderBy(e => e.timestamp);
+
+            foreach (var evt in eventsForProjection)
+            {
+                projectionCopy.Apply(evt);
+            }
+
+            projectionsWithAppliedEvents.Add(projectionCopy);
+        }
+
+        // Use the updated projections with the dependent async event requestors
+        var asyncEvents = await GetAsyncEventsAsync(_dependantAsyncEventRequestors, projectionsWithAppliedEvents);
+
+        // Map the results back to the original projection IDs (they should already match since we use projection.id)
+        return asyncEvents;
+    }
+
+    /// <summary>
+    /// Gets events from external services for dependent gRPC requestors by first applying the initial events
+    /// to projections, then using the dependent gRPC event requestors to fetch events via gRPC.
+    /// </summary>
+    private async Task<List<ExternalDataEvent>> GetDependantGrpcEventsAsync(List<ExternalDataEvent> initialEvents)
+    {
+        // Create temporary copies of projections and apply initial events
+        var projectionsWithAppliedEvents = new List<P>();
+        foreach (var projection in _projectionsToInit)
+        {
+            var json = JsonConvert.SerializeObject(projection);
+            var projectionCopy = JsonConvert.DeserializeObject<P>(json);
+
+            if (projectionCopy == null)
+            {
+                continue;
+            }
+
+            var eventsForProjection = initialEvents
+                .Where(e => e.aggregateRootId == projection.id)
+                .SelectMany(e => e.events)
+                .OrderBy(e => e.timestamp);
+
+            foreach (var evt in eventsForProjection)
+            {
+                projectionCopy.Apply(evt);
+            }
+
+            projectionsWithAppliedEvents.Add(projectionCopy);
+        }
+
+        // Use the updated projections with the dependent gRPC event requestors
+        var grpcEvents = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync<P>(
+            projectionsWithAppliedEvents,
+            _pointInTime,
+            _dependantGrpcEventRequestors);
+
+        // Map the results back to the original projection IDs (they should already match since we use projection.id)
+        return grpcEvents;
+    }
+
+    /// <summary>
+    /// Fetches events from external services via Kafka request-response pattern.
+    /// For each requestor, produces an <see cref="AsyncEventRequest"/> message and consumes 
+    /// <see cref="AsyncEventRequestResponse"/> messages until complete or timeout.
+    /// </summary>
+    /// <param name="requestors">The async event requestors to process</param>
+    /// <param name="projections">The projections to extract foreign IDs from</param>
+    /// <returns>List of ExternalDataEvent from all async requestors</returns>
+    private async Task<List<ExternalDataEvent>> GetAsyncEventsAsync(AsyncEventRequester<P>[] requestors, List<P> projections)
+    {
+        var result = new List<ExternalDataEvent>();
+
+        // Read timeout from environment variable
+        var timeoutSecondsStr = Environment.GetEnvironmentVariable("AsyncEventRequestTimeoutSeconds");
+        int timeoutSeconds = 30;
+        if (int.TryParse(timeoutSecondsStr, out var parsedTimeout) && parsedTimeout > 0)
+        {
+            timeoutSeconds = parsedTimeout;
+        }
+
+        // Create a dedicated consumer per request to avoid thread-safety issues with shared IConsumer instances.
+        // Confluent's IConsumer is not thread-safe; concurrent projection initializations for the same
+        // projection type would otherwise share and race on the same cached consumer instance.
+        var consumerGroup = P.containerName;
+        var consumer = _nostify.CreateKafkaConsumer(consumerGroup);
+
+        try
+        {
+        // Process each requestor
+        foreach (var requestor in requestors)
+        {
+            // Collect all foreign IDs for this requestor
+            var allSelectors = requestor.ListSelectors.Any()
+                ? requestor.GetAllForeignIdSelectors(projections)
+                : requestor.ForeignIdSelectors;
+
+            var foreignIds = (
+                from p in projections
+                from f in allSelectors
+                let foreignId = f(p)
+                where foreignId.HasValue && foreignId.Value != Guid.Empty
+                select foreignId!.Value
+            ).Distinct().ToList();
+
+            if (!foreignIds.Any())
+            {
+                continue;
+            }
+
+            // Ensure consumer is subscribed to the response topic
+            var responseTopic = requestor.ResponseTopicName;
+            var currentSubscription = consumer.Subscription ?? new List<string>();
+            if (!currentSubscription.Contains(responseTopic))
+            {
+                var newSubscription = currentSubscription.Concat(new[] { responseTopic }).Distinct().ToList();
+                consumer.Subscribe(newSubscription);
+                // Poll briefly to trigger partition assignment
+                consumer.Consume(TimeSpan.FromMilliseconds(100));
+            }
+
+            // Generate correlation ID for this request
+            var correlationId = Guid.NewGuid().ToString();
+
+            // Produce the request
+            var request = new AsyncEventRequest
+            {
+                topic = requestor.TopicName,
+                responseTopic = responseTopic,
+                subtopic = "",
+                aggregateRootIds = foreignIds,
+                pointInTime = _pointInTime,
+                correlationId = correlationId
+            };
+            var requestJson = JsonConvert.SerializeObject(request);
+            await _nostify.KafkaProducer.ProduceAsync(requestor.TopicName, new Message<string, string> { Value = requestJson });
+
+            // Consume responses until complete or timeout
+            var accumulatedEvents = new List<Event>();
+            var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            bool complete = false;
+
+            while (!complete && DateTime.UtcNow < deadline)
+            {
+                var remaining = deadline - DateTime.UtcNow;
+                if (remaining <= TimeSpan.Zero) break;
+
+                var consumeResult = consumer.Consume(remaining < TimeSpan.FromSeconds(1) ? remaining : TimeSpan.FromSeconds(1));
+                if (consumeResult == null) continue;
+
+                // Try to deserialize as a response
+                AsyncEventRequestResponse response;
+                try
+                {
+                    response = JsonConvert.DeserializeObject<AsyncEventRequestResponse>(consumeResult.Message.Value);
+                }
+                catch
+                {
+                    // Not a response message (could be a request from another service), skip
+                    continue;
+                }
+
+                // Check if this response matches our correlation ID
+                if (response?.correlationId != correlationId) continue;
+
+                // Accumulate events
+                if (response.events != null)
+                {
+                    accumulatedEvents.AddRange(response.events);
+                }
+
+                // Reset deadline on each matching message
+                deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+
+                if (response.complete)
+                {
+                    complete = true;
+                }
+            }
+
+            // Map accumulated events back to projections
+            if (accumulatedEvents.Any())
+            {
+                var eventsByAggRoot = accumulatedEvents.ToLookup(e => e.aggregateRootId);
+
+                var mappedEvents = (
+                    from p in projections
+                    from f in allSelectors
+                    let foreignId = f(p)
+                    where foreignId.HasValue
+                    let eventList = eventsByAggRoot[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
+                    where eventList.Any()
+                    select new ExternalDataEvent(p.id, eventList)
+                ).ToList();
+
+                result.AddRange(mappedEvents);
+            }
+        }
+        }
+        finally
+        {
+            try
+            {
+                consumer.Close();
+            }
+            catch { }
+            consumer.Dispose();
+        }
         return result;
     }
 }

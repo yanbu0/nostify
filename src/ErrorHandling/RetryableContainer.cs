@@ -52,7 +52,7 @@ public class RetryableContainer : IRetryableContainer
             onExhausted,
             onNotFound,
             onException,
-            $"ApplyAndPersist<{typeof(T).Name}> for event {newEvent.aggregateRootId}"
+            $"ApplyAndPersist<{typeof(T).Name}> for aggregateRootId {newEvent.aggregateRootId}"
         );
     }
 
