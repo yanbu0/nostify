@@ -40,11 +40,13 @@ public class GetAsyncEventsAsyncTests : IDisposable
 
         // Wire up mock nostify
         _mockNostify.Setup(n => n.KafkaProducer).Returns(_mockProducer.Object);
-        _mockNostify.Setup(n => n.GetOrCreateKafkaConsumer(It.IsAny<string>())).Returns(_mockConsumer.Object);
+        _mockNostify.Setup(n => n.CreateKafkaConsumer(It.IsAny<string>())).Returns(_mockConsumer.Object);
 
         // Consumer subscription setup
         _mockConsumer.Setup(c => c.Subscription).Returns(new List<string>());
         _mockConsumer.Setup(c => c.Subscribe(It.IsAny<IEnumerable<string>>()));
+        _mockConsumer.Setup(c => c.Close());
+        _mockConsumer.Setup(c => c.Dispose());
 
         // Setup event store container (needed by GetEventsAsync even when only using async requestors)
         var mockContainer = CosmosTestHelpers.CreateMockContainerWithEvents(new List<Event>());
@@ -1415,7 +1417,7 @@ public class GetAsyncEventsAsyncTests : IDisposable
         await factory.GetEventsAsync();
 
         // Assert - consumer group should be the projection's containerName
-        _mockNostify.Verify(n => n.GetOrCreateKafkaConsumer("FactoryTestProjections"), Times.Once);
+        _mockNostify.Verify(n => n.CreateKafkaConsumer("FactoryTestProjections"), Times.Once);
     }
 
     #endregion
@@ -1731,7 +1733,7 @@ public class GetAsyncEventsAsyncTests : IDisposable
         var mockNostify = new Mock<INostify>();
         mockNostify.Setup(n => n.GetEventStoreContainerAsync(It.IsAny<bool>())).ReturnsAsync(mockContainer.Object);
         mockNostify.Setup(n => n.KafkaProducer).Returns(_mockProducer.Object);
-        mockNostify.Setup(n => n.GetOrCreateKafkaConsumer(It.IsAny<string>())).Returns(_mockConsumer.Object);
+        mockNostify.Setup(n => n.CreateKafkaConsumer(It.IsAny<string>())).Returns(_mockConsumer.Object);
 
         int produceCallCount = 0;
         _mockProducer.Setup(p => p.ProduceAsync(
@@ -1923,7 +1925,7 @@ public class GetAsyncEventsAsyncTests : IDisposable
         localMockNostify.Setup(n => n.GetEventStoreContainerAsync(It.IsAny<bool>()))
             .ReturnsAsync(mockContainer.Object);
         localMockNostify.Setup(n => n.KafkaProducer).Returns(_mockProducer.Object);
-        localMockNostify.Setup(n => n.GetOrCreateKafkaConsumer(It.IsAny<string>())).Returns(_mockConsumer.Object);
+        localMockNostify.Setup(n => n.CreateKafkaConsumer(It.IsAny<string>())).Returns(_mockConsumer.Object);
 
         _mockConsumer.Setup(c => c.Subscription).Returns(new List<string>());
 

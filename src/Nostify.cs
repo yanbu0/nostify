@@ -112,6 +112,23 @@ public class Nostify : INostify, IDisposable
         });
     }
 
+    /// <inheritdoc />
+    public IConsumer<string, string> CreateKafkaConsumer(string consumerGroup)
+    {
+        if (_baseConsumerConfig == null)
+        {
+            throw new NostifyException("Kafka consumer config is not available. Ensure WithKafka() or WithEventHubs() was called during configuration.");
+        }
+
+        var config = new ConsumerConfig(_baseConsumerConfig)
+        {
+            GroupId = consumerGroup
+        };
+        var consumer = new ConsumerBuilder<string, string>(config).Build();
+        Logger?.LogDebug("Created dedicated Kafka consumer for group {ConsumerGroup}", consumerGroup);
+        return consumer;
+    }
+
     /// <summary>
     /// Disposes all cached Kafka consumers and the producer.
     /// </summary>

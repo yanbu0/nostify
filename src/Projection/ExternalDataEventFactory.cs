@@ -1214,11 +1214,14 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             timeoutSeconds = parsedTimeout;
         }
 
-        // Get the consumer group from the projection's containerName
-        // P is constrained to IProjection which has static abstract containerName
+        // Create a dedicated consumer per request to avoid thread-safety issues with shared IConsumer instances.
+        // Confluent's IConsumer is not thread-safe; concurrent projection initializations for the same
+        // projection type would otherwise share and race on the same cached consumer instance.
         var consumerGroup = P.containerName;
-        var consumer = _nostify.GetOrCreateKafkaConsumer(consumerGroup);
+        var consumer = _nostify.CreateKafkaConsumer(consumerGroup);
 
+        try
+        {
         // Process each requestor
         foreach (var requestor in requestors)
         {
@@ -1328,7 +1331,16 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 result.AddRange(mappedEvents);
             }
         }
-
+        }
+        finally
+        {
+            try
+            {
+                consumer.Close();
+            }
+            catch { }
+            consumer.Dispose();
+        }
         return result;
     }
 }

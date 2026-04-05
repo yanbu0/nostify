@@ -21,7 +21,8 @@ public static class DefaultEventRequestHandlers
     /// Handles an incoming <see cref="AsyncEventRequest"/> from a Kafka trigger.
     /// Deserializes the request, queries the event store for the requested aggregate root IDs,
     /// chunks the results into <see cref="AsyncEventRequestResponse"/> messages, and publishes
-    /// them back to the request topic via the Kafka producer.
+    /// them to the response topic specified in the request (falling back to the request topic
+    /// when no dedicated response topic is provided) via the Kafka producer.
     /// </summary>
     /// <param name="nostify">The nostify instance for accessing the event store and Kafka producer.</param>
     /// <param name="triggerEvent">The Kafka trigger event containing the serialized <see cref="AsyncEventRequest"/>.</param>

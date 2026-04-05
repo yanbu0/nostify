@@ -53,6 +53,16 @@ public interface INostify
     IConsumer<string, string> GetOrCreateKafkaConsumer(string consumerGroup);
 
     ///<summary>
+    /// Creates a new, dedicated Kafka consumer for the given consumer group.
+    /// Unlike <see cref="GetOrCreateKafkaConsumer"/>, the returned consumer is NOT cached and
+    /// the caller is responsible for disposing it after use.
+    /// Use this when thread-safe, short-lived consumer ownership is required (e.g., per-request consumption).
+    ///</summary>
+    ///<param name="consumerGroup">The consumer group ID</param>
+    ///<returns>A new IConsumer instance owned by the caller</returns>
+    IConsumer<string, string> CreateKafkaConsumer(string consumerGroup);
+
+    ///<summary>
     /// Projection initializer for Projections that require external data to be queried to update the projection.
     /// This property is used to initialize projections with external data events.
     ///</summary>
