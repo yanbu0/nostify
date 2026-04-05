@@ -242,10 +242,24 @@ public static class DefaultCommandHandler
             Guid newId = Guid.NewGuid();
             e.id = newId;
 
-            var propertyInfo = e.GetType().GetProperty(partitionKeyName) 
-                ?? throw new InvalidOperationException($"Property '{partitionKeyName}' not found on type '{typeof(T).Name}'");
+            var propertyInfo = e.GetType().GetProperty(partitionKeyName);
+            if (propertyInfo == null)
+            {
+                throw new NostifyException($"Property '{partitionKeyName}' was not found on type '{e.GetType().Name}'. Ensure the aggregate defines a public partition key property with that name.");
+            }
+
+            if (!propertyInfo.CanWrite)
+            {
+                throw new NostifyException($"Property '{partitionKeyName}' on type '{e.GetType().Name}' is read-only. Ensure the partition key property has a public setter.");
+            }
+
+            var propertyType = Nullable.GetUnderlyingType(propertyInfo.PropertyType) ?? propertyInfo.PropertyType;
+            if (propertyType != typeof(Guid))
+            {
+                throw new NostifyException($"Property '{partitionKeyName}' on type '{e.GetType().Name}' must be of type '{typeof(Guid).Name}' or '{typeof(Guid?).Name}' to receive the partition key value.");
+            }
+
             propertyInfo.SetValue(e, partitionKey);
-            
             IEvent pe = new EventFactory().Create<T>(command, newId, e, userId, partitionKey);
             peList.Add(pe);
         });
