@@ -130,6 +130,16 @@ public class Nostify : INostify, IDisposable
             }
         }
         _kafkaConsumers.Clear();
+
+        try
+        {
+            KafkaProducer?.Flush(TimeSpan.FromSeconds(5));
+            KafkaProducer?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogWarning(ex, "Error disposing Kafka producer");
+        }
     }
 
     /// <inheritdoc />
