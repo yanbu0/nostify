@@ -337,15 +337,8 @@ public static class NostifyFactory
         try 
         {
         
-            Console.Out.WriteLine("******* Checking Logger *********");
-            if (config.logger == null)
-            {
-                Console.WriteLine("******* Logger is null. Will try to fall back to console logging. Enable logging by using .WithLogger(yourLogger). There isn't really a reason not to enable logging, you should do it. *********");
-            }
-            else
-            {
-                config.logger.LogCritical("ILogger is available and will be used for logging.");
-            }
+            if (config.logger != null) config.logger.LogDebug("ILogger is available and will be used for logging.");
+            else if (verbose) Console.WriteLine("******* Logger is null. Will try to fall back to console logging. Enable logging by using .WithLogger(yourLogger). There isn't really a reason not to enable logging, you should do it. *********");
             //Create Confluent admin client
             if (config.logger != null) config.logger.LogDebug("Building Admin Client");
             else if (verbose) Console.WriteLine("Building Admin Client");
