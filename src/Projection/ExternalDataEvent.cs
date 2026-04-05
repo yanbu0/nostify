@@ -510,25 +510,36 @@ public class ExternalDataEvent
             return new List<ExternalDataEvent>();
         }
 
-        var tasks = grpcRequestors.Select(requestor =>
+        var channelTaskPairs = grpcRequestors.Select(requestor =>
         {
             var allSelectors = requestor.ListSelectors.Any()
                 ? requestor.GetAllForeignIdSelectors(projectionsToInit)
                 : requestor.ForeignIdSelectors;
 
             var channel = global::Grpc.Net.Client.GrpcChannel.ForAddress(requestor.Address);
-            return GetEventsViaGrpcAsync(channel, projectionsToInit, pointInTime, requestor.ServiceName, requestor.AuthToken ?? "", allSelectors);
+            var task = GetEventsViaGrpcAsync(channel, projectionsToInit, pointInTime, requestor.ServiceName, requestor.AuthToken ?? "", allSelectors);
+            return (channel, task);
         }).ToArray();
 
-        var results = await Task.WhenAll(tasks);
-
-        var combinedResults = new List<ExternalDataEvent>();
-        foreach (var r in results)
+        try
         {
-            combinedResults.AddRange(r);
-        }
+            var results = await Task.WhenAll(channelTaskPairs.Select(p => p.task));
 
-        return combinedResults;
+            var combinedResults = new List<ExternalDataEvent>();
+            foreach (var r in results)
+            {
+                combinedResults.AddRange(r);
+            }
+
+            return combinedResults;
+        }
+        finally
+        {
+            foreach (var (channel, _) in channelTaskPairs)
+            {
+                channel.Dispose();
+            }
+        }
     }
 
     /// <summary>
