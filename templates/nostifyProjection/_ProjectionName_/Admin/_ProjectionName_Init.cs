@@ -7,7 +7,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using nostify;
 
-namespace _ReplaceMe_Service;
+namespace _ReplaceMe__Service;
 
 public class _ProjectionName_Init
 {

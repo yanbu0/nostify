@@ -7,7 +7,7 @@ using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using nostify;
 
-namespace _ReplaceMe_Service;
+namespace _ReplaceMe__Service;
 
 public class _ProjectionName_DurableInit
 {
@@ -62,14 +62,14 @@ public class _ProjectionName_DurableInit
 
     [Function(nameof(DeleteAll_ProjectionName_))]
     public async Task DeleteAll_ProjectionName_(
-        [ActivityTrigger] string? input)
+        [ActivityTrigger] TaskActivityContext context)
     {
         await _initializer.DeleteAllProjections();
     }
 
     [Function(nameof(GetDistinctTenantIds__ProjectionName_))]
     public async Task<List<Guid>> GetDistinctTenantIds__ProjectionName_(
-        [ActivityTrigger] string? input)
+        [ActivityTrigger] TaskActivityContext context)
     {
         return await _initializer.GetDistinctTenantIds();
     }
