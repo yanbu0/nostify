@@ -208,10 +208,10 @@ public class DurableProjectionInitializerTests
     #region Constructor Tests
 
     [Fact]
-    public async Task Constructor_WithNullInstanceId_UsesGenericParameterNameNotConcreteTypeName()
+    public async Task Constructor_WithNullInstanceId_UsesConcreteTypeName()
     {
-        // nameof(TProjection) inside a generic class yields "TProjection" (the type parameter
-        // identifier), NOT the concrete type name such as "TestProjection".
+        // typeof(TProjection).FullName yields the concrete type's fully-qualified name
+        // (e.g. "nostify.Tests.TestProjection"), NOT the type parameter identifier "TProjection".
         // Verifiable by observing the instance ID passed to GetInstanceAsync.
         var clientMock = new Mock<DurableTaskClient>("test");
         clientMock
@@ -219,7 +219,7 @@ public class DurableProjectionInitializerTests
             .ReturnsAsync(CreateMetadataWithStatus(OrchestrationRuntimeStatus.Running));
 
         // null! is intentional: the constructor parameter is non-nullable but the body contains
-        //   _instanceId = instanceId ?? $"{nameof(TProjection)}_Init"
+        //   _instanceId = instanceId ?? $"{typeof(TProjection).FullName ?? typeof(TProjection).Name}_Init"
         // so passing null tests the fallback behaviour. The null-forgiving operator suppresses
         // the compiler warning while keeping the semantic intent clear.
         var initializer = new DurableProjectionInitializer<TestProjection, TestAggregate>(
@@ -230,8 +230,9 @@ public class DurableProjectionInitializerTests
         await initializer.StartOrchestration(req, clientMock.Object, "Orchestrator");
 
         // The abstract 3-param overload is what's actually called
+        var expectedInstanceId = $"{typeof(TestProjection).FullName ?? typeof(TestProjection).Name}_Init";
         clientMock.Verify(
-            c => c.GetInstanceAsync("TProjection_Init", It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            c => c.GetInstanceAsync(expectedInstanceId, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

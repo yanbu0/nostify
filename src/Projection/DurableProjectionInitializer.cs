@@ -325,6 +325,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         var container = await _nostify.GetCurrentStateContainerAsync<TAggregate>();
 
         return await container.FilteredQuery<TAggregate>(partitionKey)
+            .Where(x => !x.isDeleted)
             .OrderBy(x => x.id)
             .Skip(pageNumber * _pageSize)
             .Take(_pageSize)
