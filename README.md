@@ -74,7 +74,7 @@
 
 ### Updates
 
-- 4.5.1
+- 4.6.0
   - **DefaultCommandHandler Async Naming**: All handler methods in `DefaultCommandHandler` renamed to follow the `Async` suffix convention (`HandlePostAsync`, `HandlePatchAsync`, `HandleDeleteAsync`, `HandleBulkCreateAsync`, `HandleBulkUpdateAsync`, `HandleBulkDeleteAsync`). Backward-compatible wrappers with the old names are retained but marked `[Obsolete]` and will be removed in a future version. Templates updated to use the new names.
 
 - 4.5.0
