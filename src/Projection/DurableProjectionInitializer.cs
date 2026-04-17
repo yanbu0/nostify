@@ -44,7 +44,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     {
         _httpClient = httpClient;
         _nostify = nostify;
-        _instanceId = instanceId ?? $"{nameof(TProjection)}_Init";
+        _instanceId = instanceId ?? $"{typeof(TProjection).FullName ?? typeof(TProjection).Name}_Init";
 
         _batchSize = batchSize;
         _pageSize = batchSize * concurrentBatchCount;
