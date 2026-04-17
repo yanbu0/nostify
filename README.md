@@ -74,6 +74,9 @@
 
 ### Updates
 
+- 4.5.1
+  - **DefaultCommandHandler Async Naming**: All handler methods in `DefaultCommandHandler` renamed to follow the `Async` suffix convention (`HandlePostAsync`, `HandlePatchAsync`, `HandleDeleteAsync`, `HandleBulkCreateAsync`, `HandleBulkUpdateAsync`, `HandleBulkDeleteAsync`). Backward-compatible wrappers with the old names are retained but marked `[Obsolete]` and will be removed in a future version. Templates updated to use the new names.
+
 - 4.5.0
   - **Kafka Async Event Requests**: New `WithAsyncEventRequestor` and `WithDependantAsyncEventRequestor` methods on `ExternalDataEventFactory<P>` for fetching events from external services via Kafka instead of HTTP. Includes 6 overloads each (nullable/non-nullable single, nullable/non-nullable list, mixed nullable, mixed non-nullable) plus `AddAsyncEventRequestors` and `AddDependantAsyncEventRequestors` batch methods.
   - **AsyncEventRequester<T>**: New configuration class mirroring `EventRequester<T>` for Kafka-based event requests. Uses `ServiceName` instead of `Url` to derive Kafka topics (`{ServiceName}_EventRequest` for requests, `{ServiceName}_EventRequestResponse` for responses). Includes `GetAllForeignIdSelectors()` for list expansion.
