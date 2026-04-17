@@ -75,6 +75,7 @@
 ### Updates
 
 - 4.6.0
+  - **DefaultCommandHandler Async Naming**: All handler methods in `DefaultCommandHandler` renamed to follow the `Async` suffix convention (`HandlePostAsync`, `HandlePatchAsync`, `HandleDeleteAsync`, `HandleBulkCreateAsync`, `HandleBulkUpdateAsync`, `HandleBulkDeleteAsync`). Backward-compatible wrappers with the old names are retained but marked `[Obsolete]` and will be removed in a future version. Templates updated to use the new names.
   - **Version Bump**: Updated all csproj files to reflect nostify 4.6.0.
 
 - 4.5.0
