@@ -415,6 +415,9 @@ public class Nostify : INostify, IDisposable
     ///<inheritdoc />
     public async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
     {
+        if ( Logger != null) Logger.LogError("Undeliverable event in function {FunctionName}. Error: {ErrorMessage}. Event: {Event}", functionName, errorMessage, JsonConvert.SerializeObject(eventToHandle));
+        else Console.WriteLine($"Undeliverable event in function {functionName}. Error: {errorMessage}. Event: {JsonConvert.SerializeObject(eventToHandle)}");
+        
         var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
 
         await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), eventToHandle.aggregateRootId.ToPartitionKey());
