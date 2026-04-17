@@ -18,8 +18,8 @@
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
-| `HandleCreateAsync<T>` | `Task<Guid>` | Creates a single aggregate root from an `HttpRequestData` body. Returns the new aggregate root ID. |
-| `HandleUpdateAsync<T>` | `Task<Guid>` | Updates a single aggregate root from an `HttpRequestData` body. Returns the aggregate root ID. |
+| `HandlePostAsync<T>` | `Task<Guid>` | Creates a single aggregate root from an `HttpRequestData` body. Returns the new aggregate root ID. |
+| `HandlePatchAsync<T>` | `Task<Guid>` | Updates a single aggregate root from an `HttpRequestData` body. Returns the aggregate root ID. |
 | `HandleDeleteAsync<T>` | `Task<Guid>` | Deletes a single aggregate root by ID. Returns the aggregate root ID. |
 
 ### Bulk Create Handlers
