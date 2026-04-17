@@ -53,6 +53,8 @@ public class DurableProjectionInitializerTests
         int batchSize = 10,
         int concurrentBatchCount = 2)
     {
+        // instanceId! suppresses the nullable warning: the constructor accepts string (non-nullable)
+        // but handles null internally via `?? $"{nameof(TProjection)}_Init"`, so null is valid here.
         return new DurableProjectionInitializer<TestProjection, TestAggregate>(
             _httpClient, _nostifyMock.Object, instanceId!, batchSize, concurrentBatchCount);
     }
@@ -178,7 +180,10 @@ public class DurableProjectionInitializerTests
             .Setup(c => c.GetInstanceAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateMetadataWithStatus(OrchestrationRuntimeStatus.Running));
 
-        // null is passed explicitly; constructor uses: _instanceId = instanceId ?? "TProjection_Init"
+        // null! is intentional: the constructor parameter is non-nullable but the body contains
+        //   _instanceId = instanceId ?? $"{nameof(TProjection)}_Init"
+        // so passing null tests the fallback behaviour. The null-forgiving operator suppresses
+        // the compiler warning while keeping the semantic intent clear.
         var initializer = new DurableProjectionInitializer<TestProjection, TestAggregate>(
             _httpClient, _nostifyMock.Object, null!);
 
