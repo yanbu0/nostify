@@ -74,6 +74,12 @@
 
 ### Updates
 
+- 4.7.0
+  - **DurableProjectionInitializer — arbitrary partition keys**: New `OrchestrateInitByPartitionAsync` orchestrator overload that works with any string-valued Cosmos partition key, not just `tenantId`. Companion helpers `GetDistinctPartitionKeys<TKey>(Expression<Func<TAggregate, TKey>>)` and `GetIdsForPartition(PartitionKey, int)` / `GetIdsForPartition(DurablePartitionInitPageInfo)` round out the partition-based API.
+  - **DurablePartitionInitPageInfo**: New struct (`string PartitionKey`, `int PageNumber`) used as the activity input for partition-based ID paging. Mirrors `DurableInitPageInfo` but uses a string partition value for safe Durable Function activity-boundary serialization.
+  - **DRY refactor**: The existing tenant-based `OrchestrateInitAsync` and `GetIdsForTenant(DurableInitPageInfo)` are preserved (no breaking changes) but now delegate to the shared partition-based page-loop helper / `GetIdsForPartition` so all paging, chunking, retry, and concurrency logic lives in one place.
+  - **Version Bump**: Updated all csproj files to reflect nostify 4.7.0.
+
 - 4.6.0
   - **DurableProjectionInitializer**: New `DurableProjectionInitializer<TProjection, TAggregate>` class for initializing projections using Azure Durable Functions orchestration. Designed for large datasets that may exceed the execution time of a single Azure Function. Handles paged, concurrent batch processing per tenant, automatic conflict prevention (one orchestration at a time per instance ID), and clean cancellation/purge of orchestration instances.
   - **DurableInitPageInfo**: New `DurableInitPageInfo` struct carrying a `TenantId` and `PageNumber` as the input to the paged ID-fetch activity.

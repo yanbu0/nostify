@@ -4,7 +4,14 @@
 
 `DurableProjectionInitializer<TProjection, TAggregate>` coordinates full projection rebuilds using Azure Durable Functions orchestration. It is the recommended approach for large datasets where a single Azure Function execution would time out before all projections are initialized.
 
-The class breaks the work into paged, concurrent batches partitioned by tenant, enforces that only one rebuild can run at a time (via a fixed orchestration instance ID), and exposes activity-level helper methods so the host Azure Function class remains thin.
+The class breaks the work into paged, concurrent batches partitioned by either tenant ID or an arbitrary Cosmos partition key, enforces that only one rebuild can run at a time (via a fixed orchestration instance ID), and exposes activity-level helper methods so the host Azure Function class remains thin.
+
+Two orchestrator entry points are provided so the class works with any container partitioning scheme:
+
+- `OrchestrateInitAsync` — convenience overload for aggregates partitioned by `tenantId` (`Guid`).
+- `OrchestrateInitByPartitionAsync` — general overload that works with any string-valued partition key.
+
+The tenant overload internally delegates to the same per-partition page-loop helper used by the partition overload, so there is a single source of truth for paging, chunking, retries, and concurrency.
 
 ## Type Parameters
 
@@ -67,13 +74,32 @@ Task OrchestrateInitAsync(
     ILogger? logger = null)
 ```
 
-The orchestrator body. Orchestration steps:
+Tenant-partitioned orchestrator body. Use this overload when the aggregate's current-state container is partitioned by `tenantId`. Orchestration steps:
 
 1. Call `deleteActivityName` — deletes all existing projections.
-2. Call `getTenantIdsActivityName` — fetches distinct tenant IDs from the aggregate's current-state container.
+2. Call `getTenantIdsActivityName` — fetches distinct tenant IDs (`List<Guid>`) from the aggregate's current-state container.
 3. For each tenant, page through aggregate IDs (calling `getIdsActivityName` with `DurableInitPageInfo`) and fan out `processBatchActivityName` calls concurrently (up to `concurrentBatchCount` at a time), with a 3-attempt retry policy (5 s initial delay, 2× backoff).
 
 Pass `context.CreateReplaySafeLogger` for the `logger` argument to avoid duplicate log entries during orchestration replay.
+
+### OrchestrateInitByPartitionAsync
+
+```csharp
+Task OrchestrateInitByPartitionAsync(
+    TaskOrchestrationContext context,
+    string deleteActivityName,
+    string getPartitionKeysActivityName,
+    string getIdsActivityName,
+    string processBatchActivityName,
+    ILogger? logger = null)
+```
+
+General partition-key orchestrator body. Use this overload when the aggregate's current-state container is partitioned by something other than `tenantId` (e.g. organization ID, region, composite key). Orchestration steps mirror `OrchestrateInitAsync` but:
+
+1. `getPartitionKeysActivityName` returns `List<string>` (the distinct partition key values).
+2. `getIdsActivityName` is invoked with a `DurablePartitionInitPageInfo` input rather than `DurableInitPageInfo`.
+
+Both overloads share the same paging, chunking, retry, and concurrency behavior.
 
 ### DeleteAllProjections
 
@@ -89,7 +115,16 @@ Deletes every document of type `TProjection` from the bulk projection container.
 Task<List<Guid>> GetDistinctTenantIds()
 ```
 
-Queries the `TAggregate` current-state container for all distinct `tenantId` values. Intended to be called from the get-tenant-IDs activity function.
+Queries the `TAggregate` current-state container for all distinct `tenantId` values. Intended to be called from the get-tenant-IDs activity function used with `OrchestrateInitAsync`.
+
+### GetDistinctPartitionKeys
+
+```csharp
+Task<List<string>> GetDistinctPartitionKeys<TKey>(
+    Expression<Func<TAggregate, TKey>> partitionKeySelector)
+```
+
+Queries the `TAggregate` current-state container for distinct values of an arbitrary partition key property (selected via expression, e.g. `x => x.organizationId`) and returns them as a `List<string>` for serialization across activity boundaries. Null values are projected to empty strings. Intended to be called from the get-partition-keys activity function used with `OrchestrateInitByPartitionAsync`.
 
 ### GetIdsForTenant
 
@@ -97,7 +132,16 @@ Queries the `TAggregate` current-state container for all distinct `tenantId` val
 Task<List<Guid>> GetIdsForTenant(DurableInitPageInfo request)
 ```
 
-Returns a page of aggregate IDs for a given tenant, ordered by `id` for stable paging. Intended to be called from the get-IDs activity function.
+Returns a page of aggregate IDs for a given tenant, ordered by `id` for stable paging. Internally delegates to `GetIdsForPartition(request.TenantId.ToPartitionKey(), request.PageNumber)`. Intended to be called from the get-IDs activity function used with `OrchestrateInitAsync`.
+
+### GetIdsForPartition
+
+```csharp
+Task<List<Guid>> GetIdsForPartition(DurablePartitionInitPageInfo request)
+Task<List<Guid>> GetIdsForPartition(PartitionKey partitionKey, int pageNumber)
+```
+
+Returns a page of aggregate IDs for an arbitrary Cosmos partition, ordered by `id` for stable paging. The `DurablePartitionInitPageInfo` overload is the activity-friendly wrapper (constructs a `PartitionKey` from the string value); the `PartitionKey`/`int` overload is the canonical implementation. Both `GetIdsForTenant` and the `DurablePartitionInitPageInfo` overload delegate here so all paging logic lives in one place.
 
 ### ProcessBatch
 
@@ -105,7 +149,7 @@ Returns a page of aggregate IDs for a given tenant, ordered by `id` for stable p
 Task ProcessBatch(List<Guid> ids)
 ```
 
-Replays all events for the supplied aggregate IDs, builds `TProjection` instances, and persists them via `ProjectionInitializer.InitAsync`. Intended to be called from the process-batch activity function.
+Replays all events for the supplied aggregate IDs, builds `TProjection` instances, and persists them via `ProjectionInitializer.InitAsync`. Intended to be called from the process-batch activity function (shared by both orchestrator overloads).
 
 ## DurableInitPageInfo
 
@@ -117,9 +161,21 @@ public struct DurableInitPageInfo
 }
 ```
 
-Lightweight input struct passed to `GetIdsForTenant`. Carries the tenant partition key and the zero-based page number for stable, offset-based paging.
+Lightweight input struct passed to `GetIdsForTenant`. Carries the tenant partition key (`Guid`) and the zero-based page number for stable, offset-based paging.
 
-## Usage — Template-generated Activity Class
+## DurablePartitionInitPageInfo
+
+```csharp
+public struct DurablePartitionInitPageInfo
+{
+    public readonly string PartitionKey;
+    public readonly int PageNumber;
+}
+```
+
+Lightweight input struct passed to `GetIdsForPartition`. Carries the partition key value as a `string` (so it can be serialized across Durable Function activity boundaries) and the zero-based page number. Reconstruct a `Microsoft.Azure.Cosmos.PartitionKey` via `new PartitionKey(request.PartitionKey)` if you need the strongly-typed value directly.
+
+## Usage — Template-generated Activity Class (Tenant-partitioned)
 
 The `nostifyProjection` template generates a ready-to-use class (`_ProjectionName_DurableInit`) that:
 
@@ -177,6 +233,44 @@ public class MyProjectionDurableInit
     [Function(nameof(ProcessMyProjectionBatch))]
     public Task ProcessMyProjectionBatch([ActivityTrigger] List<Guid> ids)
         => _initializer.ProcessBatch(ids);
+}
+```
+
+## Usage — Arbitrary Partition Key
+
+For aggregates whose container is partitioned by a property other than `tenantId`, use `OrchestrateInitByPartitionAsync` and the partition-based helpers:
+
+```csharp
+public class MyProjectionDurableInit
+{
+    private readonly DurableProjectionInitializer<MyProjection, MyAggregate> _initializer;
+
+    public MyProjectionDurableInit(HttpClient httpClient, INostify nostify, ILogger<MyProjectionDurableInit> logger)
+    {
+        _initializer = new DurableProjectionInitializer<MyProjection, MyAggregate>(
+            httpClient, nostify, nameof(MyProjectionDurableInit));
+    }
+
+    [Function(nameof(OrchestrateMyProjectionDurableInit))]
+    public Task OrchestrateMyProjectionDurableInit([OrchestrationTrigger] TaskOrchestrationContext context)
+        => _initializer.OrchestrateInitByPartitionAsync(
+            context,
+            nameof(DeleteAllMyProjection),
+            nameof(GetMyAggregatePartitionKeys),
+            nameof(GetMyAggregateIdsForPartition),
+            nameof(ProcessMyProjectionBatch),
+            context.CreateReplaySafeLogger<MyProjectionDurableInit>());
+
+    [Function(nameof(GetMyAggregatePartitionKeys))]
+    public Task<List<string>> GetMyAggregatePartitionKeys([ActivityTrigger] TaskActivityContext context)
+        => _initializer.GetDistinctPartitionKeys(x => x.organizationId);
+
+    [Function(nameof(GetMyAggregateIdsForPartition))]
+    public Task<List<Guid>> GetMyAggregateIdsForPartition([ActivityTrigger] DurablePartitionInitPageInfo request)
+        => _initializer.GetIdsForPartition(request);
+
+    // DeleteAllMyProjection, ProcessMyProjectionBatch, StartOrchestration, CancelOrchestration
+    // are the same as the tenant-partitioned example above.
 }
 ```
 
