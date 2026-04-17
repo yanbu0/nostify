@@ -30,7 +30,7 @@ public class Create_ReplaceMe_
     {
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
-        return await DefaultCommandHandler.HandlePost<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Create, req, userId, tenantId);
+        return await DefaultCommandHandler.HandlePostAsync<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Create, req, userId, tenantId);
     }
 }
 

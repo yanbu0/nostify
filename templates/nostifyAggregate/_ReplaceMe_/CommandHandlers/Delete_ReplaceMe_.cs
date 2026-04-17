@@ -27,7 +27,7 @@ public class Delete_ReplaceMe_
     {
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
-        return await DefaultCommandHandler.HandleDelete<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Delete, aggregateId, userId, tenantId);
+        return await DefaultCommandHandler.HandleDeleteAsync<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Delete, aggregateId, userId, tenantId);
     }
 }
 
