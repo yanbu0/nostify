@@ -167,6 +167,44 @@ public class DurableProjectionInitializerTests
 
     #endregion
 
+    #region DurablePartitionInitPageInfo Tests
+
+    [Fact]
+    public void DurablePartitionInitPageInfo_Constructor_SetsPartitionKey()
+    {
+        var pageInfo = new DurablePartitionInitPageInfo("org-123", 3);
+
+        Assert.Equal("org-123", pageInfo.PartitionKey);
+    }
+
+    [Fact]
+    public void DurablePartitionInitPageInfo_Constructor_SetsPageNumber()
+    {
+        var pageInfo = new DurablePartitionInitPageInfo("org-123", 5);
+
+        Assert.Equal(5, pageInfo.PageNumber);
+    }
+
+    [Fact]
+    public void DurablePartitionInitPageInfo_PageNumberZero_IsValid()
+    {
+        var pageInfo = new DurablePartitionInitPageInfo("org-123", 0);
+
+        Assert.Equal(0, pageInfo.PageNumber);
+    }
+
+    [Fact]
+    public void DurablePartitionInitPageInfo_PartitionKey_PreservesGuidString()
+    {
+        // Common pattern: serialize a Guid partition key to its string form.
+        var guid = Guid.NewGuid();
+        var pageInfo = new DurablePartitionInitPageInfo(guid.ToString(), 2);
+
+        Assert.Equal(guid.ToString(), pageInfo.PartitionKey);
+    }
+
+    #endregion
+
     #region Constructor Tests
 
     [Fact]
@@ -1171,19 +1209,327 @@ public class DurableProjectionInitializerTests
 
     #endregion
 
+    #region OrchestrateInitByPartitionAsync Tests
+
+    /// <summary>
+    /// Sets up activity overloads needed for OrchestrateInitByPartitionAsync tests.
+    /// Mirrors <see cref="SetupOrchestratorActivities"/> but the get-partition-keys activity returns
+    /// a <see cref="List{String}"/> instead of <see cref="List{Guid}"/>.
+    /// </summary>
+    private static void SetupPartitionOrchestratorActivities(
+        Mock<TaskOrchestrationContext> contextMock,
+        string deleteActivityName,
+        string getPartitionKeysActivityName,
+        IEnumerable<string> partitionKeys,
+        string getIdsActivityName,
+        List<Guid> idsToReturn,
+        string processBatchActivityName)
+    {
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == deleteActivityName),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => n.Name == getPartitionKeysActivityName),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(partitionKeys.ToList());
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == getIdsActivityName),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(idsToReturn);
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == processBatchActivityName),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_AlwaysCallsDeleteActivityFirst()
+    {
+        var contextMock = new Mock<TaskOrchestrationContext>();
+        var callOrder = new List<string>();
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "DeleteActivity"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Callback(() => callOrder.Add("delete"))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => n.Name == "GetPartitionKeys"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Callback(() => callOrder.Add("getPartitionKeys"))
+            .ReturnsAsync(new List<string>());
+
+        var initializer = CreateInitializer();
+        await initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
+            "DeleteActivity", "GetPartitionKeys", "GetIds", "ProcessBatch");
+
+        Assert.NotEmpty(callOrder);
+        Assert.Equal("delete", callOrder[0]);
+        Assert.Contains("getPartitionKeys", callOrder);
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_WithNoPartitions_DoesNotCallGetIdsOrProcessBatch()
+    {
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "DeleteActivity"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => n.Name == "GetPartitionKeys"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(new List<string>());
+
+        var initializer = CreateInitializer();
+        await initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
+            "DeleteActivity", "GetPartitionKeys", "GetIds", "ProcessBatch");
+
+        contextMock.Verify(c => c.CallActivityAsync<List<Guid>>(
+            It.Is<TaskName>(n => n.Name == "GetIds"),
+            It.IsAny<object?>(), It.IsAny<TaskOptions?>()),
+            Times.Never);
+
+        contextMock.Verify(c => c.CallActivityAsync(
+            It.Is<TaskName>(n => n.Name == "ProcessBatch"),
+            It.IsAny<object?>(), It.IsAny<TaskOptions?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_PassesDurablePartitionInitPageInfoToGetIds()
+    {
+        // Verifies GetIds receives a DurablePartitionInitPageInfo carrying the correct partition key string and page 0.
+        const string partitionKey = "org-abc-123";
+        var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
+        DurablePartitionInitPageInfo? capturedPageInfo = null;
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "DeleteActivity"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => n.Name == "GetPartitionKeys"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(new List<string> { partitionKey });
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == "GetIds"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, input, _) =>
+            {
+                if (input is DurablePartitionInitPageInfo p)
+                    capturedPageInfo = p;
+            })
+            .ReturnsAsync(ids);
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "ProcessBatch"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        var initializer = CreateInitializer(batchSize: 10, concurrentBatchCount: 2);
+        await initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
+            "DeleteActivity", "GetPartitionKeys", "GetIds", "ProcessBatch");
+
+        Assert.NotNull(capturedPageInfo);
+        Assert.Equal(partitionKey, capturedPageInfo!.Value.PartitionKey);
+        Assert.Equal(0, capturedPageInfo!.Value.PageNumber);
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_WithMultiplePartitions_ProcessesEach()
+    {
+        var pk1 = "tenant-1";
+        var pk2 = "region-east";
+        var ids1 = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList();
+        var ids2 = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToList();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+        int getIdsCallCount = 0;
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "DeleteActivity"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => n.Name == "GetPartitionKeys"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(new List<string> { pk1, pk2 });
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == "GetIds"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns<TaskName, object?, TaskOptions?>((_, _, _) =>
+            {
+                getIdsCallCount++;
+                return Task.FromResult(getIdsCallCount == 1 ? ids1 : ids2);
+            });
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "ProcessBatch"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        var initializer = CreateInitializer(batchSize: 10, concurrentBatchCount: 2);
+        await initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
+            "DeleteActivity", "GetPartitionKeys", "GetIds", "ProcessBatch");
+
+        // GetIds called once per partition (each page partial → break)
+        contextMock.Verify(c => c.CallActivityAsync<List<Guid>>(
+            It.Is<TaskName>(n => n.Name == "GetIds"),
+            It.IsAny<object?>(), It.IsAny<TaskOptions?>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_WithMultiplePages_IncrementsPageNumberAndKeepsPartitionKey()
+    {
+        // batchSize=5, concurrentBatchCount=2 → pageSize=10
+        // First page full (10) → continue; second partial (3) → break
+        const string partitionKey = "pk-1";
+        var fullPage = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid()).ToList();
+        var partialPage = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList();
+        var capturedPageInfos = new List<DurablePartitionInitPageInfo>();
+        int callCount = 0;
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "DeleteActivity"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => n.Name == "GetPartitionKeys"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(new List<string> { partitionKey });
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == "GetIds"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns<TaskName, object?, TaskOptions?>((_, input, _) =>
+            {
+                if (input is DurablePartitionInitPageInfo p)
+                    capturedPageInfos.Add(p);
+                callCount++;
+                return Task.FromResult(callCount == 1 ? fullPage : partialPage);
+            });
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "ProcessBatch"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        var initializer = CreateInitializer(batchSize: 5, concurrentBatchCount: 2);
+        await initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
+            "DeleteActivity", "GetPartitionKeys", "GetIds", "ProcessBatch");
+
+        Assert.Equal(2, capturedPageInfos.Count);
+        Assert.Equal(0, capturedPageInfos[0].PageNumber);
+        Assert.Equal(1, capturedPageInfos[1].PageNumber);
+        Assert.All(capturedPageInfos, p => Assert.Equal(partitionKey, p.PartitionKey));
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_WithPartialPage_CallsProcessBatchForEachChunk()
+    {
+        // batchSize=5, concurrentBatchCount=2 → pageSize=10; 7 ids → 2 chunks
+        var ids = Enumerable.Range(0, 7).Select(_ => Guid.NewGuid()).ToList();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        SetupPartitionOrchestratorActivities(contextMock,
+            "DeleteActivity", "GetPartitionKeys", new[] { "pk-1" },
+            "GetIds", ids, "ProcessBatch");
+
+        var initializer = CreateInitializer(batchSize: 5, concurrentBatchCount: 2);
+        await initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
+            "DeleteActivity", "GetPartitionKeys", "GetIds", "ProcessBatch");
+
+        contextMock.Verify(c => c.CallActivityAsync(
+            It.Is<TaskName>(n => n.Name == "ProcessBatch"),
+            It.IsAny<object?>(), It.IsAny<TaskOptions?>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_WithNullLogger_DoesNotThrow()
+    {
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "Delete"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => n.Name == "GetPartitionKeys"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(new List<string>());
+
+        var initializer = CreateInitializer();
+
+        var ex = await Record.ExceptionAsync(() =>
+            initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
+                "Delete", "GetPartitionKeys", "GetIds", "ProcessBatch", null));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_WithLogger_LogsPartitionCount()
+    {
+        var ids = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        SetupPartitionOrchestratorActivities(contextMock,
+            "DeleteActivity", "GetPartitionKeys", new[] { "pk-a", "pk-b" },
+            "GetIds", ids, "ProcessBatch");
+
+        var loggerMock = new Mock<ILogger>();
+
+        var initializer = CreateInitializer("test-instance");
+        await initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
+            "DeleteActivity", "GetPartitionKeys", "GetIds", "ProcessBatch", loggerMock.Object);
+
+        loggerMock.Verify(l => l.Log(
+            It.IsAny<LogLevel>(),
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.AtLeast(3));
+    }
+
+    #endregion
+
     #region Cosmos-Dependent Methods
 
-    // DeleteAllProjections, GetDistinctTenantIds, GetIdsForTenant, and ProcessBatch
-    // all use container.GetItemLinqQueryable<T>().ReadAllAsync(), which internally calls
-    // ToFeedIterator<T>() — a Cosmos-specific extension method that cannot be mocked
-    // without a live Cosmos DB connection. This is the same limitation documented elsewhere
+    // DeleteAllProjections, GetDistinctTenantIds, GetDistinctPartitionKeys, GetIdsForTenant,
+    // GetIdsForPartition, and ProcessBatch all use container.GetItemLinqQueryable<T>().ReadAllAsync(),
+    // which internally calls ToFeedIterator<T>() — a Cosmos-specific extension method that cannot be
+    // mocked without a live Cosmos DB connection. This is the same limitation documented elsewhere
     // in the codebase (see QueryExtensions.Tests.cs).
     //
     // Integration tests with the Cosmos DB Emulator are required to verify:
-    //   - DeleteAllProjections:  all projection documents are removed
-    //   - GetDistinctTenantIds: distinct tenant IDs are returned from the aggregate container
-    //   - GetIdsForTenant:      correct page-based pagination (Skip/Take) per tenant partition
-    //   - ProcessBatch:         events are fetched, applied to projections, and InitAsync is called
+    //   - DeleteAllProjections:    all projection documents are removed
+    //   - GetDistinctTenantIds:    distinct tenant IDs are returned from the aggregate container
+    //   - GetDistinctPartitionKeys: distinct partition values for an arbitrary selector are returned as strings
+    //   - GetIdsForTenant:         delegates to GetIdsForPartition with tenantId.ToPartitionKey()
+    //   - GetIdsForPartition:      correct page-based pagination (Skip/Take) per partition
+    //   - ProcessBatch:            events are fetched, applied to projections, and InitAsync is called
 
     #endregion
 }
