@@ -74,7 +74,7 @@
 
 ### Updates
 
-- 4.5.1
+- 4.6.0
   - **DurableProjectionInitializer**: New `DurableProjectionInitializer<TProjection, TAggregate>` class for initializing projections using Azure Durable Functions orchestration. Designed for large datasets that may exceed the execution time of a single Azure Function. Handles paged, concurrent batch processing per tenant, automatic conflict prevention (one orchestration at a time per instance ID), and clean cancellation/purge of orchestration instances.
   - **DurableInitPageInfo**: New `DurableInitPageInfo` struct carrying a `TenantId` and `PageNumber` as the input to the paged ID-fetch activity.
   - **Template: `_ProjectionName_DurableInit.cs`**: The `nostifyProjection` template now generates a ready-to-use durable orchestration class (`_ProjectionName_DurableInit`) alongside the existing simple `_ProjectionName_Init.cs`. The durable class wires up `POST` (start) and `DELETE` (cancel) HTTP triggers and the four required activity functions (`DeleteAll`, `GetDistinctTenantIds`, `GetIdsForTenant`, `ProcessBatch`) using `DurableProjectionInitializer` helper methods.
