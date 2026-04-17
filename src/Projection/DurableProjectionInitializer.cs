@@ -2,10 +2,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 
+using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
@@ -108,7 +110,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     }
 
     /// <summary>
-    /// The orchestrator that runs the projection initialization logic.
+    /// The orchestrator that runs the projection initialization logic, paging through aggregates by tenant partition.
     /// <param name="context">The orchestration context provided by the durable task framework.</param>
     /// <param name="deleteActivityName">The name of the activity function that deletes projections.</param>
     /// <param name="getTenantIdsActivityName">The name of the activity function that retrieves tenant IDs.</param>
@@ -129,10 +131,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         await context.CallActivityAsync(deleteActivityName);
         logger?.LogInformation($"{_instanceId}: delete all projections");
 
-        var retryOptions = new TaskOptions(TaskRetryOptions.FromRetryPolicy(new RetryPolicy(
-            maxNumberOfAttempts: 3,
-            firstRetryInterval: TimeSpan.FromSeconds(5),
-            backoffCoefficient: 2.0)));
+        var retryOptions = CreateRetryOptions();
 
         // get tenant ids to query by tenant partition
         List<Guid> tenantIds = await context.CallActivityAsync<List<Guid>>(getTenantIdsActivityName);
@@ -142,39 +141,124 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
 
         foreach (var tenantId in tenantIds)
         {
-            // process each tenant separately
-            List<Guid> pageIds = [];
-            int pageNum = 0;
-            while (true)
-            {
-                pageIds = await context.CallActivityAsync<List<Guid>>(getIdsActivityName, new DurableInitPageInfo(tenantId, pageNum));
-                if (pageIds.Count == 0)
+            await ProcessPartitionPagesAsync(
+                context,
+                getIdsActivityName,
+                processBatchActivityName,
+                retryOptions,
+                pageNum => new DurableInitPageInfo(tenantId, pageNum),
+                count =>
                 {
-                    // no more ids to process
-                    break;
-                }
-
-                pageNum++;
-
-                // run `concurrentBatchCount` batches concurrently
-                // this splits the pageIds into `concurrentBatchCount` batches with at most `_batchSize` ids
-                var tasks = pageIds
-                    .Chunk(_batchSize)
-                    .Select(batch => context.CallActivityAsync(processBatchActivityName, batch.ToList(), retryOptions));
-
-                await Task.WhenAll(tasks);
-                totalProcessed += pageIds.Count;
-                logger?.LogInformation($"{_instanceId}: {totalProcessed} projections processed");
-
-                if (pageIds.Count < _pageSize)
-                {
-                    // at the last page
-                    break;
-                }
-            }
+                    totalProcessed += count;
+                    logger?.LogInformation($"{_instanceId}: {totalProcessed} projections processed");
+                });
         }
 
         logger?.LogInformation($"{_instanceId}: projection initialization complete");
+    }
+
+    /// <summary>
+    /// The orchestrator that runs the projection initialization logic, paging through aggregates by an arbitrary partition key.
+    /// Use this overload when the aggregate's container is partitioned by something other than tenantId.
+    /// </summary>
+    /// <param name="context">The orchestration context provided by the durable task framework.</param>
+    /// <param name="deleteActivityName">The name of the activity function that deletes projections.</param>
+    /// <param name="getPartitionKeysActivityName">The name of the activity function that retrieves the distinct partition key values (as strings) from the aggregate container.</param>
+    /// <param name="getIdsActivityName">The name of the activity function that retrieves aggregate IDs for a partition. Must accept a <see cref="DurablePartitionInitPageInfo"/> input.</param>
+    /// <param name="processBatchActivityName">The name of the activity function that processes a batch of aggregates to initialize projections.</param>
+    /// <param name="logger">Use `context.CreateReplaySafeLogger` for deployments to avoid logging duplicate messages during orchestration replay.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task OrchestrateInitByPartitionAsync(
+        TaskOrchestrationContext context,
+        string deleteActivityName,
+        string getPartitionKeysActivityName,
+        string getIdsActivityName,
+        string processBatchActivityName,
+        ILogger? logger = null
+        )
+    {
+        // delete Projections
+        await context.CallActivityAsync(deleteActivityName);
+        logger?.LogInformation($"{_instanceId}: delete all projections");
+
+        var retryOptions = CreateRetryOptions();
+
+        // get partition key values to page through
+        List<string> partitionKeys = await context.CallActivityAsync<List<string>>(getPartitionKeysActivityName);
+        logger?.LogInformation($"{_instanceId}: processing {partitionKeys.Count} partitions");
+
+        int totalProcessed = 0;
+
+        foreach (var pk in partitionKeys)
+        {
+            await ProcessPartitionPagesAsync(
+                context,
+                getIdsActivityName,
+                processBatchActivityName,
+                retryOptions,
+                pageNum => new DurablePartitionInitPageInfo(pk, pageNum),
+                count =>
+                {
+                    totalProcessed += count;
+                    logger?.LogInformation($"{_instanceId}: {totalProcessed} projections processed");
+                });
+        }
+
+        logger?.LogInformation($"{_instanceId}: projection initialization complete");
+    }
+
+    /// <summary>
+    /// Builds the standard retry policy used for all process-batch activity invocations:
+    /// 3 attempts, 5-second initial delay, 2x exponential backoff.
+    /// </summary>
+    private static TaskOptions CreateRetryOptions()
+    {
+        return new TaskOptions(TaskRetryOptions.FromRetryPolicy(new RetryPolicy(
+            maxNumberOfAttempts: 3,
+            firstRetryInterval: TimeSpan.FromSeconds(5),
+            backoffCoefficient: 2.0)));
+    }
+
+    /// <summary>
+    /// Pages through aggregate IDs for a single partition, fanning out concurrent process-batch
+    /// activity calls (chunked by <c>_batchSize</c>) for each page until an empty or partial page is returned.
+    /// Shared by both <see cref="OrchestrateInitAsync"/> and <see cref="OrchestrateInitByPartitionAsync"/>.
+    /// </summary>
+    private async Task ProcessPartitionPagesAsync<TPageInfo>(
+        TaskOrchestrationContext context,
+        string getIdsActivityName,
+        string processBatchActivityName,
+        TaskOptions retryOptions,
+        Func<int, TPageInfo> pageInfoFactory,
+        Action<int> onPageProcessed)
+    {
+        int pageNum = 0;
+        while (true)
+        {
+            var pageIds = await context.CallActivityAsync<List<Guid>>(getIdsActivityName, pageInfoFactory(pageNum));
+            if (pageIds.Count == 0)
+            {
+                // no more ids to process
+                break;
+            }
+
+            pageNum++;
+
+            // run `concurrentBatchCount` batches concurrently
+            // this splits the pageIds into `concurrentBatchCount` batches with at most `_batchSize` ids
+            var tasks = pageIds
+                .Chunk(_batchSize)
+                .Select(batch => context.CallActivityAsync(processBatchActivityName, batch.ToList(), retryOptions));
+
+            await Task.WhenAll(tasks);
+            onPageProcessed(pageIds.Count);
+
+            if (pageIds.Count < _pageSize)
+            {
+                // at the last page
+                break;
+            }
+        }
     }
 
     /// <summary>
@@ -199,16 +283,50 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     }
 
     /// <summary>
+    /// Gets the distinct partition key values from the <typeparamref name="TAggregate"/> current state container,
+    /// projected to strings for serialization across activity boundaries.
+    /// Use when the aggregate's container is partitioned by a key other than <c>tenantId</c>.
+    /// </summary>
+    /// <typeparam name="TKey">The CLR type of the partition key property on the aggregate.</typeparam>
+    /// <param name="partitionKeySelector">An expression that selects the partition key property from the aggregate (e.g. <c>x =&gt; x.organizationId</c>).</param>
+    /// <returns>A list of distinct partition key values converted to strings (null values are converted to empty strings).</returns>
+    public async Task<List<string>> GetDistinctPartitionKeys<TKey>(Expression<Func<TAggregate, TKey>> partitionKeySelector)
+    {
+        var container = await _nostify.GetCurrentStateContainerAsync<TAggregate>();
+        var values = await container.GetItemLinqQueryable<TAggregate>()
+            .Select(partitionKeySelector)
+            .Distinct()
+            .ReadAllAsync();
+        return values.Select(v => v?.ToString() ?? string.Empty).ToList();
+    }
+
+    /// <summary>
     /// Gets a page of aggregate Ids for a tenant, ordered by Id for stable paging.
     /// </summary>
     /// <param name="request">Tenant Id and page number.</param>
-    public async Task<List<Guid>> GetIdsForTenant(DurableInitPageInfo request)
+    public Task<List<Guid>> GetIdsForTenant(DurableInitPageInfo request)
+        => GetIdsForPartition(request.TenantId.ToPartitionKey(), request.PageNumber);
+
+    /// <summary>
+    /// Gets a page of aggregate Ids for the specified partition, ordered by Id for stable paging.
+    /// Activity-friendly wrapper that accepts a serializable <see cref="DurablePartitionInitPageInfo"/>.
+    /// </summary>
+    /// <param name="request">Partition key value (as string) and page number.</param>
+    public Task<List<Guid>> GetIdsForPartition(DurablePartitionInitPageInfo request)
+        => GetIdsForPartition(new PartitionKey(request.PartitionKey), request.PageNumber);
+
+    /// <summary>
+    /// Gets a page of aggregate Ids for the specified partition, ordered by Id for stable paging.
+    /// </summary>
+    /// <param name="partitionKey">The Cosmos partition key to query within.</param>
+    /// <param name="pageNumber">Zero-based page number.</param>
+    public async Task<List<Guid>> GetIdsForPartition(PartitionKey partitionKey, int pageNumber)
     {
         var container = await _nostify.GetCurrentStateContainerAsync<TAggregate>();
-        
-        return await container.FilteredQuery<TAggregate>(request.TenantId)
+
+        return await container.FilteredQuery<TAggregate>(partitionKey)
             .OrderBy(x => x.id)
-            .Skip(request.PageNumber * _pageSize)
+            .Skip(pageNumber * _pageSize)
             .Take(_pageSize)
             .Select(x => x.id)
             .ReadAllAsync();
@@ -249,6 +367,28 @@ public struct DurableInitPageInfo{
     public DurableInitPageInfo(Guid tenantId, int pageNumber)
     {
         TenantId = tenantId;
+        PageNumber = pageNumber;
+    }
+}
+
+/// <summary>
+/// Paging request for durable projection initialization by an arbitrary partition key:
+/// the partition key value (as string for activity-boundary serialization) and page number.
+/// </summary>
+public struct DurablePartitionInitPageInfo
+{
+    /// <summary>The partition key value as a string. Reconstructed via <c>new PartitionKey(value)</c> on the receiving side.</summary>
+    public readonly string PartitionKey;
+
+    /// <summary>Zero-based page number.</summary>
+    public readonly int PageNumber;
+
+    /// <summary>
+    /// Creates a new <see cref="DurablePartitionInitPageInfo"/> from a string partition key value.
+    /// </summary>
+    public DurablePartitionInitPageInfo(string partitionKey, int pageNumber)
+    {
+        PartitionKey = partitionKey;
         PageNumber = pageNumber;
     }
 }
