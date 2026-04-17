@@ -29,6 +29,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" /> <!-- Don't update this to 2.3.0 or IEndpointFeature will not resolve, Microsoft messed something up -->
     <PackageReference Include="Microsoft.Azure.Core.NewtonsoftJson" Version="2.0.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.48.1" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.2.3" /> <!-- up to 1.16.2 is safe - above 1.16.2 is not compatible with the current version of Docker Azurite (last checked Apr 14 2026) -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <None Include="LICENSE.txt" Pack="true" PackagePath="$(PackageLicenseFile)" />
     <None Include="README.md" Pack="true" PackagePath="\" />
