@@ -74,6 +74,12 @@
 
 ### Updates
 
+- 4.5.1
+  - **ProjectionInitializer PartitionKey Overloads**: Added `PartitionKey partitionKey` overloads to `IProjectionInitializer` / `ProjectionInitializer` for `InitAsync` (single ID and list), `InitContainerAsync`, and `InitAllUninitialized`. These scope Cosmos queries to a specific logical partition using `QueryRequestOptions`, enabling per-partition initialization regardless of the partition key schema.
+  - **ProjectionInitializer TenantId Overloads**: Added `Guid tenantId` convenience overloads for all four methods. Each constructs a `PartitionKey(tenantId.ToString())` and delegates to the corresponding `PartitionKey` overload (DRY). Existing all-partition overloads are preserved unchanged.
+  - **IProjectionInitializer Interface Updated**: All new `PartitionKey` and `Guid tenantId` overloads are declared on the interface so implementations and mocks stay in sync.
+  - **Spec Updated**: `Specs/IProjectionInitializer.spec.md` updated to document all overloads, the delegation pattern, usage examples, and best practices.
+
 - 4.5.0
   - **Kafka Async Event Requests**: New `WithAsyncEventRequestor` and `WithDependantAsyncEventRequestor` methods on `ExternalDataEventFactory<P>` for fetching events from external services via Kafka instead of HTTP. Includes 6 overloads each (nullable/non-nullable single, nullable/non-nullable list, mixed nullable, mixed non-nullable) plus `AddAsyncEventRequestors` and `AddDependantAsyncEventRequestors` batch methods.
   - **AsyncEventRequester<T>**: New configuration class mirroring `EventRequester<T>` for Kafka-based event requests. Uses `ServiceName` instead of `Url` to derive Kafka topics (`{ServiceName}_EventRequest` for requests, `{ServiceName}_EventRequestResponse` for responses). Includes `GetAllForeignIdSelectors()` for list expansion.

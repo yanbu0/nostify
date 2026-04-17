@@ -31,6 +31,22 @@ public class ProjectionInitializer : IProjectionInitializer
     }
 
     ///<summary>
+    ///Initialize the Projection with the specified id, scoped to the given partition key. Will requery all needed data from all services.
+    ///</summary>
+    public async Task<List<P>> InitAsync<P, A>(Guid id, PartitionKey partitionKey, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        return await InitAsync<P, A>(new List<Guid> { id }, partitionKey, nostify, httpClient, pointInTime);
+    }
+
+    ///<summary>
+    ///Initialize the Projection with the specified id, scoped to the given tenant. Will requery all needed data from all services.
+    ///</summary>
+    public async Task<List<P>> InitAsync<P, A>(Guid id, Guid tenantId, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        return await InitAsync<P, A>(id, new PartitionKey(tenantId.ToString()), nostify, httpClient, pointInTime);
+    }
+
+    ///<summary>
     ///Initialize the Projections with the specified ids.  Will requery all needed data from all services.
     ///</summary>
     public async Task<List<P>> InitAsync<P, A>(List<Guid> idsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
@@ -42,6 +58,26 @@ public class ProjectionInitializer : IProjectionInitializer
         List<P> projectionList = baseAggregates.Select(a => JsonConvert.DeserializeObject<P>(JsonConvert.SerializeObject(a))).ToList();
         //Call Init
         return await InitAsync<P>(projectionList, nostify, httpClient, pointInTime);
+    }
+
+    ///<summary>
+    ///Initialize the Projections with the specified ids, scoped to the given partition key. Will requery all needed data from all services.
+    ///</summary>
+    public async Task<List<P>> InitAsync<P, A>(List<Guid> idsToInit, PartitionKey partitionKey, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        Container baseAggregateContainer = await nostify.GetCurrentStateContainerAsync<A>();
+        var requestOptions = new QueryRequestOptions { PartitionKey = partitionKey };
+        List<A> baseAggregates = await baseAggregateContainer.GetItemLinqQueryable<A>(requestOptions: requestOptions).Where(x => idsToInit.Contains(x.id)).ReadAllAsync();
+        List<P> projectionList = baseAggregates.Select(a => JsonConvert.DeserializeObject<P>(JsonConvert.SerializeObject(a))).ToList();
+        return await InitAsync<P>(projectionList, nostify, httpClient, pointInTime);
+    }
+
+    ///<summary>
+    ///Initialize the Projections with the specified ids, scoped to the given tenant. Will requery all needed data from all services.
+    ///</summary>
+    public async Task<List<P>> InitAsync<P, A>(List<Guid> idsToInit, Guid tenantId, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        return await InitAsync<P, A>(idsToInit, new PartitionKey(tenantId.ToString()), nostify, httpClient, pointInTime);
     }
 
     /// <summary>
@@ -130,6 +166,75 @@ public class ProjectionInitializer : IProjectionInitializer
     }
 
     ///<summary>
+    ///Recreate all items in the specified partition of the Projection container.
+    ///Will delete existing items in that partition then will query the specified base Aggregate where isDeleted == false and populate all matching properties in the projection.
+    ///<para>
+    ///Will loop through all items in batches of <c>loopSize</c> and call InitAsync on each batch to query all needed Events from all external services and update projection container.
+    ///</para>
+    ///</summary>
+    ///<param name="nostify">Reference to the Nostify singleton.</param>
+    ///<param name="partitionKey">The partition key value to scope this operation to.</param>
+    ///<param name="httpClient">Reference to an HttpClient instance.</param>
+    ///<param name="partitionKeyPath">Path to the partition key.  Defaults to "/tenantId".</param>
+    ///<param name="loopSize">Number of items to init at a time.  Defaults to 1000.</param>
+    ///<param name="pointInTime">Point in time to query external data up to. If null, queries current state.</param>
+    public async Task InitContainerAsync<P, A>(INostify nostify, PartitionKey partitionKey, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        var requestOptions = new QueryRequestOptions { PartitionKey = partitionKey };
+
+        // Delete all items in the specified partition
+        Container deleteAllFromThis = await nostify.GetBulkProjectionContainerAsync<P>(partitionKeyPath);
+        List<P> existingProjections = await deleteAllFromThis.GetItemLinqQueryable<P>(requestOptions: requestOptions).ReadAllAsync();
+        await deleteAllFromThis.BulkDeleteAsync(existingProjections);
+
+        // Get event store and base aggregate IDs for this partition
+        Container eventStoreContainer = await nostify.GetEventStoreContainerAsync();
+        Container baseAggregateContainer = await nostify.GetCurrentStateContainerAsync<A>(partitionKeyPath);
+        List<Guid> baseAggregateIds = await baseAggregateContainer.GetItemLinqQueryable<A>(requestOptions: requestOptions).Where(x => !x.isDeleted).Select(x => x.id).ReadAllAsync();
+
+        for (int i = 0; i < baseAggregateIds.Count; i += loopSize)
+        {
+            List<P> projectionList = new List<P>();
+            List<Guid> ids = baseAggregateIds.Skip(i).Take(loopSize).ToList();
+
+            var eventsQuery = eventStoreContainer.GetItemLinqQueryable<Event>().Where(x => ids.Contains(x.aggregateRootId));
+
+            if (pointInTime.HasValue)
+            {
+                eventsQuery = eventsQuery.Where(x => x.timestamp <= pointInTime.Value);
+            }
+
+            List<Event> events = await eventsQuery.ReadAllAsync();
+
+            ids.ForEach(id =>
+            {
+                P newProjection = new P();
+                events.Where(e => e.aggregateRootId == id).ToList().ForEach(e => newProjection.Apply(e));
+                projectionList.Add(newProjection);
+            });
+            await InitAsync(projectionList, nostify, httpClient, pointInTime);
+        }
+    }
+
+    ///<summary>
+    ///Recreate all items in the given tenant's partition of the Projection container.
+    ///Will delete existing items in that partition then will query the specified base Aggregate where isDeleted == false and populate all matching properties in the projection.
+    ///<para>
+    ///Will loop through all items in batches of <c>loopSize</c> and call InitAsync on each batch to query all needed Events from all external services and update projection container.
+    ///</para>
+    ///</summary>
+    ///<param name="nostify">Reference to the Nostify singleton.</param>
+    ///<param name="tenantId">The tenant id to scope this operation to.</param>
+    ///<param name="httpClient">Reference to an HttpClient instance.</param>
+    ///<param name="partitionKeyPath">Path to the partition key.  Defaults to "/tenantId".</param>
+    ///<param name="loopSize">Number of items to init at a time.  Defaults to 1000.</param>
+    ///<param name="pointInTime">Point in time to query external data up to. If null, queries current state.</param>
+    public async Task InitContainerAsync<P, A>(INostify nostify, Guid tenantId, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        await InitContainerAsync<P, A>(nostify, new PartitionKey(tenantId.ToString()), httpClient, partitionKeyPath, loopSize, pointInTime);
+    }
+
+    ///<summary>
     ///Init all non-initialized projections in the container.  Will requery all needed data from all external services by calling InitAsync  
     ///</summary>
     ///<param name="nostify">Reference to the Nostify singleton.</param>
@@ -154,6 +259,45 @@ public class ProjectionInitializer : IProjectionInitializer
                 projections = await projectionContainer.GetItemLinqQueryable<P>().Where(x => x.initialized == false).ReadAllAsync();
             }
         }
+    }
+
+    ///<summary>
+    ///Init all non-initialized projections in the given partition.  Will requery all needed data from all external services by calling InitAsync  
+    ///</summary>
+    ///<param name="nostify">Reference to the Nostify singleton.</param>
+    ///<param name="partitionKey">The partition key value to scope this operation to.</param>
+    ///<param name="httpClient">Reference to an HttpClient instance.</param>
+    ///<param name="maxloopSize">Maximum size of loops to check for uninitialized projections. Defaults to 100.</param>
+    ///<param name="pointInTime">Point in time to query external data up to. If null, queries current state.</param>
+    public async Task InitAllUninitialized<P>(INostify nostify, PartitionKey partitionKey, HttpClient? httpClient = null, int maxloopSize = 100, DateTime? pointInTime = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        var requestOptions = new QueryRequestOptions { PartitionKey = partitionKey };
+        Container projectionContainer = await nostify.GetProjectionContainerAsync<P>();
+        List<P> projections = await projectionContainer.GetItemLinqQueryable<P>(requestOptions: requestOptions).Where(x => x.initialized == false).ReadAllAsync();
+
+        while (projections.Count > 0)
+        {
+            await InitAsync(projections, nostify, httpClient, pointInTime);
+            projections = projections.Where(x => x.initialized == false).ToList();
+            if (projections.Count == 0)
+            {
+                await Task.Delay(1000);
+                projections = await projectionContainer.GetItemLinqQueryable<P>(requestOptions: requestOptions).Where(x => x.initialized == false).ReadAllAsync();
+            }
+        }
+    }
+
+    ///<summary>
+    ///Init all non-initialized projections for the given tenant.  Will requery all needed data from all external services by calling InitAsync  
+    ///</summary>
+    ///<param name="nostify">Reference to the Nostify singleton.</param>
+    ///<param name="tenantId">The tenant id to scope this operation to.</param>
+    ///<param name="httpClient">Reference to an HttpClient instance.</param>
+    ///<param name="maxloopSize">Maximum size of loops to check for uninitialized projections. Defaults to 100.</param>
+    ///<param name="pointInTime">Point in time to query external data up to. If null, queries current state.</param>
+    public async Task InitAllUninitialized<P>(INostify nostify, Guid tenantId, HttpClient? httpClient = null, int maxloopSize = 100, DateTime? pointInTime = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    {
+        await InitAllUninitialized<P>(nostify, new PartitionKey(tenantId.ToString()), httpClient, maxloopSize, pointInTime);
     }
 
     // Backward compatibility overloads

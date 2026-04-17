@@ -2,228 +2,237 @@
 
 ## Overview
 
-`IProjectionInitializer` defines the contract for initializing projections with external data and managing projection containers.
+`IProjectionInitializer` defines the contract for initializing projections with external data and managing projection containers. Methods are available for all-partition, partition-key-scoped, and tenant-scoped scenarios.
 
 ## Interface Definition
 
 ```csharp
-public interface IProjectionInitializer<P> where P : NostifyObject, IProjection, IApplyable, new()
+public interface IProjectionInitializer
 ```
-
-## Type Constraints
-
-- `P : NostifyObject` - Must extend NostifyObject
-- `P : IProjection` - Must implement IProjection
-- `P : IApplyable` - Must implement IApplyable
-- `P : new()` - Must have parameterless constructor
 
 ## Methods
 
-### InitializeAsync (Single ID)
+### InitAsync (Single ID)
 
 ```csharp
-Task<P> InitializeAsync(Guid projectionId)
+Task<List<P>> InitAsync<P, A>(Guid id, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
 ```
 
-Initializes a single projection by ID.
+Initializes a single projection by querying all needed data from all services across all partitions.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `projectionId` | `Guid` | ID of projection to initialize |
-
-**Returns:** `Task<P>` - Initialized projection
-
-### InitializeAsync (Multiple IDs)
+### InitAsync (Single ID, PartitionKey)
 
 ```csharp
-Task<List<P>> InitializeAsync(List<Guid> projectionIds)
+Task<List<P>> InitAsync<P, A>(Guid id, PartitionKey partitionKey, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
 ```
 
-Initializes multiple projections by their IDs.
+Initializes a single projection scoped to the given Cosmos DB `PartitionKey`.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `projectionIds` | `List<Guid>` | IDs of projections to initialize |
-
-**Returns:** `Task<List<P>>` - Initialized projections
-
-### InitializeAsync (Existing Objects)
+### InitAsync (Single ID, TenantId)
 
 ```csharp
-Task<List<P>> InitializeAsync(List<P> projections)
+Task<List<P>> InitAsync<P, A>(Guid id, Guid tenantId, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
 ```
 
-Initializes existing projection objects.
+Convenience overload — constructs a `PartitionKey` from `tenantId` and delegates to the `PartitionKey` overload.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `projections` | `List<P>` | Projection objects to initialize |
-
-**Returns:** `Task<List<P>>` - Initialized projections
-
-### RebuildAsync
+### InitAsync (Multiple IDs)
 
 ```csharp
-Task RebuildAsync(DateTime? asOfDate = null)
+Task<List<P>> InitAsync<P, A>(List<Guid> idsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
 ```
 
-Deletes and recreates the container, rebuilding all projections.
+Initializes multiple projections by their IDs across all partitions.
+
+### InitAsync (Multiple IDs, PartitionKey)
+
+```csharp
+Task<List<P>> InitAsync<P, A>(List<Guid> idsToInit, PartitionKey partitionKey, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
+```
+
+Initializes multiple projections scoped to the given `PartitionKey`.
+
+### InitAsync (Multiple IDs, TenantId)
+
+```csharp
+Task<List<P>> InitAsync<P, A>(List<Guid> idsToInit, Guid tenantId, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
+```
+
+Convenience overload — constructs a `PartitionKey` from `tenantId` and delegates to the `PartitionKey` overload.
+
+### InitAsync (Existing Objects)
+
+```csharp
+Task<List<P>> InitAsync<P>(List<P> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
+```
+
+Initializes existing projection objects by fetching external data events, applying them, setting `initialized = true`, and upserting to the container.
+
+### InitContainerAsync (All Partitions)
+
+```csharp
+Task InitContainerAsync<P, A>(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000, DateTime? pointInTime = null)
+```
+
+Deletes **all** items in the projection container and rebuilds from the base aggregate event store. Destructive operation.
+
+### InitContainerAsync (PartitionKey)
+
+```csharp
+Task InitContainerAsync<P, A>(INostify nostify, PartitionKey partitionKey, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000, DateTime? pointInTime = null)
+```
+
+Deletes and rebuilds only the items in the specified logical partition. Non-destructive to other partitions.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `asOfDate` | `DateTime?` | `null` | Point-in-time for projection state |
+| `nostify` | `INostify` | — | Nostify singleton |
+| `partitionKey` | `PartitionKey` | — | Cosmos DB partition key value to scope the operation |
+| `httpClient` | `HttpClient?` | `null` | Optional HttpClient for external data requests |
+| `partitionKeyPath` | `string` | `"/tenantId"` | Container partition key path |
+| `loopSize` | `int` | `1000` | Batch size for processing |
+| `pointInTime` | `DateTime?` | `null` | Replay events up to this timestamp |
 
-**Note:** This is a destructive operation.
-
-### InitializeUninitializedAsync
+### InitContainerAsync (TenantId)
 
 ```csharp
-Task<List<P>> InitializeUninitializedAsync()
+Task InitContainerAsync<P, A>(INostify nostify, Guid tenantId, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000, DateTime? pointInTime = null)
 ```
 
-Finds and initializes only uninitialized projections.
+Convenience overload — constructs a `PartitionKey` from `tenantId` and delegates to the `PartitionKey` overload.
 
-**Returns:** `Task<List<P>>` - Newly initialized projections
+### InitAllUninitialized (All Partitions)
+
+```csharp
+Task InitAllUninitialized<P>(INostify nostify, HttpClient? httpClient = null, int maxloopSize = 10, DateTime? pointInTime = null)
+```
+
+Finds and initializes all projections where `initialized == false` across all partitions.
+
+### InitAllUninitialized (PartitionKey)
+
+```csharp
+Task InitAllUninitialized<P>(INostify nostify, PartitionKey partitionKey, HttpClient? httpClient = null, int maxloopSize = 100, DateTime? pointInTime = null)
+```
+
+Finds and initializes all uninitialized projections within the specified logical partition.
+
+### InitAllUninitialized (TenantId)
+
+```csharp
+Task InitAllUninitialized<P>(INostify nostify, Guid tenantId, HttpClient? httpClient = null, int maxloopSize = 100, DateTime? pointInTime = null)
+```
+
+Convenience overload — constructs a `PartitionKey` from `tenantId` and delegates to the `PartitionKey` overload.
+
+## Type Constraints
+
+All generic methods require:
+- `P : NostifyObject` — Must extend NostifyObject
+- `P : IProjection` — Must implement IProjection
+- `P : IHasExternalData<P>` — Must implement IHasExternalData
+- `P : new()` — Must have a parameterless constructor
+- `A : IAggregate` — (where used) Must implement IAggregate
+
+## Design: DRY Delegation
+
+The `PartitionKey` overloads are the primary implementations. The `Guid tenantId` overloads are thin convenience wrappers that construct a `PartitionKey` and delegate:
+
+```
+tenantId overload
+    └─▶ new PartitionKey(tenantId.ToString())
+            └─▶ PartitionKey overload (primary implementation)
+```
+
+This ensures all filtering logic lives in one place (the `PartitionKey` overloads) and the tenantId overloads stay DRY.
 
 ## Usage Examples
 
-### Basic Initialization
+### Initialize a Single Projection (Any Partition Key)
 
 ```csharp
-public class OrderProjectionInitializer : IProjectionInitializer<OrderWithCustomer>
-{
-    private readonly INostify _nostify;
-    private readonly ICustomerService _customerService;
-    
-    public async Task<OrderWithCustomer> InitializeAsync(Guid projectionId)
-    {
-        // Get or create projection
-        var projection = await _nostify.GetProjectionAsync<OrderWithCustomer>(projectionId)
-            ?? new OrderWithCustomer { id = projectionId };
-        
-        if (projection.initialized)
-        {
-            return projection;
-        }
-        
-        // Fetch external data
-        var customer = await _customerService.GetCustomerAsync(projection.CustomerId);
-        projection.CustomerName = customer.Name;
-        projection.CustomerEmail = customer.Email;
-        
-        // Mark initialized and save
-        projection.initialized = true;
-        await _nostify.UpsertProjectionAsync(projection);
-        
-        return projection;
-    }
-}
+// Using a PartitionKey directly (works for any partition key schema)
+var pk = new PartitionKey(somePartitionValue);
+var result = await nostify.ProjectionInitializer
+    .InitAsync<OrderProjection, Order>(orderId, pk, nostify, httpClient);
+
+// Using tenantId convenience overload
+var result = await nostify.ProjectionInitializer
+    .InitAsync<OrderProjection, Order>(orderId, tenantId, nostify, httpClient);
 ```
 
-### With ExternalDataEventFactory
+### Rebuild Container for a Single Tenant
 
 ```csharp
-public async Task<List<OrderWithCustomer>> InitializeAsync(List<OrderWithCustomer> projections)
-{
-    foreach (var projection in projections.Where(p => !p.initialized))
-    {
-        // Build external data events using factory
-        var events = await ExternalDataEventFactory<OrderWithCustomer>
-            .Build(_nostify)
-            .WithSameServiceIdSelectors(p => p.CustomerId)
-            .GetEventsAsync(projection);
-        
-        // Apply external data events
-        foreach (var @event in events)
-        {
-            projection.Apply(@event);
-        }
-        
-        projection.initialized = true;
-    }
-    
-    // Bulk save
-    await _nostify.UpsertProjectionAsync(projections);
-    
-    return projections;
-}
+// Scoped to one partition — does not affect other tenants
+await nostify.ProjectionInitializer
+    .InitContainerAsync<OrderProjection, Order>(nostify, tenantId, httpClient);
+
+// Equivalent using PartitionKey (e.g., for a non-tenantId partition key)
+var pk = new PartitionKey(regionCode);
+await nostify.ProjectionInitializer
+    .InitContainerAsync<RegionProjection, Region>(nostify, pk, httpClient, partitionKeyPath: "/regionCode");
 ```
 
-### Container Rebuild
+### Rebuild Entire Container (All Partitions)
 
 ```csharp
-// Rebuild all projections (destructive!)
-await projectionInitializer.RebuildAsync();
-
-// Rebuild as of specific date
-await projectionInitializer.RebuildAsync(asOfDate: DateTime.UtcNow.AddDays(-7));
+// Destructive — rebuilds ALL partitions
+await nostify.ProjectionInitializer
+    .InitContainerAsync<OrderProjection, Order>(nostify, httpClient);
 ```
 
-### Initialize Uninitialized Only
+### Initialize Uninitialized Projections for a Tenant
 
 ```csharp
-// Useful for catch-up processing
-var newlyInitialized = await projectionInitializer.InitializeUninitializedAsync();
-Console.WriteLine($"Initialized {newlyInitialized.Count} projections");
+await nostify.ProjectionInitializer
+    .InitAllUninitialized<OrderProjection>(nostify, tenantId, httpClient);
 ```
 
-## Initialization Flow
+## Initialization Flow (PartitionKey-Scoped)
 
 ```
-┌─────────────────────┐
-│ InitializeAsync(id) │
-└──────────┬──────────┘
-           │
-           ▼
-    ┌──────────────┐
-    │ Get/Create   │
-    │  Projection  │
-    └──────┬───────┘
-           │
-           ▼
-    ┌──────────────┐
-    │ initialized? │
-    │    = true    │──────────▶ Return Existing
-    └──────┬───────┘
-           │ No
-           ▼
-    ┌──────────────┐
-    │ Fetch External│
-    │    Data       │
-    └──────┬───────┘
-           │
-           ▼
-    ┌──────────────┐
-    │ Apply to     │
-    │ Projection   │
-    └──────┬───────┘
-           │
-           ▼
-    ┌──────────────┐
-    │ Set          │
-    │ initialized  │
-    │ = true       │
-    └──────┬───────┘
-           │
-           ▼
-    ┌──────────────┐
-    │ Upsert       │
-    │ Projection   │
-    └──────┬───────┘
-           │
-           ▼
-       Return
+┌──────────────────────────────────┐
+│ InitAsync / InitContainerAsync   │
+│ (PartitionKey partitionKey)      │
+└──────────────┬───────────────────┘
+               │
+               ▼
+   ┌───────────────────────┐
+   │ QueryRequestOptions   │
+   │ { PartitionKey = pk } │
+   └──────────┬────────────┘
+              │
+              ▼
+   ┌───────────────────────┐
+   │ GetItemLinqQueryable  │
+   │ (scoped to partition) │
+   └──────────┬────────────┘
+              │
+              ▼
+   ┌───────────────────────┐
+   │ Apply Events          │
+   │ Fetch External Data   │
+   │ Set initialized=true  │
+   └──────────┬────────────┘
+              │
+              ▼
+   ┌───────────────────────┐
+   │ DoBulkUpsertAsync     │
+   └───────────────────────┘
 ```
 
 ## Best Practices
 
-1. **Check initialized** - Skip if already initialized
-2. **Batch Operations** - Use list overloads for efficiency
-3. **Error Handling** - Handle external service failures
-4. **Idempotent** - Make initialization repeatable
+1. **Prefer scoped overloads** — Use `PartitionKey` or `tenantId` overloads when you only need to rebuild one partition; this avoids touching other tenants' data.
+2. **Use list overloads** — Batch operations are more efficient than single-item calls.
+3. **Error Handling** — Handle external service failures in `GetExternalDataEventsAsync`.
+4. **Idempotency** — `initialized` flag prevents double-initialization; methods are safe to retry.
+5. **Custom partition keys** — Use the `PartitionKey` overloads when the container's partition key is not `/tenantId`.
 
 ## Related Types
 
 - [IProjection](IProjection.spec.md) - Projection interface
 - [ExternalDataEventFactory](ExternalDataEventFactory.spec.md) - External data handling
 - [ExternalDataEvent](ExternalDataEvent.spec.md) - Event container
+

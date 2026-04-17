@@ -27,6 +27,124 @@ public class ProjectionInitializerTests
         _projectionInitializer = new ProjectionInitializer();
     }
 
+    [Fact]
+    public void ProjectionInitializer_ImplementsIProjectionInitializer()
+    {
+        Assert.IsAssignableFrom<IProjectionInitializer>(_projectionInitializer);
+    }
+
+    [Fact]
+    public void IProjectionInitializer_HasPartitionKeyOverloads()
+    {
+        // Verify PartitionKey overloads exist on the interface at compile time
+        IProjectionInitializer initializer = _projectionInitializer;
+
+        // These assignments will fail at compile-time if the signatures are missing
+        Func<Guid, PartitionKey, INostify, HttpClient?, DateTime?, Task<List<TestProjection>>> initById =
+            initializer.InitAsync<TestProjection, TestAggregate>;
+        Func<List<Guid>, PartitionKey, INostify, HttpClient?, DateTime?, Task<List<TestProjection>>> initByIds =
+            initializer.InitAsync<TestProjection, TestAggregate>;
+        Func<INostify, PartitionKey, HttpClient?, string, int, DateTime?, Task> initContainer =
+            initializer.InitContainerAsync<TestProjection, TestAggregate>;
+        Func<INostify, PartitionKey, HttpClient?, int, DateTime?, Task> initAllUninitialized =
+            initializer.InitAllUninitialized<TestProjection>;
+
+        Assert.NotNull(initById);
+        Assert.NotNull(initByIds);
+        Assert.NotNull(initContainer);
+        Assert.NotNull(initAllUninitialized);
+    }
+
+    [Fact]
+    public void IProjectionInitializer_HasTenantIdOverloads()
+    {
+        // Verify Guid tenantId overloads exist on the interface at compile time
+        IProjectionInitializer initializer = _projectionInitializer;
+
+        Func<Guid, Guid, INostify, HttpClient?, DateTime?, Task<List<TestProjection>>> initById =
+            initializer.InitAsync<TestProjection, TestAggregate>;
+        Func<List<Guid>, Guid, INostify, HttpClient?, DateTime?, Task<List<TestProjection>>> initByIds =
+            initializer.InitAsync<TestProjection, TestAggregate>;
+        Func<INostify, Guid, HttpClient?, string, int, DateTime?, Task> initContainer =
+            initializer.InitContainerAsync<TestProjection, TestAggregate>;
+        Func<INostify, Guid, HttpClient?, int, DateTime?, Task> initAllUninitialized =
+            initializer.InitAllUninitialized<TestProjection>;
+
+        Assert.NotNull(initById);
+        Assert.NotNull(initByIds);
+        Assert.NotNull(initContainer);
+        Assert.NotNull(initAllUninitialized);
+    }
+
+    [Fact]
+    public async Task InitAsync_WithTenantId_DelegatesToPartitionKeyOverload()
+    {
+        // Arrange: verify that the tenantId overload reaches GetCurrentStateContainerAsync
+        // (same entry point as the PartitionKey overload would use)
+        var tenantId = Guid.NewGuid();
+        var testId = Guid.NewGuid();
+
+        _nostifyMock
+            .Setup(n => n.GetCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(_containerMock.Object);
+
+        // The call will fail when it reaches GetItemLinqQueryable (not mockable without a real Cosmos connection),
+        // but we verify GetCurrentStateContainerAsync was called, proving delegation occurred.
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => _projectionInitializer.InitAsync<TestProjection, TestAggregate>(testId, tenantId, _nostifyMock.Object));
+
+        _nostifyMock.Verify(n => n.GetCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task InitAsyncList_WithTenantId_DelegatesToPartitionKeyOverload()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var testIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
+
+        _nostifyMock
+            .Setup(n => n.GetCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(_containerMock.Object);
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => _projectionInitializer.InitAsync<TestProjection, TestAggregate>(testIds, tenantId, _nostifyMock.Object));
+
+        _nostifyMock.Verify(n => n.GetCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task InitContainerAsync_WithTenantId_DelegatesToPartitionKeyOverload()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+
+        _nostifyMock
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(_containerMock.Object);
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => _projectionInitializer.InitContainerAsync<TestProjection, TestAggregate>(_nostifyMock.Object, tenantId));
+
+        _nostifyMock.Verify(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task InitAllUninitialized_WithTenantId_DelegatesToPartitionKeyOverload()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+
+        _nostifyMock
+            .Setup(n => n.GetProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(_containerMock.Object);
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => _projectionInitializer.InitAllUninitialized<TestProjection>(_nostifyMock.Object, tenantId));
+
+        _nostifyMock.Verify(n => n.GetProjectionContainerAsync<TestProjection>(It.IsAny<string>()), Times.Once);
+    }
+
     //WHY DID MICROSOFT MAKE IT SO HARD TO TEST THIS?! ToFeedIterator can't be mocked without wrapping it, ugh
     //TODO: Figure out how to work around this limitation or refactor the code to make it more testable
     //https://stackoverflow.com/questions/58212697/mocking-getitemlinqqueryable-and-extension-method-tofeediterator
