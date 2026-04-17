@@ -31,7 +31,7 @@ public class BulkDelete_ReplaceMe_
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
 
-        return await DefaultCommandHandler.HandleBulkDelete<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Delete, req, userId, tenantId);
+        return await DefaultCommandHandler.HandleBulkDeleteAsync<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Delete, req, userId, tenantId);
     }
 }
 
