@@ -190,17 +190,15 @@ public class Nostify : INostify, IDisposable
             }
             await Task.WhenAll(publishTasks).ContinueWith(result =>
                 {
-                    if (showOutput)
+                    if (showOutput && Logger != null)
                     {                        
                         if (result.IsCompletedSuccessfully)
                         {
-                            if (Logger != null) Logger.LogInformation("Event published to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
-                            else Console.WriteLine($"Event published to topic(s) {peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}")}");
+                            Logger.LogInformation("Event published to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
                         }
                         else
                         {
-                            if (Logger != null) Logger.LogError(result.Exception, "Failed to publish event to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
-                            else Console.WriteLine($"Failed to publish event to topic(s) {peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}")} || Expception: {result.Exception?.Message}");
+                            Logger.LogError(result.Exception, "Failed to publish event to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
                         }
                     }
                 });
@@ -415,6 +413,8 @@ public class Nostify : INostify, IDisposable
     ///<inheritdoc />
     public async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
     {
+        if ( Logger != null) Logger.LogError("Undeliverable event in function {FunctionName}. Error: {ErrorMessage}. Event: {Event}", functionName, errorMessage, JsonConvert.SerializeObject(eventToHandle));
+
         var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
 
         await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), eventToHandle.aggregateRootId.ToPartitionKey());
