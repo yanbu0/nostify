@@ -18,16 +18,16 @@
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
-| `HandleCreate<T>` | `Task<Guid>` | Creates a single aggregate root from an `HttpRequestData` body. Returns the new aggregate root ID. |
-| `HandleUpdate<T>` | `Task<Guid>` | Updates a single aggregate root from an `HttpRequestData` body. Returns the aggregate root ID. |
-| `HandleDelete<T>` | `Task<Guid>` | Deletes a single aggregate root by ID. Returns the aggregate root ID. |
+| `HandlePostAsync<T>` | `Task<Guid>` | Creates a single aggregate root from an `HttpRequestData` body. Returns the new aggregate root ID. |
+| `HandlePatchAsync<T>` | `Task<Guid>` | Updates a single aggregate root from an `HttpRequestData` body. Returns the aggregate root ID. |
+| `HandleDeleteAsync<T>` | `Task<Guid>` | Deletes a single aggregate root by ID. Returns the aggregate root ID. |
 
 ### Bulk Create Handlers
 
 | Method | Overload | Description |
 |--------|----------|-------------|
-| `HandleBulkCreate<T>` | `bool allowRetry` | Bulk creates aggregates from request data. Passes `allowRetry` to `BulkPersistEventAsync`. |
-| `HandleBulkCreate<T>` | `RetryOptions? retryOptions` | Bulk creates aggregates with configurable retry. Passes `retryOptions` to `BulkPersistEventAsync`. |
+| `HandleBulkCreateAsync<T>` | `bool allowRetry` | Bulk creates aggregates from request data. Passes `allowRetry` to `BulkPersistEventAsync`. |
+| `HandleBulkCreateAsync<T>` | `RetryOptions? retryOptions` | Bulk creates aggregates with configurable retry. Passes `retryOptions` to `BulkPersistEventAsync`. |
 
 Both overloads accept `partitionKeyName` (default: `"tenantId"`) to set the partition key property on each dynamic object.
 
@@ -35,22 +35,35 @@ Both overloads accept `partitionKeyName` (default: `"tenantId"`) to set the part
 
 | Method | Overload | Description |
 |--------|----------|-------------|
-| `HandleBulkUpdate<T>` | `bool allowRetry` | Bulk updates aggregates from request data. Validates each object has a valid `id` property. |
-| `HandleBulkUpdate<T>` | `RetryOptions? retryOptions` | Bulk updates with configurable retry. Same validation as `bool` overload. |
+| `HandleBulkUpdateAsync<T>` | `bool allowRetry` | Bulk updates aggregates from request data. Validates each object has a valid `id` property. |
+| `HandleBulkUpdateAsync<T>` | `RetryOptions? retryOptions` | Bulk updates with configurable retry. Same validation as `bool` overload. |
 
 ### Bulk Delete Handlers (from HttpRequestData)
 
 | Method | Overload | Description |
 |--------|----------|-------------|
-| `HandleBulkDelete<T>` | `HttpRequestData req, bool allowRetry` | Bulk deletes aggregates from a request body containing ID strings. Validates each ID parses as a GUID. |
-| `HandleBulkDelete<T>` | `HttpRequestData req, RetryOptions? retryOptions` | Same as above with configurable retry. |
+| `HandleBulkDeleteAsync<T>` | `HttpRequestData req, bool allowRetry` | Bulk deletes aggregates from a request body containing ID strings. Validates each ID parses as a GUID. |
+| `HandleBulkDeleteAsync<T>` | `HttpRequestData req, RetryOptions? retryOptions` | Same as above with configurable retry. |
 
 ### Bulk Delete Handlers (from List\<Guid\>)
 
 | Method | Overload | Description |
 |--------|----------|-------------|
-| `HandleBulkDelete<T>` | `List<Guid> aggregateRootIds, bool allowRetry` | Bulk deletes aggregates from a list of GUIDs. |
-| `HandleBulkDelete<T>` | `List<Guid> aggregateRootIds, RetryOptions? retryOptions` | Same as above with configurable retry. |
+| `HandleBulkDeleteAsync<T>` | `List<Guid> aggregateRootIds, bool allowRetry` | Bulk deletes aggregates from a list of GUIDs. |
+| `HandleBulkDeleteAsync<T>` | `List<Guid> aggregateRootIds, RetryOptions? retryOptions` | Same as above with configurable retry. |
+
+### Obsolete Backward-Compatible Methods
+
+The following non-`Async` method names are preserved as `[Obsolete]` wrappers that delegate to their `Async` counterparts. They will be removed in a future version.
+
+| Obsolete Method | Replacement |
+|-----------------|-------------|
+| `HandlePatch<T>` | `HandlePatchAsync<T>` |
+| `HandlePost<T>` | `HandlePostAsync<T>` |
+| `HandleDelete<T>` | `HandleDeleteAsync<T>` |
+| `HandleBulkCreate<T>` | `HandleBulkCreateAsync<T>` |
+| `HandleBulkUpdate<T>` | `HandleBulkUpdateAsync<T>` |
+| `HandleBulkDelete<T>` | `HandleBulkDeleteAsync<T>` |
 
 ## Common Parameters
 
