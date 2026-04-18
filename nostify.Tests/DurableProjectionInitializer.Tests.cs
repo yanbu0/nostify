@@ -325,6 +325,47 @@ public class DurableProjectionInitializerTests
     }
 
     [Fact]
+    public async Task StartOrchestration_WhenExistingInstanceIsPending_Returns409Conflict()
+    {
+        // Pending means the orchestration has been scheduled but has not started yet.
+        // It is effectively active — starting another with the same ID must be blocked.
+        var clientMock = new Mock<DurableTaskClient>("test");
+        clientMock
+            .Setup(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateMetadataWithStatus(OrchestrationRuntimeStatus.Pending));
+
+        var initializer = CreateInitializer("test-instance");
+        var req = MockHttpRequestData.Create();
+
+        var response = await initializer.StartOrchestration(req, clientMock.Object, "OrchestratorName");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task StartOrchestration_WhenExistingInstanceIsPending_DoesNotScheduleNewOrchestration()
+    {
+        // Ensures only one orchestration can be active at a time even when the existing
+        // instance is in Pending state (scheduled but not yet executing).
+        var clientMock = new Mock<DurableTaskClient>("test");
+        clientMock
+            .Setup(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateMetadataWithStatus(OrchestrationRuntimeStatus.Pending));
+
+        var initializer = CreateInitializer("test-instance");
+        var req = MockHttpRequestData.Create();
+
+        await initializer.StartOrchestration(req, clientMock.Object, "OrchestratorName");
+
+        clientMock.Verify(
+            c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task StartOrchestration_WhenNoExistingInstance_SchedulesOrchestration()
     {
         var clientMock = new Mock<DurableTaskClient>("test");

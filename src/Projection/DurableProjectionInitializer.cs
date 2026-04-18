@@ -51,12 +51,12 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     }
 
     /// <summary>
-    /// Starts the durable orchestration to initialize projections. If an orchestration with the same instance Id is already running, returns a 409 Conflict response.
+    /// Starts the durable orchestration to initialize projections. If an orchestration with the same instance Id is already active (Running or Pending), returns a 409 Conflict response.
     /// </summary>
     /// <param name="req">The HTTP request data from the Azure Function.</param>
     /// <param name="client">The durable task client injected by the Azure host.</param>
     /// <param name="orchestratorName">The name of the orchestrator.</param>
-    /// <returns>The HTTP response with 409 if running, otherwise 202 response with a Location header and a payload containing instance control URLs.</returns>
+    /// <returns>The HTTP response with 409 if active, otherwise 202 response with a Location header and a payload containing instance control URLs.</returns>
     public async Task<HttpResponseData> StartOrchestration(
         HttpRequestData req,
         DurableTaskClient client,
@@ -64,10 +64,10 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     {
         var existing = await client.GetInstanceAsync(_instanceId);
 
-        // only allow one orchestration to run at a time
-        if (existing != null && existing.RuntimeStatus == OrchestrationRuntimeStatus.Running)
+        // only allow one orchestration to run at a time — block if Running (IsRunning) or Pending
+        if (existing != null && (existing.IsRunning || existing.RuntimeStatus == OrchestrationRuntimeStatus.Pending))
         {
-            // already running, return 409 Conflict
+            // already active, return 409 Conflict
             var conflict = req.CreateResponse(HttpStatusCode.Conflict);
             conflict.WriteString($"{_instanceId} is already running");
             return conflict;
