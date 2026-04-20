@@ -70,14 +70,14 @@ public static class DefaultCommandHandler
     /// <param name="req">The HTTP request containing the post data</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
-    /// <param name="partitionKeyName"></param>
+    /// <param name="partitionKeyName">The name of the partition key property</param>
     /// <returns>The GUID of the aggregate root that was created</returns>
     public async static Task<Guid> HandlePostAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
         // Read the post object from the request body
         object postObj = await req.Body.ReadFromRequestBodyAsync(true);
         
-        return await HandlePostAsync<T>(nostify, command, postObj, userId, partitionKey);
+        return await HandlePostAsync<T>(nostify, command, postObj, userId, partitionKey, partitionKeyName);
     }
 
     /// <summary>
