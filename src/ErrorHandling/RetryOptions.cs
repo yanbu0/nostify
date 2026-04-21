@@ -109,15 +109,19 @@ public class RetryOptions
     /// Calculates the delay for a given retry attempt, applying exponential backoff if <see cref="DelayMultiplier"/> is set.
     /// </summary>
     /// <param name="attempt">The zero-based attempt number (0 = first retry).</param>
+    /// <param name="delay">Optional total milliseconds for the delay calculation. Defaults to <c>null</c> which will set it to <see cref="Delay"/>.</param>
+    /// <param name="delayMultiplier">Optional delay multiplier for exponential backoff. Defaults to <c>null</c> which will set it to <see cref="DelayMultiplier"/>.</param>
     /// <returns>The calculated delay <see cref="TimeSpan"/> for the given attempt.</returns>
-    public TimeSpan GetDelayForAttempt(int attempt)
+    public TimeSpan GetDelayForAttempt(int attempt, double? delay = null, double? delayMultiplier = null)
     {
-        if (DelayMultiplier == null || attempt == 0)
+        delayMultiplier ??= DelayMultiplier;
+        delay ??= Delay.TotalMilliseconds;
+        if (delayMultiplier == null || attempt == 0)
         {
-            return Delay;
+            return TimeSpan.FromMilliseconds(delay.Value);
         }
 
-        return TimeSpan.FromMilliseconds(Delay.TotalMilliseconds * Math.Pow(DelayMultiplier.Value, attempt));
+        return TimeSpan.FromMilliseconds(delay.Value * Math.Pow(delayMultiplier.Value, attempt));
     }
 
     /// <summary>

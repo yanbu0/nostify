@@ -215,7 +215,15 @@ public static class DefaultCommandHandler
     /// <returns>The count of aggregate roots that were created</returns>
     public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, NostifyCommand command, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, bool allowRetry = false, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
-        return await HandleBulkCreateAsync<T>(nostify, command, newObjects, userId, partitionKey, batchSize, allowRetry ? new RetryOptions() : null, publishErrorEvents, partitionKeyName);
+        return await HandleBulkCreateAsync<T>(nostify, 
+                        command, 
+                        newObjects, 
+                        userId, 
+                        partitionKey, 
+                        batchSize, 
+                        allowRetry ? new RetryOptions() : null, 
+                        publishErrorEvents, 
+                        partitionKeyName);
     }
 
     /// <summary>

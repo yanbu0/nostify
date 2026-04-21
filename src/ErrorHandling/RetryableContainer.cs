@@ -318,6 +318,7 @@ public class RetryableContainer : IRetryableContainer
 
     #endregion
 
+    const int MIN_DELAY_MS = 100;
     /// <summary>
     /// Handles 429 TooManyRequests by waiting the server-specified RetryAfter duration.
     /// Always retries regardless of RetryOptions settings because 429 is always transient.
@@ -330,8 +331,12 @@ public class RetryableContainer : IRetryableContainer
             throw ce;
         }
 
-        int waitTime = ce.RetryAfter.HasValue ? (int)ce.RetryAfter.Value.TotalMilliseconds : 1000;
-        Options.LogRetry($"{operationDescription}: 429 TooManyRequests, retrying (attempt {attempt + 1}/{Options.MaxRetries}) after {waitTime}ms");
+        double min_delay = ce.RetryAfter.HasValue && ce.RetryAfter.Value.TotalMilliseconds > MIN_DELAY_MS
+            ? ce.RetryAfter.Value.TotalMilliseconds
+            : MIN_DELAY_MS;
+        int waitTime = (int)Options.GetDelayForAttempt(attempt, min_delay, 3).TotalMilliseconds;
+
+        Options.LogRetry($"{operationDescription}: 429 TooManyRequests RU Charge: {ce.RequestCharge}, retrying (attempt {attempt + 1}/{Options.MaxRetries}) after {waitTime}ms");
         await Task.Delay(waitTime);
     }
 }
