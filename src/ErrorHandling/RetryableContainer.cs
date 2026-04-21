@@ -331,10 +331,11 @@ public class RetryableContainer : IRetryableContainer
             throw ce;
         }
 
-        double min_delay = ce.RetryAfter.HasValue && ce.RetryAfter.Value.TotalMilliseconds > MIN_DELAY_MS
+        double retryAfterMs = ce.RetryAfter.HasValue && ce.RetryAfter.Value.TotalMilliseconds > 0
             ? ce.RetryAfter.Value.TotalMilliseconds
-            : MIN_DELAY_MS;
-        int waitTime = (int)Options.GetDelayForAttempt(attempt, min_delay, 3).TotalMilliseconds;
+            : Math.Max(Options.Delay.TotalMilliseconds, MIN_DELAY_MS);
+        double baseDelayMs = Math.Max(retryAfterMs, Options.Delay.TotalMilliseconds);
+        int waitTime = (int)Options.GetDelayForAttempt(attempt, baseDelayMs, 3).TotalMilliseconds;
 
         Options.LogRetry($"{operationDescription}: 429 TooManyRequests RU Charge: {ce.RequestCharge}, retrying (attempt {attempt + 1}/{Options.MaxRetries}) after {waitTime}ms");
         await Task.Delay(waitTime);
