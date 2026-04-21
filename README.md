@@ -75,7 +75,7 @@
 ### Updates
 
 - 4.6.1
-  - **RetryOptions Test Coverage**: Added unit tests for `RetryOptions.GetDelayForAttempt` covering the new optional `delay` and `delayMultiplier` per-call overrides introduced in 4.6.0, including verification that instance defaults remain unchanged. Updated `RetryOptions` and `RetryableContainer` spec files to document the per-call override parameters and the 100ms minimum-delay floor / 3x exponential backoff applied to 429 responses.
+  - **RetryOptions Test Coverage**: Added unit tests for `RetryOptions.GetDelayForAttempt` covering the new optional `delay` and `delayMultiplier` per-call overrides introduced in 4.6.1, including verification that instance defaults remain unchanged. Updated `RetryOptions` and `RetryableContainer` spec files to document the per-call override parameters and the 100ms minimum-delay floor / 3x exponential backoff applied to 429 responses.
 
 - 4.6.0
   - **DurableProjectionInitializer**: New `DurableProjectionInitializer<TProjection, TAggregate>` class for initializing projections using Azure Durable Functions orchestration. Designed for large datasets that may exceed the execution time of a single Azure Function. Handles paged, concurrent batch processing per partition, automatic conflict prevention (one orchestration at a time per instance ID), and clean cancellation/purge of orchestration instances. Supports both tenant-partitioned aggregates (`OrchestrateInitAsync`) and aggregates partitioned by any other Cosmos partition key (`OrchestrateInitByPartitionAsync`); both code paths share a single page-loop / chunking / retry helper internally for DRY.
