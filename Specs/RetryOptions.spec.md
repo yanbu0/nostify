@@ -52,24 +52,29 @@ public RetryOptions(int maxRetries, TimeSpan delay, bool retryWhenNotFound,
 ### GetDelayForAttempt
 
 ```csharp
-public TimeSpan GetDelayForAttempt(int attempt)
+public TimeSpan GetDelayForAttempt(int attempt, double? delay = null, double? delayMultiplier = null)
 ```
 
-Calculates the delay for a given retry attempt using exponential backoff when `DelayMultiplier` is set.
+Calculates the delay for a given retry attempt using exponential backoff when a delay multiplier is set.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `attempt` | `int` | Zero-based attempt number (0 = first retry) |
+| `delay` | `double?` | Optional delay (in milliseconds) overriding the instance `Delay`. Defaults to `null` (use `Delay.TotalMilliseconds`). |
+| `delayMultiplier` | `double?` | Optional multiplier overriding the instance `DelayMultiplier`. Defaults to `null` (use `DelayMultiplier`). |
 
 **Returns:** The calculated delay `TimeSpan`.
 
 **Behavior:**
-- When `DelayMultiplier` is null or `attempt` is 0: returns `Delay` (constant)
-- Otherwise: `Delay.TotalMilliseconds * Math.Pow(DelayMultiplier, attempt)` milliseconds
+- When the effective multiplier (override or instance) is null, or `attempt` is 0: returns the effective delay (constant)
+- Otherwise: `effectiveDelayMs * Math.Pow(effectiveMultiplier, attempt)` milliseconds
 
 **Examples:**
 - Delay=1s, Multiplier=2.0: 1s, 2s, 4s, 8s
 - Delay=100ms, Multiplier=1.5: 100ms, 150ms, 225ms
+- Override delay=100ms, override multiplier=3 (instance values ignored): 100ms, 300ms, 900ms, 2700ms
+
+The override parameters allow callers (e.g., `RetryableContainer`'s 429 handler) to apply exponential backoff anchored at a server-supplied delay (such as a Cosmos `RetryAfter`) without mutating the shared `RetryOptions` instance.
 
 ### LogRetry
 
