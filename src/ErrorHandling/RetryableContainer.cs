@@ -90,7 +90,7 @@ public class RetryableContainer : IRetryableContainer
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                await HandleTooManyRequestsAsync(ce, attempt, $"ReadItem<{typeof(T).Name}> for {id}");
+                await HandleTooManyRequestsAsync(ce, attempt, $"ReadItem<{typeof(T).Name}> for {id}", cancellationToken);
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.NotFound)
             {
@@ -142,7 +142,7 @@ public class RetryableContainer : IRetryableContainer
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>");
+                await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>", cancellationToken);
             }
             catch (Exception ex)
             {
@@ -178,7 +178,7 @@ public class RetryableContainer : IRetryableContainer
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                await HandleTooManyRequestsAsync(ce, attempt, $"UpsertItem<{typeof(T).Name}>");
+                await HandleTooManyRequestsAsync(ce, attempt, $"UpsertItem<{typeof(T).Name}>", cancellationToken);
             }
             catch (Exception ex)
             {
@@ -323,7 +323,7 @@ public class RetryableContainer : IRetryableContainer
     /// Handles 429 TooManyRequests by waiting the server-specified RetryAfter duration.
     /// Always retries regardless of RetryOptions settings because 429 is always transient.
     /// </summary>
-    private async Task HandleTooManyRequestsAsync(CosmosException ce, int attempt, string operationDescription)
+    private async Task HandleTooManyRequestsAsync(CosmosException ce, int attempt, string operationDescription, CancellationToken cancellationToken = default)
     {
         if (attempt >= Options.MaxRetries)
         {
@@ -335,9 +335,9 @@ public class RetryableContainer : IRetryableContainer
             ? ce.RetryAfter.Value.TotalMilliseconds
             : Math.Max(Options.Delay.TotalMilliseconds, MIN_DELAY_MS);
         double baseDelayMs = Math.Max(retryAfterMs, Options.Delay.TotalMilliseconds);
-        int waitTime = (int)Options.GetDelayForAttempt(attempt, baseDelayMs, 3).TotalMilliseconds;
+        TimeSpan delay = Options.GetDelayForAttempt(attempt, baseDelayMs, 3);
 
-        Options.LogRetry($"{operationDescription}: 429 TooManyRequests RU Charge: {ce.RequestCharge}, retrying (attempt {attempt + 1}/{Options.MaxRetries}) after {waitTime}ms");
-        await Task.Delay(waitTime);
+        Options.LogRetry($"{operationDescription}: 429 TooManyRequests RU Charge: {ce.RequestCharge}, retrying (attempt {attempt + 1}/{Options.MaxRetries}) after {delay.TotalMilliseconds}ms");
+        await Task.Delay(delay, cancellationToken);
     }
 }
