@@ -61,7 +61,7 @@ Throws `ArgumentNullException` if either parameter is null.
 
 ### Retry Behavior
 
-1. **429 TooManyRequests**: Always retries using server-provided `RetryAfter` header. Falls back to 1000ms if no header. Throws after `MaxRetries` exhausted.
+1. **429 TooManyRequests**: Always retries. Waits for a delay derived from the server-provided `RetryAfter` header and then applies exponential backoff via `RetryOptions.GetDelayForAttempt(attempt, delay, delayMultiplier: 3)`. If Cosmos provides a positive `RetryAfter`, the effective base delay is the greater of that value and `Options.Delay.TotalMilliseconds`; if `RetryAfter` is missing or non-positive, the fallback floor of `MIN_DELAY_MS = 100ms` is used as the base delay. The current `RequestCharge` is included in the retry log message. Throws after `MaxRetries` exhausted.
 2. **404 NotFound (ApplyAndPersist)**: `ApplyAndPersistAsync` returns null on NotFound internally. If `RetryWhenNotFound=true`, retries up to `MaxRetries`. If false, invokes `onNotFound` callback immediately.
 3. **404 NotFound (ReadItem)**: Catches `CosmosException` with NotFound status. Same retry logic as above.
 4. **Other Exceptions**: Invoked `onException` callback if provided, otherwise rethrows.

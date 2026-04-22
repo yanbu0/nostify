@@ -102,6 +102,58 @@ public class RetryOptionsTests
         Assert.Equal(TimeSpan.FromMilliseconds(225), options.GetDelayForAttempt(2));
     }
 
+    [Fact]
+    public void GetDelayForAttempt_DelayOverride_UsedInsteadOfInstanceDelay()
+    {
+        var options = new RetryOptions { Delay = TimeSpan.FromSeconds(1), DelayMultiplier = 2.0 };
+
+        // attempt 0 always returns base delay (overridden value)
+        Assert.Equal(TimeSpan.FromMilliseconds(250), options.GetDelayForAttempt(0, delay: 250));
+        // attempt 1: 250 * 2^1 = 500ms (instance multiplier still used)
+        Assert.Equal(TimeSpan.FromMilliseconds(500), options.GetDelayForAttempt(1, delay: 250));
+        // attempt 2: 250 * 2^2 = 1000ms
+        Assert.Equal(TimeSpan.FromMilliseconds(1000), options.GetDelayForAttempt(2, delay: 250));
+    }
+
+    [Fact]
+    public void GetDelayForAttempt_DelayMultiplierOverride_UsedInsteadOfInstanceMultiplier()
+    {
+        var options = new RetryOptions { Delay = TimeSpan.FromMilliseconds(100), DelayMultiplier = 2.0 };
+
+        // attempt 0 always returns base delay
+        Assert.Equal(TimeSpan.FromMilliseconds(100), options.GetDelayForAttempt(0, delayMultiplier: 3));
+        // attempt 1: 100 * 3^1 = 300ms (overridden multiplier)
+        Assert.Equal(TimeSpan.FromMilliseconds(300), options.GetDelayForAttempt(1, delayMultiplier: 3));
+        // attempt 2: 100 * 3^2 = 900ms
+        Assert.Equal(TimeSpan.FromMilliseconds(900), options.GetDelayForAttempt(2, delayMultiplier: 3));
+    }
+
+    [Fact]
+    public void GetDelayForAttempt_BothOverrides_UsedInsteadOfInstanceValues()
+    {
+        var options = new RetryOptions { Delay = TimeSpan.FromSeconds(5), DelayMultiplier = 2.0 };
+
+        // attempt 0 always returns base delay (overridden value)
+        Assert.Equal(TimeSpan.FromMilliseconds(100), options.GetDelayForAttempt(0, delay: 100, delayMultiplier: 3));
+        // attempt 1: 100 * 3^1 = 300ms
+        Assert.Equal(TimeSpan.FromMilliseconds(300), options.GetDelayForAttempt(1, delay: 100, delayMultiplier: 3));
+        // attempt 2: 100 * 3^2 = 900ms
+        Assert.Equal(TimeSpan.FromMilliseconds(900), options.GetDelayForAttempt(2, delay: 100, delayMultiplier: 3));
+        // attempt 3: 100 * 3^3 = 2700ms
+        Assert.Equal(TimeSpan.FromMilliseconds(2700), options.GetDelayForAttempt(3, delay: 100, delayMultiplier: 3));
+    }
+
+    [Fact]
+    public void GetDelayForAttempt_NullMultiplierOnInstance_NoOverride_ReturnsConstantDelayUsingOverrideDelay()
+    {
+        var options = new RetryOptions { Delay = TimeSpan.FromSeconds(1), DelayMultiplier = null };
+
+        // No multiplier (instance null, no override) -> constant override delay regardless of attempt
+        Assert.Equal(TimeSpan.FromMilliseconds(200), options.GetDelayForAttempt(0, delay: 200));
+        Assert.Equal(TimeSpan.FromMilliseconds(200), options.GetDelayForAttempt(1, delay: 200));
+        Assert.Equal(TimeSpan.FromMilliseconds(200), options.GetDelayForAttempt(5, delay: 200));
+    }
+
     #endregion
 
     #region LogRetry
