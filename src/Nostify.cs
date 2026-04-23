@@ -377,16 +377,20 @@ public class Nostify : INostify, IDisposable
             if (retryOptions != null)
             {
                 var retryable = eventContainer.WithRetry(retryOptions);
-                List<Task> taskList = new List<Task>();
-                eventBatch.ForEach(pe =>
-                {
-                    taskList.Add(retryable.CreateItemAsync(
-                        pe,
-                        pe.aggregateRootId.ToPartitionKey(),
-                        onException: (ex) => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
-                    ));
-                });
-                await Task.WhenAll(taskList);
+                await retryable.DoBulkCreateAsync(
+                    eventBatch,
+                    onException: (ex) => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+                );
+                // List<Task> taskList = new List<Task>();
+                // eventBatch.ForEach(pe =>
+                // {
+                //     taskList.Add(retryable.CreateItemAsync(
+                //         pe,
+                //         pe.aggregateRootId.ToPartitionKey(),
+                //         onException: (ex) => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+                //     ));
+                // });
+                // await Task.WhenAll(taskList);
             }
             else
             {
