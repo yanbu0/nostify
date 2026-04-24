@@ -222,6 +222,22 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
     /// <inheritdoc/>
     public async Task<ItemResponse<TResult>?> UpsertItemAsync<TResult>(
         TResult item,
+        PartitionKey? partitionKey,
+        Func<Exception, Task>? onException = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (_exceptionToThrow != null)
+        {
+            if (onException != null) { await onException(_exceptionToThrow); return default; }
+            throw _exceptionToThrow;
+        }
+
+        return default;
+    }
+
+    /// <inheritdoc/>
+    public async Task<ItemResponse<TResult>?> UpsertItemAsync<TResult>(
+        TResult item,
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {
@@ -291,11 +307,15 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
     /// <inheritdoc/>
     public Task DoBulkCreateAsync<TItem>(
         List<TItem> itemList,
-        Func<Exception, Task>? onException = null) where TItem : IApplyable
+        Func<TItem, Exception, Task>? onException = null)
     {
         if (_exceptionToThrow != null)
         {
-            if (onException != null) return onException(_exceptionToThrow);
+            if (onException != null)
+            {
+                var item = itemList.Count > 0 ? itemList[0] : default!;
+                return onException(item, _exceptionToThrow);
+            }
             throw _exceptionToThrow;
         }
 
@@ -305,11 +325,51 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
     /// <inheritdoc/>
     public Task DoBulkUpsertAsync<TItem>(
         List<TItem> itemList,
-        Func<Exception, Task>? onException = null) where TItem : IApplyable
+        Func<TItem, Exception, Task>? onException = null)
     {
         if (_exceptionToThrow != null)
         {
-            if (onException != null) return onException(_exceptionToThrow);
+            if (onException != null)
+            {
+                var item = itemList.Count > 0 ? itemList[0] : default!;
+                return onException(item, _exceptionToThrow);
+            }
+            throw _exceptionToThrow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task DoBulkCreateEventAsync(
+        List<IEvent> eventList,
+        Func<IEvent, Exception, Task>? onException = null)
+    {
+        if (_exceptionToThrow != null)
+        {
+            if (onException != null)
+            {
+                var evt = eventList.Count > 0 ? eventList[0] : default!;
+                return onException(evt, _exceptionToThrow);
+            }
+            throw _exceptionToThrow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task DoBulkUpsertEventAsync(
+        List<IEvent> eventList,
+        Func<IEvent, Exception, Task>? onException = null)
+    {
+        if (_exceptionToThrow != null)
+        {
+            if (onException != null)
+            {
+                var evt = eventList.Count > 0 ? eventList[0] : default!;
+                return onException(evt, _exceptionToThrow);
+            }
             throw _exceptionToThrow;
         }
 

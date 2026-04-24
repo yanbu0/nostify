@@ -404,7 +404,7 @@ public class AsyncEventRequestHandlerTests : IDisposable
         Assert.All(allEvents, e => Assert.True(e.timestamp <= pointInTime));
     }
 
-    [Fact(Skip = "Flaky chunking behavior across environments; excluded from CI until test is stabilized.")]
+    [Fact(Skip = "Flaky in CI/local due to timing/chunking nondeterminism; run manually when investigating async chunk behavior.")]
     public async Task Handler_PointInTime_CorrelationIdPreservedInAllChunks()
     {
         // Arrange

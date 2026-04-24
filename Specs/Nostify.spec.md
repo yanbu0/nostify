@@ -194,7 +194,7 @@ Applies and persists a bulk array of Kafka events to projections:
 Persists a list of events to the event store in configurable batches:
 
 - **`bool allowRetry` overload** — Backwards-compatible. Converts `allowRetry = true` to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
-- **`RetryOptions?` overload** — Primary implementation. When `retryOptions` is provided, wraps the event store container with `RetryableContainer` via `container.WithRetry(retryOptions)` and uses `retryable.CreateItemAsync` for each event. When `null`, falls through to direct `CreateItemAsync` with try/catch error handling.
+- **`RetryOptions?` overload** — Primary implementation. When `retryOptions` is provided, wraps the event store container with `RetryableContainer` via `container.WithRetry(retryOptions)` and uses `retryable.DoBulkCreateEventAsync` for batched event persistence. When `null`, falls through to direct `CreateItemAsync` with try/catch error handling.
 - Both overloads write failed events to the undeliverable events container via `HandleUndeliverableAsync`.
 - When `publishErrorEvents = true`, error commands (`ErrorCommand.BulkPersistEvent`) are also published to Kafka.
 

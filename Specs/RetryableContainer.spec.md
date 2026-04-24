@@ -29,16 +29,27 @@ public interface IRetryableContainer
 | `UpsertItemAsync<T>(T, ...)` | `Task<ItemResponse<T>?>` | Upsert item with 429 retry |
 | `DoBulkCreateAsync<T>(List<T>, ...)` | `Task` | Bulk creates items with per-item 429 retry; container must have bulk enabled |
 | `DoBulkUpsertAsync<T>(List<T>, ...)` | `Task` | Bulk upserts items with per-item 429 retry; container must have bulk enabled |
+| `DoBulkCreateEventAsync(List<IEvent>, ...)` | `Task` | Bulk creates events with per-item 429 retry using each event's `aggregateRootId` partition key; container must have bulk enabled |
+| `DoBulkUpsertEventAsync(List<IEvent>, ...)` | `Task` | Bulk upserts events with per-item 429 retry using each event's `aggregateRootId` partition key; container must have bulk enabled |
 
 ### Callback Parameters
 
-All methods accept optional callbacks to handle different failure scenarios:
+Apply/read/write methods accept optional callbacks to handle different failure scenarios:
 
 | Callback | Type | When Invoked |
 |----------|------|-------------|
 | `onExhausted` | `Func<Task>?` | All retries exhausted for not-found result |
 | `onNotFound` | `Func<Task>?` | Item not found and `RetryWhenNotFound` is false |
 | `onException` | `Func<Exception, Task>?` | Non-transient exception occurs |
+
+Bulk methods use item-aware exception callbacks so callers can identify which item failed:
+
+| Method | `onException` Type |
+|--------|---------------------|
+| `DoBulkCreateAsync<T>(...)` | `Func<T, Exception, Task>?` |
+| `DoBulkUpsertAsync<T>(...)` | `Func<T, Exception, Task>?` |
+| `DoBulkCreateEventAsync(...)` | `Func<IEvent, Exception, Task>?` |
+| `DoBulkUpsertEventAsync(...)` | `Func<IEvent, Exception, Task>?` |
 
 ## Implementation
 
