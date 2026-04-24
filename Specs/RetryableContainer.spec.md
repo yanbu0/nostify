@@ -30,6 +30,7 @@ public interface IRetryableContainer
 | `DoBulkCreateAsync<T>(List<T>, ...)` | `Task` | Bulk creates items with per-item 429 retry; container must have bulk enabled |
 | `DoBulkUpsertAsync<T>(List<T>, ...)` | `Task` | Bulk upserts items with per-item 429 retry; container must have bulk enabled |
 | `DoBulkCreateEventAsync(List<IEvent>, ...)` | `Task` | Bulk creates events with per-item 429 retry using each event's `aggregateRootId` partition key; container must have bulk enabled |
+| `DoBulkUpsertEventAsync(List<IEvent>, ...)` | `Task` | Bulk upserts events with per-item 429 retry using each event's `aggregateRootId` partition key; container must have bulk enabled |
 
 ### Callback Parameters
 
@@ -48,6 +49,7 @@ Bulk methods use item-aware exception callbacks so callers can identify which it
 | `DoBulkCreateAsync<T>(...)` | `Func<T, Exception, Task>?` |
 | `DoBulkUpsertAsync<T>(...)` | `Func<T, Exception, Task>?` |
 | `DoBulkCreateEventAsync(...)` | `Func<IEvent, Exception, Task>?` |
+| `DoBulkUpsertEventAsync(...)` | `Func<IEvent, Exception, Task>?` |
 
 ## Implementation
 

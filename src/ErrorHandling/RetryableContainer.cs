@@ -338,6 +338,23 @@ public class RetryableContainer : IRetryableContainer
         await Task.WhenAll(taskList);
     }
 
+    /// <inheritdoc/>
+    public async Task DoBulkUpsertEventAsync(
+        List<IEvent> eventList,
+        Func<IEvent, Exception, Task>? onException = null)
+    {
+        Container.ValidateBulkEnabled(true);
+
+        List<Task> taskList = new List<Task>();
+        eventList.ForEach(pe => taskList.Add(UpsertItemAsync(
+            pe,
+            onException: onException != null
+                ? (ex) => onException(pe, ex)
+                : (Func<Exception, Task>?)((ex) => Task.FromException(new NostifyException($"Bulk Upsert Event Error {ex.Message}")))
+        )));
+        await Task.WhenAll(taskList);
+    }
+
     #endregion
 
     const int MIN_DELAY_MS = 100;

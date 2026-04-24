@@ -642,6 +642,74 @@ public class RetryableContainerTests
         Assert.Equal("Bulk operations must be enabled for this container", ex.Message);
     }
 
+    [Fact]
+    public async Task DoBulkUpsertEventAsync_BulkEnabled_UpsertsAllEvents()
+    {
+        var clientOptions = new CosmosClientOptions { AllowBulkExecution = true };
+        var mockClient = new Mock<CosmosClient>();
+        mockClient.Setup(c => c.ClientOptions).Returns(clientOptions);
+
+        var mockDatabase = new Mock<Database>();
+        mockDatabase.Setup(d => d.Client).Returns(mockClient.Object);
+
+        var mockContainer = new Mock<Container>();
+        mockContainer.Setup(c => c.Database).Returns(mockDatabase.Object);
+
+        int upsertCalls = 0;
+        var upsertedEvents = new List<IEvent>();
+        var mockResponse = new Mock<ItemResponse<IEvent>>();
+        mockContainer
+            .Setup(c => c.UpsertItemAsync(
+                It.IsAny<IEvent>(),
+                It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IEvent, PartitionKey?, ItemRequestOptions, CancellationToken>((evt, pk, opts, ct) =>
+            {
+                Interlocked.Increment(ref upsertCalls);
+                upsertedEvents.Add(evt);
+            })
+            .ReturnsAsync(mockResponse.Object);
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var events = new List<IEvent>
+        {
+            CreateTestEvent(Guid.NewGuid()),
+            CreateTestEvent(Guid.NewGuid()),
+            CreateTestEvent(Guid.NewGuid())
+        };
+
+        await retryable.DoBulkUpsertEventAsync(events);
+
+        Assert.Equal(events.Count, upsertCalls);
+        Assert.Equal(events.Count, upsertedEvents.Count);
+        Assert.All(events, e => Assert.Contains(e, upsertedEvents));
+    }
+
+    [Fact]
+    public async Task DoBulkUpsertEventAsync_BulkDisabled_ThrowsNostifyException()
+    {
+        var clientOptions = new CosmosClientOptions { AllowBulkExecution = false };
+        var mockClient = new Mock<CosmosClient>();
+        mockClient.Setup(c => c.ClientOptions).Returns(clientOptions);
+
+        var mockDatabase = new Mock<Database>();
+        mockDatabase.Setup(d => d.Client).Returns(mockClient.Object);
+
+        var mockContainer = new Mock<Container>();
+        mockContainer.Setup(c => c.Database).Returns(mockDatabase.Object);
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var events = new List<IEvent> { CreateTestEvent(Guid.NewGuid()) };
+
+        var ex = await Assert.ThrowsAsync<NostifyException>(() => retryable.DoBulkUpsertEventAsync(events));
+        Assert.Equal("Bulk operations must be enabled for this container", ex.Message);
+    }
+
     #endregion
 
     #region MaxRetries = 0

@@ -342,5 +342,23 @@ public class MockRetryableContainer<T> : IRetryableContainer where T : NostifyOb
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc/>
+    public Task DoBulkUpsertEventAsync(
+        List<IEvent> eventList,
+        Func<IEvent, Exception, Task>? onException = null)
+    {
+        if (_exceptionToThrow != null)
+        {
+            if (onException != null)
+            {
+                var evt = eventList.Count > 0 ? eventList[0] : default!;
+                return onException(evt, _exceptionToThrow);
+            }
+            throw _exceptionToThrow;
+        }
+
+        return Task.CompletedTask;
+    }
+
     #endregion
 }
