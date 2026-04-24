@@ -322,11 +322,14 @@ public class MockRetryableContainerTests
         var mock = new MockRetryableContainer<TestAggregate>(ex);
 
         Exception? caught = null;
+        TestAggregate? caughtItem = null;
+        var item = new TestAggregate();
         await mock.DoBulkCreateAsync(
-            new List<TestAggregate> { new TestAggregate() },
-            onException: (e) => { caught = e; return Task.CompletedTask; });
+            new List<TestAggregate> { item },
+            onException: (i, e) => { caughtItem = i; caught = e; return Task.CompletedTask; });
 
         Assert.Same(ex, caught);
+        Assert.Same(item, caughtItem);
     }
 
     [Fact]
@@ -364,11 +367,14 @@ public class MockRetryableContainerTests
         var mock = new MockRetryableContainer<TestAggregate>(ex);
 
         Exception? caught = null;
+        TestAggregate? caughtItem = null;
+        var item = new TestAggregate();
         await mock.DoBulkUpsertAsync(
-            new List<TestAggregate> { new TestAggregate() },
-            onException: (e) => { caught = e; return Task.CompletedTask; });
+            new List<TestAggregate> { item },
+            onException: (i, e) => { caughtItem = i; caught = e; return Task.CompletedTask; });
 
         Assert.Same(ex, caught);
+        Assert.Same(item, caughtItem);
     }
 
     [Fact]

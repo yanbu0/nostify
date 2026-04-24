@@ -264,7 +264,7 @@ public static class DefaultCommandHandler
             var propertyType = Nullable.GetUnderlyingType(propertyInfo.PropertyType) ?? propertyInfo.PropertyType;
             if (propertyType != typeof(Guid))
             {
-                throw new NostifyException($"Property '{partitionKeyName}' on type '{e.GetType().Name}' must be of type '{typeof(Guid).Name}' or '{typeof(Guid?).Name}' to receive the partition key value.");
+                throw new NostifyException($"Property '{partitionKeyName}' on type '{e.GetType().Name}' must be of type '{typeof(Guid).Name}' to receive the partition key value.");
             }
 
             propertyInfo.SetValue(e, partitionKey);

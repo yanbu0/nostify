@@ -377,20 +377,13 @@ public class Nostify : INostify, IDisposable
             if (retryOptions != null)
             {
                 var retryable = eventContainer.WithRetry(retryOptions);
-                await retryable.DoBulkCreateAsync(
+                await retryable.DoBulkCreateEventAsync(
                     eventBatch,
-                    onException: (ex) => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+                    onException: async (pe, ex) => {
+                        Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
+                        await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                    }
                 );
-                // List<Task> taskList = new List<Task>();
-                // eventBatch.ForEach(pe =>
-                // {
-                //     taskList.Add(retryable.CreateItemAsync(
-                //         pe,
-                //         pe.aggregateRootId.ToPartitionKey(),
-                //         onException: (ex) => HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
-                //     ));
-                // });
-                // await Task.WhenAll(taskList);
             }
             else
             {
@@ -405,6 +398,7 @@ public class Nostify : INostify, IDisposable
                         }
                         catch (Exception ex)
                         {
+                            Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
                             _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
                         }
                     }));

@@ -166,23 +166,45 @@ public interface IRetryableContainer
     /// Bulk creates a list of items with per-item retry on 429 TooManyRequests.
     /// The underlying container must have bulk operations enabled.
     /// </summary>
-    /// <typeparam name="T">The type of items to create, must implement <see cref="IApplyable"/>.</typeparam>
+    /// <typeparam name="T">The type of items to create.</typeparam>
     /// <param name="itemList">List of items to create.</param>
-    /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual item.</param>
+    /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual item. Receives the item being created and the exception.</param>
     /// <returns>A task representing the asynchronous bulk create operation.</returns>
     Task DoBulkCreateAsync<T>(
         List<T> itemList,
-        Func<Exception, Task>? onException = null) where T : IApplyable;
+        Func<T, Exception, Task>? onException = null);
 
     /// <summary>
     /// Bulk upserts a list of items with per-item retry on 429 TooManyRequests.
     /// The underlying container must have bulk operations enabled.
     /// </summary>
-    /// <typeparam name="T">The type of items to upsert, must implement <see cref="IApplyable"/>.</typeparam>
+    /// <typeparam name="T">The type of items to upsert.</typeparam>
     /// <param name="itemList">List of items to upsert.</param>
     /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual item.</param>
     /// <returns>A task representing the asynchronous bulk upsert operation.</returns>
     Task DoBulkUpsertAsync<T>(
         List<T> itemList,
-        Func<Exception, Task>? onException = null) where T : IApplyable;
+        Func<T, Exception, Task>? onException = null);
+
+    /// <summary>
+    /// Bulk creates events with per-item retry on 429 TooManyRequests using each event's aggregateRootId partition key.
+    /// The underlying container must have bulk operations enabled.
+    /// </summary>
+    /// <param name="eventList">List of events to create.</param>
+    /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual event. Receives the event and the exception.</param>
+    /// <returns>A task representing the asynchronous bulk create operation.</returns>
+    Task DoBulkCreateEventAsync(
+        List<IEvent> eventList,
+        Func<IEvent, Exception, Task>? onException = null);
+
+    /// <summary>
+    /// Bulk upserts events with per-item retry on 429 TooManyRequests using each event's aggregateRootId partition key.
+    /// The underlying container must have bulk operations enabled.
+    /// </summary>
+    /// <param name="eventList">List of events to upsert.</param>
+    /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual event. Receives the event and the exception.</param>
+    /// <returns>A task representing the asynchronous bulk upsert operation.</returns>
+    Task DoBulkUpsertEventAsync(
+        List<IEvent> eventList,
+        Func<IEvent, Exception, Task>? onException = null);
 }

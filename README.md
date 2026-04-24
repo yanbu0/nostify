@@ -74,10 +74,14 @@
 
 ### Updates
 
-- 4.6.1
-  - **RetryOptions Test Coverage**: Added unit tests for `RetryOptions.GetDelayForAttempt` covering the new optional `delay` and `delayMultiplier` per-call overrides introduced in 4.6.1, including verification that instance defaults remain unchanged. Updated `RetryOptions` and `RetryableContainer` spec files to document the per-call override parameters and the 100ms minimum-delay floor / 3x exponential backoff applied to 429 responses.
+- 4.6.2
+    - **Bulk Event Retry Path**: `Nostify.BulkPersistEventAsync(..., RetryOptions?)` now uses `IRetryableContainer.DoBulkCreateEventAsync(...)` for retry-enabled batches. This preserves event-specific partition key behavior (`aggregateRootId`) while keeping per-item retry and undeliverable-event handling.
+    - **Item-Aware Bulk Exception Callbacks**: `IRetryableContainer.DoBulkCreateAsync<T>` and `DoBulkUpsertAsync<T>` now pass both the failing item and exception to `onException` (`Func<T, Exception, Task>`), enabling richer error handling and diagnostics for failed bulk operations.
+    - **Bulk Mode Validation Coverage**: Added `RetryableContainer` tests that explicitly validate `DoBulkCreateEventAsync` requires Cosmos bulk mode and throws when bulk execution is disabled.
+    - **Pipeline Stability**: Marked `AsyncEventRequestHandlerTests.Handler_PointInTime_CorrelationIdPreservedInAllChunks` as skipped due to CI/local timing/chunking nondeterminism.
 
 - 4.6.1
+    - **RetryOptions Test Coverage**: Added unit tests for `RetryOptions.GetDelayForAttempt` covering the new optional `delay` and `delayMultiplier` per-call overrides introduced in 4.6.1, including verification that instance defaults remain unchanged. Updated `RetryOptions` and `RetryableContainer` spec files to document the per-call override parameters and the 100ms minimum-delay floor / 3x exponential backoff applied to 429 responses.
   - **429 Retry Handling Improvement**: `RetryableContainer.HandleTooManyRequestsAsync` now applies exponential backoff to 429 TooManyRequests responses using a 3x multiplier per attempt and enforces a minimum delay floor of 100ms (replacing the previous flat 1000ms fallback when `RetryAfter` was missing). Retry log messages now also include the failed request's `RequestCharge` (RUs). To support this, `RetryOptions.GetDelayForAttempt` gained two optional parameters (`delay`, `delayMultiplier`) that allow callers to override the instance defaults per-call without mutating shared `RetryOptions`.
 
 - 4.6.0
@@ -1959,6 +1963,14 @@ All retry methods accept three optional callbacks:
 | `onNotFound` | `Func<Task>?` | 404 received and `RetryWhenNotFound` is `false` (immediate, no retry) |
 | `onException` | `Func<Exception, Task>?` | Non-transient exception occurred. If null, exception propagates normally |
 
+Bulk methods use item-aware exception callbacks:
+
+| Bulk Method | `onException` Signature |
+|------------|--------------------------|
+| `DoBulkCreateAsync<T>(...)` | `Func<T, Exception, Task>?` |
+| `DoBulkUpsertAsync<T>(...)` | `Func<T, Exception, Task>?` |
+| `DoBulkCreateEventAsync(...)` | `Func<IEvent, Exception, Task>?` |
+
 If a callback is null, the default behavior applies: exhausted/notFound return `null`, and exceptions propagate.
 
 #### Available Methods
@@ -1971,6 +1983,7 @@ If a callback is null, the default behavior applies: exhausted/notFound return `
 | `UpsertItemAsync<T>(item, ...)` | Create or replace an item |
 | `DoBulkCreateAsync<T>(items, ...)` | Bulk create items with per-item 429 retry; container must have bulk enabled |
 | `DoBulkUpsertAsync<T>(items, ...)` | Bulk upsert items with per-item 429 retry; container must have bulk enabled |
+| `DoBulkCreateEventAsync(events, ...)` | Bulk create events with per-item 429 retry and event partition-key routing; container must have bulk enabled |
 
 #### RetryOptions Properties Reference
 

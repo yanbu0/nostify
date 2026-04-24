@@ -192,6 +192,102 @@ public class AllowRetryDelegationTests
         Assert.Null(capturedRetryOptions);
     }
 
+    [Fact]
+    public async Task HandleBulkCreateAsync_AllowRetryTrue_PerformsBulkOperationForEachBatch()
+    {
+        // Arrange
+        var batchCounts = new List<int>();
+        RetryOptions? capturedRetryOptions = null;
+
+        _mockNostify
+            .Setup(n => n.BulkPersistEventAsync(
+                It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
+            .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
+            {
+                capturedRetryOptions = ro;
+                var loopSize = bs ?? evts.Count;
+                for (int i = 0; i < evts.Count; i += loopSize)
+                {
+                    batchCounts.Add(Math.Min(loopSize, evts.Count - i));
+                }
+            })
+            .Returns(Task.CompletedTask);
+
+        var command = new NostifyCommand("CreateTestAggregate", isNew: true);
+        var newObjects = new List<TestAggregate>
+        {
+            new() { name = "A" },
+            new() { name = "B" },
+            new() { name = "C" },
+            new() { name = "D" },
+            new() { name = "E" }
+        };
+
+        // Act
+        var count = await DefaultCommandHandler.HandleBulkCreateAsync<TestAggregate>(
+            _mockNostify.Object,
+            command,
+            newObjects,
+            userId: Guid.NewGuid(),
+            partitionKey: Guid.NewGuid(),
+            batchSize: 2,
+            allowRetry: true,
+            publishErrorEvents: false);
+
+        // Assert
+        Assert.Equal(5, count);
+        Assert.NotNull(capturedRetryOptions);
+        Assert.Equal(new List<int> { 2, 2, 1 }, batchCounts);
+    }
+
+    [Fact]
+    public async Task HandleBulkCreateAsync_AllowRetryFalse_PerformsBulkOperationForEachBatch()
+    {
+        // Arrange
+        var batchCounts = new List<int>();
+        RetryOptions? capturedRetryOptions = new RetryOptions();
+
+        _mockNostify
+            .Setup(n => n.BulkPersistEventAsync(
+                It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
+            .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
+            {
+                capturedRetryOptions = ro;
+                var loopSize = bs ?? evts.Count;
+                for (int i = 0; i < evts.Count; i += loopSize)
+                {
+                    batchCounts.Add(Math.Min(loopSize, evts.Count - i));
+                }
+            })
+            .Returns(Task.CompletedTask);
+
+        var command = new NostifyCommand("CreateTestAggregate", isNew: true);
+        var newObjects = new List<TestAggregate>
+        {
+            new() { name = "A" },
+            new() { name = "B" },
+            new() { name = "C" },
+            new() { name = "D" },
+            new() { name = "E" }
+        };
+
+        // Act
+        var count = await DefaultCommandHandler.HandleBulkCreateAsync<TestAggregate>(
+            _mockNostify.Object,
+            command,
+            newObjects,
+            userId: Guid.NewGuid(),
+            partitionKey: Guid.NewGuid(),
+            batchSize: 2,
+            allowRetry: false,
+            publishErrorEvents: false);
+
+        // Assert
+        Assert.Equal(5, count);
+        Assert.Null(capturedRetryOptions);
+        Assert.Equal(new List<int> { 2, 2, 1 }, batchCounts);
+    }
+
     #endregion
 
     #region DefaultCommandHandler.HandleBulkUpdate

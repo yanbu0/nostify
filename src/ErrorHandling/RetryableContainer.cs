@@ -289,14 +289,16 @@ public class RetryableContainer : IRetryableContainer
     /// <inheritdoc/>
     public async Task DoBulkCreateAsync<T>(
         List<T> itemList,
-        Func<Exception, Task>? onException = null) where T : IApplyable
+        Func<T, Exception, Task>? onException = null)
     {
         Container.ValidateBulkEnabled(true);
 
         List<Task> taskList = new List<Task>();
         itemList.ForEach(i => taskList.Add(CreateItemAsync(
             i,
-            onException: onException ?? ((ex) => Task.FromException(new NostifyException($"Bulk Create Error {ex.Message}")))
+            onException: onException != null
+                ? (ex) => onException(i, ex)
+                : (Func<Exception, Task>?)((ex) => Task.FromException(new NostifyException($"Bulk Create Error {ex.Message}")))
         )));
         await Task.WhenAll(taskList);
     }
@@ -304,14 +306,34 @@ public class RetryableContainer : IRetryableContainer
     /// <inheritdoc/>
     public async Task DoBulkUpsertAsync<T>(
         List<T> itemList,
-        Func<Exception, Task>? onException = null) where T : IApplyable
+        Func<T, Exception, Task>? onException = null)
     {
         Container.ValidateBulkEnabled(true);
 
         List<Task> taskList = new List<Task>();
         itemList.ForEach(i => taskList.Add(UpsertItemAsync(
             i,
-            onException: onException ?? ((ex) => Task.FromException(new NostifyException($"Bulk Upsert Error {ex.Message}")))
+            onException: onException != null
+                ? (ex) => onException(i, ex)
+                : (Func<Exception, Task>?)((ex) => Task.FromException(new NostifyException($"Bulk Upsert Error {ex.Message}")))
+        )));
+        await Task.WhenAll(taskList);
+    }
+
+    /// <inheritdoc/>
+    public async Task DoBulkCreateEventAsync(
+        List<IEvent> eventList,
+        Func<IEvent, Exception, Task>? onException = null)
+    {
+        Container.ValidateBulkEnabled(true);
+
+        List<Task> taskList = new List<Task>();
+        eventList.ForEach(pe => taskList.Add(CreateItemAsync(
+            pe,
+            pe.aggregateRootId.ToPartitionKey(),
+            onException: onException != null
+                ? (ex) => onException(pe, ex)
+                : (Func<Exception, Task>?)((ex) => Task.FromException(new NostifyException($"Bulk Create Event Error {ex.Message}")))
         )));
         await Task.WhenAll(taskList);
     }
