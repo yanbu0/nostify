@@ -167,6 +167,7 @@ public class RetryableContainer : IRetryableContainer
     /// <inheritdoc/>
     public async Task<ItemResponse<T>?> UpsertItemAsync<T>(
         T item,
+        PartitionKey? partitionKey,
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {
@@ -174,7 +175,9 @@ public class RetryableContainer : IRetryableContainer
         {
             try
             {
-                return await Container.UpsertItemAsync(item, cancellationToken: cancellationToken);
+                return await (partitionKey.HasValue
+                    ? Container.UpsertItemAsync(item, partitionKey.Value, cancellationToken: cancellationToken)
+                    : Container.UpsertItemAsync(item, cancellationToken: cancellationToken));
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
@@ -189,6 +192,15 @@ public class RetryableContainer : IRetryableContainer
         }
 
         return default;
+    }
+
+    /// <inheritdoc/>
+    public async Task<ItemResponse<T>?> UpsertItemAsync<T>(
+        T item,
+        Func<Exception, Task>? onException = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await UpsertItemAsync(item, null, onException, cancellationToken);
     }
 
     /// <summary>
@@ -348,6 +360,7 @@ public class RetryableContainer : IRetryableContainer
         List<Task> taskList = new List<Task>();
         eventList.ForEach(pe => taskList.Add(UpsertItemAsync(
             pe,
+            pe.aggregateRootId.ToPartitionKey(),
             onException: onException != null
                 ? (ex) => onException(pe, ex)
                 : (Func<Exception, Task>?)((ex) => Task.FromException(new NostifyException($"Bulk Upsert Event Error {ex.Message}")))
