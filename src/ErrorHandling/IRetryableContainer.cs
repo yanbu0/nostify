@@ -196,7 +196,7 @@ public interface IRetryableContainer
     /// </summary>
     /// <typeparam name="T">The type of items to upsert.</typeparam>
     /// <param name="itemList">List of items to upsert.</param>
-    /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual item.</param>
+    /// <param name="onException">Callback invoked when a non-transient exception occurs for an individual item. Receives the item being upserted and the exception.</param>
     /// <returns>A task representing the asynchronous bulk upsert operation.</returns>
     Task DoBulkUpsertAsync<T>(
         List<T> itemList,
