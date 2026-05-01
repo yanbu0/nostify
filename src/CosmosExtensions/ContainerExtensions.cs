@@ -241,6 +241,13 @@ public static class ContainerExtensions
                 {
                     await container.CreateItemAsync<T>(nosObjToUpdate, partitionKey);
                 }
+                catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+                {
+                    // Item was already created by a previous delivery of the same event (at-least-once delivery).
+                    // Treat as idempotent success — the projection already reflects this create event.
+                    if (logger != null) logger.LogWarning("Create skipped for {ContainerId} {IdToMatch}: item already exists (409 Conflict, likely a duplicate delivery)", container.Id, idToMatch);
+                    else Console.Error.WriteLine($"Create skipped for {container.Id} {idToMatch}: item already exists (409 Conflict, likely a duplicate delivery)");
+                }
                 catch (CosmosException ex)
                 {
                     throw new NostifyException($"Create failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");

@@ -73,9 +73,10 @@ Throws `ArgumentNullException` if either parameter is null.
 ### Retry Behavior
 
 1. **429 TooManyRequests**: Always retries. Waits for a delay derived from the server-provided `RetryAfter` header and then applies exponential backoff via `RetryOptions.GetDelayForAttempt(attempt, delay, delayMultiplier: 3)`. If Cosmos provides a positive `RetryAfter`, the effective base delay is the greater of that value and `Options.Delay.TotalMilliseconds`; if `RetryAfter` is missing or non-positive, the fallback floor of `MIN_DELAY_MS = 100ms` is used as the base delay. The current `RequestCharge` is included in the retry log message. Throws after `MaxRetries` exhausted.
-2. **404 NotFound (ApplyAndPersist)**: `ApplyAndPersistAsync` returns null on NotFound internally. If `RetryWhenNotFound=true`, retries up to `MaxRetries`. If false, invokes `onNotFound` callback immediately.
-3. **404 NotFound (ReadItem)**: Catches `CosmosException` with NotFound status. Same retry logic as above.
-4. **Other Exceptions**: Invoked `onException` callback if provided, otherwise rethrows.
+2. **409 Conflict on retry** (`CreateItemAsync` only): When `attempt > 0`, a `409 Conflict` response means the item was already committed in a prior attempt before a 429 was returned. Treated as idempotent success — returns `default` (null) instead of throwing. A first-attempt 409 (attempt == 0) is a real conflict and is passed to the `onException` callback as usual.
+3. **404 NotFound (ApplyAndPersist)**: `ApplyAndPersistAsync` returns null on NotFound internally. If `RetryWhenNotFound=true`, retries up to `MaxRetries`. If false, invokes `onNotFound` callback immediately.
+4. **404 NotFound (ReadItem)**: Catches `CosmosException` with NotFound status. Same retry logic as above.
+5. **Other Exceptions**: Invoked `onException` callback if provided, otherwise rethrows.
 
 ### Exponential Backoff
 

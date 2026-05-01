@@ -144,6 +144,13 @@ public class RetryableContainer : IRetryableContainer
             {
                 await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>", cancellationToken);
             }
+            catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict && attempt > 0)
+            {
+                // The item was already committed in a previous attempt before the 429 was returned.
+                // Treat as idempotent success rather than a real conflict error.
+                Options.LogRetry($"CreateItem<{typeof(T).Name}>: 409 Conflict on retry attempt {attempt + 1}, treating as idempotent success");
+                return default;
+            }
             catch (Exception ex)
             {
                 if (onException != null) await onException(ex);
