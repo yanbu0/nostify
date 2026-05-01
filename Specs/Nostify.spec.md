@@ -195,7 +195,7 @@ Persists a list of events to the event store in configurable batches:
 
 - **`bool allowRetry` overload** — Backwards-compatible. Converts `allowRetry = true` to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
 - **`RetryOptions?` overload** — Primary implementation. When `retryOptions` is provided, wraps the event store container with `RetryableContainer` via `container.WithRetry(retryOptions)` and uses `retryable.DoBulkCreateEventAsync` for batched event persistence. When `null`, falls through to direct `CreateItemAsync` with try/catch error handling.
-- Both overloads write failed events to the undeliverable events container via `HandleUndeliverableAsync`.
+- Both overloads write failed events to the undeliverable events container via `await HandleUndeliverableAsync` (awaited, not fire-and-forget, so errors in undeliverable handling are propagated to the caller).
 - When `publishErrorEvents = true`, error commands (`ErrorCommand.BulkPersistEvent`) are also published to Kafka.
 
 Both `BulkApplyAndPersistAsync` and `BulkPersistEventAsync` follow the same delegation pattern: `bool` overloads create default `RetryOptions` and delegate to the `RetryOptions?` overload.

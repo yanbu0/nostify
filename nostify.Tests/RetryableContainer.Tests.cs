@@ -526,6 +526,58 @@ public class RetryableContainerTests
             retryable.CreateItemAsync(new TestAggregate()));
     }
 
+    [Fact]
+    public async Task CreateItem_Conflict409OnFirstAttempt_CallsOnExceptionCallback()
+    {
+        // On the first attempt (attempt == 0) a 409 should still be treated as an error.
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        Exception? caught = null;
+        await retryable.CreateItemAsync(
+            new TestAggregate(), new PartitionKey("pk"),
+            onException: (ex) => { caught = ex; return Task.CompletedTask; });
+
+        Assert.NotNull(caught);
+        Assert.IsType<CosmosException>(caught);
+    }
+
+    [Fact]
+    public async Task CreateItem_Conflict409AfterTooManyRequests_TreatsAsIdempotentSuccess()
+    {
+        // Simulates the Cosmos bulk SDK scenario: first call returns 429, retry returns 409
+        // because the item was already committed before the throttle was applied.
+        int callCount = 0;
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<TestAggregate, PartitionKey, ItemRequestOptions, CancellationToken>((item, pk, opts, ct) =>
+            {
+                callCount++;
+                if (callCount == 1)
+                    throw new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+                throw new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0);
+            });
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        // Should NOT throw — the 409 on retry is treated as idempotent success
+        var result = await retryable.CreateItemAsync(new TestAggregate(), new PartitionKey("pk"));
+
+        Assert.Null(result); // returns default on idempotent path
+        Assert.Equal(2, callCount); // called twice: once for 429, once for 409
+    }
+
     #endregion
 
     #region UpsertItemAsync

@@ -136,6 +136,7 @@ var order = await nostify.RehydrateAsync<Order>(orderId);
 
 ## Version History
 
+- **4.6.3** - Fixed 409 Conflict errors in bulk create operations: `RetryableContainer.CreateItemAsync` now treats 409 on retry as idempotent success; `ApplyAndPersistAsync` (isNew path) catches 409 for at-least-once delivery; `BulkPersistEventAsync` awaits `HandleUndeliverableAsync`; template `BulkCreate_ReplaceMe_.cs` corrected to use `BulkCreate` command
 - **4.6.2** - Added unit tests for `RetryOptions.GetDelayForAttempt` per-call overrides; updated RetryOptions and RetryableContainer spec docs to reflect 4.6.2 429 retry behavior (3x exponential backoff with 100ms minimum floor, optional `delay` and `delayMultiplier` overrides)
 - **4.6.0** - DurableProjectionInitializer for large-dataset projection rebuilds via Azure Durable Functions; DurableInitPageInfo struct; nostifyProjection template now generates a DurableInit activity class
 - **4.5.0** - Kafka async event request/response for ExternalDataEventFactory, singleton consumer cache, AsyncEventRequester, template AsyncEventRequestHandler. gRPC transport: GrpcEventRequester, GrpcEventMapping, ExternalDataEvent gRPC overloads, factory WithGrpcEventRequestor/WithDependantGrpcEventRequestor, HandleGrpcEventRequestAsync handler, nostifyGrpc template

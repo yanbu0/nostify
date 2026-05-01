@@ -399,7 +399,7 @@ public class Nostify : INostify, IDisposable
                         catch (Exception ex)
                         {
                             Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
-                            _ = HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                            await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
                         }
                     }));
                 });
