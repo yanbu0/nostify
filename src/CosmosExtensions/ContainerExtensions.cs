@@ -453,11 +453,11 @@ public static class ContainerExtensions
         {
             if (retryOptions != null)
             {
-                await bulkContainer.WithRetry(retryOptions).DoBulkUpsertAsync<T>(objToUpsertList);
+                await bulkContainer.WithRetry(retryOptions).DoBulkCreateAsync<T>(objToUpsertList);
             }
             else
             {
-                await bulkContainer.DoBulkUpsertAsync<T>(objToUpsertList);
+                await bulkContainer.DoBulkCreateAsync<T>(objToUpsertList);
             }
         }
 

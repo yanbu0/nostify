@@ -615,7 +615,7 @@ public class DefaultEventHandlersTests
     }
 
     /// <summary>
-    /// Creates a mock Container with bulk execution enabled and UpsertItemAsync mocked for TestAggregate.
+    /// Creates a mock Container with bulk execution enabled and CreateItemAsync mocked for TestAggregate.
     /// Wires up Database.Client.ClientOptions.AllowBulkExecution = true so ValidateBulkEnabled passes.
     /// </summary>
     private static Mock<Container> CreateBulkEnabledAggregateMockContainer()
@@ -632,7 +632,7 @@ public class DefaultEventHandlersTests
 
         var mockResponse = new Mock<ItemResponse<TestAggregate>>();
         mockContainer
-            .Setup(c => c.UpsertItemAsync(
+            .Setup(c => c.CreateItemAsync(
                 It.IsAny<TestAggregate>(),
                 It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(),
@@ -643,7 +643,7 @@ public class DefaultEventHandlersTests
     }
 
     /// <summary>
-    /// Creates a mock Container with bulk execution enabled and UpsertItemAsync mocked for TestProjection.
+    /// Creates a mock Container with bulk execution enabled and CreateItemAsync mocked for TestProjection.
     /// </summary>
     private static Mock<Container> CreateBulkEnabledProjectionMockContainer()
     {
@@ -659,7 +659,7 @@ public class DefaultEventHandlersTests
 
         var mockResponse = new Mock<ItemResponse<TestProjection>>();
         mockContainer
-            .Setup(c => c.UpsertItemAsync(
+            .Setup(c => c.CreateItemAsync(
                 It.IsAny<TestProjection>(),
                 It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(),
@@ -691,7 +691,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(1, result);
-        mockContainer.Verify(c => c.UpsertItemAsync(
+        mockContainer.Verify(c => c.CreateItemAsync(
             It.IsAny<TestAggregate>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -722,7 +722,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(1, result);
-        mockContainer.Verify(c => c.UpsertItemAsync(
+        mockContainer.Verify(c => c.CreateItemAsync(
             It.IsAny<TestAggregate>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -751,7 +751,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(3, result);
-        mockContainer.Verify(c => c.UpsertItemAsync(
+        mockContainer.Verify(c => c.CreateItemAsync(
             It.IsAny<TestAggregate>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -776,7 +776,7 @@ public class DefaultEventHandlersTests
 
         // Assert - no events match the filter, so 0 created
         Assert.Equal(0, result);
-        mockContainer.Verify(c => c.UpsertItemAsync(
+        mockContainer.Verify(c => c.CreateItemAsync(
             It.IsAny<TestAggregate>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -829,7 +829,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(1, result);
-        mockContainer.Verify(c => c.UpsertItemAsync(
+        mockContainer.Verify(c => c.CreateItemAsync(
             It.IsAny<TestProjection>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -864,7 +864,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(1, result);
-        mockContainer.Verify(c => c.UpsertItemAsync(
+        mockContainer.Verify(c => c.CreateItemAsync(
             It.IsAny<TestProjection>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -897,7 +897,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(3, result);
-        mockContainer.Verify(c => c.UpsertItemAsync(
+        mockContainer.Verify(c => c.CreateItemAsync(
             It.IsAny<TestProjection>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
