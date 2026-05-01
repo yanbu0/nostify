@@ -578,6 +578,69 @@ public class RetryableContainerTests
         Assert.Equal(2, callCount); // called twice: once for 429, once for 409
     }
 
+    [Fact]
+    public async Task CreateItem_TooManyRequests_ExhaustedRetries_ThrowsOriginalException()
+    {
+        // ExceptionDispatchInfo.Capture(ce).Throw() must be used instead of `throw ce`
+        // to preserve the original exception identity (same reference) and stack trace.
+        var originalException = new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(originalException);
+
+        var options = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var thrown = await Assert.ThrowsAsync<CosmosException>(() =>
+            retryable.CreateItemAsync(new TestAggregate(), new PartitionKey("pk")));
+
+        // The rethrown exception must be the same object, not a copy created by `throw ce`
+        Assert.Same(originalException, thrown);
+    }
+
+    [Fact]
+    public async Task ReadItem_TooManyRequests_ExhaustedRetries_ThrowsOriginalException()
+    {
+        var originalException = new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.ReadItemAsync<TestAggregate>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(originalException);
+
+        var options = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var thrown = await Assert.ThrowsAsync<CosmosException>(() =>
+            retryable.ReadItemAsync<TestAggregate>("id", new PartitionKey("pk")));
+
+        Assert.Same(originalException, thrown);
+    }
+
+    [Fact]
+    public async Task UpsertItem_TooManyRequests_ExhaustedRetries_ThrowsOriginalException()
+    {
+        var originalException = new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.UpsertItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(originalException);
+
+        var options = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var thrown = await Assert.ThrowsAsync<CosmosException>(() =>
+            retryable.UpsertItemAsync(new TestAggregate(), new PartitionKey("pk")));
+
+        Assert.Same(originalException, thrown);
+    }
+
     #endregion
 
     #region UpsertItemAsync

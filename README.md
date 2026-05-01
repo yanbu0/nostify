@@ -74,6 +74,9 @@
 
 ### Updates
 
+- 4.6.4
+    - **Stack Trace Preservation on Exhausted 429 Retries**: `RetryableContainer.HandleTooManyRequestsAsync` now uses `ExceptionDispatchInfo.Capture(ce).Throw()` instead of `throw ce` when retries are exhausted. This preserves the original exception's stack trace and identity, so callers receive the exact `CosmosException` thrown by the Cosmos SDK rather than a copy with a reset stack trace.
+
 - 4.6.3
     - **409 Conflict Idempotent Retry (RetryableContainer)**: `RetryableContainer.CreateItemAsync` now catches `409 Conflict` on retry attempts (`attempt > 0`) and treats them as idempotent success. This eliminates spurious 409 errors that occur when the Cosmos SDK bulk executor commits an item before a 429 TooManyRequests is returned, causing the next retry to collide with an already-committed document.
     - **409 Conflict Idempotent Delivery (ApplyAndPersistAsync)**: `ContainerExtensions.ApplyAndPersistAsync` on the `isNew` (create) path now catches `409 Conflict` and treats it as an already-created success rather than throwing. This handles Kafka at-least-once redelivery where the same create event is processed more than once.
