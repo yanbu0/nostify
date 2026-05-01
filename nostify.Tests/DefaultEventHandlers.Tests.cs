@@ -615,7 +615,7 @@ public class DefaultEventHandlersTests
     }
 
     /// <summary>
-    /// Creates a mock Container with bulk execution enabled and CreateItemAsync mocked for TestAggregate.
+    /// Creates a mock Container with bulk execution enabled and UpsertItemAsync mocked for TestAggregate.
     /// Wires up Database.Client.ClientOptions.AllowBulkExecution = true so ValidateBulkEnabled passes.
     /// </summary>
     private static Mock<Container> CreateBulkEnabledAggregateMockContainer()
@@ -632,7 +632,7 @@ public class DefaultEventHandlersTests
 
         var mockResponse = new Mock<ItemResponse<TestAggregate>>();
         mockContainer
-            .Setup(c => c.CreateItemAsync(
+            .Setup(c => c.UpsertItemAsync(
                 It.IsAny<TestAggregate>(),
                 It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(),
@@ -643,7 +643,7 @@ public class DefaultEventHandlersTests
     }
 
     /// <summary>
-    /// Creates a mock Container with bulk execution enabled and CreateItemAsync mocked for TestProjection.
+    /// Creates a mock Container with bulk execution enabled and UpsertItemAsync mocked for TestProjection.
     /// </summary>
     private static Mock<Container> CreateBulkEnabledProjectionMockContainer()
     {
@@ -659,7 +659,7 @@ public class DefaultEventHandlersTests
 
         var mockResponse = new Mock<ItemResponse<TestProjection>>();
         mockContainer
-            .Setup(c => c.CreateItemAsync(
+            .Setup(c => c.UpsertItemAsync(
                 It.IsAny<TestProjection>(),
                 It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(),
@@ -691,7 +691,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(1, result);
-        mockContainer.Verify(c => c.CreateItemAsync(
+        mockContainer.Verify(c => c.UpsertItemAsync(
             It.IsAny<TestAggregate>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -722,7 +722,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(1, result);
-        mockContainer.Verify(c => c.CreateItemAsync(
+        mockContainer.Verify(c => c.UpsertItemAsync(
             It.IsAny<TestAggregate>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -751,7 +751,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(3, result);
-        mockContainer.Verify(c => c.CreateItemAsync(
+        mockContainer.Verify(c => c.UpsertItemAsync(
             It.IsAny<TestAggregate>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -776,7 +776,7 @@ public class DefaultEventHandlersTests
 
         // Assert - no events match the filter, so 0 created
         Assert.Equal(0, result);
-        mockContainer.Verify(c => c.CreateItemAsync(
+        mockContainer.Verify(c => c.UpsertItemAsync(
             It.IsAny<TestAggregate>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -829,7 +829,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(1, result);
-        mockContainer.Verify(c => c.CreateItemAsync(
+        mockContainer.Verify(c => c.UpsertItemAsync(
             It.IsAny<TestProjection>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -864,7 +864,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(1, result);
-        mockContainer.Verify(c => c.CreateItemAsync(
+        mockContainer.Verify(c => c.UpsertItemAsync(
             It.IsAny<TestProjection>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -897,7 +897,7 @@ public class DefaultEventHandlersTests
 
         // Assert
         Assert.Equal(3, result);
-        mockContainer.Verify(c => c.CreateItemAsync(
+        mockContainer.Verify(c => c.UpsertItemAsync(
             It.IsAny<TestProjection>(),
             It.IsAny<PartitionKey?>(),
             It.IsAny<ItemRequestOptions>(),
@@ -1587,6 +1587,55 @@ public class DefaultEventHandlersTests
             It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
 
         Assert.Equal(0, result);
+    }
+
+    #endregion
+
+    #region ApplyAndPersistAsync: duplicate create (409 on isNew) is idempotent
+
+    [Fact]
+    public async Task HandleAggregateEventAsync_CreateEvent_409Conflict_TreatedAsIdempotentSuccess()
+    {
+        // Arrange - create event with isNew=true, but CreateItemAsync throws 409 (item already exists
+        // from a previous at-least-once delivery of the same create event).
+        var aggId = Guid.NewGuid();
+        var createCommand = new NostifyCommand("CreateTest", isNew: true);
+        var createEvent = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = aggId,
+            command = createCommand,
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Created" }
+        };
+        var kafkaTriggerStr = CreateKafkaTriggerEventString(createEvent);
+        var triggerEvent = Newtonsoft.Json.JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(kafkaTriggerStr)!;
+
+        var mockContainer = new Mock<Container>();
+        // CreateItemAsync throws 409 — item was already persisted by a prior delivery
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(),
+                It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
+
+        _mockNostify
+            .Setup(n => n.GetCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        // Act — should NOT throw; 409 on create is treated as "already created"
+        var result = await DefaultEventHandlers.HandleAggregateEventAsync<TestAggregate>(
+            _mockNostify.Object, triggerEvent);
+
+        // Assert — result is a valid (non-null) aggregate with the event applied
+        Assert.NotNull(result);
+        // No undeliverable event should have been raised
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
     }
 
     #endregion
