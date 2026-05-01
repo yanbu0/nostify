@@ -806,6 +806,9 @@ public class Nostify : INostify, IDisposable
         // Create the sequence container
         await CreateContainerAsync(Repository.SequenceContainer, "/partitionKey", throughput, verbose);
 
+        // Create the undeliverable events container
+        await CreateContainerAsync(Repository.UndeliverableEvents, "/aggregateRootId", throughput, verbose);
+
         // Create the containers for the aggregates and projections
         foreach (var containerName in EnumerateContainerNames(assembly))
         {
