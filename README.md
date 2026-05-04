@@ -75,6 +75,7 @@
 ### Updates
 
 - 4.6.4
+    - **Fixes Bug In RetryableContainer Caused By 429 Errors Not Propogating**: There were circumstances where 429 errors weren't propogating properly from Cosmos. See below for details.
     - **429 Propagation Fix in ApplyAndPersistAsync**: Two `catch (CosmosException)` blocks in `ContainerExtensions.ApplyAndPersistAsync` were swallowing 429 TooManyRequests — wrapping them in `NostifyException` (create path and patch outer catch), which prevented `RetryableContainer.ExecuteWithRetryAsync` from reaching its dedicated 429 retry clause and instead routed them to the `onException` callback. Fix: adds `catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests) { throw; }` before each general `CosmosException` handler on those paths, and adds a `patchResult.statusCode == TooManyRequests` check to re-throw a raw `CosmosException(429)` from the `IsException` branch (preserving `SafePatchItemAsync`'s always-returns-a-result contract for direct callers).
     - **Stack Trace Preservation on Exhausted 429 Retries**: `RetryableContainer.HandleTooManyRequestsAsync` now uses `ExceptionDispatchInfo.Capture(ce).Throw()` instead of `throw ce` when retries are exhausted. This preserves the original exception's stack trace and identity, so callers receive the exact `CosmosException` thrown by the Cosmos SDK rather than a copy with a reset stack trace.
 
