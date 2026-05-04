@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Net;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
@@ -387,7 +388,7 @@ public class RetryableContainer : IRetryableContainer
         if (attempt >= Options.MaxRetries)
         {
             Options.LogRetry($"{operationDescription}: 429 TooManyRequests, exhausted {Options.MaxRetries} retries");
-            throw ce;
+            ExceptionDispatchInfo.Capture(ce).Throw();
         }
 
         double retryAfterMs = ce.RetryAfter.HasValue && ce.RetryAfter.Value.TotalMilliseconds > 0
