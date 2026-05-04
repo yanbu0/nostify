@@ -164,9 +164,18 @@ public class Nostify : INostify, IDisposable
     {
         var eventContainer = await GetEventStoreContainerAsync();
         var retryOptions = new RetryOptions { Logger = Logger, LogRetries = Logger != null };
-        await eventContainer
-            .WithRetry(retryOptions)
-            .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        try
+        {
+            await eventContainer
+                .WithRetry(retryOptions)
+                .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Failed to persist event in PersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(eventToPersist));
+            await HandleUndeliverableAsync(nameof(PersistEventAsync), ex.Message, eventToPersist);
+            throw;
+        }
     }
 
     ///<inheritdoc />
