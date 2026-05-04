@@ -308,6 +308,163 @@ public class MultiApplyAndPersistTests
 
     #endregion
 
+    #region 429 retry paths
+
+    [Fact]
+    public async Task MultiApplyAndPersist_WithRetryOptions_429OnPatchItem_RetriesAndReturns1()
+    {
+        // Arrange — ReadItemAsync always succeeds; PatchItemAsync throws 429 once then succeeds.
+        // After the 429 the RetryableContainer retries the whole operation, so ReadItemAsync
+        // is called a second time before PatchItemAsync succeeds.
+        var projId = Guid.NewGuid();
+        var evt = CreateTestEvent();
+        var mockContainer = CreateBulkEnabledContainerBase();
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
+
+        // Return a fresh instance each call so Apply() in each retry attempt
+        // always sees the pre-event state and produces patch operations.
+        mockContainer
+            .Setup(c => c.ReadItemAsync<TestProjection>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, PartitionKey, ItemRequestOptions, CancellationToken>((id, pk, opts, ct) =>
+            {
+                var fresh = new TestProjection { id = projId, name = "Original" };
+                var freshResponse = new Mock<ItemResponse<TestProjection>>();
+                freshResponse.Setup(r => r.Resource).Returns(fresh);
+                return Task.FromResult(freshResponse.Object);
+            });
+
+        int patchCallCount = 0;
+        var mockPatchResponse = new Mock<ItemResponse<TestProjection>>();
+        mockPatchResponse.Setup(r => r.Resource).Returns(new TestProjection { id = projId, name = "Updated" });
+        mockContainer
+            .Setup(c => c.PatchItemAsync<TestProjection>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<IReadOnlyList<PatchOperation>>(),
+                It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, PartitionKey, IReadOnlyList<PatchOperation>, PatchItemRequestOptions, CancellationToken>(
+                (id, pk, ops, opts, ct) =>
+                {
+                    if (Interlocked.Increment(ref patchCallCount) == 1)
+                        throw new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
+                    return Task.FromResult(mockPatchResponse.Object);
+                });
+
+        // Act
+        List<TestProjection> result = await _nostify.MultiApplyAndPersistAsync<TestProjection>(
+            mockContainer.Object, evt, new List<Guid> { projId }, retryOptions: retryOptions);
+
+        // Assert — the 429 caused a full-operation retry:
+        // ReadItemAsync: called twice (once per attempt); PatchItemAsync: called twice (1 fail + 1 success)
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        Assert.Equal(2, patchCallCount);
+        Assert.Equal(1, result.Count);
+    }
+
+    [Fact]
+    public async Task MultiApplyAndPersist_WithRetryOptions_429OnReadItem_RetriesAndReturns1()
+    {
+        // Arrange — ReadItemAsync throws 429 once then succeeds; PatchItemAsync always succeeds.
+        var projId = Guid.NewGuid();
+        var evt = CreateTestEvent();
+        var mockContainer = CreateBulkEnabledContainerBase();
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
+
+        int readCallCount = 0;
+        var existing = new TestProjection { id = projId, name = "Original" };
+        var mockReadResponse = new Mock<ItemResponse<TestProjection>>();
+        mockReadResponse.Setup(r => r.Resource).Returns(existing);
+        mockContainer
+            .Setup(c => c.ReadItemAsync<TestProjection>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, PartitionKey, ItemRequestOptions, CancellationToken>(
+                (id, pk, opts, ct) =>
+                {
+                    if (Interlocked.Increment(ref readCallCount) == 1)
+                        throw new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
+                    return Task.FromResult(mockReadResponse.Object);
+                });
+
+        var updated = new TestProjection { id = projId, name = "Updated" };
+        var mockPatchResponse = new Mock<ItemResponse<TestProjection>>();
+        mockPatchResponse.Setup(r => r.Resource).Returns(updated);
+        mockContainer
+            .Setup(c => c.PatchItemAsync<TestProjection>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<IReadOnlyList<PatchOperation>>(),
+                It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockPatchResponse.Object);
+
+        // Act
+        List<TestProjection> result = await _nostify.MultiApplyAndPersistAsync<TestProjection>(
+            mockContainer.Object, evt, new List<Guid> { projId }, retryOptions: retryOptions);
+
+        // Assert — ReadItemAsync: 2 calls (1 fail + 1 success); PatchItemAsync: 1 call
+        Assert.Equal(2, readCallCount);
+        mockContainer.Verify(c => c.PatchItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<IReadOnlyList<PatchOperation>>(),
+            It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(1, result.Count);
+    }
+
+    [Fact]
+    public async Task MultiApplyAndPersist_WithRetryOptions_429OnPatchItem_MultipleRetries_EventuallySucceeds()
+    {
+        // Arrange — ReadItemAsync always succeeds (fresh instance each call so Apply() always
+        // produces diff); PatchItemAsync throws 429 twice, then succeeds on the third call.
+        var projId = Guid.NewGuid();
+        var evt = CreateTestEvent();
+        var mockContainer = CreateBulkEnabledContainerBase();
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
+
+        mockContainer
+            .Setup(c => c.ReadItemAsync<TestProjection>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, PartitionKey, ItemRequestOptions, CancellationToken>((id, pk, opts, ct) =>
+            {
+                var fresh = new TestProjection { id = projId, name = "Original" };
+                var freshResponse = new Mock<ItemResponse<TestProjection>>();
+                freshResponse.Setup(r => r.Resource).Returns(fresh);
+                return Task.FromResult(freshResponse.Object);
+            });
+
+        int patchCallCount = 0;
+        var mockPatchResponse = new Mock<ItemResponse<TestProjection>>();
+        mockPatchResponse.Setup(r => r.Resource).Returns(new TestProjection { id = projId, name = "Updated" });
+        mockContainer
+            .Setup(c => c.PatchItemAsync<TestProjection>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<IReadOnlyList<PatchOperation>>(),
+                It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, PartitionKey, IReadOnlyList<PatchOperation>, PatchItemRequestOptions, CancellationToken>(
+                (id, pk, ops, opts, ct) =>
+                {
+                    int call = Interlocked.Increment(ref patchCallCount);
+                    if (call <= 2)
+                        throw new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
+                    return Task.FromResult(mockPatchResponse.Object);
+                });
+
+        // Act
+        List<TestProjection> result = await _nostify.MultiApplyAndPersistAsync<TestProjection>(
+            mockContainer.Object, evt, new List<Guid> { projId }, retryOptions: retryOptions);
+
+        // Assert — two 429s then success: 3 Read calls and 3 Patch calls
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+        Assert.Equal(3, patchCallCount);
+        Assert.Equal(1, result.Count);
+    }
+
+    #endregion
+
     #region Without RetryOptions (null)
 
     [Fact]
