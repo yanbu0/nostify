@@ -353,7 +353,8 @@ public class RetryableContainerTests
     public async Task ApplyAndPersist_PlainContainer_PatchPath_429PropagatesAsCosmosException_NotNostifyException()
     {
         // Arrange — calling ContainerExtensions.ApplyAndPersistAsync directly (no RetryableContainer).
-        // PatchItemAsync throws 429; the fix ensures it propagates as CosmosException, not NostifyException.
+        // PatchItemAsync throws 429; the fix ensures it propagates as the ORIGINAL CosmosException
+        // (not a new one), so RetryAfter and all metadata are preserved for the caller.
         var aggId = Guid.NewGuid();
         var mockContainer = new Mock<Container>();
 
@@ -366,12 +367,13 @@ public class RetryableContainerTests
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(mockReadResponse.Object);
 
+        var originalException = new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
         mockContainer
             .Setup(c => c.PatchItemAsync<TestAggregate>(
                 It.IsAny<string>(), It.IsAny<PartitionKey>(),
                 It.IsAny<IReadOnlyList<PatchOperation>>(),
                 It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0));
+            .ThrowsAsync(originalException);
 
         var evt = new Event
         {
@@ -384,12 +386,14 @@ public class RetryableContainerTests
             payload = new { name = "Updated" }
         };
 
-        // Act & Assert — must be CosmosException with 429, not NostifyException
+        // Act & Assert — must be the ORIGINAL CosmosException (same reference), not a new one
         var ex = await Assert.ThrowsAsync<CosmosException>(() =>
             mockContainer.Object.ApplyAndPersistAsync<TestAggregate>(evt));
 
         Assert.Equal(HttpStatusCode.TooManyRequests, ex.StatusCode);
         Assert.IsNotType<NostifyException>(ex);
+        // Verify it is the same object — RetryAfter and all transient metadata are preserved
+        Assert.Same(originalException, ex);
     }
 
     [Fact]

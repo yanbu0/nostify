@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 using System.Transactions;
 using JsonDiffPatchDotNet;
@@ -281,7 +282,12 @@ public static class ContainerExtensions
                     if (patchResult.IsException)
                     {
                         if (patchResult.statusCode == HttpStatusCode.TooManyRequests)
+                        {
+                            // Rethrow the original CosmosException so RetryAfter and all metadata are preserved for RetryableContainer
+                            if (patchResult.capturedDispatchInfo != null)
+                                patchResult.capturedDispatchInfo.Throw();
                             throw new CosmosException(patchResult.exceptionMessage, HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
+                        }
                         throw new NostifyException($"Patch failed for {idToMatch} || {patchResult.exceptionMessage}");
                     }
                     else if (patchResult.NotFound)
