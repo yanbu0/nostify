@@ -72,7 +72,9 @@ public readonly struct PatchItemResult
     public static PatchItemResult NotFoundResult(string id, PartitionKey partitionKey) => new PatchItemResult(id, partitionKey, HttpStatusCode.NotFound, string.Empty);
 
     /// <summary>
-    /// Returns a result from a cosmos exception, preserving the original exception's metadata (e.g. RetryAfter) via ExceptionDispatchInfo.
+    /// Returns a result from a cosmos exception, preserving the full original exception state
+    /// (including RetryAfter, RequestCharge, ActivityId, and stack trace) via ExceptionDispatchInfo.
+    /// Use capturedDispatchInfo.Throw() to rethrow the original exception with all metadata intact.
     /// </summary>
     public static PatchItemResult ExceptionResult(string id, PartitionKey partitionKey, CosmosException cosmosException) => new PatchItemResult(id, partitionKey, cosmosException.StatusCode, cosmosException.Message, ExceptionDispatchInfo.Capture(cosmosException));
 

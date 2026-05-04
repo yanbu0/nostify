@@ -286,7 +286,8 @@ public static class ContainerExtensions
                             // Rethrow the original CosmosException so RetryAfter and all metadata are preserved for RetryableContainer
                             if (patchResult.capturedDispatchInfo != null)
                                 patchResult.capturedDispatchInfo.Throw();
-                            throw new CosmosException(patchResult.exceptionMessage, HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
+                            // Should never reach here: capturedDispatchInfo is always populated for CosmosException results
+                            throw new InvalidOperationException($"PatchItemResult has TooManyRequests status but no captured exception dispatch info. Message: {patchResult.exceptionMessage}");
                         }
                         throw new NostifyException($"Patch failed for {idToMatch} || {patchResult.exceptionMessage}");
                     }
