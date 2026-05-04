@@ -431,6 +431,89 @@ public class RetryableContainerTests
 
     #endregion
 
+    #region ApplyAndPersistAsync — 429 exhaustion routes to onException
+
+    [Fact]
+    public async Task ApplyAndPersist_429Exhausted_WithOnException_CallsOnExceptionAndReturnsDefault()
+    {
+        // All attempts return 429 (retries exhausted). The onException callback must be invoked
+        // with the original CosmosException and the method must return null rather than throwing.
+        // This ensures the error is routed to HandleUndeliverableAsync instead of propagating
+        // to the outer try/catch (which would re-throw and trigger an unnecessary Kafka retry).
+        var originalException = new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+        var aggId = Guid.NewGuid();
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(originalException);
+
+        var options = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var evt = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = aggId,
+            command = new NostifyCommand("CreateTestAggregate", isNew: true),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Created" }
+        };
+
+        Exception? caught = null;
+        var result = await retryable.ApplyAndPersistAsync<TestAggregate>(evt,
+            onException: (ex) => { caught = ex; return Task.CompletedTask; });
+
+        // onException must be called with the original 429 exception
+        Assert.NotNull(caught);
+        Assert.Same(originalException, caught);
+        // Must return null (default), not throw
+        Assert.Null(result);
+        // CreateItemAsync called twice: initial attempt + 1 retry (maxRetries=1)
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task ApplyAndPersist_429Exhausted_WithoutOnException_Throws()
+    {
+        // When no onException callback is provided, exhausted 429 must still re-throw
+        // so callers that expect an exception (e.g. outer catch blocks) continue to work.
+        var originalException = new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+        var aggId = Guid.NewGuid();
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(originalException);
+
+        var options = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var evt = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = aggId,
+            command = new NostifyCommand("CreateTestAggregate", isNew: true),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Created" }
+        };
+
+        var thrown = await Assert.ThrowsAsync<CosmosException>(() =>
+            retryable.ApplyAndPersistAsync<TestAggregate>(evt));
+
+        Assert.Same(originalException, thrown);
+    }
+
+    #endregion
+
     #region ReadItemAsync
 
     [Fact]
@@ -590,7 +673,7 @@ public class RetryableContainerTests
             .Setup(c => c.CreateItemAsync(
                 It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
+            .ThrowsAsync(new CosmosException("Internal error", HttpStatusCode.InternalServerError, 0, string.Empty, 0));
 
         var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
         var retryable = new RetryableContainer(mockContainer.Object, options);
@@ -612,7 +695,7 @@ public class RetryableContainerTests
             .Setup(c => c.CreateItemAsync(
                 It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
+            .ThrowsAsync(new CosmosException("Internal error", HttpStatusCode.InternalServerError, 0, string.Empty, 0));
 
         var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
         var retryable = new RetryableContainer(mockContainer.Object, options);
@@ -653,7 +736,7 @@ public class RetryableContainerTests
             .Setup(c => c.CreateItemAsync(
                 It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
+            .ThrowsAsync(new CosmosException("Internal error", HttpStatusCode.InternalServerError, 0, string.Empty, 0));
 
         var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
         var retryable = new RetryableContainer(mockContainer.Object, options);
@@ -698,7 +781,7 @@ public class RetryableContainerTests
             .Setup(c => c.CreateItemAsync(
                 It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0));
+            .ThrowsAsync(new CosmosException("Internal error", HttpStatusCode.InternalServerError, 0, string.Empty, 0));
 
         var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
         var retryable = new RetryableContainer(mockContainer.Object, options);
@@ -708,9 +791,14 @@ public class RetryableContainerTests
     }
 
     [Fact]
-    public async Task CreateItem_Conflict409OnFirstAttempt_CallsOnExceptionCallback()
+    public async Task CreateItem_Conflict409OnFirstAttempt_TreatsAsIdempotentSuccess()
     {
-        // On the first attempt (attempt == 0) a 409 should still be treated as an error.
+        // 409 Conflict at any attempt — including the very first (attempt == 0) — must be treated
+        // as idempotent success, not an error.  This handles two real-world scenarios:
+        //   1. Cosmos committed the item before returning 429; the next within-invocation retry
+        //      gets 409 because the item already exists.
+        //   2. Kafka retries the entire function; the fresh invocation (attempt == 0) gets 409
+        //      because the item was already committed in the previous function execution.
         var mockContainer = new Mock<Container>();
         mockContainer
             .Setup(c => c.CreateItemAsync(
@@ -721,13 +809,18 @@ public class RetryableContainerTests
         var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
         var retryable = new RetryableContainer(mockContainer.Object, options);
 
+        // Should NOT call onException and should return null (idempotent success)
         Exception? caught = null;
-        await retryable.CreateItemAsync(
+        var result = await retryable.CreateItemAsync(
             new TestAggregate(), new PartitionKey("pk"),
             onException: (ex) => { caught = ex; return Task.CompletedTask; });
 
-        Assert.NotNull(caught);
-        Assert.IsType<CosmosException>(caught);
+        Assert.Null(caught);   // onException must NOT be called for 409
+        Assert.Null(result);   // returns default — the item already exists, which is success
+        // CreateItemAsync should only be called once (409 is not retried)
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -319,34 +319,22 @@ public class Nostify : INostify, IDisposable
 
     /// <summary>
     /// Creates and executes an apply-and-persist task for a single projection item.
-    /// When retryOptions is provided, uses RetryableContainer for per-item retry with exponential backoff.
+    /// Always uses RetryableContainer for per-item retry with exponential backoff.
+    /// When retryOptions is null, default RetryOptions are used so that transient
+    /// 429 errors are retried rather than immediately written to undeliverable events.
     /// </summary>
     private async Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new()
     {
-        if (retryOptions != null)
-        {
-            var retryable = bulkContainer.WithRetry(retryOptions);
-            var result = await retryable.ApplyAndPersistAsync<P>(
-                pe,
-                id,
-                onExhausted: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Exhausted retries", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
-                onNotFound: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
-                onException: (ex) => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
-            );
-            return result ?? new P();
-        }
-        else
-        {
-            try
-            {
-                return await bulkContainer.ApplyAndPersistAsync<P>(new List<IEvent>() { pe }, pk.ToPartitionKey(), id);
-            }
-            catch (Exception ex)
-            {
-                await HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
-                throw;
-            }
-        }
+        var effectiveOptions = retryOptions ?? new RetryOptions { Logger = Logger, LogRetries = Logger != null };
+        var retryable = bulkContainer.WithRetry(effectiveOptions);
+        var result = await retryable.ApplyAndPersistAsync<P>(
+            pe,
+            id,
+            onExhausted: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Exhausted retries", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
+            onNotFound: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
+            onException: (ex) => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+        );
+        return result ?? new P();
     }
 
     /// <summary>
