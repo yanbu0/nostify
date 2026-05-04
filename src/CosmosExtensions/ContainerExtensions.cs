@@ -248,6 +248,11 @@ public static class ContainerExtensions
                     if (logger != null) logger.LogWarning("Create skipped for {ContainerId} {IdToMatch}: item already exists (409 Conflict, likely a duplicate delivery)", container.Id, idToMatch);
                     else Console.Error.WriteLine($"Create skipped for {container.Id} {idToMatch}: item already exists (409 Conflict, likely a duplicate delivery)");
                 }
+                catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    // Let 429 propagate so RetryableContainer can handle retry
+                    throw;
+                }
                 catch (CosmosException ex)
                 {
                     throw new NostifyException($"Create failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
@@ -284,6 +289,11 @@ public static class ContainerExtensions
                         nosObjToUpdate = null;
                     }
 
+                }
+                catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    // Let 429 propagate so RetryableContainer can handle retry
+                    throw;
                 }
                 catch (CosmosException ex)
                 {
@@ -509,6 +519,11 @@ public static class ContainerExtensions
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             return PatchItemResult.NotFoundResult(id, partitionKey);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            // Let 429 propagate so RetryableContainer can handle retry
+            throw;
         }
         catch (CosmosException ex)
         {
