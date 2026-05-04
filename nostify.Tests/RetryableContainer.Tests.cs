@@ -250,6 +250,183 @@ public class RetryableContainerTests
 
     #endregion
 
+    #region ApplyAndPersistAsync - Create path (isNew=true) 429 retry
+
+    [Fact]
+    public async Task ApplyAndPersist_CreatePath_429OnCreateItem_RetriesAndSucceeds()
+    {
+        // Arrange — isNew=true event; CreateItemAsync throws 429 on the first call then succeeds.
+        // ReadItemAsync must never be called (the create path skips reading the existing item).
+        var aggId = Guid.NewGuid();
+        var mockContainer = new Mock<Container>();
+
+        int createCallCount = 0;
+        var mockCreateResponse = new Mock<ItemResponse<TestAggregate>>();
+        mockCreateResponse.Setup(r => r.Resource).Returns(new TestAggregate { id = aggId });
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<TestAggregate, PartitionKey?, ItemRequestOptions, CancellationToken>((item, pk, opts, ct) =>
+            {
+                if (Interlocked.Increment(ref createCallCount) == 1)
+                    throw new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
+                return Task.FromResult(mockCreateResponse.Object);
+            });
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        // isNew=true + no projectionBaseAggregateId → triggers the create path in ApplyAndPersistAsync
+        var evt = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = aggId,
+            command = new NostifyCommand("CreateTestAggregate", isNew: true),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Created" }
+        };
+
+        // Act
+        var result = await retryable.ApplyAndPersistAsync<TestAggregate>(evt);
+
+        // Assert — 429 caused a retry; CreateItemAsync called twice (1 fail + 1 success)
+        Assert.Equal(2, createCallCount);
+        Assert.NotNull(result);
+        // ReadItemAsync must never be called on the create path
+        mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ApplyAndPersist_CreatePath_429OnCreateItem_MultipleRetries_EventuallySucceeds()
+    {
+        // Arrange — CreateItemAsync throws 429 twice then succeeds (3 calls total).
+        var aggId = Guid.NewGuid();
+        var mockContainer = new Mock<Container>();
+
+        int createCallCount = 0;
+        var mockCreateResponse = new Mock<ItemResponse<TestAggregate>>();
+        mockCreateResponse.Setup(r => r.Resource).Returns(new TestAggregate { id = aggId });
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<TestAggregate, PartitionKey?, ItemRequestOptions, CancellationToken>((item, pk, opts, ct) =>
+            {
+                int call = Interlocked.Increment(ref createCallCount);
+                if (call <= 2)
+                    throw new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
+                return Task.FromResult(mockCreateResponse.Object);
+            });
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var evt = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = aggId,
+            command = new NostifyCommand("CreateTestAggregate", isNew: true),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Created" }
+        };
+
+        // Act
+        var result = await retryable.ApplyAndPersistAsync<TestAggregate>(evt);
+
+        // Assert — two 429s then success = 3 calls
+        Assert.Equal(3, createCallCount);
+        Assert.NotNull(result);
+    }
+
+    #endregion
+
+    #region ApplyAndPersistAsync on plain Container — 429 propagates as CosmosException (non-retriable path)
+
+    [Fact]
+    public async Task ApplyAndPersist_PlainContainer_PatchPath_429PropagatesAsCosmosException_NotNostifyException()
+    {
+        // Arrange — calling ContainerExtensions.ApplyAndPersistAsync directly (no RetryableContainer).
+        // PatchItemAsync throws 429; the fix ensures it propagates as CosmosException, not NostifyException.
+        var aggId = Guid.NewGuid();
+        var mockContainer = new Mock<Container>();
+
+        var existing = new TestAggregate { id = aggId, name = "Original" };
+        var mockReadResponse = new Mock<ItemResponse<TestAggregate>>();
+        mockReadResponse.Setup(r => r.Resource).Returns(existing);
+        mockContainer
+            .Setup(c => c.ReadItemAsync<TestAggregate>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockReadResponse.Object);
+
+        mockContainer
+            .Setup(c => c.PatchItemAsync<TestAggregate>(
+                It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<IReadOnlyList<PatchOperation>>(),
+                It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0));
+
+        var evt = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = aggId,
+            command = new NostifyCommand("UpdateTestAggregate"),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Updated" }
+        };
+
+        // Act & Assert — must be CosmosException with 429, not NostifyException
+        var ex = await Assert.ThrowsAsync<CosmosException>(() =>
+            mockContainer.Object.ApplyAndPersistAsync<TestAggregate>(evt));
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, ex.StatusCode);
+        Assert.IsNotType<NostifyException>(ex);
+    }
+
+    [Fact]
+    public async Task ApplyAndPersist_PlainContainer_CreatePath_429PropagatesAsCosmosException_NotNostifyException()
+    {
+        // Arrange — isNew=true event; CreateItemAsync throws 429.
+        // The fix ensures CosmosException(429) propagates, not NostifyException.
+        var aggId = Guid.NewGuid();
+        var mockContainer = new Mock<Container>();
+
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("Rate limited", HttpStatusCode.TooManyRequests, 429, string.Empty, 0));
+
+        var evt = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = aggId,
+            command = new NostifyCommand("CreateTestAggregate", isNew: true),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Created" }
+        };
+
+        // Act & Assert — must be CosmosException with 429, not NostifyException
+        var ex = await Assert.ThrowsAsync<CosmosException>(() =>
+            mockContainer.Object.ApplyAndPersistAsync<TestAggregate>(evt));
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, ex.StatusCode);
+        Assert.IsNotType<NostifyException>(ex);
+    }
+
+    #endregion
+
     #region ReadItemAsync
 
     [Fact]
