@@ -280,6 +280,8 @@ public static class ContainerExtensions
 
                     if (patchResult.IsException)
                     {
+                        if (patchResult.statusCode == HttpStatusCode.TooManyRequests)
+                            throw new CosmosException(patchResult.exceptionMessage, HttpStatusCode.TooManyRequests, 429, string.Empty, 0);
                         throw new NostifyException($"Patch failed for {idToMatch} || {patchResult.exceptionMessage}");
                     }
                     else if (patchResult.NotFound)
@@ -519,11 +521,6 @@ public static class ContainerExtensions
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             return PatchItemResult.NotFoundResult(id, partitionKey);
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
-        {
-            // Let 429 propagate so RetryableContainer can handle retry
-            throw;
         }
         catch (CosmosException ex)
         {
