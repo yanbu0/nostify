@@ -387,7 +387,7 @@ public static class DefaultCommandHandler
             throw new NostifyException($"Failed to deserialize request body to list of IDs. {ex.Message}");
         }
 
-        if(idStrings == null) throw new NostifyException("Failed to deserialize request body to list of IDs.");
+        if (idStrings == null) throw new NostifyException("Failed to deserialize request body to list of IDs.");
         
         List<IEvent> peList = new List<IEvent>();
 
