@@ -81,7 +81,16 @@ public async Task PersistEventAsync(IEvent eventToPersist)
     catch (Exception ex)
     {
         Logger?.LogError(ex, "Failed to persist event in PersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(eventToPersist));
-        await HandleUndeliverableAsync(nameof(PersistEventAsync), ex.Message, eventToPersist);
+        try
+        {
+            await HandleUndeliverableAsync(nameof(PersistEventAsync), ex.Message, eventToPersist);
+        }
+        catch (Exception undeliverableEx)
+        {
+            // Log but do not rethrow: the original persistence exception is re-thrown below,
+            // ensuring the HTTP caller receives the actual failure, not a secondary write error.
+            Logger?.LogError(undeliverableEx, "Failed to write undeliverable event in PersistEventAsync");
+        }
         throw;
     }
 }
@@ -89,7 +98,7 @@ public async Task PersistEventAsync(IEvent eventToPersist)
 
 On any exception from the Cosmos write:
 1. Logs the error via `Logger.LogError` (if a logger is configured).
-2. Writes the event to the undeliverable events container via `HandleUndeliverableAsync` so it can be inspected and replayed.
+2. Attempts to write the event to the undeliverable events container via `HandleUndeliverableAsync`. If this write also fails, the error is logged and swallowed so it cannot mask the original persistence exception.
 3. Re-throws the original exception so the calling HTTP handler still returns a failure response.
 
 ### PublishEventAsync
