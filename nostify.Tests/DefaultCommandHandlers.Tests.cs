@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using Confluent.Kafka;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -152,19 +155,62 @@ public class DefaultCommandHandlersTests
     #region PersistEventAsync – undeliverable contract
 
     /// <summary>
-    /// Verifies that <see cref="INostify.PersistEventAsync"/> and <see cref="INostify.HandleUndeliverableAsync"/>
-    /// are both present on the interface, and that callers can configure a mock where HandleUndeliverableAsync
-    /// is invoked when PersistEventAsync fails.
+    /// A test-only subclass of <see cref="Nostify"/> that overrides the two virtual I/O boundary
+    /// methods so the real <see cref="Nostify.PersistEventAsync"/> implementation can run under test:
+    ///   - <see cref="GetEventStoreContainerAsync"/> returns a caller-supplied fake container.
+    ///   - <see cref="HandleUndeliverableAsync"/> records arguments without touching Cosmos.
+    /// </summary>
+    private sealed class TestableNostify : Nostify
+    {
+        private readonly Container _fakeEventContainer;
+
+        public List<(string FunctionName, string ErrorMessage, IEvent Event, ErrorCommand? Command)> UndeliverableCalls { get; } = new();
+
+        public TestableNostify(Container fakeEventContainer)
+            : base(
+                new NostifyCosmosClient(),
+                "/tenantId",
+                Guid.Empty,
+                "localhost:9092",
+                new Mock<IProducer<string, string>>().Object,
+                new Mock<System.Net.Http.IHttpClientFactory>().Object)
+        {
+            _fakeEventContainer = fakeEventContainer;
+        }
+
+        public override Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
+            => Task.FromResult(_fakeEventContainer);
+
+        public override Task HandleUndeliverableAsync(
+            string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
+        {
+            UndeliverableCalls.Add((functionName, errorMessage, eventToHandle, errorCommand));
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// Exercises the real <see cref="Nostify.PersistEventAsync"/> implementation: when the
+    /// underlying event-store write throws, the production catch block must call
+    /// <see cref="Nostify.HandleUndeliverableAsync"/> and then re-throw the original exception.
     ///
-    /// The real <see cref="Nostify"/> implementation wraps the Cosmos write in a try/catch:
-    ///   1. Logs the error via Logger.LogError
-    ///   2. Calls HandleUndeliverableAsync to write the event to the undeliverable container
-    ///   3. Re-throws the original exception
+    /// Uses <see cref="TestableNostify"/> (a concrete subclass) so the production code runs end-to-end
+    /// without touching real Cosmos — only the two virtual I/O boundaries are swapped out.
     /// </summary>
     [Fact]
     public async Task PersistEventAsync_OnException_HandleUndeliverableCalledAndExceptionPropagates()
     {
-        // Arrange
+        // Arrange: a mock Container whose CreateItemAsync always throws
+        var failure = new InvalidOperationException("Cosmos DB write failed");
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var nostify = new TestableNostify(mockContainer.Object);
+
         var testEvent = new Event
         {
             id = Guid.NewGuid(),
@@ -176,21 +222,20 @@ public class DefaultCommandHandlersTests
             payload = new { name = "Test" }
         };
 
-        var failure = new InvalidOperationException("Cosmos DB write failed");
-
-        _mockNostify
-            .Setup(n => n.PersistEventAsync(testEvent))
-            .ThrowsAsync(failure);
-
-        // Act
+        // Act: the REAL PersistEventAsync runs; it must re-throw the original exception
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _mockNostify.Object.PersistEventAsync(testEvent));
+            nostify.PersistEventAsync(testEvent));
 
-        // Assert
+        // Assert: the original exception identity is preserved
         Assert.Same(failure, thrown);
-        _mockNostify.Verify(n => n.PersistEventAsync(testEvent), Times.Once);
-        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+
+        // Assert: HandleUndeliverableAsync was called exactly once with the right context
+        Assert.Single(nostify.UndeliverableCalls);
+        var call = nostify.UndeliverableCalls[0];
+        Assert.Equal(nameof(Nostify.PersistEventAsync), call.FunctionName);
+        Assert.Equal(failure.Message, call.ErrorMessage);
+        Assert.Same(testEvent, call.Event);
+        Assert.Null(call.Command);
     }
 
     #endregion

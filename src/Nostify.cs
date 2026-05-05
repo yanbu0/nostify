@@ -427,7 +427,7 @@ public class Nostify : INostify, IDisposable
     }
 
     ///<inheritdoc />
-    public async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
+    public virtual async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
     {
         if ( Logger != null) Logger.LogError("Undeliverable event in function {FunctionName}. Error: {ErrorMessage}. Event: {Event}", functionName, errorMessage, JsonConvert.SerializeObject(eventToHandle));
 
@@ -484,7 +484,7 @@ public class Nostify : INostify, IDisposable
 
 
     ///<inheritdoc />
-    public async Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
+    public virtual async Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
     {
         return await GetContainerAsync(Repository.EventStoreContainer, allowBulk, Repository.EventStorePartitionKey);
     }
