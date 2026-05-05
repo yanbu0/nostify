@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Net;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
@@ -132,6 +133,7 @@ public class RetryableContainer : IRetryableContainer
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {
+        // Loop with retry logic for transient failures (429 TooManyRequests) and idempotent handling of 409 Conflict.
         for (int attempt = 0; attempt <= Options.MaxRetries; attempt++)
         {
             try
@@ -142,6 +144,8 @@ public class RetryableContainer : IRetryableContainer
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
+                // Always retry on 429 TooManyRequests, using server-specified RetryAfter duration.
+                // This will throw if we've exhausted retries, which is appropriate since 429 is always transient and we want to bubble up the exception after max retries.
                 await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>", cancellationToken);
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict && attempt > 0)
@@ -159,6 +163,7 @@ public class RetryableContainer : IRetryableContainer
             }
         }
 
+        // This should never be reached because HandleTooManyRequestsAsync will throw after max retries, but we need to return something to satisfy the compiler.
         return default;
     }
 
@@ -387,7 +392,7 @@ public class RetryableContainer : IRetryableContainer
         if (attempt >= Options.MaxRetries)
         {
             Options.LogRetry($"{operationDescription}: 429 TooManyRequests, exhausted {Options.MaxRetries} retries");
-            throw ce;
+            ExceptionDispatchInfo.Capture(ce).Throw();
         }
 
         double retryAfterMs = ce.RetryAfter.HasValue && ce.RetryAfter.Value.TotalMilliseconds > 0

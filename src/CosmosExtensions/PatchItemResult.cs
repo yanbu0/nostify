@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Runtime.ExceptionServices;
 using Microsoft.Azure.Cosmos;
 
 namespace nostify;
@@ -10,12 +11,13 @@ namespace nostify;
 /// </summary>
 public readonly struct PatchItemResult
 {
-    private PatchItemResult(string id, PartitionKey partitionKey, HttpStatusCode statusCode, string exceptionMessage)
+    private PatchItemResult(string id, PartitionKey partitionKey, HttpStatusCode statusCode, string exceptionMessage, ExceptionDispatchInfo? capturedDispatchInfo = null)
     {
         this.id = id;
         this.partitionKey = partitionKey;
         this.statusCode = statusCode;
         this.exceptionMessage = exceptionMessage;
+        this.capturedDispatchInfo = capturedDispatchInfo;
     }
 
     /// <summary>
@@ -37,6 +39,12 @@ public readonly struct PatchItemResult
     /// The exception message if an exception occurred
     /// </summary>
     public readonly string exceptionMessage;
+
+    /// <summary>
+    /// Captured dispatch info for the original exception, preserving stack trace and metadata (e.g. RetryAfter).
+    /// Only populated when the result was created from a CosmosException.
+    /// </summary>
+    public readonly ExceptionDispatchInfo? capturedDispatchInfo;
 
     /// <summary>
     /// Returns true if the item was patched successfully
@@ -64,9 +72,11 @@ public readonly struct PatchItemResult
     public static PatchItemResult NotFoundResult(string id, PartitionKey partitionKey) => new PatchItemResult(id, partitionKey, HttpStatusCode.NotFound, string.Empty);
 
     /// <summary>
-    /// Returns a result from a cosmos exception
+    /// Returns a result from a cosmos exception, preserving the full original exception state
+    /// (including RetryAfter, RequestCharge, ActivityId, and stack trace) via ExceptionDispatchInfo.
+    /// Use capturedDispatchInfo.Throw() to rethrow the original exception with all metadata intact.
     /// </summary>
-    public static PatchItemResult ExceptionResult(string id, PartitionKey partitionKey, CosmosException cosmosException) => new PatchItemResult(id, partitionKey, cosmosException.StatusCode, cosmosException.Message);
+    public static PatchItemResult ExceptionResult(string id, PartitionKey partitionKey, CosmosException cosmosException) => new PatchItemResult(id, partitionKey, cosmosException.StatusCode, cosmosException.Message, ExceptionDispatchInfo.Capture(cosmosException));
 
     /// <summary>
     /// Returns a result from an exception

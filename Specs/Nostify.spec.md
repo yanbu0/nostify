@@ -63,6 +63,44 @@ Disposes all cached Kafka consumers (calls `Close()` then `Dispose()` on each). 
 
 ## Key Method Implementations
 
+### PersistEventAsync
+
+Persists a single event to the Cosmos DB event store with failure observability:
+
+```csharp
+public async Task PersistEventAsync(IEvent eventToPersist)
+{
+    var eventContainer = await GetEventStoreContainerAsync();
+    var retryOptions = new RetryOptions { Logger = Logger, LogRetries = Logger != null };
+    try
+    {
+        await eventContainer
+            .WithRetry(retryOptions)
+            .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+    }
+    catch (Exception ex)
+    {
+        Logger?.LogError(ex, "Failed to persist event in PersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(eventToPersist));
+        try
+        {
+            await HandleUndeliverableAsync(nameof(PersistEventAsync), ex.Message, eventToPersist);
+        }
+        catch (Exception undeliverableEx)
+        {
+            // Log but do not rethrow: the original persistence exception is re-thrown below,
+            // ensuring the HTTP caller receives the actual failure, not a secondary write error.
+            Logger?.LogError(undeliverableEx, "Failed to write undeliverable event in PersistEventAsync");
+        }
+        throw;
+    }
+}
+```
+
+On any exception from the Cosmos write:
+1. Logs the error via `Logger.LogError` (if a logger is configured).
+2. Attempts to write the event to the undeliverable events container via `HandleUndeliverableAsync`. If this write also fails, the error is logged and swallowed so it cannot mask the original persistence exception.
+3. Re-throws the original exception so the calling HTTP handler still returns a failure response.
+
 ### PublishEventAsync
 
 Persists an event to Cosmos DB and publishes to Kafka:

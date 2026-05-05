@@ -74,6 +74,15 @@
 
 ### Updates
 
+- 4.6.5
+    - **PersistEventAsync Undeliverable Tracking**: `Nostify.PersistEventAsync` now wraps the Cosmos write in a try/catch. On any failure, it logs the error via `Logger.LogError` and writes the event to the undeliverable container via `HandleUndeliverableAsync` before re-throwing, ensuring no events are silently lost when single-event persistence fails.
+    - **Bulk Update/Delete Null Body Handling**: `DefaultCommandHandler.HandleBulkUpdateAsync` and `HandleBulkDeleteAsync` (HttpRequestData overloads) now throw `NostifyException` when the request body deserializes to null (e.g., a literal `null` JSON body), instead of silently returning 0 with a 200 response.
+
+- 4.6.4
+    - **Fixes Bug In RetryableContainer Caused By 429 Errors Not Propogating**: There were circumstances where 429 errors weren't propogating properly from Cosmos. See below for details.
+    - **429 Propagation Fix in ApplyAndPersistAsync**: Two `catch (CosmosException)` blocks in `ContainerExtensions.ApplyAndPersistAsync` were swallowing 429 TooManyRequests — wrapping them in `NostifyException` (create path and patch outer catch), which prevented `RetryableContainer.ExecuteWithRetryAsync` from reaching its dedicated 429 retry clause and instead routed them to the `onException` callback. Fix: adds `catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests) { throw; }` before each general `CosmosException` handler on those paths, and adds a `patchResult.statusCode == TooManyRequests` check to re-throw a raw `CosmosException(429)` from the `IsException` branch (preserving `SafePatchItemAsync`'s always-returns-a-result contract for direct callers).
+    - **Stack Trace Preservation on Exhausted 429 Retries**: `RetryableContainer.HandleTooManyRequestsAsync` now uses `ExceptionDispatchInfo.Capture(ce).Throw()` instead of `throw ce` when retries are exhausted. This preserves the original exception's stack trace and identity, so callers receive the exact `CosmosException` thrown by the Cosmos SDK rather than a copy with a reset stack trace.
+
 - 4.6.3
     - **409 Conflict Idempotent Retry (RetryableContainer)**: `RetryableContainer.CreateItemAsync` now catches `409 Conflict` on retry attempts (`attempt > 0`) and treats them as idempotent success. This eliminates spurious 409 errors that occur when the Cosmos SDK bulk executor commits an item before a 429 TooManyRequests is returned, causing the next retry to collide with an already-committed document.
     - **409 Conflict Idempotent Delivery (ApplyAndPersistAsync)**: `ContainerExtensions.ApplyAndPersistAsync` on the `isNew` (create) path now catches `409 Conflict` and treats it as an already-created success rather than throwing. This handles Kafka at-least-once redelivery where the same create event is processed more than once.

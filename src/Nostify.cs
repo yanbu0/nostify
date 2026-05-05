@@ -162,11 +162,29 @@ public class Nostify : INostify, IDisposable
     /// <inheritdoc />
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
-        var eventContainer = await GetEventStoreContainerAsync();
         var retryOptions = new RetryOptions { Logger = Logger, LogRetries = Logger != null };
-        await eventContainer
-            .WithRetry(retryOptions)
-            .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        try
+        {
+            var eventContainer = await GetEventStoreContainerAsync();
+            await eventContainer
+                .WithRetry(retryOptions)
+                .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Failed to persist event in PersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(eventToPersist));
+            try
+            {
+                await HandleUndeliverableAsync(nameof(PersistEventAsync), ex.Message, eventToPersist);
+            }
+            catch (Exception undeliverableEx)
+            {
+                // Log but do not rethrow: the original persistence exception is re-thrown below,
+                // ensuring the HTTP caller receives the actual failure, not a secondary write error.
+                Logger?.LogError(undeliverableEx, "Failed to write undeliverable event in PersistEventAsync");
+            }
+            throw;
+        }
     }
 
     ///<inheritdoc />
@@ -399,7 +417,7 @@ public class Nostify : INostify, IDisposable
                         catch (Exception ex)
                         {
                             Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
-                            await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                            await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown error during bulk event persistence", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
                         }
                     }));
                 });
@@ -409,7 +427,7 @@ public class Nostify : INostify, IDisposable
     }
 
     ///<inheritdoc />
-    public async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
+    public virtual async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
     {
         if ( Logger != null) Logger.LogError("Undeliverable event in function {FunctionName}. Error: {ErrorMessage}. Event: {Event}", functionName, errorMessage, JsonConvert.SerializeObject(eventToHandle));
 
@@ -466,7 +484,7 @@ public class Nostify : INostify, IDisposable
 
 
     ///<inheritdoc />
-    public async Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
+    public virtual async Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
     {
         return await GetContainerAsync(Repository.EventStoreContainer, allowBulk, Repository.EventStorePartitionKey);
     }

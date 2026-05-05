@@ -246,6 +246,7 @@ public static class NostifyFactory
     public static NostifyConfig WithLogger(this NostifyConfig config, ILogger logger)
     {
         config.logger = logger;
+        config.logger.LogInformation("ILogger configured for Nostify. Structured logging enabled.");
         
         return config;
     }

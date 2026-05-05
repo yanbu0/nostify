@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 using System.Transactions;
 using JsonDiffPatchDotNet;
@@ -248,6 +249,11 @@ public static class ContainerExtensions
                     if (logger != null) logger.LogWarning("Create skipped for {ContainerId} {IdToMatch}: item already exists (409 Conflict, likely a duplicate delivery)", container.Id, idToMatch);
                     else Console.Error.WriteLine($"Create skipped for {container.Id} {idToMatch}: item already exists (409 Conflict, likely a duplicate delivery)");
                 }
+                catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    // Let 429 propagate so RetryableContainer can handle retry
+                    throw;
+                }
                 catch (CosmosException ex)
                 {
                     throw new NostifyException($"Create failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
@@ -275,6 +281,14 @@ public static class ContainerExtensions
 
                     if (patchResult.IsException)
                     {
+                        if (patchResult.statusCode == HttpStatusCode.TooManyRequests)
+                        {
+                            // Rethrow the original CosmosException so RetryAfter and all metadata are preserved for RetryableContainer
+                            if (patchResult.capturedDispatchInfo != null)
+                                patchResult.capturedDispatchInfo.Throw();
+                            // Should never reach here: capturedDispatchInfo is always populated for CosmosException results
+                            throw new InvalidOperationException($"PatchItemResult has TooManyRequests status but no captured exception dispatch info. Message: {patchResult.exceptionMessage}");
+                        }
                         throw new NostifyException($"Patch failed for {idToMatch} || {patchResult.exceptionMessage}");
                     }
                     else if (patchResult.NotFound)
@@ -284,6 +298,12 @@ public static class ContainerExtensions
                         nosObjToUpdate = null;
                     }
 
+                }
+                catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    logger?.LogInformation(ex, "Received 429 TooManyRequests for {ContainerId} {IdToMatch}, tenantId: {PartitionKey}. This will be retried by the caller if retry options are configured.", container.Id, idToMatch, partitionKey);
+                    // Let 429 propagate so RetryableContainer can handle retry
+                    throw;
                 }
                 catch (CosmosException ex)
                 {

@@ -314,7 +314,8 @@ public static class DefaultCommandHandler
     /// <returns>The count of aggregate roots that were updated</returns>
     public async static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
     {
-        List<dynamic> updateObjects = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync()) ?? new List<dynamic>();
+        List<dynamic> updateObjects = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync()) 
+            ?? throw new NostifyException($"Failed to deserialize request body to list of objects.");
         List<IEvent> peList = new List<IEvent>();
 
         updateObjects.ForEach(e =>
@@ -370,7 +371,24 @@ public static class DefaultCommandHandler
     /// <returns>The count of aggregate roots that were deleted</returns>
     public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
     {
-        List<string> idStrings = JsonConvert.DeserializeObject<List<string>>(await new StreamReader(req.Body).ReadToEndAsync()) ?? new List<string>();
+        string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+        if (string.IsNullOrWhiteSpace(requestBody))
+        {
+            throw new NostifyException("Request body cannot be null or empty.");
+        }
+
+        List<string>? idStrings;
+        try
+        {
+            idStrings = JsonConvert.DeserializeObject<List<string>>(requestBody);
+        }
+        catch (JsonException ex)
+        {
+            throw new NostifyException($"Failed to deserialize request body to list of IDs. {ex.Message}");
+        }
+
+        if (idStrings == null) throw new NostifyException("Failed to deserialize request body to list of IDs.");
+        
         List<IEvent> peList = new List<IEvent>();
 
         idStrings.ForEach(idStr =>
