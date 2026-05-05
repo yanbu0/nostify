@@ -149,6 +149,24 @@ public class RetryableContainer : IRetryableContainer
                 // The item was already committed in a previous attempt before the 429 was returned.
                 // Treat as idempotent success rather than a real conflict error.
                 Options.LogRetry($"CreateItem<{typeof(T).Name}>: 409 Conflict on retry attempt {attempt + 1}, treating as idempotent success");
+
+                // Attempt to read the existing item back and return a real ItemResponse.
+                string? itemId = item is IUniquelyIdentifiable identifiable
+                    ? identifiable.id.ToString()
+                    : item?.GetType().GetProperty("id")?.GetValue(item)?.ToString();
+
+                if (itemId != null && partitionKey.HasValue)
+                {
+                    try
+                    {
+                        return await Container.ReadItemAsync<T>(itemId, partitionKey.Value, cancellationToken: cancellationToken);
+                    }
+                    catch
+                    {
+                        // If the read fails, fall back to null rather than surfacing a secondary error.
+                    }
+                }
+
                 return default;
             }
             catch (Exception ex)

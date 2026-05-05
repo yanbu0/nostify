@@ -86,15 +86,17 @@ public interface IRetryableContainer
     /// <summary>
     /// Creates an item with automatic 429 retry. Does NOT retry on 404.
     /// If a 409 Conflict is returned on a retry attempt (attempt &gt; 0), the item is assumed to have
-    /// been committed before the 429 throttle was applied and the call returns <c>null</c> as an
-    /// idempotent success. A 409 on the first attempt (attempt == 0) is treated as an error.
+    /// been committed before the 429 throttle was applied (idempotent success). The method then
+    /// attempts to read the existing item and return its <see cref="ItemResponse{T}"/>. If the id
+    /// cannot be determined or the read fails, <c>null</c> is returned instead.
+    /// A 409 on the first attempt (attempt == 0) is treated as an error.
     /// </summary>
     /// <typeparam name="T">The type of item to create.</typeparam>
     /// <param name="item">The item to create.</param>
     /// <param name="partitionKey">The partition key.</param>
     /// <param name="onException">Callback invoked when a non-transient exception occurs.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The item response, or <c>null</c> when the item was already created on a previous attempt (idempotent success).</returns>
+    /// <returns>The item response, or <c>null</c> if the read-back after an idempotent 409 fails.</returns>
     Task<ItemResponse<T>?> CreateItemAsync<T>(
         T item,
         PartitionKey? partitionKey,
@@ -105,14 +107,16 @@ public interface IRetryableContainer
     /// Creates an item with automatic 429 retry. The partition key is inferred from the item
     /// by the Cosmos DB SDK based on the container's partition key path. Does NOT retry on 404.
     /// If a 409 Conflict is returned on a retry attempt (attempt &gt; 0), the item is assumed to have
-    /// been committed before the 429 throttle was applied and the call returns <c>null</c> as an
-    /// idempotent success. A 409 on the first attempt (attempt == 0) is treated as an error.
+    /// been committed before the 429 throttle was applied (idempotent success). The method then
+    /// attempts to read the existing item and return its <see cref="ItemResponse{T}"/>. If the id
+    /// cannot be determined or the read fails, <c>null</c> is returned instead.
+    /// A 409 on the first attempt (attempt == 0) is treated as an error.
     /// </summary>
     /// <typeparam name="T">The type of item to create.</typeparam>
     /// <param name="item">The item to create.</param>
     /// <param name="onException">Callback invoked when a non-transient exception occurs.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The item response, or <c>null</c> when the item was already created on a previous attempt (idempotent success).</returns>
+    /// <returns>The item response, or <c>null</c> if the read-back after an idempotent 409 fails.</returns>
     Task<ItemResponse<T>?> CreateItemAsync<T>(
         T item,
         Func<Exception, Task>? onException = null,

@@ -556,11 +556,14 @@ public class RetryableContainerTests
         // because the item was already committed before the throttle was applied.
         int callCount = 0;
         var mockContainer = new Mock<Container>();
+        var mockReadResponse = new Mock<ItemResponse<TestAggregate>>();
+        var item = new TestAggregate();
+
         mockContainer
             .Setup(c => c.CreateItemAsync(
                 It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
                 It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
-            .Returns<TestAggregate, PartitionKey, ItemRequestOptions, CancellationToken>((item, pk, opts, ct) =>
+            .Returns<TestAggregate, PartitionKey, ItemRequestOptions, CancellationToken>((i, pk, opts, ct) =>
             {
                 callCount++;
                 if (callCount == 1)
@@ -568,13 +571,19 @@ public class RetryableContainerTests
                 throw new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0);
             });
 
+        mockContainer
+            .Setup(c => c.ReadItemAsync<TestAggregate>(
+                item.id.ToString(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockReadResponse.Object);
+
         var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
         var retryable = new RetryableContainer(mockContainer.Object, options);
 
-        // Should NOT throw — the 409 on retry is treated as idempotent success
-        var result = await retryable.CreateItemAsync(new TestAggregate(), new PartitionKey("pk"));
+        // Should NOT throw — the 409 on retry is treated as idempotent success and reads back the item
+        var result = await retryable.CreateItemAsync(item, new PartitionKey("pk"));
 
-        Assert.Null(result); // returns default on idempotent path
+        Assert.NotNull(result); // reads back the already-committed item
         Assert.Equal(2, callCount); // called twice: once for 429, once for 409
     }
 
