@@ -248,7 +248,8 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
             // this splits the pageIds into `concurrentBatchCount` batches with at most `_batchSize` ids
             var tasks = pageIds
                 .Chunk(_batchSize)
-                .Select(batch => context.CallActivityAsync(processBatchActivityName, batch.ToList(), retryOptions));
+                .Select(batch => context.CallActivityAsync(processBatchActivityName, batch.ToList(), retryOptions))
+                .ToList();
 
             await Task.WhenAll(tasks);
             onPageProcessed(pageIds.Count);

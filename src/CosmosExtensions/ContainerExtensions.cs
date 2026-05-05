@@ -301,6 +301,7 @@ public static class ContainerExtensions
                 }
                 catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
                 {
+                    logger?.LogInformation(ex, "Received 429 TooManyRequests for {ContainerId} {IdToMatch}, tenantId: {PartitionKey}. This will be retried by the caller if retry options are configured.", container.Id, idToMatch, partitionKey);
                     // Let 429 propagate so RetryableContainer can handle retry
                     throw;
                 }
