@@ -578,6 +578,26 @@ public class RetryableContainerTests
         Assert.Equal(2, callCount); // called twice: once for 429, once for 409
     }
 
+    [Fact]
+    public async Task CreateItem_Exhausted429Retries_ThrowsCosmosException()
+    {
+        // Every call returns 429; after MaxRetries the original CosmosException should be thrown.
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0));
+
+        var options = new RetryOptions(maxRetries: 2, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        var ex = await Assert.ThrowsAsync<CosmosException>(() =>
+            retryable.CreateItemAsync(new TestAggregate(), new PartitionKey("pk")));
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, ex.StatusCode);
+    }
+
     #endregion
 
     #region UpsertItemAsync

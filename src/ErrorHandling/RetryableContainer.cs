@@ -132,6 +132,7 @@ public class RetryableContainer : IRetryableContainer
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {
+        CosmosException? lastException = null;
         for (int attempt = 0; attempt <= Options.MaxRetries; attempt++)
         {
             try
@@ -142,6 +143,7 @@ public class RetryableContainer : IRetryableContainer
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
+                lastException = ce;
                 await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>", cancellationToken);
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict && attempt > 0)
@@ -159,7 +161,9 @@ public class RetryableContainer : IRetryableContainer
             }
         }
 
-        return default;
+        if (lastException != null)
+            throw lastException;
+        throw new InvalidOperationException($"CreateItem<{typeof(T).Name}>: exhausted all retries without a successful response.");
     }
 
     /// <inheritdoc/>

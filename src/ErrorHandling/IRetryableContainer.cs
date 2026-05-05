@@ -88,6 +88,8 @@ public interface IRetryableContainer
     /// If a 409 Conflict is returned on a retry attempt (attempt &gt; 0), the item is assumed to have
     /// been committed before the 429 throttle was applied and the call returns <c>null</c> as an
     /// idempotent success. A 409 on the first attempt (attempt == 0) is treated as an error.
+    /// Throws the underlying <see cref="CosmosException"/> (or an <see cref="InvalidOperationException"/>)
+    /// after all retries are exhausted.
     /// </summary>
     /// <typeparam name="T">The type of item to create.</typeparam>
     /// <param name="item">The item to create.</param>
@@ -95,6 +97,7 @@ public interface IRetryableContainer
     /// <param name="onException">Callback invoked when a non-transient exception occurs.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The item response, or <c>null</c> when the item was already created on a previous attempt (idempotent success).</returns>
+    /// <exception cref="CosmosException">Thrown after all retry attempts are exhausted.</exception>
     Task<ItemResponse<T>?> CreateItemAsync<T>(
         T item,
         PartitionKey? partitionKey,
@@ -107,12 +110,15 @@ public interface IRetryableContainer
     /// If a 409 Conflict is returned on a retry attempt (attempt &gt; 0), the item is assumed to have
     /// been committed before the 429 throttle was applied and the call returns <c>null</c> as an
     /// idempotent success. A 409 on the first attempt (attempt == 0) is treated as an error.
+    /// Throws the underlying <see cref="CosmosException"/> (or an <see cref="InvalidOperationException"/>)
+    /// after all retries are exhausted.
     /// </summary>
     /// <typeparam name="T">The type of item to create.</typeparam>
     /// <param name="item">The item to create.</param>
     /// <param name="onException">Callback invoked when a non-transient exception occurs.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The item response, or <c>null</c> when the item was already created on a previous attempt (idempotent success).</returns>
+    /// <exception cref="CosmosException">Thrown after all retry attempts are exhausted.</exception>
     Task<ItemResponse<T>?> CreateItemAsync<T>(
         T item,
         Func<Exception, Task>? onException = null,
