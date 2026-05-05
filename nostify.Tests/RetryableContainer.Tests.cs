@@ -587,6 +587,41 @@ public class RetryableContainerTests
         Assert.Equal(2, callCount); // called twice: once for 429, once for 409
     }
 
+    [Fact]
+    public async Task CreateItem_Conflict409AfterTooManyRequests_ReadBackFails_ReturnsNull()
+    {
+        // Verifies that when the read-back after an idempotent 409 fails, null is returned without throwing.
+        int callCount = 0;
+        var mockContainer = new Mock<Container>();
+        var item = new TestAggregate();
+
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<TestAggregate, PartitionKey, ItemRequestOptions, CancellationToken>((i, pk, opts, ct) =>
+            {
+                callCount++;
+                if (callCount == 1)
+                    throw new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+                throw new CosmosException("Conflict", HttpStatusCode.Conflict, 0, string.Empty, 0);
+            });
+
+        mockContainer
+            .Setup(c => c.ReadItemAsync<TestAggregate>(
+                item.id.ToString(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("Not Found", HttpStatusCode.NotFound, 0, string.Empty, 0));
+
+        var options = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: false);
+        var retryable = new RetryableContainer(mockContainer.Object, options);
+
+        // Should NOT throw — falls back to null when read-back fails
+        var result = await retryable.CreateItemAsync(item, new PartitionKey("pk"));
+
+        Assert.Null(result);
+    }
+
     #endregion
 
     #region UpsertItemAsync

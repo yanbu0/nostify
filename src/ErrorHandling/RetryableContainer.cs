@@ -161,9 +161,10 @@ public class RetryableContainer : IRetryableContainer
                     {
                         return await Container.ReadItemAsync<T>(itemId, partitionKey.Value, cancellationToken: cancellationToken);
                     }
-                    catch
+                    catch (Exception readEx)
                     {
-                        // If the read fails, fall back to null rather than surfacing a secondary error.
+                        // If the read fails, log and fall back to null rather than surfacing a secondary error.
+                        Options.LogRetry($"CreateItem<{typeof(T).Name}>: read-back after idempotent 409 failed: {readEx.Message}");
                     }
                 }
 
