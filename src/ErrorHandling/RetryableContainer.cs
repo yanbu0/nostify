@@ -163,6 +163,8 @@ public class RetryableContainer : IRetryableContainer
 
         if (lastException != null)
             throw lastException;
+        // This line is only reached if all retry attempts completed without a successful result,
+        // a 429, or a handled exception — which should not occur in practice.
         throw new InvalidOperationException($"CreateItem<{typeof(T).Name}>: exhausted all retries without a successful response.");
     }
 
