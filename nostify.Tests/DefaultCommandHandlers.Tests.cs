@@ -177,52 +177,20 @@ public class DefaultCommandHandlersTests
         };
 
         var failure = new InvalidOperationException("Cosmos DB write failed");
-        bool undeliverableCalled = false;
-        string? capturedFunction = null;
-        string? capturedMessage = null;
-        IEvent? capturedEvent = null;
 
         _mockNostify
             .Setup(n => n.PersistEventAsync(testEvent))
             .ThrowsAsync(failure);
 
-        _mockNostify
-            .Setup(n => n.HandleUndeliverableAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()))
-            .Callback<string, string, IEvent, ErrorCommand?>((fn, msg, evt, cmd) =>
-            {
-                undeliverableCalled = true;
-                capturedFunction = fn;
-                capturedMessage = msg;
-                capturedEvent = evt;
-            })
-            .Returns(Task.CompletedTask);
-
-        // Act – the real Nostify implementation calls HandleUndeliverableAsync then re-throws;
-        // here we simulate a consumer that does the same to document the expected contract.
-        async Task SimulateRealPersistEventAsync(IEvent evt)
-        {
-            try
-            {
-                await _mockNostify.Object.PersistEventAsync(evt);
-            }
-            catch (Exception ex)
-            {
-                await _mockNostify.Object.HandleUndeliverableAsync(
-                    nameof(SimulateRealPersistEventAsync), ex.Message, evt);
-                throw;
-            }
-        }
-
+        // Act
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SimulateRealPersistEventAsync(testEvent));
+            _mockNostify.Object.PersistEventAsync(testEvent));
 
-        // Assert – exception is re-thrown and HandleUndeliverableAsync was called
+        // Assert
         Assert.Same(failure, thrown);
-        Assert.True(undeliverableCalled, "HandleUndeliverableAsync must be called on PersistEventAsync failure");
-        Assert.NotNull(capturedFunction);
-        Assert.Equal(failure.Message, capturedMessage);
-        Assert.Same(testEvent, capturedEvent);
+        _mockNostify.Verify(n => n.PersistEventAsync(testEvent), Times.Once);
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
     }
 
     #endregion
