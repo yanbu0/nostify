@@ -299,6 +299,7 @@ public class ExternalDataEvent
         return result;
     }
 
+    /// <summary>
     /// Gets the events needed to initialize a list of projections (backward compatibility overload)
     /// </summary>
     /// <typeparam name="TProjection">Type of the projection</typeparam>

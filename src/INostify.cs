@@ -122,7 +122,7 @@ public interface INostify
     ///This overload converts the boolean allowRetry into default RetryOptions and delegates to the RetryOptions overload.
     ///</summary>
     ///<param name="container">The container to which the events will be applied and persisted.</param>
-    ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List<Guid> to find the projection to apply to</param>
+    ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List&lt;Guid&gt; to find the projection to apply to</param>
     ///<param name="events">The events to be applied and persisted.</param>
     ///<param name="allowRetry">Optional. If true, will retry on TooManyRequests error. Default is false.</param>
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container. Default is false.</param>
@@ -135,7 +135,7 @@ public interface INostify
     ///When retryOptions is provided, each projection update uses RetryableContainer with the specified retry policy.
     ///</summary>
     ///<param name="container">The container to which the events will be applied and persisted.</param>
-    ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List<Guid> to find the projection to apply to</param>
+    ///<param name="idPropertyName">The name of the property with either the single Guid id value or a List&lt;Guid&gt; to find the projection to apply to</param>
     ///<param name="events">The events to be applied and persisted.</param>
     ///<param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each projection is updated using RetryableContainer with retry logic. When null, no retry is performed.</param>
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container. Default is false.</param>
@@ -223,9 +223,9 @@ public interface INostify
     ///<param name="partitionKeyPath">Path to parition key, unless not using tenants, leave default</param>
     public Task<Container> GetBulkProjectionContainerAsync<P>(string partitionKeyPath = "/tenantId") where P : IProjection;
 
-    ///<<summary>
+    ///<summary>
     ///Retrieves the undeliverable events container
-    ///</summary>>
+    ///</summary>
     public Task<Container> GetUndeliverableEventsContainerAsync();
 
     ///<summary>
