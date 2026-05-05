@@ -145,6 +145,7 @@ public class RetryableContainer : IRetryableContainer
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 // Always retry on 429 TooManyRequests, using server-specified RetryAfter duration.
+                // This will throw if we've exhausted retries, which is appropriate since 429 is always transient and we want to bubble up the exception after max retries.
                 await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>", cancellationToken);
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict)
@@ -163,6 +164,7 @@ public class RetryableContainer : IRetryableContainer
             }
         }
 
+        // This should never be reached because HandleTooManyRequestsAsync will throw after max retries, but we need to return something to satisfy the compiler.
         return default;
     }
 
