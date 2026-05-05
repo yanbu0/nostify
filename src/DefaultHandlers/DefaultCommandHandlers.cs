@@ -209,7 +209,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic.</param>
+    /// <param name="allowRetry">Optional. Whether to allow per-item retry behavior. When true, each event is persisted using RetryableContainer with default retry logic.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
