@@ -148,12 +148,11 @@ public class RetryableContainer : IRetryableContainer
                 // This will throw if we've exhausted retries, which is appropriate since 429 is always transient and we want to bubble up the exception after max retries.
                 await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>", cancellationToken);
             }
-            catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict)
+            catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict && attempt > 0)
             {
-                // 409 Conflict means the item already exists — treat as idempotent success.
-                // This covers both within-invocation retries (item committed before 429 was returned)
-                // and cross-invocation retries (Kafka function retry where item was already created).
-                Options.LogRetry($"CreateItem<{typeof(T).Name}>: 409 Conflict on attempt {attempt + 1}, treating as idempotent success");
+                // The item was already committed in a previous attempt before the 429 was returned.
+                // Treat as idempotent success rather than a real conflict error.
+                Options.LogRetry($"CreateItem<{typeof(T).Name}>: 409 Conflict on retry attempt {attempt + 1}, treating as idempotent success");
                 return default;
             }
             catch (Exception ex)
@@ -264,11 +263,6 @@ public class RetryableContainer : IRetryableContainer
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                if (attempt >= Options.MaxRetries)
-                {
-                    Options.LogRetry($"{operationDescription}: 429 TooManyRequests, exhausted {Options.MaxRetries} retries");
-                    if (onException != null) { await onException(ce); return default; }
-                }
                 await HandleTooManyRequestsAsync(ce, attempt, operationDescription);
             }
             catch (Exception ex)

@@ -173,7 +173,16 @@ public class Nostify : INostify, IDisposable
         catch (Exception ex)
         {
             Logger?.LogError(ex, "Failed to persist event in PersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(eventToPersist));
-            await HandleUndeliverableAsync(nameof(PersistEventAsync), ex.Message, eventToPersist);
+            try
+            {
+                await HandleUndeliverableAsync(nameof(PersistEventAsync), ex.Message, eventToPersist);
+            }
+            catch (Exception undeliverableEx)
+            {
+                // Log but do not rethrow: the original persistence exception is re-thrown below,
+                // ensuring the HTTP caller receives the actual failure, not a secondary write error.
+                Logger?.LogError(undeliverableEx, "Failed to write undeliverable event in PersistEventAsync");
+            }
             throw;
         }
     }
@@ -328,22 +337,34 @@ public class Nostify : INostify, IDisposable
 
     /// <summary>
     /// Creates and executes an apply-and-persist task for a single projection item.
-    /// Always uses RetryableContainer for per-item retry with exponential backoff.
-    /// When retryOptions is null, default RetryOptions are used so that transient
-    /// 429 errors are retried rather than immediately written to undeliverable events.
+    /// When retryOptions is provided, uses RetryableContainer for per-item retry with exponential backoff.
     /// </summary>
     private async Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new()
     {
-        var effectiveOptions = retryOptions ?? new RetryOptions { Logger = Logger, LogRetries = Logger != null };
-        var retryable = bulkContainer.WithRetry(effectiveOptions);
-        var result = await retryable.ApplyAndPersistAsync<P>(
-            pe,
-            id,
-            onExhausted: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Exhausted retries", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
-            onNotFound: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
-            onException: (ex) => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
-        );
-        return result ?? new P();
+        if (retryOptions != null)
+        {
+            var retryable = bulkContainer.WithRetry(retryOptions);
+            var result = await retryable.ApplyAndPersistAsync<P>(
+                pe,
+                id,
+                onExhausted: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Exhausted retries", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
+                onNotFound: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
+                onException: (ex) => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+            );
+            return result ?? new P();
+        }
+        else
+        {
+            try
+            {
+                return await bulkContainer.ApplyAndPersistAsync<P>(new List<IEvent>() { pe }, pk.ToPartitionKey(), id);
+            }
+            catch (Exception ex)
+            {
+                await HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                throw;
+            }
+        }
     }
 
     /// <summary>
@@ -387,16 +408,18 @@ public class Nostify : INostify, IDisposable
                 List<Task> taskList = new List<Task>();
                 eventBatch.ForEach(pe =>
                 {
-                    taskList.Add(
-                        eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey()).ContinueWith(async result =>
-                         {
-                             if (!result.IsCompletedSuccessfully)
-                             {
-                                 Logger?.LogError(result.Exception, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
-                                 await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), result.Exception?.Message ?? "Unknown error", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
-                             }
-                         })
-                    );
+                    taskList.Add(Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey());
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
+                            await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown error during bulk event persistence", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                        }
+                    }));
                 });
                 await Task.WhenAll(taskList);
             }
