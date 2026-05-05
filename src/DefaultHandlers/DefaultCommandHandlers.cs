@@ -384,10 +384,11 @@ public static class DefaultCommandHandler
         }
         catch (JsonException ex)
         {
-            throw new NostifyException("Failed to deserialize request body to list of IDs.", ex);
+            throw new NostifyException($"Failed to deserialize request body to list of IDs. {ex.Message}");
         }
 
-        idStrings ??= throw new NostifyException("Failed to deserialize request body to list of IDs.");
+        if(idStrings == null) throw new NostifyException("Failed to deserialize request body to list of IDs.");
+        
         List<IEvent> peList = new List<IEvent>();
 
         idStrings.ForEach(idStr =>
