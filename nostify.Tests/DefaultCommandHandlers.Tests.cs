@@ -157,15 +157,18 @@ public class DefaultCommandHandlersTests
     /// <summary>
     /// A test-only subclass of <see cref="Nostify"/> that overrides the two virtual I/O boundary
     /// methods so the real <see cref="Nostify.PersistEventAsync"/> implementation can run under test:
-    ///   - <see cref="GetEventStoreContainerAsync"/> returns a caller-supplied fake container.
+    ///   - <see cref="GetEventStoreContainerAsync"/> returns a caller-supplied fake container or throws
+    ///     a caller-supplied exception, depending on which constructor was used.
     ///   - <see cref="HandleUndeliverableAsync"/> records arguments without touching Cosmos.
     /// </summary>
     private sealed class TestableNostify : Nostify
     {
-        private readonly Container _fakeEventContainer;
+        private readonly Container? _fakeEventContainer;
+        private readonly Exception? _containerException;
 
         public List<(string FunctionName, string ErrorMessage, IEvent Event, ErrorCommand? Command)> UndeliverableCalls { get; } = new();
 
+        /// <summary>Simulates a successful container resolution that returns the supplied fake.</summary>
         public TestableNostify(Container fakeEventContainer)
             : base(
                 new NostifyCosmosClient(),
@@ -178,8 +181,25 @@ public class DefaultCommandHandlersTests
             _fakeEventContainer = fakeEventContainer;
         }
 
+        /// <summary>Simulates a container-resolution failure (GetEventStoreContainerAsync throws).</summary>
+        public TestableNostify(Exception containerException)
+            : base(
+                new NostifyCosmosClient(),
+                "/tenantId",
+                Guid.Empty,
+                "localhost:9092",
+                new Mock<IProducer<string, string>>().Object,
+                new Mock<System.Net.Http.IHttpClientFactory>().Object)
+        {
+            _containerException = containerException;
+        }
+
         public override Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
-            => Task.FromResult(_fakeEventContainer);
+        {
+            if (_containerException != null)
+                return Task.FromException<Container>(_containerException);
+            return Task.FromResult(_fakeEventContainer!);
+        }
 
         public override Task HandleUndeliverableAsync(
             string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
@@ -210,6 +230,47 @@ public class DefaultCommandHandlersTests
             .ThrowsAsync(failure);
 
         var nostify = new TestableNostify(mockContainer.Object);
+
+        var testEvent = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = Guid.NewGuid(),
+            command = new NostifyCommand("TestCommand"),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Test" }
+        };
+
+        // Act: the REAL PersistEventAsync runs; it must re-throw the original exception
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            nostify.PersistEventAsync(testEvent));
+
+        // Assert: the original exception identity is preserved
+        Assert.Same(failure, thrown);
+
+        // Assert: HandleUndeliverableAsync was called exactly once with the right context
+        Assert.Single(nostify.UndeliverableCalls);
+        var call = nostify.UndeliverableCalls[0];
+        Assert.Equal(nameof(Nostify.PersistEventAsync), call.FunctionName);
+        Assert.Equal(failure.Message, call.ErrorMessage);
+        Assert.Same(testEvent, call.Event);
+        Assert.Null(call.Command);
+    }
+
+    /// <summary>
+    /// Exercises the real <see cref="Nostify.PersistEventAsync"/> implementation: when
+    /// <see cref="Nostify.GetEventStoreContainerAsync"/> throws (container resolution failure),
+    /// the production catch block must call <see cref="Nostify.HandleUndeliverableAsync"/> and
+    /// re-throw the original exception.  This verifies that the try/catch covers the full method
+    /// body, including the container-resolution step.
+    /// </summary>
+    [Fact]
+    public async Task PersistEventAsync_ContainerResolutionFails_HandleUndeliverableCalledAndExceptionPropagates()
+    {
+        // Arrange: TestableNostify whose GetEventStoreContainerAsync throws
+        var failure = new InvalidOperationException("Cosmos container not found");
+        var nostify = new TestableNostify(failure);
 
         var testEvent = new Event
         {
