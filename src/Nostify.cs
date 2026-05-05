@@ -387,18 +387,16 @@ public class Nostify : INostify, IDisposable
                 List<Task> taskList = new List<Task>();
                 eventBatch.ForEach(pe =>
                 {
-                    taskList.Add(Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey());
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
-                            await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
-                        }
-                    }));
+                    taskList.Add(
+                        eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey()).ContinueWith(async result =>
+                         {
+                             if (!result.IsCompletedSuccessfully)
+                             {
+                                 Logger?.LogError(result.Exception, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
+                                 await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), result.Exception?.Message ?? "Unknown error", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                             }
+                         })
+                    );
                 });
                 await Task.WhenAll(taskList);
             }

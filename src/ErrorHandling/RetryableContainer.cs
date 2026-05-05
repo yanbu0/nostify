@@ -133,6 +133,7 @@ public class RetryableContainer : IRetryableContainer
         Func<Exception, Task>? onException = null,
         CancellationToken cancellationToken = default)
     {
+        // Loop with retry logic for transient failures (429 TooManyRequests) and idempotent handling of 409 Conflict.
         for (int attempt = 0; attempt <= Options.MaxRetries; attempt++)
         {
             try
@@ -143,6 +144,7 @@ public class RetryableContainer : IRetryableContainer
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.TooManyRequests)
             {
+                // Always retry on 429 TooManyRequests, using server-specified RetryAfter duration.
                 await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>", cancellationToken);
             }
             catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict)
