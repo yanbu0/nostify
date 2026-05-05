@@ -111,6 +111,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
 
     /// <summary>
     /// The orchestrator that runs the projection initialization logic, paging through aggregates by tenant partition.
+    /// </summary>
     /// <param name="context">The orchestration context provided by the durable task framework.</param>
     /// <param name="deleteActivityName">The name of the activity function that deletes projections.</param>
     /// <param name="getTenantIdsActivityName">The name of the activity function that retrieves tenant IDs.</param>
