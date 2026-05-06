@@ -236,7 +236,7 @@ public static class DefaultEventHandlers
         }
         catch (Exception e)
         {
-            await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}", 
+            await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{typeof(P).Name}", 
                 e.Message, 
                 newEvent ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
                 );
