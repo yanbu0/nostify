@@ -748,7 +748,7 @@ public static class DefaultEventHandlers
     /// <typeparam name="T">The aggregate type that implements NostifyObject and IAggregate.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
-    /// <param name="allowRetry">Reserved for future use. Bulk deletes do not currently support per-item retry.</param>
+    /// <param name="allowRetry">Included for API consistency with other bulk handlers. Currently ignored — bulk deletes do not support per-item retry.</param>
     /// <returns>A task containing the number of successfully deleted records.</returns>
     public async static Task<int> HandleAggregateBulkDeleteEventAsync<T>(INostify nostify, string[] events, bool allowRetry = true) where T : NostifyObject, IAggregate, new()
     {
@@ -806,7 +806,7 @@ public static class DefaultEventHandlers
     /// <typeparam name="P">The projection type that implements NostifyObject and IProjection.</typeparam>
     /// <param name="nostify">The nostify instance for accessing containers and handling undeliverable events.</param>
     /// <param name="events">Array of Kafka trigger event strings to process.</param>
-    /// <param name="allowRetry">Reserved for future use. Bulk deletes do not currently support per-item retry.</param>
+    /// <param name="allowRetry">Included for API consistency with other bulk handlers. Currently ignored — bulk deletes do not support per-item retry.</param>
     /// <returns>A task containing the number of successfully deleted records.</returns>
     public async static Task<int> HandleProjectionBulkDeleteEventAsync<P>(INostify nostify, string[] events, bool allowRetry = true) where P : NostifyObject, IProjection, new()
     {
