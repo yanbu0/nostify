@@ -137,6 +137,7 @@ var order = await nostify.RehydrateAsync<Order>(orderId);
 
 ## Version History
 
+- **4.6.6** - `RetryableContainer.CreateItemAsync` now treats ALL 409 Conflict responses as idempotent success (removed `attempt > 0` guard); `DoBulkCreateAsync` also catches 409 on the no-retry path — both changes fix Kafka at-least-once redelivery creating spurious undeliverable events
 - **4.6.5** - `PersistEventAsync` now logs and writes to the undeliverable container on failure before re-throwing; `HandleBulkUpdateAsync` and `HandleBulkDeleteAsync` (HttpRequestData) throw `NostifyException` on null deserialized body
 - **4.6.4** - Fixed 429 TooManyRequests being swallowed in `ContainerExtensions.ApplyAndPersistAsync`: added explicit `throw` for 429 on the create-path catch and the patch outer-catch so 429s propagate to `RetryableContainer` for retry instead of routing to `onException`; on the patch result path, `patchResult.statusCode == TooManyRequests` re-throws a raw `CosmosException(429)` before the `NostifyException` wrapper so `SafePatchItemAsync`'s always-returns-a-result contract is preserved
 - **4.6.3** - Fixed 409 Conflict errors in bulk create operations: `RetryableContainer.CreateItemAsync` now treats 409 on retry as idempotent success; `ApplyAndPersistAsync` (isNew path) catches 409 for at-least-once delivery; `BulkPersistEventAsync` awaits `HandleUndeliverableAsync`; template `BulkCreate_ReplaceMe_.cs` corrected to use `BulkCreate` command
