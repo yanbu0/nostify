@@ -205,18 +205,18 @@ public static class DefaultEventHandlers
                 var retryable = currentStateContainer.WithRetry(retryOptions);
                 doApply = projectionBaseAggregateId.HasValue 
                     ? retryable.ApplyAndPersistAsync<P>(newEvent, projectionBaseAggregateId.Value,
-                        onExhausted: () => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}:Retry", 
+                        onExhausted: () => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{typeof(P).Name}:Retry", 
                             $"Not found after {retryOptions.MaxRetries} retries", newEvent),
-                        onNotFound: () => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}:NotFound", 
+                        onNotFound: () => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{typeof(P).Name}:NotFound", 
                             "Not found and RetryWhenNotFound is false", newEvent),
-                        onException: (ex) => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}", 
+                        onException: (ex) => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{typeof(P).Name}", 
                             ex.Message, newEvent))
                     : retryable.ApplyAndPersistAsync<P>(newEvent,
-                        onExhausted: () => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}:Retry", 
+                        onExhausted: () => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{typeof(P).Name}:Retry", 
                             $"Not found after {retryOptions.MaxRetries} retries", newEvent),
-                        onNotFound: () => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}:NotFound", 
+                        onNotFound: () => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{typeof(P).Name}:NotFound", 
                             "Not found and RetryWhenNotFound is false", newEvent),
-                        onException: (ex) => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}", 
+                        onException: (ex) => nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{typeof(P).Name}", 
                             ex.Message, newEvent));
             }
             else
@@ -320,7 +320,7 @@ public static class DefaultEventHandlers
             events.ToList().ForEach(async eventStr =>
             {
                 Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent(eventTypeFilter) ?? throw new NostifyException("Event is null");
-                await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(T)}", 
+                await nostify.HandleUndeliverableAsync($"{nameof(HandleAggregateBulkCreateEventAsync)}:{typeof(T).Name}", 
                     e.Message, 
                     @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
                     );
