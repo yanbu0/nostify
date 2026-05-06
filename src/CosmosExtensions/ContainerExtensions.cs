@@ -570,8 +570,22 @@ public static class ContainerExtensions
         bulkContainer.ValidateBulkEnabled(true);
 
         List<Task> taskList = new List<Task>();
-        itemList.ForEach(i => taskList.Add(bulkContainer.CreateItemAsync(i)));
+        itemList.ForEach(i => taskList.Add(CreateItemIgnoreConflictAsync(bulkContainer, i)));
         await Task.WhenAll(taskList);
+
+        static async Task CreateItemIgnoreConflictAsync<TItem>(Container container, TItem item)
+        {
+            try
+            {
+                await container.CreateItemAsync(item);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+            {
+                // Item already exists — at-least-once delivery from Kafka re-delivered the event.
+                // Treat as idempotent success.
+                Console.Error.WriteLine($"Create skipped: item already exists (409 Conflict, likely a duplicate delivery)");
+            }
+        }
     }
 
 }
