@@ -23,7 +23,12 @@
     "AzureSignalRConnectionString":"Endpoint=http://localhost;Port=8888;AccessKey=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGH;Version=1.0;",
     "AutoCreateContainers":true,
     "DefaultContainerThroughput":-1,
-    "VerboseNostifyBuild":true
+    "VerboseNostifyBuild":true,
+    // Default retry options applied by all default handlers when allowRetry=true (the default).
+    // Set DefaultRetryMaxRetries to 0 to effectively disable retry across all handlers.
+    "DefaultRetryMaxRetries": 3,
+    "DefaultRetryDelayMs": 1000,
+    "DefaultRetryWhenNotFound": false
   },
   "Host": {
     "CORS": "*"

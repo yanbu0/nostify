@@ -7,6 +7,7 @@ using Azure.Core.Serialization;
 using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json;
 using Microsoft.Extensions.Logging;
+using System;
 
 namespace _ReplaceMe__Service;
 
@@ -42,6 +43,14 @@ public class Program
             bool autoCreateContainers = config.GetValue<bool>("AutoCreateContainers");
             int defaultThroughput = config.GetValue<int>("DefaultContainerThroughput");
             bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
+
+            // Build default retry options from settings (applied by all default handlers when allowRetry=true)
+            var defaultRetryOptions = new RetryOptions(
+                maxRetries: config.GetValue<int>("DefaultRetryMaxRetries", 3),
+                delay: TimeSpan.FromMilliseconds(config.GetValue<double>("DefaultRetryDelayMs", 1000)),
+                retryWhenNotFound: config.GetValue<bool>("DefaultRetryWhenNotFound", false)
+            );
+
             var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
             var logger = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
 
@@ -51,7 +60,8 @@ public class Program
                                 cosmosEndpointUri: endPoint,
                                 createContainers: autoCreateContainers,
                                 containerThroughput: defaultThroughput,
-                                useGatewayConnection: false)
+                                useGatewayConnection: false,
+                                defaultRetryOptions: defaultRetryOptions)
 #if (eventHubs)
                             .WithEventHubs(eventHubConnectionString)
 #else

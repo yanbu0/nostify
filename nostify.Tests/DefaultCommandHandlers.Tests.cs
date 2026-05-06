@@ -35,6 +35,9 @@ public class DefaultCommandHandlersTests
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Returns(Task.CompletedTask);
+        _mockNostify
+            .Setup(n => n.DefaultRetryOptions)
+            .Returns(new RetryOptions());
     }
 
     #region Helpers

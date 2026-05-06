@@ -27,6 +27,9 @@ public class DefaultEventHandlersTests
         _mockNostify
             .Setup(n => n.InitAsync<TestProjection>(It.IsAny<List<TestProjection>>()))
             .ReturnsAsync(new List<TestProjection>());
+        _mockNostify
+            .Setup(n => n.DefaultRetryOptions)
+            .Returns(new RetryOptions());
     }
 
     /// <summary>
@@ -479,9 +482,9 @@ public class DefaultEventHandlersTests
             .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
             .ReturnsAsync(mockContainer.Object);
 
-        // Act - use default retryOptions (null => defaults to RetryWhenNotFound=false)
+        // Act - use explicit RetryOptions matching the defaults (RetryWhenNotFound=false)
         await DefaultEventHandlers.HandleProjectionBulkUpdateEvent<TestProjection>(
-            _mockNostify.Object, events, new List<string>());
+            _mockNostify.Object, events, new List<string>(), new RetryOptions());
 
         // Assert - ReadItemAsync called only once (defaults don't retry on NotFound)
         mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
@@ -1214,8 +1217,9 @@ public class DefaultEventHandlersTests
             .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
             .ReturnsAsync(mockContainer.Object);
 
+        // Pass explicit RetryOptions matching the defaults (RetryWhenNotFound=false)
         await DefaultEventHandlers.HandleAggregateBulkUpdateEvent<TestAggregate>(
-            _mockNostify.Object, events, new List<string>());
+            _mockNostify.Object, events, new List<string>(), new RetryOptions());
 
         mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
@@ -1427,9 +1431,9 @@ public class DefaultEventHandlersTests
             .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
             .ReturnsAsync(mockContainer.Object);
 
-        // Act
+        // Act - use explicit RetryOptions matching the defaults (RetryWhenNotFound=false)
         int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
-            _mockNostify.Object, events, new List<string>());
+            _mockNostify.Object, events, new List<string>(), new RetryOptions());
 
         mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
@@ -1573,9 +1577,9 @@ public class DefaultEventHandlersTests
             .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
             .ReturnsAsync(mockContainer.Object);
 
-        // Act
+        // Act - use explicit RetryOptions matching the defaults (RetryWhenNotFound=false)
         int result = await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<TestAggregate>(
-            _mockNostify.Object, events, new List<string>());
+            _mockNostify.Object, events, new List<string>(), new RetryOptions());
 
         mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
             It.IsAny<string>(), It.IsAny<PartitionKey>(),

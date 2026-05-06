@@ -36,6 +36,8 @@ public class Nostify : INostify, IDisposable
     public IHttpClientFactory HttpClientFactory { get; }
     /// <inheritdoc />
     public ILogger? Logger { get; }
+    /// <inheritdoc />
+    public RetryOptions DefaultRetryOptions { get; }
 
     private readonly ConsumerConfig? _baseConsumerConfig;
     private readonly ConcurrentDictionary<string, IConsumer<string, string>> _kafkaConsumers = new();
@@ -48,7 +50,7 @@ public class Nostify : INostify, IDisposable
     {
     }
 
-    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null)
+    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null, RetryOptions? defaultRetryOptions = null)
     {
         Repository = repository;
         DefaultPartitionKeyPath = defaultPartitionKeyPath;
@@ -58,6 +60,7 @@ public class Nostify : INostify, IDisposable
         HttpClientFactory = httpClientFactory;
         Logger = logger;
         _baseConsumerConfig = baseConsumerConfig;
+        DefaultRetryOptions = defaultRetryOptions ?? new RetryOptions();
     }
 
     ///<summary>
@@ -90,6 +93,7 @@ public class Nostify : INostify, IDisposable
             producerConfig.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
         }
         KafkaProducer = new ProducerBuilder<string, string>(producerConfig).Build();
+        DefaultRetryOptions = new RetryOptions();
     }
 
     /// <inheritdoc />

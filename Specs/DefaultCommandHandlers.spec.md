@@ -9,8 +9,9 @@
 ## Key Design Principles
 
 1. **All handlers return meaningful values** — Single-event handlers return the `Guid` of the affected aggregate root; bulk handlers return `int` (count of events processed).
-2. **Dual overloads for retry** — Each bulk handler has two overloads: one accepting `bool allowRetry` (backwards-compatible, with defaults for `userId`, `partitionKey`, `batchSize`) and one accepting `RetryOptions?` (configurable retry, requires explicit `userId`, `partitionKey`, `batchSize` to avoid ambiguity). The `bool` overload creates default `RetryOptions` when `true` and delegates to the `RetryOptions?` overload.
-3. **Static methods** — All handlers are `public async static`, designed to be called directly without instantiation.
+2. **`allowRetry` defaults to `true`** — All bulk handlers have a `bool allowRetry = true` overload. When `allowRetry = true`, the handler uses `nostify.DefaultRetryOptions` (from `NostifyFactory.WithCosmos`). A developer must explicitly pass `allowRetry: false` or supply `null` to the `RetryOptions?` overload to disable retry.
+3. **Dual overloads for retry** — Each bulk handler has two overloads: one accepting `bool allowRetry` (simple, defaults to `true`) and one accepting `RetryOptions?` (configurable retry, requires explicit `userId`, `partitionKey`, `batchSize` to avoid ambiguity). The `bool` overload delegates to the `RetryOptions?` overload passing `nostify.DefaultRetryOptions` when true or `null` when false.
+4. **Static methods** — All handlers are `public async static`, designed to be called directly without instantiation.
 
 ## Method Groups
 
@@ -74,7 +75,7 @@ The following non-`Async` method names are preserved as `[Obsolete]` wrappers th
 | `userId` | `Guid` | `default` | User identifier for the operations |
 | `partitionKey` | `Guid` | `default` | Tenant identifier for the operations |
 | `batchSize` | `int` | `100` | Number of events per batch for bulk operations |
-| `allowRetry` | `bool` | `false` | Whether to allow retries (delegates to default `RetryOptions`) |
+| `allowRetry` | `bool` | `true` | When `true`, uses `nostify.DefaultRetryOptions` for retry. Set to `false` to disable retry entirely. |
 | `retryOptions` | `RetryOptions?` | — (required) | Configurable retry options for per-item retry behavior. No default to avoid ambiguity with `bool allowRetry` overload. |
 | `publishErrorEvents` | `bool` | `false` | Whether to publish error events for failed operations |
 

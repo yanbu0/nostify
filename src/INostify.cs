@@ -77,6 +77,13 @@ public interface INostify
     ILogger? Logger { get; }
 
     ///<summary>
+    /// Default retry options applied by default handlers when no explicit <see cref="RetryOptions"/> are provided
+    /// and <c>allowRetry</c> is <c>true</c>. Configured via <see cref="NostifyFactory.WithCosmos"/> or defaults
+    /// to <c>new RetryOptions()</c> (3 retries, 1 s delay, exponential backoff).
+    ///</summary>
+    RetryOptions DefaultRetryOptions { get; }
+
+    ///<summary>
     ///Writes event to event store
     ///</summary>        
     ///<param name="eventToPersist">Event to apply and persist in event store</param>
