@@ -63,6 +63,24 @@ public static async Task<List<P>> MultiApplyAndPersistAsync<P>(
 
 Delegates to `INostify.MultiApplyAndPersistAsync`. Applies an event to all listed projection IDs in batches, with optional per-item retry.
 
+### BulkDeleteFromEventsAsync / BulkDeleteAsync
+
+```csharp
+public static async Task<int> BulkDeleteFromEventsAsync<P>(
+    this Container containerToDeleteFrom,
+    string[] events,
+    RetryOptions? retryOptions = null) where P : NostifyObject
+```
+
+Bulk delete operations are implemented as Cosmos patch operations that set `ttl = 1` on matching documents.
+
+- `BulkDeleteFromEventsAsync` resolves target IDs from Kafka trigger events and delegates to `BulkDeleteAsync`.
+- `BulkDeleteAsync` (GUID list and object list overloads) performs batched patch operations and returns the number of successful patches.
+- When `retryOptions` is provided, each patch retries on transient failures:
+  - always retries `429 TooManyRequests` (using `RetryAfter` when present),
+  - retries `404 NotFound` only when `RetryOptions.RetryWhenNotFound` is `true`,
+  - logs retry attempts through `RetryOptions.LogRetry`.
+
 ## 429 TooManyRequests Propagation
 
 `ApplyAndPersistAsync` is designed to be called through `RetryableContainer`, which wraps it in `ExecuteWithRetryAsync`. For retry to work, 429 `CosmosException`s must escape as raw `CosmosException`s — not wrapped in `NostifyException`.

@@ -67,9 +67,10 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete items from</param>
     ///<param name="events">Array of strings from KafkaTrigger</param>
+    ///<param name="retryOptions">Optional retry options for transient patch failures. When null, no retry is applied.</param>
     ///<typeparam name="P">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> BulkDeleteFromEventsAsync<P>(this Container containerToDeleteFrom, string[] events) where P : NostifyObject
+    public static async Task<int> BulkDeleteFromEventsAsync<P>(this Container containerToDeleteFrom, string[] events, RetryOptions? retryOptions = null) where P : NostifyObject
     {
         List<Guid> projectionIdsToDelete = events
             .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
@@ -77,7 +78,7 @@ public static class ContainerExtensions
             .Select(e => e!.aggregateRootId)
             .ToList();
         List<P> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<P>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
-        return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete);
+        return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete, retryOptions);
     }
 
     ///<summary>
@@ -85,12 +86,13 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete items from</param>
     ///<param name="projectionIdsToDelete">List of projection ids to delete</param>
+    ///<param name="retryOptions">Optional retry options for transient patch failures. When null, no retry is applied.</param>
     ///<typeparam name="P">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> BulkDeleteAsync<P>(this Container containerToDeleteFrom, List<Guid> projectionIdsToDelete) where P : NostifyObject
+    public static async Task<int> BulkDeleteAsync<P>(this Container containerToDeleteFrom, List<Guid> projectionIdsToDelete, RetryOptions? retryOptions = null) where P : NostifyObject
     {
         List<P> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<P>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
-        return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete);
+        return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete, retryOptions);
     }
 
     ///<summary>
@@ -98,9 +100,10 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="containerToDeleteFrom">Container to delete items from</param>
     ///<param name="projectionsToDelete">List of projections to delete</param>
+    ///<param name="retryOptions">Optional retry options for transient patch failures. When null, no retry is applied.</param>
     ///<typeparam name="P">Type of Projection to delete</typeparam>
     ///<returns>Number of items deleted</returns>
-    public static async Task<int> BulkDeleteAsync<P>(this Container containerToDeleteFrom, List<P> projectionsToDelete) where P : NostifyObject
+    public static async Task<int> BulkDeleteAsync<P>(this Container containerToDeleteFrom, List<P> projectionsToDelete, RetryOptions? retryOptions = null) where P : NostifyObject
     {
         containerToDeleteFrom.ValidateBulkEnabled(true);
         var containerResponse = await containerToDeleteFrom.ReadContainerAsync();
@@ -144,7 +147,14 @@ public static class ContainerExtensions
                     {
                         throw new NostifyException($"Partition key value is null or empty for property '{partitionKeyPath.Trim('/')}' on item of type '{item.GetType().Name}'.");
                     }
-                    tasks.Add(containerToDeleteFrom.PatchItemAsync<P>(item.id.ToString(), pk.ToPartitionKey(), patchOperations));
+                    if (retryOptions == null)
+                    {
+                        tasks.Add(containerToDeleteFrom.PatchItemAsync<P>(item.id.ToString(), pk.ToPartitionKey(), patchOperations));
+                    }
+                    else
+                    {
+                        tasks.Add(PatchItemWithRetryAsync<P>(containerToDeleteFrom, item.id.ToString(), pk.ToPartitionKey(), patchOperations, retryOptions));
+                    }
                 }
                 // Wait for all tasks to complete
                 await Task.WhenAll(tasks);
@@ -158,6 +168,46 @@ public static class ContainerExtensions
         }
 
         return totalUpdated;
+    }
+
+    private static async Task PatchItemWithRetryAsync<T>(
+        Container container,
+        string id,
+        PartitionKey partitionKey,
+        IReadOnlyList<PatchOperation> patchOperations,
+        RetryOptions retryOptions) where T : NostifyObject
+    {
+        int attempt = 0;
+        const int minDelayMs = 100;
+        const int maxJitterMultiplier = 3;
+
+        while (true)
+        {
+            try
+            {
+                await container.PatchItemAsync<T>(id, partitionKey, patchOperations);
+                return;
+            }
+            catch (CosmosException ex) when (
+                ex.StatusCode == HttpStatusCode.TooManyRequests ||
+                (ex.StatusCode == HttpStatusCode.NotFound && retryOptions.RetryWhenNotFound))
+            {
+                if (attempt >= retryOptions.MaxRetries)
+                {
+                    retryOptions.LogRetry($"Bulk delete patch exhausted retries for id '{id}' with status {(int)ex.StatusCode} ({ex.StatusCode}).");
+                    throw;
+                }
+
+                double baseDelayMs = ex.StatusCode == HttpStatusCode.TooManyRequests && ex.RetryAfter.HasValue && ex.RetryAfter.Value.TotalMilliseconds > 0
+                    ? ex.RetryAfter.Value.TotalMilliseconds
+                    : Math.Max(retryOptions.Delay.TotalMilliseconds, minDelayMs);
+                TimeSpan delay = retryOptions.GetDelayForAttempt(attempt, baseDelayMs, maxJitterMultiplier);
+
+                retryOptions.LogRetry($"Bulk delete patch retry for id '{id}' after {(int)ex.StatusCode} ({ex.StatusCode}) (attempt {attempt + 1}/{retryOptions.MaxRetries}) in {delay.TotalMilliseconds}ms.");
+                await Task.Delay(delay);
+                attempt++;
+            }
+        }
     }
 
     ///<summary>
