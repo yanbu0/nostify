@@ -148,11 +148,13 @@ public class RetryableContainer : IRetryableContainer
                 // This will throw if we've exhausted retries, which is appropriate since 429 is always transient and we want to bubble up the exception after max retries.
                 await HandleTooManyRequestsAsync(ce, attempt, $"CreateItem<{typeof(T).Name}>", cancellationToken);
             }
-            catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict && attempt > 0)
+            catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.Conflict)
             {
-                // The item was already committed in a previous attempt before the 429 was returned.
-                // Treat as idempotent success rather than a real conflict error.
-                Options.LogRetry($"CreateItem<{typeof(T).Name}>: 409 Conflict on retry attempt {attempt + 1}, treating as idempotent success");
+                // 409 Conflict means the item already exists. This can happen either because:
+                //   (a) the item was committed in a previous attempt within this call before a 429 was returned, or
+                //   (b) Kafka at-least-once delivery re-delivered the event to a fresh function invocation.
+                // In both cases, treat as idempotent success — the desired state already exists in Cosmos.
+                Options.LogRetry($"CreateItem<{typeof(T).Name}>: 409 Conflict, treating as idempotent success (item already exists, likely duplicate delivery)");
                 return default;
             }
             catch (Exception ex)

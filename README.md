@@ -74,6 +74,9 @@
 
 ### Updates
 
+- 4.6.6
+    - **409 Conflict Always Treated as Idempotent Success**: `RetryableContainer.CreateItemAsync` no longer guards 409 handling with `attempt > 0`. All 409 Conflict responses are now treated as idempotent success, covering Kafka at-least-once redelivery where duplicate events arrive in fresh function invocations (where `attempt` is always 0). `ContainerExtensions.DoBulkCreateAsync` also gained a 409 catch on the no-retry path for the same reason.
+
 - 4.6.5
     - **PersistEventAsync Undeliverable Tracking**: `Nostify.PersistEventAsync` now wraps the Cosmos write in a try/catch. On any failure, it logs the error via `Logger.LogError` and writes the event to the undeliverable container via `HandleUndeliverableAsync` before re-throwing, ensuring no events are silently lost when single-event persistence fails.
     - **Bulk Update/Delete Null Body Handling**: `DefaultCommandHandler.HandleBulkUpdateAsync` and `HandleBulkDeleteAsync` (HttpRequestData overloads) now throw `NostifyException` when the request body deserializes to null (e.g., a literal `null` JSON body), instead of silently returning 0 with a 200 response.

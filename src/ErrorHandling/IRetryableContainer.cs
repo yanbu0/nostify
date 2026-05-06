@@ -85,16 +85,17 @@ public interface IRetryableContainer
 
     /// <summary>
     /// Creates an item with automatic 429 retry. Does NOT retry on 404.
-    /// If a 409 Conflict is returned on a retry attempt (attempt &gt; 0), the item is assumed to have
-    /// been committed before the 429 throttle was applied and the call returns <c>null</c> as an
-    /// idempotent success. A 409 on the first attempt (attempt == 0) is treated as an error.
+    /// A 409 Conflict is always treated as idempotent success (returns <c>null</c>), whether it occurs
+    /// on the first attempt or a retry attempt. This handles both the case where an item was committed
+    /// before a 429 throttle was applied and the case where Kafka at-least-once delivery re-delivers
+    /// the same event to a fresh function invocation.
     /// </summary>
     /// <typeparam name="T">The type of item to create.</typeparam>
     /// <param name="item">The item to create.</param>
     /// <param name="partitionKey">The partition key.</param>
     /// <param name="onException">Callback invoked when a non-transient exception occurs.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The item response, or <c>null</c> when the item was already created on a previous attempt (idempotent success).</returns>
+    /// <returns>The item response, or <c>null</c> when the item already existed (idempotent success).</returns>
     Task<ItemResponse<T>?> CreateItemAsync<T>(
         T item,
         PartitionKey? partitionKey,
@@ -104,15 +105,16 @@ public interface IRetryableContainer
     /// <summary>
     /// Creates an item with automatic 429 retry. The partition key is inferred from the item
     /// by the Cosmos DB SDK based on the container's partition key path. Does NOT retry on 404.
-    /// If a 409 Conflict is returned on a retry attempt (attempt &gt; 0), the item is assumed to have
-    /// been committed before the 429 throttle was applied and the call returns <c>null</c> as an
-    /// idempotent success. A 409 on the first attempt (attempt == 0) is treated as an error.
+    /// A 409 Conflict is always treated as idempotent success (returns <c>null</c>), whether it occurs
+    /// on the first attempt or a retry attempt. This handles both the case where an item was committed
+    /// before a 429 throttle was applied and the case where Kafka at-least-once delivery re-delivers
+    /// the same event to a fresh function invocation.
     /// </summary>
     /// <typeparam name="T">The type of item to create.</typeparam>
     /// <param name="item">The item to create.</param>
     /// <param name="onException">Callback invoked when a non-transient exception occurs.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The item response, or <c>null</c> when the item was already created on a previous attempt (idempotent success).</returns>
+    /// <returns>The item response, or <c>null</c> when the item already existed (idempotent success).</returns>
     Task<ItemResponse<T>?> CreateItemAsync<T>(
         T item,
         Func<Exception, Task>? onException = null,
