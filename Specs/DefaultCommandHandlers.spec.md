@@ -9,7 +9,7 @@
 ## Key Design Principles
 
 1. **All handlers return meaningful values** — Single-event handlers return the `Guid` of the affected aggregate root; bulk handlers return `int` (count of events processed).
-2. **`allowRetry` defaults to `true`** — All bulk handlers have a `bool allowRetry = true` overload. When `allowRetry = true`, the handler uses `nostify.DefaultRetryOptions` (from `NostifyFactory.WithCosmos`). A developer must explicitly pass `allowRetry: false` or supply `null` to the `RetryOptions?` overload to disable retry.
+2. **`allowRetry` defaults to `true`** — All handlers expose retry control. Single-event handlers call `INostify.PersistEventAsync(IEvent, RetryOptions?)`; bulk handlers have a `bool allowRetry = true` overload that uses `nostify.DefaultRetryOptions` (from `NostifyFactory.WithCosmos`). A developer must explicitly pass `allowRetry: false` or supply `null` to the `RetryOptions?` overload to disable retry.
 3. **Dual overloads for retry** — Each bulk handler has two overloads: one accepting `bool allowRetry` (simple, defaults to `true`) and one accepting `RetryOptions?` (configurable retry, requires explicit `userId`, `partitionKey`, `batchSize` to avoid ambiguity). The `bool` overload delegates to the `RetryOptions?` overload passing `nostify.DefaultRetryOptions` when true or `null` when false.
 4. **Static methods** — All handlers are `public async static`, designed to be called directly without instantiation.
 
@@ -81,14 +81,14 @@ The following non-`Async` method names are preserved as `[Obsolete]` wrappers th
 
 ## Key Relationships
 
-- **`INostify`** — Used for event persistence via `PersistEventAsync` (single) and `BulkPersistEventAsync` (bulk). Both `bool allowRetry` and `RetryOptions?` overloads are available on `INostify`.
+- **`INostify`** — Used for event persistence via `PersistEventAsync(IEvent, RetryOptions?)` (single) and `BulkPersistEventAsync` (bulk). Both `bool allowRetry` and `RetryOptions?` retry controls are available through the handler surface.
 - **`EventFactory`** — Used to create events from dynamic payloads (`Create<T>`) or null-payload events for deletes (`CreateNullPayloadEvent`).
 - **`HttpRequestData`** — Request body deserialized as `List<dynamic>` (create/update) or `List<string>` (delete by ID strings).
 - **`RetryOptions`** — When provided to a bulk handler, passed directly to `INostify.BulkPersistEventAsync(RetryOptions?)` for per-item retry via `RetryableContainer`.
 
 ## Error Handling
 
-- **Single handlers**: Exceptions propagate to the caller. `PersistEventAsync` on the underlying `Nostify` implementation logs the error and writes the event to the undeliverable container via `HandleUndeliverableAsync` before re-throwing.
+- **Single handlers**: Exceptions propagate to the caller. `PersistEventAsync(IEvent, RetryOptions?)` on the underlying `Nostify` implementation logs the error and writes the event to the undeliverable container via `HandleUndeliverableAsync` before re-throwing. Passing `null` disables retry entirely for the single-event handler path.
 - **Bulk handlers**: Error handling is delegated to `BulkPersistEventAsync`, which writes failed events to the undeliverable events container and optionally publishes error events to Kafka.
 - **Validation**: `HandleBulkUpdate` throws `ArgumentException` if any object lacks a valid `id`. `HandleBulkDelete` (from request) throws `ArgumentException` for unparseable GUIDs.
 - **Null body after deserialization**: `HandleBulkUpdateAsync` and `HandleBulkDeleteAsync` (HttpRequestData overloads) throw `NostifyException` when the request body deserializes to null (for example, a literal JSON `null` body), preventing silent no-op responses. Malformed JSON fails earlier during deserialization and is not converted into `NostifyException` by these handlers.

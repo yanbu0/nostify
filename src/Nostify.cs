@@ -167,12 +167,27 @@ public class Nostify : INostify, IDisposable
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
         var retryOptions = new RetryOptions { Logger = Logger, LogRetries = Logger != null };
+        await PersistEventAsync(eventToPersist, retryOptions);
+    }
+
+    /// <inheritdoc />
+    public async Task PersistEventAsync(IEvent eventToPersist, RetryOptions? retryOptions)
+    {
         try
         {
             var eventContainer = await GetEventStoreContainerAsync();
-            await eventContainer
-                .WithRetry(retryOptions)
-                .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+            if (retryOptions != null)
+            {
+                retryOptions.Logger ??= Logger;
+                retryOptions.LogRetries |= Logger != null;
+                await eventContainer
+                    .WithRetry(retryOptions)
+                    .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+            }
+            else
+            {
+                await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+            }
         }
         catch (Exception ex)
         {
@@ -977,5 +992,4 @@ public class Nostify : INostify, IDisposable
     }
 
 }
-
 

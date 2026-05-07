@@ -89,6 +89,14 @@ public interface INostify
     ///<param name="eventToPersist">Event to apply and persist in event store</param>
     public Task PersistEventAsync(IEvent eventToPersist);
 
+    ///<summary>
+    ///Writes event to event store with optional retry configuration.
+    ///When <paramref name="retryOptions"/> is null, no retry is performed.
+    ///</summary>
+    ///<param name="eventToPersist">Event to apply and persist in event store</param>
+    ///<param name="retryOptions">Optional. Retry options for configuring single-event persistence retry behavior. When provided, the event write uses RetryableContainer with retry logic.</param>
+    public Task PersistEventAsync(IEvent eventToPersist, RetryOptions? retryOptions);
+
     /// <summary>
     /// Applies and persists an event to a list of projections in the specified container.
     /// </summary>

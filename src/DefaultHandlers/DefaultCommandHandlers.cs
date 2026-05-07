@@ -58,10 +58,7 @@ public static class DefaultCommandHandler
     {
         // Create and persist the event using the EventFactory, with validation enabled
         IEvent pe = new EventFactory().Create<T>(command, aggregateRootId, patchObj, userId, partitionKey);
-        if (allowRetry)
-            await nostify.BulkPersistEventAsync(new List<IEvent> { pe }, 1, nostify.DefaultRetryOptions, false);
-        else
-            await nostify.PersistEventAsync(pe);
+        await nostify.PersistEventAsync(pe, allowRetry ? nostify.DefaultRetryOptions : null);
 
         return aggregateRootId;
     }
@@ -109,10 +106,7 @@ public static class DefaultCommandHandler
         
         // Create and persist the event using the EventFactory, with validation enabled
         IEvent pe = new EventFactory().Create<T>(command, aggRootId, dynamicPostObj, userId, partitionKey);
-        if (allowRetry)
-            await nostify.BulkPersistEventAsync(new List<IEvent> { pe }, 1, nostify.DefaultRetryOptions, false);
-        else
-            await nostify.PersistEventAsync(pe);
+        await nostify.PersistEventAsync(pe, allowRetry ? nostify.DefaultRetryOptions : null);
 
         return aggRootId;
     }
@@ -160,10 +154,7 @@ public static class DefaultCommandHandler
     {
         // Create and persist the event using the EventFactory
         IEvent pe = new EventFactory().CreateNullPayloadEvent(command, aggregateRootId, userId, partitionKey);
-        if (allowRetry)
-            await nostify.BulkPersistEventAsync(new List<IEvent> { pe }, 1, nostify.DefaultRetryOptions, false);
-        else
-            await nostify.PersistEventAsync(pe);
+        await nostify.PersistEventAsync(pe, allowRetry ? nostify.DefaultRetryOptions : null);
 
         return aggregateRootId;
     }

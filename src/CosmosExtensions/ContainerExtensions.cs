@@ -179,7 +179,7 @@ public static class ContainerExtensions
     {
         int attempt = 0;
         const int minDelayMs = 100;
-        const int maxJitterMultiplier = 3;
+        const int delayMultiplier = 3;
 
         while (true)
         {
@@ -201,7 +201,7 @@ public static class ContainerExtensions
                 double baseDelayMs = ex.StatusCode == HttpStatusCode.TooManyRequests && ex.RetryAfter.HasValue && ex.RetryAfter.Value.TotalMilliseconds > 0
                     ? ex.RetryAfter.Value.TotalMilliseconds
                     : Math.Max(retryOptions.Delay.TotalMilliseconds, minDelayMs);
-                TimeSpan delay = retryOptions.GetDelayForAttempt(attempt, baseDelayMs, maxJitterMultiplier);
+                TimeSpan delay = retryOptions.GetDelayForAttempt(attempt, baseDelayMs, delayMultiplier);
 
                 retryOptions.LogRetry($"Bulk delete patch retry for id '{id}' after {(int)ex.StatusCode} ({ex.StatusCode}) (attempt {attempt + 1}/{retryOptions.MaxRetries}) in {delay.TotalMilliseconds}ms.");
                 await Task.Delay(delay);

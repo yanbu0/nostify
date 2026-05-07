@@ -92,6 +92,13 @@ public interface INostify
 | `BulkPersistEventAsync` | `Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)` | Persists all events in bulk. The `bool allowRetry` overload converts to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions` overload. |
 | `BulkPersistEventAsync` | `Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false)` | Persists all events in bulk with configurable retry. `retryOptions` and `batchSize` are required (no defaults) to avoid ambiguity with the `bool allowRetry` overload. |
 
+### Single Event Persistence
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `PersistEventAsync` | `Task PersistEventAsync(IEvent eventToPersist)` | Persists one event using the legacy default retry policy (`new RetryOptions()` plus configured logger wiring). |
+| `PersistEventAsync` | `Task PersistEventAsync(IEvent eventToPersist, RetryOptions? retryOptions)` | Persists one event with optional configurable retry. When `retryOptions` is `null`, writes directly to Cosmos without retry; when provided, uses `RetryableContainer` and still re-throws failures after undeliverable handling. |
+
 ### Saga Operations
 
 | Method | Signature | Description |
