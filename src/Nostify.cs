@@ -201,7 +201,7 @@ public class Nostify : INostify, IDisposable
             {
                 // Log but do not rethrow: the original persistence exception is re-thrown below,
                 // ensuring the HTTP caller receives the actual failure, not a secondary write error.
-                Logger?.LogError(undeliverableEx, "Failed to write undeliverable event in PersistEventAsync");
+                Logger?.LogError(undeliverableEx, $"Failed to write undeliverable event in {nameof(PersistEventAsync)}. Original event: {JsonConvert.SerializeObject(eventToPersist)}");
             }
             throw;
         }
