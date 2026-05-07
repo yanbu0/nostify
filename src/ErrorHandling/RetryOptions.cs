@@ -110,14 +110,15 @@ public class RetryOptions
     /// </summary>
     /// <param name="other">The existing retry options to copy.</param>
     public RetryOptions(RetryOptions other)
-        : this(
-            maxRetries: other?.MaxRetries ?? throw new ArgumentNullException(nameof(other)),
-            delay: other.Delay,
-            retryWhenNotFound: other.RetryWhenNotFound,
-            delayMultiplier: other.DelayMultiplier,
-            logRetries: other.LogRetries,
-            logger: other.Logger)
     {
+        ArgumentNullException.ThrowIfNull(other);
+
+        MaxRetries = other.MaxRetries;
+        Delay = other.Delay;
+        RetryWhenNotFound = other.RetryWhenNotFound;
+        DelayMultiplier = other.DelayMultiplier;
+        LogRetries = other.LogRetries;
+        Logger = other.Logger;
     }
 
     /// <summary>
