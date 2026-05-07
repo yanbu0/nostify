@@ -19,6 +19,33 @@ public static class DefaultEventHandlers
 {
     #region Async Methods
 
+    private static RetryOptions? ResolveRetryOptions(INostify nostify, RetryOptions? retryOptions, bool allowRetry = true)
+    {
+        if (!allowRetry)
+        {
+            return null;
+        }
+
+        RetryOptions? source = retryOptions ?? nostify.DefaultRetryOptions;
+        if (source == null)
+        {
+            return null;
+        }
+
+        return new RetryOptions(
+            maxRetries: source.MaxRetries,
+            delay: source.Delay,
+            retryWhenNotFound: source.RetryWhenNotFound,
+            delayMultiplier: source.DelayMultiplier,
+            logRetries: true,
+            logger: source.Logger ?? nostify.Logger);
+    }
+
+    private static void LogWarning(INostify nostify, string message)
+    {
+        nostify.Logger?.LogWarning(message);
+    }
+
     /// <summary>
     /// Default handler for the Create, Update, Delete events by applying the event to the current state projection of the specified aggregate type.
     /// </summary>
@@ -36,13 +63,7 @@ public static class DefaultEventHandlers
         Event newEvent = triggerEvent.GetEvent(eventTypeFilter) ?? throw new NostifyException("No event found in trigger event for the specified event type filter");
         try
         {
-            RetryOptions? effectiveRetryOptions = allowRetry ? (retryOptions ?? nostify.DefaultRetryOptions) : null;
-            // Wire nostify.Logger into retryOptions if not already set
-            if (effectiveRetryOptions != null)
-            {
-                effectiveRetryOptions.Logger ??= nostify.Logger;
-                effectiveRetryOptions.LogRetries = true;
-            }
+            RetryOptions? effectiveRetryOptions = ResolveRetryOptions(nostify, retryOptions, allowRetry);
             // If idToApplyToPropertyName is provided, use it to determine the projectionBaseAggregateId
             Guid? projectionBaseAggregateId = null;
             if (!string.IsNullOrEmpty(idToApplyToPropertyName))
@@ -116,13 +137,7 @@ public static class DefaultEventHandlers
         {
             if (newEvent != null)
             {
-                RetryOptions? effectiveRetryOptions = allowRetry ? (retryOptions ?? nostify.DefaultRetryOptions) : null;
-                // Wire nostify.Logger into retryOptions if not already set
-                if (effectiveRetryOptions != null)
-                {
-                    effectiveRetryOptions.Logger ??= nostify.Logger;
-                    effectiveRetryOptions.LogRetries = true;
-                }
+                RetryOptions? effectiveRetryOptions = ResolveRetryOptions(nostify, retryOptions, allowRetry);
 
                 //Update projection container
                 Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
@@ -184,13 +199,7 @@ public static class DefaultEventHandlers
         Event newEvent = triggerEvent.GetEvent(eventTypeFilter) ?? throw new NostifyException("No event found in trigger event for the specified event type filter"); 
         try
         {
-            RetryOptions? effectiveRetryOptions = allowRetry ? (retryOptions ?? nostify.DefaultRetryOptions) : null;
-            // Wire nostify.Logger into retryOptions if not already set
-            if (effectiveRetryOptions != null)
-            {
-                effectiveRetryOptions.Logger ??= nostify.Logger;
-                effectiveRetryOptions.LogRetries = true;
-            }
+            RetryOptions? effectiveRetryOptions = ResolveRetryOptions(nostify, retryOptions, allowRetry);
             // If idToApplyToPropertyName is provided, use it to determine the projectionBaseAggregateId
             Guid? projectionBaseAggregateId = null;
             if (!string.IsNullOrEmpty(idToApplyToPropertyName))
@@ -303,12 +312,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully created records.</returns>
     public async static Task<int> HandleAggregateBulkCreateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
-        // Wire nostify.Logger into retryOptions if not already set
-        if (retryOptions != null)
-        {
-            retryOptions.Logger ??= nostify.Logger;
-            retryOptions.LogRetries = true;
-        }
+        retryOptions = ResolveRetryOptions(nostify, retryOptions);
         try
         {
             // Count events that match the filter (BulkCreate is all-or-nothing on success)
@@ -390,12 +394,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully created records.</returns>
     public async static Task<int> HandleProjectionBulkCreateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
-        // Wire nostify.Logger into retryOptions if not already set
-        if (retryOptions != null)
-        {
-            retryOptions.Logger ??= nostify.Logger;
-            retryOptions.LogRetries = true;
-        }
+        retryOptions = ResolveRetryOptions(nostify, retryOptions);
         try
         {
             // Count events that match the filter (BulkCreate is all-or-nothing on success)
@@ -481,12 +480,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully updated records.</returns>
     public async static Task<int> HandleAggregateBulkUpdateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
-        // Wire nostify.Logger into retryOptions if not already set
-        if (retryOptions != null)
-        {
-            retryOptions.Logger ??= nostify.Logger;
-            retryOptions.LogRetries = true;
-        }
+        retryOptions = ResolveRetryOptions(nostify, retryOptions);
         try
         {
             Container currentStateContainer = await nostify.GetBulkCurrentStateContainerAsync<T>();
@@ -624,12 +618,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully updated records.</returns>
     public async static Task<int> HandleProjectionBulkUpdateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
-        // Wire nostify.Logger into retryOptions if not already set
-        if (retryOptions != null)
-        {
-            retryOptions.Logger ??= nostify.Logger;
-            retryOptions.LogRetries = true;
-        }
+        retryOptions = ResolveRetryOptions(nostify, retryOptions);
         try
         {
             Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
@@ -672,18 +661,18 @@ public static class DefaultEventHandlers
                                     }
                                     else
                                     {
-                                        nostify.Logger.LogWarning($"Failed to update projection for event: {newEvent}");
+                                        LogWarning(nostify, $"Failed to update projection for event: {newEvent}");
                                     }
                                 }));
                         }
                         else
                         {
-                            nostify.Logger.LogWarning($"Unable to get event from trigger event: {triggerEvent}");
+                            LogWarning(nostify, $"Unable to get event from trigger event: {triggerEvent}");
                         }
                     }
                     else
                     {
-                        nostify.Logger.LogWarning($"Failed to deserialize event: {eventStr}");
+                        LogWarning(nostify, $"Failed to deserialize event: {eventStr}");
                     }
                 }
             }
@@ -706,18 +695,18 @@ public static class DefaultEventHandlers
                                     }
                                     else
                                     {
-                                        nostify.Logger.LogWarning($"Failed to update projection for event: {newEvent}");
+                                        LogWarning(nostify, $"Failed to update projection for event: {newEvent}");
                                     }
                                 }));
                         }
                         else
                         {
-                            nostify.Logger.LogWarning($"Unable to get event from trigger event: {triggerEvent}");
+                            LogWarning(nostify, $"Unable to get event from trigger event: {triggerEvent}");
                         }
                     }
                     else
                     {
-                        nostify.Logger.LogWarning($"Failed to deserialize event: {eventStr}");
+                        LogWarning(nostify, $"Failed to deserialize event: {eventStr}");
                     }
                 }
             }
@@ -793,11 +782,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully deleted records.</returns>
     public async static Task<int> HandleAggregateBulkDeleteEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
-        if (retryOptions != null)
-        {
-            retryOptions.Logger ??= nostify.Logger;
-            retryOptions.LogRetries = true;
-        }
+        retryOptions = ResolveRetryOptions(nostify, retryOptions);
 
         try
         {
@@ -870,11 +855,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully deleted records.</returns>
     public async static Task<int> HandleProjectionBulkDeleteEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, new()
     {
-        if (retryOptions != null)
-        {
-            retryOptions.Logger ??= nostify.Logger;
-            retryOptions.LogRetries = true;
-        }
+        retryOptions = ResolveRetryOptions(nostify, retryOptions);
 
         try
         {

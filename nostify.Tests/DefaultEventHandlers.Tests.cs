@@ -1693,5 +1693,83 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.InitAsync<TestProjection>(It.IsAny<List<TestProjection>>()), Times.Never);
     }
 
+    [Fact]
+    public async Task HandleAggregateEventAsync_DefaultRetryOptions_RemainsUnchanged()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var kafkaTriggerStr = CreateKafkaTriggerEventString(evt);
+        var triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(kafkaTriggerStr)!;
+        var defaultRetryOptions = new RetryOptions(
+            maxRetries: 4,
+            delay: TimeSpan.FromMilliseconds(10),
+            retryWhenNotFound: true,
+            delayMultiplier: 1.5,
+            logRetries: false,
+            logger: null);
+
+        var mockContainer = CreateSucceedingAggregateMockContainer(aggId);
+        _mockNostify
+            .Setup(n => n.DefaultRetryOptions)
+            .Returns(defaultRetryOptions);
+        _mockNostify
+            .Setup(n => n.GetCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var result = await DefaultEventHandlers.HandleAggregateEventAsync<TestAggregate>(
+            _mockNostify.Object, triggerEvent);
+
+        Assert.NotNull(result);
+        Assert.Null(defaultRetryOptions.Logger);
+        Assert.False(defaultRetryOptions.LogRetries);
+        Assert.Equal(1.5, defaultRetryOptions.DelayMultiplier);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkUpdateEventAsync_RetryPath_WithNullLogger_DoesNotThrowWhenEventFilteredOut()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        _mockNostify
+            .Setup(n => n.Logger)
+            .Returns((ILogger?)null);
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(new Mock<Container>().Object);
+
+        int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
+            _mockNostify.Object,
+            events,
+            new List<string> { "DifferentEventType" },
+            new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false));
+
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkUpdateEventAsync_NoRetryPath_WithNullLogger_DoesNotThrowWhenEventFilteredOut()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        _mockNostify
+            .Setup(n => n.Logger)
+            .Returns((ILogger?)null);
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(new Mock<Container>().Object);
+
+        int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
+            _mockNostify.Object,
+            events,
+            new List<string> { "DifferentEventType" },
+            retryOptions: null);
+
+        Assert.Equal(0, result);
+    }
+
     #endregion
 }

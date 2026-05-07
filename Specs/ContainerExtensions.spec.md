@@ -79,6 +79,7 @@ Bulk delete operations are implemented as Cosmos patch operations that set `ttl 
 - When `retryOptions` is provided, each patch retries on transient failures:
   - always retries `429 TooManyRequests` (using `RetryAfter` when present),
   - retries `404 NotFound` only when `RetryOptions.RetryWhenNotFound` is `true`,
+  - calculates backoff using the caller-configured `RetryOptions.DelayMultiplier`,
   - logs retry attempts through `RetryOptions.LogRetry`.
 
 ## 429 TooManyRequests Propagation
