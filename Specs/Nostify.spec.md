@@ -78,7 +78,7 @@ Persists a single event to the Cosmos DB event store with failure observability.
 
 Two overloads exist:
 
-- **`PersistEventAsync(IEvent)`** — Backwards-compatible overload. Creates a `RetryOptions` instance wired with the configured logger and delegates to `PersistEventAsync(IEvent, RetryOptions?)`.
+- **`PersistEventAsync(IEvent)`** — Backwards-compatible overload. Uses `DefaultRetryOptions` and delegates to `PersistEventAsync(IEvent, RetryOptions?)`.
 - **`PersistEventAsync(IEvent, RetryOptions?)`** — Primary implementation:
 
 ```csharp
@@ -264,7 +264,7 @@ Both `BulkApplyAndPersistAsync` and `BulkPersistEventAsync` follow the same dele
 
 Persists a single event to the event store:
 
-- **`PersistEventAsync(IEvent)`** — Backwards-compatible overload. Creates a default `RetryOptions` instance, wires logger settings, and delegates to `PersistEventAsync(IEvent, RetryOptions?)`.
+- **`PersistEventAsync(IEvent)`** — Backwards-compatible overload. Uses `DefaultRetryOptions` and delegates to `PersistEventAsync(IEvent, RetryOptions?)`, so retry is enabled by default.
 - **`PersistEventAsync(IEvent, RetryOptions?)`** — Primary implementation. When `retryOptions` is provided, wraps the event store container with `RetryableContainer` for retries while still re-throwing failures after writing to the undeliverable container. When `retryOptions` is `null`, writes directly with no retry.
 
 ## Event Store Container Configuration

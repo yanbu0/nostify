@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -265,6 +266,20 @@ public class DefaultCommandHandlersTests
             _fakeEventContainer = fakeEventContainer;
         }
 
+        /// <summary>Simulates a successful container resolution with a custom default retry policy.</summary>
+        public TestableNostify(Container fakeEventContainer, RetryOptions defaultRetryOptions)
+            : base(
+                new NostifyCosmosClient(),
+                "/tenantId",
+                Guid.Empty,
+                "localhost:9092",
+                new Mock<IProducer<string, string>>().Object,
+                new Mock<System.Net.Http.IHttpClientFactory>().Object,
+                defaultRetryOptions: defaultRetryOptions)
+        {
+            _fakeEventContainer = fakeEventContainer;
+        }
+
         /// <summary>Simulates a container-resolution failure (GetEventStoreContainerAsync throws).</summary>
         public TestableNostify(Exception containerException)
             : base(
@@ -418,6 +433,76 @@ public class DefaultCommandHandlersTests
         Assert.Equal(failure.Message, call.ErrorMessage);
         Assert.Same(testEvent, call.Event);
         Assert.Null(call.Command);
+    }
+
+    [Fact]
+    public async Task PersistEventAsync_DefaultOverload_UsesDefaultRetryOptions()
+    {
+        var failure = new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var nostify = new TestableNostify(
+            mockContainer.Object,
+            new RetryOptions(maxRetries: 0, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: true));
+
+        var testEvent = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = Guid.NewGuid(),
+            command = new NostifyCommand("TestCommand"),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Test" }
+        };
+
+        var thrown = await Assert.ThrowsAsync<CosmosException>(() =>
+            nostify.PersistEventAsync(testEvent));
+
+        Assert.Same(failure, thrown);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PersistEventAsync_WithNullRetryOptions_DoesNotRetry()
+    {
+        var failure = new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
+        var mockContainer = new Mock<Container>();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var nostify = new TestableNostify(
+            mockContainer.Object,
+            new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(1), retryWhenNotFound: true));
+
+        var testEvent = new Event
+        {
+            id = Guid.NewGuid(),
+            aggregateRootId = Guid.NewGuid(),
+            command = new NostifyCommand("TestCommand"),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { name = "Test" }
+        };
+
+        var thrown = await Assert.ThrowsAsync<CosmosException>(() =>
+            nostify.PersistEventAsync(testEvent, retryOptions: null));
+
+        Assert.Same(failure, thrown);
+        mockContainer.Verify(c => c.CreateItemAsync(
+            It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion

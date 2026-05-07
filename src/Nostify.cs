@@ -166,8 +166,7 @@ public class Nostify : INostify, IDisposable
     /// <inheritdoc />
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
-        var retryOptions = new RetryOptions { Logger = Logger, LogRetries = Logger != null };
-        await PersistEventAsync(eventToPersist, retryOptions);
+        await PersistEventAsync(eventToPersist, DefaultRetryOptions);
     }
 
     /// <inheritdoc />
