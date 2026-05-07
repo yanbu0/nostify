@@ -642,15 +642,15 @@ public static class DefaultEventHandlers
                                 {
                                     P? result = await retryable.ApplyAndPersistAsync<P>(newEvent,
                                         onExhausted: () => nostify.HandleUndeliverableAsync(
-                                            $"{nameof(HandleProjectionBulkUpdateEventAsync)}:{nameof(P)}:Retry", 
+                                            $"{nameof(HandleProjectionBulkUpdateEventAsync)}:{typeof(P).Name}:Retry", 
                                             $"Not found after {retryOptions.MaxRetries} retries",
                                             newEvent),
                                         onNotFound: () => nostify.HandleUndeliverableAsync(
-                                            $"{nameof(HandleProjectionBulkUpdateEventAsync)}:{nameof(P)}:NotFound", 
+                                            $"{nameof(HandleProjectionBulkUpdateEventAsync)}:{typeof(P).Name}:NotFound", 
                                             "Not found and RetryWhenNotFound is false",
                                             newEvent),
                                         onException: (ex) => nostify.HandleUndeliverableAsync(
-                                            $"{nameof(HandleProjectionBulkUpdateEventAsync)}:{nameof(P)}", 
+                                            $"{nameof(HandleProjectionBulkUpdateEventAsync)}:{typeof(P).Name}", 
                                             ex.Message ?? "Unknown error",
                                             newEvent)
                                     );
