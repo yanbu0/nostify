@@ -70,7 +70,7 @@ public class Program
 #endif
                                 .WithHttp(httpClientFactory)
                                 .WithLogger(logger)
-                                .Build<_ReplaceMe_>(verbose: true);
+                                .Build<_ReplaceMe_>(verbose: verboseNostifyBuild);
 
             services.AddSingleton<INostify>(nostify);
             services.AddLogging();
