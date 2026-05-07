@@ -166,29 +166,10 @@ public class Nostify : INostify, IDisposable
     /// <inheritdoc />
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
-        await PersistEventAsync(eventToPersist, DefaultRetryOptions);
-    }
-
-    /// <inheritdoc />
-    public async Task PersistEventAsync(IEvent eventToPersist, RetryOptions? retryOptions)
-    {
         try
         {
             var eventContainer = await GetEventStoreContainerAsync();
-            if (retryOptions != null)
-            {
-                var effectiveRetryOptions = new RetryOptions(retryOptions)
-                {
-                    Logger = retryOptions.Logger ?? Logger
-                };
-                await eventContainer
-                    .WithRetry(effectiveRetryOptions)
-                    .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
-            }
-            else
-            {
-                await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
-            }
+            await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
         }
         catch (Exception ex)
         {
