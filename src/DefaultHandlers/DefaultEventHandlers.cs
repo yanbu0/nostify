@@ -855,7 +855,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully deleted records.</returns>
     public async static Task<int> HandleProjectionBulkDeleteEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, new()
     {
-        retryOptions = ResolveRetryOptions(nostify, retryOptions);
+        retryOptions = ResolveRetryOptions(nostify, retryOptions, retryOptions != null);
 
         try
         {
