@@ -27,6 +27,9 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.HandleUndeliverableAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()))
             .Returns(Task.CompletedTask);
+        _mockNostify
+            .Setup(n => n.DefaultRetryOptions)
+            .Returns(new RetryOptions());
     }
 
     #region INostify Interface Contract - Both Overloads

@@ -21,6 +21,7 @@ public class AllowRetryDelegationTests
     public AllowRetryDelegationTests()
     {
         _mockNostify = new Mock<INostify>();
+        _mockNostify.Setup(n => n.DefaultRetryOptions).Returns(new RetryOptions());
     }
 
     #region Nostify.BulkPersistEventAsync

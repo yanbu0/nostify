@@ -5,12 +5,10 @@
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "FUNCTIONS_V2_COMPATIBILITY_MODE": true,
 #if (eventHubs)
-    // EventHubs Configuration - Azure Event Hubs messaging
     "EventHubConnectionString": "Endpoint=sb://your-eventhub-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=YOUR_SHARED_ACCESS_KEY",
     "EventHubName": "your-eventhub-name",
     "BrokerList": "your-eventhub-namespace.servicebus.windows.net:9093",
 #else
-    // Kafka Configuration - Apache Kafka messaging
     "BrokerList":"localhost:54165",
     "KafkaApiKey":"API_KEY_GOES_HERE",
     "KafkaApiSecret":"API_SECRET_GOES_HERE",
@@ -23,7 +21,10 @@
     "AzureSignalRConnectionString":"Endpoint=http://localhost;Port=8888;AccessKey=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGH;Version=1.0;",
     "AutoCreateContainers":true,
     "DefaultContainerThroughput":-1,
-    "VerboseNostifyBuild":true
+    "VerboseNostifyBuild":true,
+    "DefaultRetryMaxRetries": 3,
+    "DefaultRetryDelayMs": 1000,
+    "DefaultRetryWhenNotFound": false
   },
   "Host": {
     "CORS": "*"

@@ -60,6 +60,28 @@ public class RetryOptionsTests
         Assert.Null(options.Logger);
     }
 
+    [Fact]
+    public void CopyConstructor_CopiesAllProperties()
+    {
+        var logger = new Mock<ILogger>().Object;
+        var original = new RetryOptions(
+            maxRetries: 7,
+            delay: TimeSpan.FromMilliseconds(250),
+            retryWhenNotFound: true,
+            delayMultiplier: 1.25,
+            logRetries: true,
+            logger: logger);
+
+        var copy = new RetryOptions(original);
+
+        Assert.Equal(original.MaxRetries, copy.MaxRetries);
+        Assert.Equal(original.Delay, copy.Delay);
+        Assert.Equal(original.RetryWhenNotFound, copy.RetryWhenNotFound);
+        Assert.Equal(original.DelayMultiplier, copy.DelayMultiplier);
+        Assert.Equal(original.LogRetries, copy.LogRetries);
+        Assert.Same(original.Logger, copy.Logger);
+    }
+
     #endregion
 
     #region GetDelayForAttempt

@@ -238,6 +238,13 @@ Persists a list of events to the event store in configurable batches:
 
 Both `BulkApplyAndPersistAsync` and `BulkPersistEventAsync` follow the same delegation pattern: `bool` overloads create default `RetryOptions` and delegate to the `RetryOptions?` overload.
 
+### PersistEventAsync
+
+Persists a single event to the event store:
+
+- **`PersistEventAsync(IEvent)`** — Backwards-compatible overload. Creates a default `RetryOptions` instance, wires logger settings, and delegates to `PersistEventAsync(IEvent, RetryOptions?)`.
+- **`PersistEventAsync(IEvent, RetryOptions?)`** — Primary implementation. When `retryOptions` is provided, wraps the event store container with `RetryableContainer` for retries while still re-throwing failures after writing to the undeliverable container. When `retryOptions` is `null`, writes directly with no retry.
+
 ## Event Store Container Configuration
 
 The event store container is created with:
