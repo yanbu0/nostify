@@ -179,7 +179,6 @@ public class Nostify : INostify, IDisposable
             if (retryOptions != null)
             {
                 retryOptions.Logger ??= Logger;
-                retryOptions.LogRetries |= Logger != null;
                 await eventContainer
                     .WithRetry(retryOptions)
                     .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
@@ -992,4 +991,3 @@ public class Nostify : INostify, IDisposable
     }
 
 }
-

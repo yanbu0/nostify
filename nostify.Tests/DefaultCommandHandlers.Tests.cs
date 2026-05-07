@@ -214,7 +214,7 @@ public class DefaultCommandHandlersTests
     [Fact]
     public async Task HandleDeleteAsync_AllowRetryFalse_DisablesRetryForSingleEventPersist()
     {
-        RetryOptions? capturedRetryOptions = new RetryOptions();
+        RetryOptions? capturedRetryOptions = null;
         _mockNostify
             .Setup(n => n.PersistEventAsync(It.IsAny<IEvent>(), It.IsAny<RetryOptions?>()))
             .Callback<IEvent, RetryOptions?>((_, options) => capturedRetryOptions = options)
