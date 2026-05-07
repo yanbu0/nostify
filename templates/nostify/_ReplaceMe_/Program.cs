@@ -51,12 +51,11 @@ public class Program
                 retryWhenNotFound: config.GetValue<bool>("DefaultRetryWhenNotFound", false)
             );
 
-            services.AddSingleton<INostify>(sp =>
-            {
-                var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-                var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
+            var sp = services.BuildServiceProvider();
+            var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
 
-                return NostifyFactory.WithCosmos(
+            var nostify = NostifyFactory.WithCosmos(
                                     cosmosApiKey: apiKey,
                                     cosmosDbName: dbName,
                                     cosmosEndpointUri: endPoint,
@@ -72,7 +71,8 @@ public class Program
                                 .WithHttp(httpClientFactory)
                                 .WithLogger(logger)
                                 .Build<_ReplaceMe_>(verbose: true);
-            });
+
+            services.AddSingleton<INostify>(nostify);
             services.AddLogging();
         })
         .Build();
