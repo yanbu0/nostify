@@ -24,9 +24,10 @@ public static class DefaultCommandHandler
     /// <param name="context">The Azure Functions execution context</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <returns>The GUID of the aggregate root that was patched</returns>
     /// <exception cref="ArgumentException">Thrown when the provided ID is invalid</exception>
-    public async static Task<Guid> HandlePatchAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandlePatchAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, FunctionContext context, Guid userId = default, Guid partitionKey = default, bool allowRetry = true) where T : class, IAggregate
     {
         // Read the patch object from the request body
         dynamic patchObj = await req.Body.ReadFromRequestBodyAsync();
@@ -38,7 +39,7 @@ public static class DefaultCommandHandler
             throw new ArgumentException($"Invalid id: {unparsedGuid}");
         }
         
-        return await HandlePatchAsync<T>(nostify, command, (object)patchObj, aggRootId, userId, partitionKey);
+        return await HandlePatchAsync<T>(nostify, command, (object)patchObj, aggRootId, userId, partitionKey, allowRetry);
     }
 
     /// <summary>
@@ -51,12 +52,13 @@ public static class DefaultCommandHandler
     /// <param name="aggregateRootId">The GUID of the aggregate root to patch</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <returns>The GUID of the aggregate root that was patched</returns>
-    public async static Task<Guid> HandlePatchAsync<T>(INostify nostify, NostifyCommand command, object patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandlePatchAsync<T>(INostify nostify, NostifyCommand command, object patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default, bool allowRetry = true) where T : class, IAggregate
     {
         // Create and persist the event using the EventFactory, with validation enabled
         IEvent pe = new EventFactory().Create<T>(command, aggregateRootId, patchObj, userId, partitionKey);
-        await nostify.PersistEventAsync(pe);
+        await nostify.PersistEventAsync(pe, allowRetry ? nostify.DefaultRetryOptions : null);
 
         return aggregateRootId;
     }
@@ -71,13 +73,14 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
     /// <param name="partitionKeyName">The name of the partition key property</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <returns>The GUID of the aggregate root that was created</returns>
-    public async static Task<Guid> HandlePostAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
+    public async static Task<Guid> HandlePostAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId", bool allowRetry = true) where T : class, IAggregate
     {
         // Read the post object from the request body
         object postObj = await req.Body.ReadFromRequestBodyAsync(true);
         
-        return await HandlePostAsync<T>(nostify, command, postObj, userId, partitionKey, partitionKeyName);
+        return await HandlePostAsync<T>(nostify, command, postObj, userId, partitionKey, partitionKeyName, allowRetry);
     }
 
     /// <summary>
@@ -89,9 +92,10 @@ public static class DefaultCommandHandler
     /// <param name="postObj">The post data object</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
-    /// <param name="partitionKeyName"></param>
+    /// <param name="partitionKeyName">The name of the partition key property in the dynamic object. Defaults to <c>"tenantId"</c>.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <returns>The GUID of the aggregate root that was created</returns>
-    public async static Task<Guid> HandlePostAsync<T>(INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
+    public async static Task<Guid> HandlePostAsync<T>(INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId", bool allowRetry = true) where T : class, IAggregate
     {
         dynamic dynamicPostObj = postObj as dynamic;
         Guid aggRootId = Guid.NewGuid();
@@ -102,7 +106,7 @@ public static class DefaultCommandHandler
         
         // Create and persist the event using the EventFactory, with validation enabled
         IEvent pe = new EventFactory().Create<T>(command, aggRootId, dynamicPostObj, userId, partitionKey);
-        await nostify.PersistEventAsync(pe);
+        await nostify.PersistEventAsync(pe, allowRetry ? nostify.DefaultRetryOptions : null);
 
         return aggRootId;
     }
@@ -116,9 +120,10 @@ public static class DefaultCommandHandler
     /// <param name="context">The Azure Functions execution context</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <returns>The GUID of the aggregate root that was deleted</returns>
     /// <exception cref="ArgumentException">Thrown when the provided ID is invalid or missing</exception>
-    public async static Task<Guid> HandleDeleteAsync<T>(INostify nostify, NostifyCommand command, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandleDeleteAsync<T>(INostify nostify, NostifyCommand command, FunctionContext context, Guid userId = default, Guid partitionKey = default, bool allowRetry = true) where T : class, IAggregate
     {
         // Try to get the aggregate root ID from the binding data
         if (!context.BindingContext.BindingData.TryGetValue("id", out string idStr))
@@ -131,7 +136,7 @@ public static class DefaultCommandHandler
             throw new ArgumentException($"Invalid id: {idStr}");
         }
 
-        return await HandleDeleteAsync<T>(nostify, command, aggRootId, userId, partitionKey);
+        return await HandleDeleteAsync<T>(nostify, command, aggRootId, userId, partitionKey, allowRetry);
     }
 
     /// <summary>
@@ -143,13 +148,13 @@ public static class DefaultCommandHandler
     /// <param name="aggregateRootId">The GUID of the aggregate root to delete</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <returns>The GUID of the aggregate root that was deleted</returns>
-    public async static Task<Guid> HandleDeleteAsync<T>(INostify nostify, NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
+    public async static Task<Guid> HandleDeleteAsync<T>(INostify nostify, NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default, bool allowRetry = true) where T : class, IAggregate
     {
-
         // Create and persist the event using the EventFactory
         IEvent pe = new EventFactory().CreateNullPayloadEvent(command, aggregateRootId, userId, partitionKey);
-        await nostify.PersistEventAsync(pe);
+        await nostify.PersistEventAsync(pe, allowRetry ? nostify.DefaultRetryOptions : null);
 
         return aggregateRootId;
     }
@@ -164,14 +169,14 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">Whether to allow retries on failed operations (default: false)</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
-    public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
+    public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
         RetryOptions? retryOptions = allowRetry
-            ? new RetryOptions()
+            ? nostify.DefaultRetryOptions
             : null;
         return await HandleBulkCreateAsync<T>(nostify, command, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
     }
@@ -209,11 +214,11 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">Optional. Whether to allow per-item retry behavior. When true, each event is persisted using RetryableContainer with default retry logic.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
-    public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, NostifyCommand command, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, bool allowRetry = false, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
+    public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, NostifyCommand command, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, bool allowRetry = true, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
         return await HandleBulkCreateAsync<T>(nostify, 
                         command, 
@@ -221,7 +226,7 @@ public static class DefaultCommandHandler
                         userId, 
                         partitionKey, 
                         batchSize, 
-                        allowRetry ? new RetryOptions() : null, 
+                        allowRetry ? nostify.DefaultRetryOptions : null, 
                         publishErrorEvents, 
                         partitionKeyName);
     }
@@ -287,13 +292,13 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">Whether to allow retries on failed operations (default: false)</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were updated</returns>
-    public async static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false) where T : class, IAggregate
+    public async static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
     {
         RetryOptions? retryOptions = allowRetry
-            ? new RetryOptions()
+            ? nostify.DefaultRetryOptions
             : null;
         return await HandleBulkUpdateAsync<T>(nostify, command, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
     }
@@ -344,13 +349,13 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">Whether to allow retries on failed operations (default: false)</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
-    public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false) where T : class, IAggregate
+    public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
     {
         RetryOptions? retryOptions = allowRetry
-            ? new RetryOptions()
+            ? nostify.DefaultRetryOptions
             : null;
         return await HandleBulkDeleteAsync<T>(nostify, command, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
     }
@@ -417,13 +422,13 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">Whether to allow retries on failed operations (default: false)</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
-    public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, NostifyCommand command, List<Guid> aggregateRootIds, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false) where T : class, IAggregate
+    public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, NostifyCommand command, List<Guid> aggregateRootIds, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
     {
         RetryOptions? retryOptions = allowRetry
-            ? new RetryOptions()
+            ? nostify.DefaultRetryOptions
             : null;
         return await HandleBulkDeleteAsync<T>(nostify, command, aggregateRootIds, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
     }
@@ -461,32 +466,32 @@ public static class DefaultCommandHandler
     // Backward-compatible wrappers (obsolete — use the *Async equivalents)
     // ---------------------------------------------------------------------------
 
-    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, NostifyCommand, HttpRequestData, FunctionContext, Guid, Guid)"/>
+    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, NostifyCommand, HttpRequestData, FunctionContext, Guid, Guid, bool)"/>
     [Obsolete("Use HandlePatchAsync instead.")]
     public static Task<Guid> HandlePatch<T>(INostify nostify, NostifyCommand command, HttpRequestData req, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
         => HandlePatchAsync<T>(nostify, command, req, context, userId, partitionKey);
 
-    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, NostifyCommand, object, Guid, Guid, Guid)"/>
+    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, NostifyCommand, object, Guid, Guid, Guid, bool)"/>
     [Obsolete("Use HandlePatchAsync instead.")]
     public static Task<Guid> HandlePatch<T>(INostify nostify, NostifyCommand command, object patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
         => HandlePatchAsync<T>(nostify, command, patchObj, aggregateRootId, userId, partitionKey);
 
-    /// <inheritdoc cref="HandlePostAsync{T}(INostify, NostifyCommand, HttpRequestData, Guid, Guid, string)"/>
+    /// <inheritdoc cref="HandlePostAsync{T}(INostify, NostifyCommand, HttpRequestData, Guid, Guid, string, bool)"/>
     [Obsolete("Use HandlePostAsync instead.")]
     public static Task<Guid> HandlePost<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
         => HandlePostAsync<T>(nostify, command, req, userId, partitionKey, partitionKeyName);
 
-    /// <inheritdoc cref="HandlePostAsync{T}(INostify, NostifyCommand, object, Guid, Guid, string)"/>
+    /// <inheritdoc cref="HandlePostAsync{T}(INostify, NostifyCommand, object, Guid, Guid, string, bool)"/>
     [Obsolete("Use HandlePostAsync instead.")]
     public static Task<Guid> HandlePost<T>(INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
         => HandlePostAsync<T>(nostify, command, postObj, userId, partitionKey, partitionKeyName);
 
-    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, NostifyCommand, FunctionContext, Guid, Guid)"/>
+    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, NostifyCommand, FunctionContext, Guid, Guid, bool)"/>
     [Obsolete("Use HandleDeleteAsync instead.")]
     public static Task<Guid> HandleDelete<T>(INostify nostify, NostifyCommand command, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
         => HandleDeleteAsync<T>(nostify, command, context, userId, partitionKey);
 
-    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, NostifyCommand, Guid, Guid, Guid)"/>
+    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, NostifyCommand, Guid, Guid, Guid, bool)"/>
     [Obsolete("Use HandleDeleteAsync instead.")]
     public static Task<Guid> HandleDelete<T>(INostify nostify, NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
         => HandleDeleteAsync<T>(nostify, command, aggregateRootId, userId, partitionKey);

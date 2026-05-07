@@ -83,6 +83,13 @@ public class NostifyConfig
     public bool useGatewayConnection { get; set; }
 
     /// <summary>
+    /// The default retry options applied by default handlers when <c>allowRetry</c> is <c>true</c>
+    /// and no explicit <see cref="RetryOptions"/> are provided. Defaults to <c>new RetryOptions()</c>
+    /// (3 retries, 1 s delay, exponential backoff) when not set or when <c>null</c> is passed.
+    /// </summary>
+    public RetryOptions DefaultRetryOptions { get; set; } = new RetryOptions();
+
+    /// <summary>
     /// The IHttpClientFactory instance for creating HttpClient instances to make HTTP requests.
     /// </summary>
     public IHttpClientFactory? httpClientFactory { get; set; } = null;
@@ -111,16 +118,16 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Cosmos.
     /// </summary>
-    public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false)
+    public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false, RetryOptions? defaultRetryOptions = null)
     {
         NostifyConfig config = new NostifyConfig();
-        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers, containerThroughput, useGatewayConnection);
+        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers, containerThroughput, useGatewayConnection, defaultRetryOptions);
     }
 
     /// <summary>
     /// Creates a new instance of Nostify using Cosmos.
     /// </summary>
-    public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false)
+    public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false, RetryOptions? defaultRetryOptions = null)
     {
         config.cosmosApiKey = cosmosApiKey;
         config.cosmosDbName = cosmosDbName;
@@ -128,6 +135,7 @@ public static class NostifyFactory
         config.createContainers = createContainers ?? false;
         config.containerThroughput = containerThroughput;
         config.useGatewayConnection = useGatewayConnection;
+        config.DefaultRetryOptions = defaultRetryOptions ?? new RetryOptions();
         return config;
     }
 
@@ -323,7 +331,8 @@ public static class NostifyFactory
             KafkaProducer,
             HttpClientFactory,
             config.logger,
-            baseConsumerConfig
+            baseConsumerConfig,
+            config.DefaultRetryOptions
         );
     }
 

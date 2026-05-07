@@ -36,6 +36,8 @@ public class Nostify : INostify, IDisposable
     public IHttpClientFactory HttpClientFactory { get; }
     /// <inheritdoc />
     public ILogger? Logger { get; }
+    /// <inheritdoc />
+    public RetryOptions DefaultRetryOptions { get; }
 
     private readonly ConsumerConfig? _baseConsumerConfig;
     private readonly ConcurrentDictionary<string, IConsumer<string, string>> _kafkaConsumers = new();
@@ -48,7 +50,7 @@ public class Nostify : INostify, IDisposable
     {
     }
 
-    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null)
+    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null, RetryOptions? defaultRetryOptions = null)
     {
         Repository = repository;
         DefaultPartitionKeyPath = defaultPartitionKeyPath;
@@ -58,6 +60,7 @@ public class Nostify : INostify, IDisposable
         HttpClientFactory = httpClientFactory;
         Logger = logger;
         _baseConsumerConfig = baseConsumerConfig;
+        DefaultRetryOptions = defaultRetryOptions ?? new RetryOptions();
     }
 
     ///<summary>
@@ -90,6 +93,7 @@ public class Nostify : INostify, IDisposable
             producerConfig.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
         }
         KafkaProducer = new ProducerBuilder<string, string>(producerConfig).Build();
+        DefaultRetryOptions = new RetryOptions();
     }
 
     /// <inheritdoc />
@@ -162,13 +166,29 @@ public class Nostify : INostify, IDisposable
     /// <inheritdoc />
     public async Task PersistEventAsync(IEvent eventToPersist)
     {
-        var retryOptions = new RetryOptions { Logger = Logger, LogRetries = Logger != null };
+        await PersistEventAsync(eventToPersist, DefaultRetryOptions);
+    }
+
+    /// <inheritdoc />
+    public async Task PersistEventAsync(IEvent eventToPersist, RetryOptions? retryOptions)
+    {
         try
         {
             var eventContainer = await GetEventStoreContainerAsync();
-            await eventContainer
-                .WithRetry(retryOptions)
-                .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+            if (retryOptions != null)
+            {
+                var effectiveRetryOptions = new RetryOptions(retryOptions)
+                {
+                    Logger = retryOptions.Logger ?? Logger
+                };
+                await eventContainer
+                    .WithRetry(effectiveRetryOptions)
+                    .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+            }
+            else
+            {
+                await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+            }
         }
         catch (Exception ex)
         {
@@ -181,7 +201,7 @@ public class Nostify : INostify, IDisposable
             {
                 // Log but do not rethrow: the original persistence exception is re-thrown below,
                 // ensuring the HTTP caller receives the actual failure, not a secondary write error.
-                Logger?.LogError(undeliverableEx, "Failed to write undeliverable event in PersistEventAsync");
+                Logger?.LogError(undeliverableEx, $"Failed to write undeliverable event in {nameof(PersistEventAsync)}. Original event: {JsonConvert.SerializeObject(eventToPersist)}");
             }
             throw;
         }
@@ -973,5 +993,3 @@ public class Nostify : INostify, IDisposable
     }
 
 }
-
-

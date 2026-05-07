@@ -74,6 +74,11 @@
 
 ### Updates
 
+- 4.7.0
+    - **Default Retry Options in NostifyFactory**: `NostifyFactory.WithCosmos` now accepts a `defaultRetryOptions` parameter of type `RetryOptions`. This value is stored on the `Nostify` instance as `INostify.DefaultRetryOptions` (also added to the interface). If not set or `null` is passed, defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`).
+    - **All Default Handlers Retry by Default**: Every single-event and bulk-event handler in `DefaultEventHandlers` and every bulk handler in `DefaultCommandHandler` now has an `allowRetry = true` parameter (default). When `allowRetry = true`, the handler resolves its effective `RetryOptions` from `nostify.DefaultRetryOptions` rather than creating a fresh `new RetryOptions()`. Explicitly passing `allowRetry: false` or `retryOptions: null` (to the `RetryOptions?` overload) disables retry.
+    - **Template Updated**: The `nostify` main service template now reads `DefaultRetryMaxRetries`, `DefaultRetryDelayMs`, and `DefaultRetryWhenNotFound` from `local.settings.json` and passes a constructed `RetryOptions` to `NostifyFactory.WithCosmos`.
+
 - 4.6.6
     - **409 Conflict Always Treated as Idempotent Success**: `RetryableContainer.CreateItemAsync` no longer guards 409 handling with `attempt > 0`. All 409 Conflict responses are now treated as idempotent success, covering Kafka at-least-once redelivery where duplicate events arrive in fresh function invocations (where `attempt` is always 0). `ContainerExtensions.DoBulkCreateAsync` also gained a 409 catch on the no-retry path for the same reason.
 

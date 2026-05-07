@@ -7,6 +7,7 @@ using Azure.Core.Serialization;
 using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json;
 using Microsoft.Extensions.Logging;
+using System;
 
 namespace _ReplaceMe__Service;
 
@@ -42,24 +43,34 @@ public class Program
             bool autoCreateContainers = config.GetValue<bool>("AutoCreateContainers");
             int defaultThroughput = config.GetValue<int>("DefaultContainerThroughput");
             bool verboseNostifyBuild = config.GetValue<bool>("VerboseNostifyBuild");
-            var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
-            var logger = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
+
+            // Build default retry options from settings (applied by all default handlers when allowRetry=true)
+            var defaultRetryOptions = new RetryOptions(
+                maxRetries: config.GetValue<int>("DefaultRetryMaxRetries", 3),
+                delay: TimeSpan.FromMilliseconds(config.GetValue<double>("DefaultRetryDelayMs", 1000)),
+                retryWhenNotFound: config.GetValue<bool>("DefaultRetryWhenNotFound", false)
+            );
+
+            var sp = services.BuildServiceProvider();
+            var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
 
             var nostify = NostifyFactory.WithCosmos(
-                                cosmosApiKey: apiKey,
-                                cosmosDbName: dbName,
-                                cosmosEndpointUri: endPoint,
-                                createContainers: autoCreateContainers,
-                                containerThroughput: defaultThroughput,
-                                useGatewayConnection: false)
+                                    cosmosApiKey: apiKey,
+                                    cosmosDbName: dbName,
+                                    cosmosEndpointUri: endPoint,
+                                    createContainers: autoCreateContainers,
+                                    containerThroughput: defaultThroughput,
+                                    useGatewayConnection: false,
+                                    defaultRetryOptions: defaultRetryOptions)
 #if (eventHubs)
-                            .WithEventHubs(eventHubConnectionString)
+                                .WithEventHubs(eventHubConnectionString)
 #else
-                            .WithKafka(kafka)
+                                .WithKafka(kafka)
 #endif
-                            .WithHttp(httpClientFactory)
-                            .WithLogger(logger)
-                            .Build<_ReplaceMe_>(verbose: true);
+                                .WithHttp(httpClientFactory)
+                                .WithLogger(logger)
+                                .Build<_ReplaceMe_>(verbose: verboseNostifyBuild);
 
             services.AddSingleton<INostify>(nostify);
             services.AddLogging();
@@ -93,4 +104,3 @@ internal static class WorkerConfigurationExtensions
         return builder;
     }
 }
-

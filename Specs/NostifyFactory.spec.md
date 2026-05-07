@@ -181,6 +181,40 @@ services.AddSingleton<INostify>(sp =>
 });
 ```
 
+### With DefaultRetryOptions
+
+The `.WithCosmos()` method accepts an optional `defaultRetryOptions` parameter. These options are stored on the `Nostify` instance and automatically applied by all default handlers when `allowRetry = true` (the default). Read the settings from `local.settings.json` / `appsettings.json`:
+
+```csharp
+// local.settings.json
+{
+  "Values": {
+    "DefaultRetryMaxRetries": 3,
+    "DefaultRetryDelayMs": 1000,
+    "DefaultRetryWhenNotFound": false
+  }
+}
+
+// Program.cs
+var defaultRetryOptions = new RetryOptions(
+    maxRetries: config.GetValue<int>("DefaultRetryMaxRetries", 3),
+    delay: TimeSpan.FromMilliseconds(config.GetValue<double>("DefaultRetryDelayMs", 1000)),
+    retryWhenNotFound: config.GetValue<bool>("DefaultRetryWhenNotFound", false)
+);
+
+var nostify = NostifyFactory.WithCosmos(
+        cosmosApiKey: apiKey,
+        cosmosDbName: dbName,
+        cosmosEndpointUri: endPoint,
+        createContainers: true,
+        defaultRetryOptions: defaultRetryOptions)
+    .WithKafka(kafka)
+    .WithHttp(httpClientFactory)
+    .Build<MyAggregate>();
+```
+
+If `defaultRetryOptions` is not set or `null` is passed, the factory defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`).
+
 ### With Structured Logging
 
 The `.WithLogger()` fluent method enables structured logging throughout the nostify framework, replacing `Console.WriteLine` calls with `ILogger` output:

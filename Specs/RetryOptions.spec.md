@@ -36,6 +36,14 @@ public RetryOptions(int maxRetries, TimeSpan delay, bool retryWhenNotFound,
 | `logRetries` | `bool` | `false` | Enable retry attempt logging |
 | `logger` | `ILogger?` | `null` | Structured logger instance |
 
+### Copy Constructor
+
+```csharp
+public RetryOptions(RetryOptions other)
+```
+
+Creates a new `RetryOptions` instance by copying all properties from an existing instance. This is used by callers that need to adjust logging behavior for a single operation without mutating a shared baseline configuration.
+
 ## Properties
 
 | Property | Type | Default | Description |
