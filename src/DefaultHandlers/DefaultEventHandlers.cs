@@ -29,14 +29,14 @@ public static class DefaultEventHandlers
     /// Will apply to this aggregate rather than the aggregateRootId of the Event. Use when Events can have effects on other aggregates.</param>
     /// <param name="eventTypeFilter">Optional filter to specify which event type to process.</param>
     /// <param name="retryOptions">Optional retry options for configuring retry behavior. When <c>null</c> and <paramref name="allowRetry"/> is <c>true</c>, uses <see cref="INostify.DefaultRetryOptions"/>.</param>
-    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container. Requires <paramref name="retryOptions"/> to be <c>null</c> for <see cref="INostify.DefaultRetryOptions"/> to apply. Set to <c>false</c> to disable retry entirely.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <paramref name="retryOptions"/> when provided, otherwise <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry entirely, even when <paramref name="retryOptions"/> is provided.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async static Task<T?> HandleAggregateEventAsync<T>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, string? idToApplyToPropertyName = null, string? eventTypeFilter = null, RetryOptions? retryOptions = null, bool allowRetry = true) where T : NostifyObject, IAggregate, new()
     {
         Event newEvent = triggerEvent.GetEvent(eventTypeFilter) ?? throw new NostifyException("No event found in trigger event for the specified event type filter");
         try
         {
-            RetryOptions? effectiveRetryOptions = retryOptions ?? (allowRetry ? nostify.DefaultRetryOptions : null);
+            RetryOptions? effectiveRetryOptions = allowRetry ? (retryOptions ?? nostify.DefaultRetryOptions) : null;
             // Wire nostify.Logger into retryOptions if not already set
             if (effectiveRetryOptions != null)
             {
@@ -107,7 +107,7 @@ public static class DefaultEventHandlers
     /// <param name="eventTypeFilter">Optional filter specifying which event type to process.</param>
     /// <param name="batchSize">Maximum number of projections to apply per batch.</param>
     /// <param name="retryOptions">Optional retry options for configuring per-item retry behavior. When <c>null</c> and <paramref name="allowRetry"/> is <c>true</c>, uses <see cref="INostify.DefaultRetryOptions"/>.</param>
-    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container. Requires <paramref name="retryOptions"/> to be <c>null</c> for <see cref="INostify.DefaultRetryOptions"/> to apply. Set to <c>false</c> to disable retry entirely.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses per-item retry with <paramref name="retryOptions"/> when provided, otherwise <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry entirely, even when <paramref name="retryOptions"/> is provided.</param>
     /// <returns>A task containing the number of successfully updated projections.</returns>
     public async static Task<int> HandleMultiApplyEventAsync<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, Expression<Func<P, Guid?>> foreignIdSelector, string? eventTypeFilter = null, int batchSize = 100, RetryOptions? retryOptions = null, bool allowRetry = true) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
@@ -116,7 +116,7 @@ public static class DefaultEventHandlers
         {
             if (newEvent != null)
             {
-                RetryOptions? effectiveRetryOptions = retryOptions ?? (allowRetry ? nostify.DefaultRetryOptions : null);
+                RetryOptions? effectiveRetryOptions = allowRetry ? (retryOptions ?? nostify.DefaultRetryOptions) : null;
                 // Wire nostify.Logger into retryOptions if not already set
                 if (effectiveRetryOptions != null)
                 {
@@ -177,14 +177,14 @@ public static class DefaultEventHandlers
     /// Will apply to this projection rather than the aggregateRootId of the Event. Use when Events can have effects on other projections.</param>
     /// <param name="eventTypeFilter">Optional filter to specify which event type to process.</param>
     /// <param name="retryOptions">Optional retry options for configuring retry behavior. When <c>null</c> and <paramref name="allowRetry"/> is <c>true</c>, uses <see cref="INostify.DefaultRetryOptions"/>.</param>
-    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container. Requires <paramref name="retryOptions"/> to be <c>null</c> for <see cref="INostify.DefaultRetryOptions"/> to apply. Set to <c>false</c> to disable retry entirely.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <paramref name="retryOptions"/> when provided, otherwise <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry entirely, even when <paramref name="retryOptions"/> is provided.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async static Task<P?> HandleProjectionEventAsync<P>(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, HttpClient? httpClient, string? idToApplyToPropertyName = null, string? eventTypeFilter = null, RetryOptions? retryOptions = null, bool allowRetry = true) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         Event newEvent = triggerEvent.GetEvent(eventTypeFilter) ?? throw new NostifyException("No event found in trigger event for the specified event type filter"); 
         try
         {
-            RetryOptions? effectiveRetryOptions = retryOptions ?? (allowRetry ? nostify.DefaultRetryOptions : null);
+            RetryOptions? effectiveRetryOptions = allowRetry ? (retryOptions ?? nostify.DefaultRetryOptions) : null;
             // Wire nostify.Logger into retryOptions if not already set
             if (effectiveRetryOptions != null)
             {

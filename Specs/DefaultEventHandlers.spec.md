@@ -9,7 +9,7 @@
 ## Key Design Principles
 
 1. **All handlers return meaningful values** — Single-event handlers return the updated entity (`T?` or `P?`); bulk handlers return `int` (count of successfully processed records); `HandleMultiApplyEventAsync` returns `int` (count of updated projections).
-2. **`allowRetry` defaults to `true`** — All handlers have a `bool allowRetry = true` parameter. When `allowRetry = true`, the handler uses `nostify.DefaultRetryOptions` (set via `NostifyFactory.WithCosmos`). A developer must explicitly pass `allowRetry: false` or supply `null` to the `RetryOptions?` overload to disable retry.
+2. **`allowRetry` defaults to `true`** — All handlers have a `bool allowRetry = true` parameter. When `allowRetry = true`, the handler uses the explicit `RetryOptions` when provided, otherwise `nostify.DefaultRetryOptions` (set via `NostifyFactory.WithCosmos`). Passing `allowRetry: false` disables retry entirely, even if a non-null `RetryOptions` instance is also supplied.
 3. **Backwards compatibility** — Deprecated non-`Async` methods delegate to the `Async` methods and retain their original `Task` return types. Since `Task<int>` derives from `Task`, this is seamlessly compatible.
 4. **Async naming convention** — All primary implementations use the `Async` suffix. Deprecated wrappers without the suffix are marked `[Obsolete]`.
 
@@ -70,7 +70,7 @@ All methods without the `Async` suffix are deprecated via `[Obsolete]` attribute
 ## Key Relationships
 
 - **`INostify`** — Used for container access (`GetCurrentStateContainerAsync`, `GetProjectionContainerAsync`, `GetBulkCurrentStateContainerAsync`, `GetBulkProjectionContainerAsync`), undeliverable handling, and projection initialization. Also provides `Logger` property as fallback for retry logging and `DefaultRetryOptions` for default retry configuration.
-- **`RetryOptions`** — When provided (or resolved via `nostify.DefaultRetryOptions` when `allowRetry=true`), the handler automatically wires `nostify.Logger` into `retryOptions.Logger` (if not already set) and enables `retryOptions.LogRetries = true`. This eliminates the need for callers to manually configure logging.
+- **`RetryOptions`** — When retry is enabled and `RetryOptions` is provided (or resolved via `nostify.DefaultRetryOptions` when `allowRetry=true`), the handler automatically wires `nostify.Logger` into `retryOptions.Logger` (if not already set) and enables `retryOptions.LogRetries = true`. This eliminates the need for callers to manually configure logging.
 - **`RetryableContainer`** — Created via `container.WithRetry(retryOptions)` for retry-enabled update and create operations.
 - **`ContainerExtensions`** — Provides `BulkCreateFromKafkaTriggerEventsAsync` (with optional `RetryOptions`), `BulkDeleteFromEventsAsync` (with optional `RetryOptions` for TTL patch retries), `ApplyAndPersistAsync`, and `MultiApplyAndPersistAsync` (with optional `RetryOptions`).
 - **`Nostify.CreateApplyAndPersistTask`** — Internal overloaded method. The `RetryOptions?` overload wraps the container with `RetryableContainer` for per-item retry; the legacy `bool allowRetry` overload delegates to it. `MultiApplyAndPersistAsync` passes `RetryOptions` through to this method.

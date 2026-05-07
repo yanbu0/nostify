@@ -1642,5 +1642,56 @@ public class DefaultEventHandlersTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
     }
 
+    [Fact]
+    public async Task HandleAggregateEventAsync_AllowRetryFalse_IgnoresProvidedRetryOptions()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var kafkaTriggerStr = CreateKafkaTriggerEventString(evt);
+        var triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(kafkaTriggerStr)!;
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: true);
+
+        var mockContainer = CreateNotFoundThenSucceedAggregateMockContainer(1, aggId);
+        _mockNostify
+            .Setup(n => n.GetCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var result = await DefaultEventHandlers.HandleAggregateEventAsync<TestAggregate>(
+            _mockNostify.Object, triggerEvent, retryOptions: retryOptions, allowRetry: false);
+
+        Assert.Null(result);
+        mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
+            It.IsAny<string>(),
+            It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleProjectionEventAsync_AllowRetryFalse_IgnoresProvidedRetryOptions()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var kafkaTriggerStr = CreateKafkaTriggerEventString(evt);
+        var triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(kafkaTriggerStr)!;
+        var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: true);
+
+        var mockContainer = CreateNotFoundThenSucceedMockContainer(1, aggId);
+        _mockNostify
+            .Setup(n => n.GetProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        var result = await DefaultEventHandlers.HandleProjectionEventAsync<TestProjection>(
+            _mockNostify.Object, triggerEvent, httpClient: null, retryOptions: retryOptions, allowRetry: false);
+
+        Assert.Null(result);
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(),
+            It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _mockNostify.Verify(n => n.InitAsync<TestProjection>(It.IsAny<List<TestProjection>>()), Times.Never);
+    }
+
     #endregion
 }
