@@ -502,15 +502,15 @@ public static class DefaultEventHandlers
                                 {
                                     T? result = await retryable.ApplyAndPersistAsync<T>(newEvent,
                                         onExhausted: () => nostify.HandleUndeliverableAsync(
-                                            $"{nameof(HandleAggregateBulkUpdateEventAsync)}:{nameof(T)}:Retry", 
+                                            $"{nameof(HandleAggregateBulkUpdateEventAsync)}:{typeof(T).Name}:Retry", 
                                             $"Not found after {retryOptions.MaxRetries} retries",
                                             newEvent),
                                         onNotFound: () => nostify.HandleUndeliverableAsync(
-                                            $"{nameof(HandleAggregateBulkUpdateEventAsync)}:{nameof(T)}:NotFound", 
+                                            $"{nameof(HandleAggregateBulkUpdateEventAsync)}:{typeof(T).Name}:NotFound", 
                                             "Not found and RetryWhenNotFound is false",
                                             newEvent),
                                         onException: (ex) => nostify.HandleUndeliverableAsync(
-                                            $"{nameof(HandleAggregateBulkUpdateEventAsync)}:{nameof(T)}", 
+                                            $"{nameof(HandleAggregateBulkUpdateEventAsync)}:{typeof(T).Name}", 
                                             ex.Message ?? "Unknown error",
                                             newEvent)
                                     );
