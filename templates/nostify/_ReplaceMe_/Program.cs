@@ -51,27 +51,28 @@ public class Program
                 retryWhenNotFound: config.GetValue<bool>("DefaultRetryWhenNotFound", false)
             );
 
-            var httpClientFactory = services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
-            var logger = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
+            services.AddSingleton<INostify>(sp =>
+            {
+                var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("nostify");
 
-            var nostify = NostifyFactory.WithCosmos(
-                                cosmosApiKey: apiKey,
-                                cosmosDbName: dbName,
-                                cosmosEndpointUri: endPoint,
-                                createContainers: autoCreateContainers,
-                                containerThroughput: defaultThroughput,
-                                useGatewayConnection: false,
-                                defaultRetryOptions: defaultRetryOptions)
+                return NostifyFactory.WithCosmos(
+                                    cosmosApiKey: apiKey,
+                                    cosmosDbName: dbName,
+                                    cosmosEndpointUri: endPoint,
+                                    createContainers: autoCreateContainers,
+                                    containerThroughput: defaultThroughput,
+                                    useGatewayConnection: false,
+                                    defaultRetryOptions: defaultRetryOptions)
 #if (eventHubs)
-                            .WithEventHubs(eventHubConnectionString)
+                                .WithEventHubs(eventHubConnectionString)
 #else
-                            .WithKafka(kafka)
+                                .WithKafka(kafka)
 #endif
-                            .WithHttp(httpClientFactory)
-                            .WithLogger(logger)
-                            .Build<_ReplaceMe_>(verbose: true);
-
-            services.AddSingleton<INostify>(nostify);
+                                .WithHttp(httpClientFactory)
+                                .WithLogger(logger)
+                                .Build<_ReplaceMe_>(verbose: true);
+            });
             services.AddLogging();
         })
         .Build();
@@ -103,4 +104,3 @@ internal static class WorkerConfigurationExtensions
         return builder;
     }
 }
-
