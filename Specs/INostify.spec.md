@@ -21,6 +21,7 @@ public interface INostify
 | `kafkaUrl` | `string` | Kafka broker connection URL |
 | `eventStoreContainerName` | `string` | Name of the container storing all events |
 | `Logger` | `ILogger?` | Optional structured logger. Set via `NostifyFactory.WithLogger()`. When non-null, used by internal retry logic and diagnostic output instead of `Console.WriteLine`. |
+| `DefaultRetryOptions` | `RetryOptions` | Default retry configuration applied by all default handlers when `allowRetry = true`. Configured via `NostifyFactory.WithCosmos(defaultRetryOptions)`. Defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`). |
 
 ## Methods
 
