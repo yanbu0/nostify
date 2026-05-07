@@ -106,6 +106,21 @@ public class RetryOptions
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="RetryOptions"/> class by copying an existing instance.
+    /// </summary>
+    /// <param name="other">The existing retry options to copy.</param>
+    public RetryOptions(RetryOptions other)
+        : this(
+            maxRetries: other?.MaxRetries ?? throw new ArgumentNullException(nameof(other)),
+            delay: other.Delay,
+            retryWhenNotFound: other.RetryWhenNotFound,
+            delayMultiplier: other.DelayMultiplier,
+            logRetries: other.LogRetries,
+            logger: other.Logger)
+    {
+    }
+
+    /// <summary>
     /// Calculates the delay for a given retry attempt, applying exponential backoff if <see cref="DelayMultiplier"/> is set.
     /// </summary>
     /// <param name="attempt">The zero-based attempt number (0 = first retry).</param>

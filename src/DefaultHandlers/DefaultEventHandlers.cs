@@ -32,13 +32,13 @@ public static class DefaultEventHandlers
             return null;
         }
 
-        return new RetryOptions(
-            maxRetries: source.MaxRetries,
-            delay: source.Delay,
-            retryWhenNotFound: source.RetryWhenNotFound,
-            delayMultiplier: source.DelayMultiplier,
-            logRetries: true,
-            logger: source.Logger ?? nostify.Logger);
+        var clonedOptions = new RetryOptions(source)
+        {
+            LogRetries = true,
+            Logger = source.Logger ?? nostify.Logger
+        };
+
+        return clonedOptions;
     }
 
     private static void LogWarning(INostify nostify, string message)
