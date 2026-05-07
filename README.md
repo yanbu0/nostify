@@ -574,6 +574,8 @@ IEvent pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Cr
 await _nostify.PersistEventAsync(pe);
 ```
 
+`PersistEventAsync` is the single-item Cosmos write path. It does not accept retry options; configurable retry remains available on the bulk persistence APIs.
+
 When a command becomes an `Event` the text name of the command becomes the topic name published to Kafka, so for this example the event handler, `OnTestCreated` would subscribe to the `Create_Test` topic.
 
 #### NostifyKafkaTriggerEvent
