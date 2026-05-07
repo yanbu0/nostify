@@ -178,13 +178,10 @@ public class Nostify : INostify, IDisposable
             var eventContainer = await GetEventStoreContainerAsync();
             if (retryOptions != null)
             {
-                var effectiveRetryOptions = new RetryOptions(
-                    retryOptions.MaxRetries,
-                    retryOptions.Delay,
-                    retryOptions.RetryWhenNotFound,
-                    retryOptions.DelayMultiplier,
-                    retryOptions.LogRetries,
-                    retryOptions.Logger ?? Logger);
+                var effectiveRetryOptions = new RetryOptions(retryOptions)
+                {
+                    Logger = retryOptions.Logger ?? Logger
+                };
                 await eventContainer
                     .WithRetry(effectiveRetryOptions)
                     .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
