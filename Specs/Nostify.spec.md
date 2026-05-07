@@ -12,23 +12,31 @@ public class Nostify : INostify, IDisposable
 
 ## Constructor
 
+The primary public constructor is for development (no Kafka credentials):
+
 ```csharp
 public Nostify(
-    NostifyCosmosClient repository,
-    IProducer<string, string> bulkPublisher,
-    Guid defaultUserId,
+    string primaryKey,
+    string dbName,
+    string cosmosEndpointUri,
     string kafkaUrl,
-    string eventStoreContainerName
+    IHttpClientFactory httpClientFactory,
+    string defaultPartitionKeyPath = "/tenantId",
+    Guid defaultTenantId = default
 )
 ```
 
+The framework-internal constructor (used by `NostifyFactory.Build`) additionally accepts `ILogger?`, `ConsumerConfig?`, and `RetryOptions? defaultRetryOptions`. When `defaultRetryOptions` is `null`, it defaults to `new RetryOptions()`.
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `repository` | `NostifyCosmosClient` | Cosmos DB client for database operations |
-| `bulkPublisher` | `IProducer<string, string>` | Kafka producer instance |
-| `defaultUserId` | `Guid` | Default user ID when not specified in events |
+| `primaryKey` / `repository` | `string` / `NostifyCosmosClient` | Cosmos DB credentials or pre-built client |
 | `kafkaUrl` | `string` | Kafka broker URL |
-| `eventStoreContainerName` | `string` | Name of event store container |
+| `httpClientFactory` | `IHttpClientFactory` | Factory for outbound HTTP calls |
+| `defaultPartitionKeyPath` | `string` | Partition key path for containers (default `/tenantId`) |
+| `defaultTenantId` | `Guid` | Default tenant ID for multi-tenant scenarios |
+| `logger` | `ILogger?` | Optional structured logger |
+| `defaultRetryOptions` | `RetryOptions?` | Default retry configuration; falls back to `new RetryOptions()` |
 
 ## Properties
 
@@ -40,6 +48,7 @@ public Nostify(
 | `kafkaUrl` | `string` | Kafka connection URL |
 | `eventStoreContainerName` | `string` | Event store container name |
 | `Logger` | `ILogger?` | Optional structured logger for diagnostic output and retry logging. Set via `NostifyFactory.WithLogger()`. Falls back to `Console.WriteLine` when null. |
+| `DefaultRetryOptions` | `RetryOptions` | Default retry configuration applied by all default handlers when `allowRetry = true`. Configured via `NostifyFactory.WithCosmos(defaultRetryOptions)`. Defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`). |
 
 ## Kafka Consumer Cache
 
@@ -65,18 +74,31 @@ Disposes all cached Kafka consumers (calls `Close()` then `Dispose()` on each). 
 
 ### PersistEventAsync
 
-Persists a single event to the Cosmos DB event store with failure observability:
+Persists a single event to the Cosmos DB event store with failure observability.
+
+Two overloads exist:
+
+- **`PersistEventAsync(IEvent)`** — Backwards-compatible overload. Creates a `RetryOptions` instance wired with the configured logger and delegates to `PersistEventAsync(IEvent, RetryOptions?)`.
+- **`PersistEventAsync(IEvent, RetryOptions?)`** — Primary implementation:
 
 ```csharp
-public async Task PersistEventAsync(IEvent eventToPersist)
+public async Task PersistEventAsync(IEvent eventToPersist, RetryOptions? retryOptions)
 {
-    var eventContainer = await GetEventStoreContainerAsync();
-    var retryOptions = new RetryOptions { Logger = Logger, LogRetries = Logger != null };
     try
     {
-        await eventContainer
-            .WithRetry(retryOptions)
-            .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        var eventContainer = await GetEventStoreContainerAsync();
+        if (retryOptions != null)
+        {
+            // Clone options, wire in logger if not already set, then retry
+            var effectiveOptions = new RetryOptions(retryOptions) { Logger = retryOptions.Logger ?? Logger };
+            await eventContainer
+                .WithRetry(effectiveOptions)
+                .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        }
+        else
+        {
+            await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
+        }
     }
     catch (Exception ex)
     {

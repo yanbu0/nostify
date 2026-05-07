@@ -92,7 +92,7 @@ public static class DefaultCommandHandler
     /// <param name="postObj">The post data object</param>
     /// <param name="userId">Optional user identifier for the operation</param>
     /// <param name="partitionKey">Optional tenant identifier for the operation</param>
-    /// <param name="partitionKeyName"></param>
+    /// <param name="partitionKeyName">The name of the partition key property in the dynamic object. Defaults to <c>"tenantId"</c>.</param>
     /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <returns>The GUID of the aggregate root that was created</returns>
     public async static Task<Guid> HandlePostAsync<T>(INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId", bool allowRetry = true) where T : class, IAggregate
@@ -466,32 +466,32 @@ public static class DefaultCommandHandler
     // Backward-compatible wrappers (obsolete — use the *Async equivalents)
     // ---------------------------------------------------------------------------
 
-    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, NostifyCommand, HttpRequestData, FunctionContext, Guid, Guid)"/>
+    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, NostifyCommand, HttpRequestData, FunctionContext, Guid, Guid, bool)"/>
     [Obsolete("Use HandlePatchAsync instead.")]
     public static Task<Guid> HandlePatch<T>(INostify nostify, NostifyCommand command, HttpRequestData req, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
         => HandlePatchAsync<T>(nostify, command, req, context, userId, partitionKey);
 
-    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, NostifyCommand, object, Guid, Guid, Guid)"/>
+    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, NostifyCommand, object, Guid, Guid, Guid, bool)"/>
     [Obsolete("Use HandlePatchAsync instead.")]
     public static Task<Guid> HandlePatch<T>(INostify nostify, NostifyCommand command, object patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
         => HandlePatchAsync<T>(nostify, command, patchObj, aggregateRootId, userId, partitionKey);
 
-    /// <inheritdoc cref="HandlePostAsync{T}(INostify, NostifyCommand, HttpRequestData, Guid, Guid, string)"/>
+    /// <inheritdoc cref="HandlePostAsync{T}(INostify, NostifyCommand, HttpRequestData, Guid, Guid, string, bool)"/>
     [Obsolete("Use HandlePostAsync instead.")]
     public static Task<Guid> HandlePost<T>(INostify nostify, NostifyCommand command, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
         => HandlePostAsync<T>(nostify, command, req, userId, partitionKey, partitionKeyName);
 
-    /// <inheritdoc cref="HandlePostAsync{T}(INostify, NostifyCommand, object, Guid, Guid, string)"/>
+    /// <inheritdoc cref="HandlePostAsync{T}(INostify, NostifyCommand, object, Guid, Guid, string, bool)"/>
     [Obsolete("Use HandlePostAsync instead.")]
     public static Task<Guid> HandlePost<T>(INostify nostify, NostifyCommand command, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
         => HandlePostAsync<T>(nostify, command, postObj, userId, partitionKey, partitionKeyName);
 
-    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, NostifyCommand, FunctionContext, Guid, Guid)"/>
+    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, NostifyCommand, FunctionContext, Guid, Guid, bool)"/>
     [Obsolete("Use HandleDeleteAsync instead.")]
     public static Task<Guid> HandleDelete<T>(INostify nostify, NostifyCommand command, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
         => HandleDeleteAsync<T>(nostify, command, context, userId, partitionKey);
 
-    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, NostifyCommand, Guid, Guid, Guid)"/>
+    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, NostifyCommand, Guid, Guid, Guid, bool)"/>
     [Obsolete("Use HandleDeleteAsync instead.")]
     public static Task<Guid> HandleDelete<T>(INostify nostify, NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
         => HandleDeleteAsync<T>(nostify, command, aggregateRootId, userId, partitionKey);
