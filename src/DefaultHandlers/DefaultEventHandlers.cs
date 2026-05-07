@@ -329,14 +329,18 @@ public static class DefaultEventHandlers
         }
         catch (Exception e)
         {
-            events.ToList().ForEach(async eventStr =>
+            nostify.Logger?.LogError(e, $"Error in {nameof(HandleAggregateBulkCreateEventAsync)}:{typeof(T).Name}, createing undeliverables: {e.Message}");
+            // Bulk create undeliverables
+            List<Task> tasks = new List<Task>();
+            events.ToList().ForEach(eventStr =>
             {
                 Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent(eventTypeFilter) ?? throw new NostifyException("Event is null");
-                await nostify.HandleUndeliverableAsync($"{nameof(HandleAggregateBulkCreateEventAsync)}:{typeof(T).Name}", 
+                tasks.Add(nostify.HandleUndeliverableAsync($"{nameof(HandleAggregateBulkCreateEventAsync)}:{typeof(T).Name}", 
                     e.Message, 
-                    @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
-                    );
+                    @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleAggregateEvent, Guid.Empty)
+                    ));
             });
+            await Task.WhenAll(tasks);
             throw;
         }
     }
@@ -412,14 +416,18 @@ public static class DefaultEventHandlers
         }
         catch (Exception e)
         {
-            events.ToList().ForEach(async eventStr =>
+            nostify.Logger?.LogError(e, $"Error in {nameof(HandleProjectionBulkCreateEventAsync)}:{typeof(P).Name}, createing undeliverables: {e.Message}");
+            // Bulk create undeliverables
+            List<Task> tasks = new List<Task>();
+            events.ToList().ForEach(eventStr =>
             {
                 Event @event = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(eventStr)?.GetEvent(eventTypeFilter) ?? throw new NostifyException("Event is null");
-                await nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionEventAsync)}:{nameof(P)}", 
+                tasks.Add(nostify.HandleUndeliverableAsync($"{nameof(HandleProjectionBulkCreateEventAsync)}:{typeof(P).Name}", 
                     e.Message, 
                     @event ?? new EventFactory().NoValidate().CreateNullPayloadEvent(ErrorCommand.HandleProjection, Guid.Empty)
-                    );
+                    ));
             });
+            await Task.WhenAll(tasks);
             throw;
         }
     }
