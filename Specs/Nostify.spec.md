@@ -48,7 +48,7 @@ The framework-internal constructor (used by `NostifyFactory.Build`) additionally
 | `kafkaUrl` | `string` | Kafka connection URL |
 | `eventStoreContainerName` | `string` | Event store container name |
 | `Logger` | `ILogger?` | Optional structured logger for diagnostic output and retry logging. Set via `NostifyFactory.WithLogger()`. Falls back to `Console.WriteLine` when null. |
-| `DefaultRetryOptions` | `RetryOptions` | Default retry configuration applied by all default handlers when `allowRetry = true`. Configured via `NostifyFactory.WithCosmos(defaultRetryOptions)`. Defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`). |
+| `DefaultRetryOptions` | `RetryOptions` | Default retry configuration applied by retry-enabled default event handlers and bulk command handlers when `allowRetry = true`. Configured via `NostifyFactory.WithCosmos(defaultRetryOptions)`. Defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`). |
 
 ## Kafka Consumer Cache
 
@@ -76,29 +76,15 @@ Disposes all cached Kafka consumers (calls `Close()` then `Dispose()` on each). 
 
 Persists a single event to the Cosmos DB event store with failure observability.
 
-Two overloads exist:
-
-- **`PersistEventAsync(IEvent)`** — Backwards-compatible overload. Uses `DefaultRetryOptions` and delegates to `PersistEventAsync(IEvent, RetryOptions?)`.
-- **`PersistEventAsync(IEvent, RetryOptions?)`** — Primary implementation:
+Single implementation:
 
 ```csharp
-public async Task PersistEventAsync(IEvent eventToPersist, RetryOptions? retryOptions)
+public async Task PersistEventAsync(IEvent eventToPersist)
 {
     try
     {
         var eventContainer = await GetEventStoreContainerAsync();
-        if (retryOptions != null)
-        {
-            // Clone options, wire in logger if not already set, then retry
-            var effectiveOptions = new RetryOptions(retryOptions) { Logger = retryOptions.Logger ?? Logger };
-            await eventContainer
-                .WithRetry(effectiveOptions)
-                .CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
-        }
-        else
-        {
-            await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
-        }
+        await eventContainer.CreateItemAsync(eventToPersist, eventToPersist.aggregateRootId.ToPartitionKey());
     }
     catch (Exception ex)
     {
@@ -264,8 +250,7 @@ Both `BulkApplyAndPersistAsync` and `BulkPersistEventAsync` follow the same dele
 
 Persists a single event to the event store:
 
-- **`PersistEventAsync(IEvent)`** — Backwards-compatible overload. Uses `DefaultRetryOptions` and delegates to `PersistEventAsync(IEvent, RetryOptions?)`, so retry is enabled by default.
-- **`PersistEventAsync(IEvent, RetryOptions?)`** — Primary implementation. When `retryOptions` is provided, wraps the event store container with `RetryableContainer` for retries while still re-throwing failures after writing to the undeliverable container. When `retryOptions` is `null`, writes directly with no retry.
+- **`PersistEventAsync(IEvent)`** — Writes directly through the standard Cosmos SDK single-item path. Failures are still logged, written to the undeliverable container, and re-thrown to the caller.
 
 ## Event Store Container Configuration
 

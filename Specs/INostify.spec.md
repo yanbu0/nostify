@@ -21,7 +21,7 @@ public interface INostify
 | `kafkaUrl` | `string` | Kafka broker connection URL |
 | `eventStoreContainerName` | `string` | Name of the container storing all events |
 | `Logger` | `ILogger?` | Optional structured logger. Set via `NostifyFactory.WithLogger()`. When non-null, used by internal retry logic and diagnostic output instead of `Console.WriteLine`. |
-| `DefaultRetryOptions` | `RetryOptions` | Default retry configuration applied by all default handlers when `allowRetry = true`. Configured via `NostifyFactory.WithCosmos(defaultRetryOptions)`. Defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`). |
+| `DefaultRetryOptions` | `RetryOptions` | Default retry configuration applied by retry-enabled default event handlers and bulk command handlers when `allowRetry = true`. Configured via `NostifyFactory.WithCosmos(defaultRetryOptions)`. Defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`). |
 
 ## Methods
 
@@ -97,8 +97,7 @@ public interface INostify
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `PersistEventAsync` | `Task PersistEventAsync(IEvent eventToPersist)` | Persists one event using the legacy default retry policy (`new RetryOptions()` plus configured logger wiring). |
-| `PersistEventAsync` | `Task PersistEventAsync(IEvent eventToPersist, RetryOptions? retryOptions)` | Persists one event with optional configurable retry. When `retryOptions` is `null`, writes directly to Cosmos without retry; when provided, uses `RetryableContainer` and still re-throws failures after undeliverable handling. |
+| `PersistEventAsync` | `Task PersistEventAsync(IEvent eventToPersist)` | Persists one event directly with the standard Cosmos SDK create path, while still logging and routing failures to the undeliverable container before re-throwing. |
 
 ### Saga Operations
 

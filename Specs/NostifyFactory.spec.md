@@ -183,7 +183,7 @@ services.AddSingleton<INostify>(sp =>
 
 ### With DefaultRetryOptions
 
-The `.WithCosmos()` method accepts an optional `defaultRetryOptions` parameter. These options are stored on the `Nostify` instance and automatically applied by all default handlers when `allowRetry = true` (the default). Read the settings from `local.settings.json` / `appsettings.json`:
+The `.WithCosmos()` method accepts an optional `defaultRetryOptions` parameter. These options are stored on the `Nostify` instance and automatically applied by retry-enabled default event handlers and bulk command handlers when `allowRetry = true` (the default). Read the settings from `local.settings.json` / `appsettings.json`:
 
 ```csharp
 // local.settings.json
