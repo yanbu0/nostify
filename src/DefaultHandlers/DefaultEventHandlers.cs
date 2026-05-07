@@ -312,7 +312,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully created records.</returns>
     public async static Task<int> HandleAggregateBulkCreateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
-        retryOptions = ResolveRetryOptions(nostify, retryOptions);
+        retryOptions = ResolveRetryOptions(nostify, retryOptions, retryOptions != null);
         try
         {
             // Count events that match the filter (BulkCreate is all-or-nothing on success)
@@ -394,7 +394,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully created records.</returns>
     public async static Task<int> HandleProjectionBulkCreateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
-        retryOptions = ResolveRetryOptions(nostify, retryOptions);
+        retryOptions = ResolveRetryOptions(nostify, retryOptions, retryOptions != null);
         try
         {
             // Count events that match the filter (BulkCreate is all-or-nothing on success)
@@ -480,7 +480,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully updated records.</returns>
     public async static Task<int> HandleAggregateBulkUpdateEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
-        retryOptions = ResolveRetryOptions(nostify, retryOptions);
+        retryOptions = ResolveRetryOptions(nostify, retryOptions, retryOptions != null);
         try
         {
             Container currentStateContainer = await nostify.GetBulkCurrentStateContainerAsync<T>();
@@ -618,7 +618,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully updated records.</returns>
     public async static Task<int> HandleProjectionBulkUpdateEventAsync<P>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
-        retryOptions = ResolveRetryOptions(nostify, retryOptions);
+        retryOptions = ResolveRetryOptions(nostify, retryOptions, retryOptions != null);
         try
         {
             Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
@@ -782,7 +782,7 @@ public static class DefaultEventHandlers
     /// <returns>A task containing the number of successfully deleted records.</returns>
     public async static Task<int> HandleAggregateBulkDeleteEventAsync<T>(INostify nostify, string[] events, List<string> eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, IAggregate, new()
     {
-        retryOptions = ResolveRetryOptions(nostify, retryOptions);
+        retryOptions = ResolveRetryOptions(nostify, retryOptions, retryOptions != null);
 
         try
         {
