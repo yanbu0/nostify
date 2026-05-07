@@ -1231,6 +1231,31 @@ public class DefaultEventHandlersTests
             It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
     }
 
+    [Fact]
+    public async Task HandleAggregateBulkUpdateEvent_NullRetryOptions_DoesNotUseDefaultRetryOptions()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        _mockNostify
+            .Setup(n => n.DefaultRetryOptions)
+            .Returns(new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: true));
+
+        var mockContainer = CreateNotFoundThenSucceedAggregateMockContainer(1, aggId);
+        _mockNostify
+            .Setup(n => n.GetBulkCurrentStateContainerAsync<TestAggregate>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        await DefaultEventHandlers.HandleAggregateBulkUpdateEvent<TestAggregate>(
+            _mockNostify.Object, events, new List<string>(), retryOptions: null);
+        mockContainer.Verify(c => c.ReadItemAsync<TestAggregate>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+    }
+
     #endregion
 
     #region Aggregate: Non-Cosmos exception → undeliverable immediately
@@ -1445,6 +1470,34 @@ public class DefaultEventHandlersTests
             It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
 
         Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task HandleProjectionBulkUpdateEventAsync_NullRetryOptions_DoesNotUseDefaultRetryOptions()
+    {
+        var aggId = Guid.NewGuid();
+        var evt = CreateUpdateEvent(aggId);
+        var events = new[] { CreateKafkaTriggerEventString(evt) };
+
+        _mockNostify
+            .Setup(n => n.DefaultRetryOptions)
+            .Returns(new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: true));
+
+        var mockContainer = CreateNotFoundThenSucceedMockContainer(1, aggId);
+        _mockNostify
+            .Setup(n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()))
+            .ReturnsAsync(mockContainer.Object);
+
+        int result = await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
+            _mockNostify.Object, events, new List<string>(), retryOptions: null);
+
+        Assert.Equal(0, result);
+        mockContainer.Verify(c => c.ReadItemAsync<TestProjection>(
+            It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockNostify.Verify(n => n.InitAsync<TestProjection>(It.IsAny<List<TestProjection>>()), Times.Once);
+        _mockNostify.Verify(n => n.HandleUndeliverableAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
     }
 
     #endregion
