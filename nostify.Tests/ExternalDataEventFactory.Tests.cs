@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
 using Moq;
 using nostify;
 using Xunit;
@@ -749,6 +751,111 @@ public class ExternalDataEventFactoryTests
         // Assert
         Assert.NotNull(result);
         Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_EnableLoggingTrueAndLoggerConfigured_WritesLogs()
+    {
+        // Arrange
+        var testEvents = new List<Event>
+        {
+            new Event
+            {
+                aggregateRootId = _testProjections[0].siteId,
+                timestamp = DateTime.UtcNow.AddMinutes(-30),
+                command = new NostifyCommand("CreateSite")
+            }
+        };
+
+        var (mockNostify, mockContainer) = CreateMockNostifyWithEvents(testEvents);
+        var loggerMock = new Mock<ILogger>();
+        mockNostify.SetupGet(n => n.Logger).Returns(loggerMock.Object);
+
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            mockNostify.Object,
+            _testProjections,
+            queryExecutor: InMemoryQueryExecutor.Default);
+
+        factory.WithSameServiceIdSelectors(p => p.siteId);
+
+        // Act
+        var result = await factory.GetEventsAsync(enableLogging: true);
+
+        // Assert
+        Assert.NotEmpty(result);
+        loggerMock.Verify(l => l.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_EnableLoggingFalse_DoesNotWriteLogs()
+    {
+        // Arrange
+        var testEvents = new List<Event>
+        {
+            new Event
+            {
+                aggregateRootId = _testProjections[0].siteId,
+                timestamp = DateTime.UtcNow.AddMinutes(-30),
+                command = new NostifyCommand("CreateSite")
+            }
+        };
+
+        var (mockNostify, mockContainer) = CreateMockNostifyWithEvents(testEvents);
+        var loggerMock = new Mock<ILogger>();
+        mockNostify.SetupGet(n => n.Logger).Returns(loggerMock.Object);
+
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            mockNostify.Object,
+            _testProjections,
+            queryExecutor: InMemoryQueryExecutor.Default);
+
+        factory.WithSameServiceIdSelectors(p => p.siteId);
+
+        // Act
+        var result = await factory.GetEventsAsync();
+
+        // Assert
+        Assert.NotEmpty(result);
+        loggerMock.Verify(l => l.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_EnableLoggingTrueAndLoggerMissing_WritesConsoleGuidance()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            queryExecutor: InMemoryQueryExecutor.Default);
+
+        var originalOut = Console.Out;
+        var consoleCapture = new StringWriter();
+        Console.SetOut(consoleCapture);
+
+        try
+        {
+            // Act
+            await factory.GetEventsAsync(enableLogging: true);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+
+        // Assert
+        Assert.Contains("Configure logging with NostifyFactory.WithLogger(yourLogger).", consoleCapture.ToString());
     }
 
     [Fact]
