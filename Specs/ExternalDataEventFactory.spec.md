@@ -298,7 +298,7 @@ public async Task<List<ExternalDataEvent>> GetEventsAsync(bool enableLogging = f
 
 Executes all configured selectors and requestors and returns the collected events.
 
-When `enableLogging` is `true`, `GetEventsAsync` emits per-stage timing logs and a total elapsed-time log through `INostify.Logger`. If logging is enabled but no logger is configured, the method writes a console guidance message instructing users to configure logging via `NostifyFactory.WithLogger(...)`.
+When `enableLogging` is `true`, `GetEventsAsync` emits per-stage timing logs and a total elapsed-time log through `INostify.Logger`. Timing `Stopwatch` instances are only created when logging is effectively active (`enableLogging == true` and a logger is configured). If logging is enabled but no logger is configured, the method writes a console guidance message instructing users to configure logging via `NostifyFactory.WithLogger(...)`.
 
 **Execution Order:**
 1. Same-service single ID selectors (non-nullable and nullable)
