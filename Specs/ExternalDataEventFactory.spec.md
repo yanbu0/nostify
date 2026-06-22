@@ -243,7 +243,7 @@ public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string
 ```
 
 - `serviceName` is forwarded to `GrpcEventRequester<P>` and included in the `service_name` proto field on every gRPC call.
-- `authToken` (nullable) is coerced to `""` when null and set on `GrpcEventRequester<P>.AuthToken`. When non-empty, the value is sent as `"******"` in gRPC metadata.
+- `authToken` (nullable) is coerced to `""` when null and set on `GrpcEventRequester<P>.AuthToken`. When non-empty, the value is sent as `"Bearer {token}"` in the `"authorization"` gRPC metadata header.
 - The per-call `authToken` **always takes precedence** over the constructor-level `authToken`.
 
 #### WithGrpcEventRequestor (with serviceName, uses constructor authToken)
