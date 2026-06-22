@@ -293,10 +293,12 @@ Six overloads matching the primary `WithGrpcEventRequestor(address, serviceName,
 ### GetEventsAsync
 
 ```csharp
-public async Task<List<ExternalDataEvent>> GetEventsAsync()
+public async Task<List<ExternalDataEvent>> GetEventsAsync(bool enableLogging = false)
 ```
 
 Executes all configured selectors and requestors and returns the collected events.
+
+When `enableLogging` is `true`, `GetEventsAsync` emits per-stage timing logs and a total elapsed-time log through `INostify.Logger`. Timing `Stopwatch` instances are only created when logging is effectively active (`enableLogging == true` and a logger is configured). If logging is enabled but no logger is configured, the method writes a console guidance message instructing users to configure logging via `NostifyFactory.WithLogger(...)`.
 
 **Execution Order:**
 1. Same-service single ID selectors (non-nullable and nullable)
@@ -352,6 +354,13 @@ var events = await new ExternalDataEventFactory<OrderProjection>(nostify, projec
     .WithSameServiceDependantIdSelectors(p => p.WarehouseId) // populated by first-round events
     .WithEventRequestor("https://inventory/api/events", p => p.ProductId)
     .GetEventsAsync();
+```
+
+```csharp
+var events = await new ExternalDataEventFactory<OrderProjection>(nostify, projections)
+    .WithSameServiceIdSelectors(p => p.CustomerId)
+    .WithGrpcEventRequestor("https://inventory-grpc:5001", (Func<OrderProjection, Guid>)(p => p.ProductId))
+    .GetEventsAsync(enableLogging: true);
 ```
 
 ## Usage Examples
@@ -494,6 +503,7 @@ var factory = new ExternalDataEventFactory<TestProjection>(
 ## Version History
 
 - **4.8.0** - Added constructor `authToken` parameter to `ExternalDataEventFactory`. Added 12 new overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` that accept `(address, serviceName, selectors)` without a per-call `authToken`, using the constructor token instead. Per-call `authToken` always takes precedence over the constructor token.
+- **4.7.1** - Added optional `enableLogging` parameter to `GetEventsAsync`, including per-stage timing logs, total elapsed-time logging, and console guidance when logging is enabled without a configured logger
 - **4.5.0** - Added `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads with `serviceName` + `authToken` parameters (12 new overloads). Added address-only gRPC overloads (12 overloads), `AddGrpcEventRequestors`, `AddDependantGrpcEventRequestors`. Added `WithAsyncEventRequestor`, `WithDependantAsyncEventRequestor`, `AddAsyncEventRequestors`, `AddDependantAsyncEventRequestors` for Kafka-based async event fetching
 - **4.3.0** - Added nullable `Guid?` overloads for all selector methods; all methods now return `this` for fluent chaining
 - **4.1.0** - Initial release with basic selector support

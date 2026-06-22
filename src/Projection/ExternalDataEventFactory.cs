@@ -2,12 +2,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Confluent.Kafka;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace nostify;
@@ -910,120 +912,190 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
     #endregion
 
-    public async Task<List<ExternalDataEvent>> GetEventsAsync()
+    public async Task<List<ExternalDataEvent>> GetEventsAsync(bool enableLogging = false)
     {
+        var logger = _nostify.Logger;
+        var shouldLog = enableLogging && logger != null;
+        var totalStopwatch = shouldLog ? Stopwatch.StartNew() : null;
+
+        if (enableLogging && logger == null)
+        {
+            Console.WriteLine("ExternalDataEventFactory.GetEventsAsync logging is enabled, but INostify.Logger is null. Configure logging with NostifyFactory.WithLogger(yourLogger).");
+        }
+
+        void LogCallTiming(string callType, string target, long elapsedMs)
+        {
+            if (!shouldLog)
+            {
+                return;
+            }
+
+            logger!.LogInformation("ExternalDataEventFactory call={CallType} target={Target} elapsedMs={ElapsedMs}", callType, target, elapsedMs);
+        }
+
+        Stopwatch? StartCallStopwatch() => shouldLog ? Stopwatch.StartNew() : null;
+
+        void StopAndLogCall(Stopwatch? stopwatch, string callType, string target)
+        {
+            if (stopwatch == null)
+            {
+                return;
+            }
+
+            stopwatch.Stop();
+            LogCallTiming(callType, target, stopwatch.ElapsedMilliseconds);
+        }
+
+        string BuildTargetsString(IEnumerable<string> values)
+        {
+            var targets = values.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct().ToList();
+            return targets.Count == 0 ? "unknown" : string.Join(",", targets);
+        }
+
         var result = new List<ExternalDataEvent>();
 
-        // Handle same service IDs using ExternalDataEvent.GetEventsAsync
-        Container eventStoreContainer = await _nostify.GetEventStoreContainerAsync();
-        
-        // Get events for single-ID selectors (non-nullable)
-        if (_foreignKeySelectors.Any())
+        try
         {
-            var singleIdEvents = await ExternalDataEvent.GetEventsAsync(
-                eventStoreContainer, 
-                _projectionsToInit, 
-                _queryExecutor,
-                _pointInTime, 
-                _foreignKeySelectors.ToArray());
-            result.AddRange(singleIdEvents);
-        }
+            // Handle same service IDs using ExternalDataEvent.GetEventsAsync
+            Container eventStoreContainer = await _nostify.GetEventStoreContainerAsync();
 
-        // Get events for single-ID selectors (nullable) - nulls filtered by HasValue in ExternalDataEvent
-        if (_nullableForeignKeySelectors.Any())
+            // Get events for single-ID selectors (non-nullable)
+            if (_foreignKeySelectors.Any())
+            {
+                var singleIdStopwatch = StartCallStopwatch();
+                var singleIdEvents = await ExternalDataEvent.GetEventsAsync(
+                    eventStoreContainer,
+                    _projectionsToInit,
+                    _queryExecutor,
+                    _pointInTime,
+                    _foreignKeySelectors.ToArray());
+                StopAndLogCall(singleIdStopwatch, "WithSameServiceIdSelectors", "eventStore");
+                result.AddRange(singleIdEvents);
+            }
+
+            // Get events for single-ID selectors (nullable) - nulls filtered by HasValue in ExternalDataEvent
+            if (_nullableForeignKeySelectors.Any())
+            {
+                var nullableSingleIdStopwatch = StartCallStopwatch();
+                var nullableSingleIdEvents = await ExternalDataEvent.GetEventsAsync(
+                    eventStoreContainer,
+                    _projectionsToInit,
+                    _queryExecutor,
+                    _pointInTime,
+                    _nullableForeignKeySelectors.ToArray());
+                StopAndLogCall(nullableSingleIdStopwatch, "WithSameServiceIdSelectorsNullable", "eventStore");
+                result.AddRange(nullableSingleIdEvents);
+            }
+
+            // Get events for list-ID selectors (non-nullable)
+            if (_foreignKeyListSelectors.Any())
+            {
+                var listIdStopwatch = StartCallStopwatch();
+                var listIdEvents = await ExternalDataEvent.GetEventsAsync(
+                    eventStoreContainer,
+                    _projectionsToInit,
+                    _queryExecutor,
+                    _pointInTime,
+                    _foreignKeyListSelectors.ToArray());
+                StopAndLogCall(listIdStopwatch, "WithSameServiceListIdSelectors", "eventStore");
+                result.AddRange(listIdEvents);
+            }
+
+            // Get events for list-ID selectors (nullable) - nulls within lists filtered by HasValue in ExternalDataEvent
+            if (_nullableForeignKeyListSelectors.Any())
+            {
+                var nullableListIdStopwatch = StartCallStopwatch();
+                var nullableListIdEvents = await ExternalDataEvent.GetEventsAsync(
+                    eventStoreContainer,
+                    _projectionsToInit,
+                    _queryExecutor,
+                    _pointInTime,
+                    _nullableForeignKeyListSelectors.ToArray());
+                StopAndLogCall(nullableListIdStopwatch, "WithSameServiceListIdSelectorsNullable", "eventStore");
+                result.AddRange(nullableListIdEvents);
+            }
+
+            // Handle external service IDs before dependent selectors
+            // so that external events can also populate dependent IDs
+            if (_httpClient != null)
+            {
+                var externalEventsStopwatch = StartCallStopwatch();
+                var externalEvents = await ExternalDataEvent.GetMultiServiceEventsAsync<P>(_httpClient!,
+                    this._projectionsToInit,
+                    this._pointInTime,
+                    this._eventRequestors);
+                StopAndLogCall(externalEventsStopwatch, "WithEventRequestor", BuildTargetsString(this._eventRequestors.Select(r => r.Url)));
+                result.AddRange(externalEvents);
+            }
+
+            // Handle async (Kafka) event requestors
+            if (_asyncEventRequestors.Any())
+            {
+                var asyncEventsStopwatch = StartCallStopwatch();
+                var asyncEvents = await GetAsyncEventsAsync(_asyncEventRequestors, _projectionsToInit);
+                StopAndLogCall(asyncEventsStopwatch, "WithAsyncEventRequestor", BuildTargetsString(_asyncEventRequestors.Select(r => r.ServiceName)));
+                result.AddRange(asyncEvents);
+            }
+
+            // Handle gRPC event requestors
+            if (_grpcEventRequestors.Any())
+            {
+                var grpcEventsStopwatch = StartCallStopwatch();
+                var grpcEvents = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync<P>(
+                    this._projectionsToInit,
+                    this._pointInTime,
+                    this._grpcEventRequestors);
+                StopAndLogCall(grpcEventsStopwatch, "WithGrpcEventRequestor", BuildTargetsString(this._grpcEventRequestors.Select(r => $"{r.ServiceName}@{r.Address}")));
+                result.AddRange(grpcEvents);
+            }
+
+            // Handle dependent selectors - these require applying ALL initial events first to get the IDs
+            // This runs after both local and external events have been collected
+            if (_dependantIdSelectors.Any() || _dependantListIdSelectors.Any() || _nullableDependantIdSelectors.Any() || _nullableDependantListIdSelectors.Any())
+            {
+                var dependantEventsStopwatch = StartCallStopwatch();
+                var dependantEvents = await GetDependantEventsAsync(eventStoreContainer, result);
+                StopAndLogCall(dependantEventsStopwatch, "WithSameServiceDependantSelectors", "eventStore");
+                result.AddRange(dependantEvents);
+            }
+
+            // Handle dependent external event requestors - these also require applying initial events first
+            if (_httpClient != null && _dependantEventRequestors.Any())
+            {
+                var dependantExternalEventsStopwatch = StartCallStopwatch();
+                var dependantExternalEvents = await GetDependantExternalEventsAsync(result);
+                StopAndLogCall(dependantExternalEventsStopwatch, "WithDependantEventRequestor", BuildTargetsString(_dependantEventRequestors.Select(r => r.Url)));
+                result.AddRange(dependantExternalEvents);
+            }
+
+            // Handle dependent async (Kafka) event requestors - these also require applying initial events first
+            if (_dependantAsyncEventRequestors.Any())
+            {
+                var dependantAsyncEventsStopwatch = StartCallStopwatch();
+                var dependantAsyncEvents = await GetDependantAsyncEventsAsync(result);
+                StopAndLogCall(dependantAsyncEventsStopwatch, "WithDependantAsyncEventRequestor", BuildTargetsString(_dependantAsyncEventRequestors.Select(r => r.ServiceName)));
+                result.AddRange(dependantAsyncEvents);
+            }
+
+            // Handle dependent gRPC event requestors - these also require applying initial events first
+            if (_dependantGrpcEventRequestors.Any())
+            {
+                var dependantGrpcEventsStopwatch = StartCallStopwatch();
+                var dependantGrpcEvents = await GetDependantGrpcEventsAsync(result);
+                StopAndLogCall(dependantGrpcEventsStopwatch, "WithDependantGrpcEventRequestor", BuildTargetsString(_dependantGrpcEventRequestors.Select(r => $"{r.ServiceName}@{r.Address}")));
+                result.AddRange(dependantGrpcEvents);
+            }
+
+            return result;
+        }
+        finally
         {
-            var nullableSingleIdEvents = await ExternalDataEvent.GetEventsAsync(
-                eventStoreContainer, 
-                _projectionsToInit, 
-                _queryExecutor,
-                _pointInTime, 
-                _nullableForeignKeySelectors.ToArray());
-            result.AddRange(nullableSingleIdEvents);
+            if (totalStopwatch != null)
+            {
+                totalStopwatch.Stop();
+                logger!.LogInformation("ExternalDataEventFactory totalElapsedMs={TotalElapsedMs}", totalStopwatch.ElapsedMilliseconds);
+            }
         }
-
-        // Get events for list-ID selectors (non-nullable)
-        if (_foreignKeyListSelectors.Any())
-        {
-            var listIdEvents = await ExternalDataEvent.GetEventsAsync(
-                eventStoreContainer, 
-                _projectionsToInit, 
-                _queryExecutor,
-                _pointInTime, 
-                _foreignKeyListSelectors.ToArray());
-            result.AddRange(listIdEvents);
-        }
-
-        // Get events for list-ID selectors (nullable) - nulls within lists filtered by HasValue in ExternalDataEvent
-        if (_nullableForeignKeyListSelectors.Any())
-        {
-            var nullableListIdEvents = await ExternalDataEvent.GetEventsAsync(
-                eventStoreContainer, 
-                _projectionsToInit, 
-                _queryExecutor,
-                _pointInTime, 
-                _nullableForeignKeyListSelectors.ToArray());
-            result.AddRange(nullableListIdEvents);
-        }
-
-        // Handle external service IDs before dependent selectors
-        // so that external events can also populate dependent IDs
-        if (_httpClient != null)
-        {
-            var externalEvents = await ExternalDataEvent.GetMultiServiceEventsAsync<P>(_httpClient!,
-                this._projectionsToInit,
-                this._pointInTime,
-                this._eventRequestors);
-
-            result.AddRange(externalEvents);
-        }
-
-        // Handle async (Kafka) event requestors
-        if (_asyncEventRequestors.Any())
-        {
-            var asyncEvents = await GetAsyncEventsAsync(_asyncEventRequestors, _projectionsToInit);
-            result.AddRange(asyncEvents);
-        }
-
-        // Handle gRPC event requestors
-        if (_grpcEventRequestors.Any())
-        {
-            var grpcEvents = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync<P>(
-                this._projectionsToInit,
-                this._pointInTime,
-                this._grpcEventRequestors);
-            result.AddRange(grpcEvents);
-        }
-
-        // Handle dependent selectors - these require applying ALL initial events first to get the IDs
-        // This runs after both local and external events have been collected
-        if (_dependantIdSelectors.Any() || _dependantListIdSelectors.Any() || _nullableDependantIdSelectors.Any() || _nullableDependantListIdSelectors.Any())
-        {
-            var dependantEvents = await GetDependantEventsAsync(eventStoreContainer, result);
-            result.AddRange(dependantEvents);
-        }
-
-        // Handle dependent external event requestors - these also require applying initial events first
-        if (_httpClient != null && _dependantEventRequestors.Any())
-        {
-            var dependantExternalEvents = await GetDependantExternalEventsAsync(result);
-            result.AddRange(dependantExternalEvents);
-        }
-
-        // Handle dependent async (Kafka) event requestors - these also require applying initial events first
-        if (_dependantAsyncEventRequestors.Any())
-        {
-            var dependantAsyncEvents = await GetDependantAsyncEventsAsync(result);
-            result.AddRange(dependantAsyncEvents);
-        }
-
-        // Handle dependent gRPC event requestors - these also require applying initial events first
-        if (_dependantGrpcEventRequestors.Any())
-        {
-            var dependantGrpcEvents = await GetDependantGrpcEventsAsync(result);
-            result.AddRange(dependantGrpcEvents);
-        }
-
-        return result; 
     }
 
     /// <summary>
