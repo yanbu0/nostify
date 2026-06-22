@@ -74,8 +74,13 @@
 
 ### Updates
 
+- 4.8.0
+    - **Constructor authToken for ExternalDataEventFactory**: `ExternalDataEventFactory<P>` now accepts an optional `authToken` parameter in the constructor. When set, all `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads that omit the per-call `authToken` will automatically use the constructor value. Per-call `authToken` parameters continue to take precedence over the constructor token, preserving backward compatibility.
+    - **New gRPC overloads (serviceName only)**: Added 12 new overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` that accept `(address, serviceName, selectors)` without requiring a per-call `authToken`. This eliminates the need to repeat the API key for every call when all requests share the same token.
+
 - 4.7.1
     - **Add Logging to Event Requestors**: You can now call `await factory.GetEventsAsync(enableLogging: true)` to add logging to the external event selectors to include timing.
+
 - 4.7.0
     - **Default Retry Options in NostifyFactory**: `NostifyFactory.WithCosmos` now accepts a `defaultRetryOptions` parameter of type `RetryOptions`. This value is stored on the `Nostify` instance as `INostify.DefaultRetryOptions` (also added to the interface). If not set or `null` is passed, defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`).
     - **All Default Handlers Retry by Default**: Every single-event and bulk-event handler in `DefaultEventHandlers` and every bulk handler in `DefaultCommandHandler` now has an `allowRetry = true` parameter (default). When `allowRetry = true`, the handler resolves its effective `RetryOptions` from `nostify.DefaultRetryOptions` rather than creating a fresh `new RetryOptions()`. Explicitly passing `allowRetry: false` or `retryOptions: null` (to the `RetryOptions?` overload) disables retry.
@@ -469,7 +474,7 @@ MyApp.Grpc/
 
 #### Connecting Clients
 
-Microservices fetch events from the gateway using `WithGrpcEventRequestor` with `serviceName` and optional `authToken`:
+Microservices fetch events from the gateway using `WithGrpcEventRequestor` with `serviceName` and optional `authToken`. Pass the API key once in the constructor to avoid repeating it on every call:
 
 ```csharp
 public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
@@ -479,27 +484,37 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
     DateTime? pointInTime = null)
 {
     var factory = new ExternalDataEventFactory<OrderProjection>(
-        nostify, projectionsToInit, httpClient, pointInTime);
+        nostify, projectionsToInit, httpClient, pointInTime,
+        authToken: "my-secret-api-key"); // set once here
 
     factory.WithSameServiceIdSelectors(p => p.customerId);
 
-    // Route through centralized gRPC gateway
+    // Route through centralized gRPC gateway — no authToken needed per call
     factory.WithGrpcEventRequestor(
         "https://grpc-gateway:5090",
         serviceName: "InventoryService",
-        authToken: "my-secret-api-key",
         p => p.warehouseId
     );
 
     factory.WithDependantGrpcEventRequestor(
         "https://grpc-gateway:5090",
         serviceName: "ShippingService",
-        authToken: "my-secret-api-key",
         p => p.shippingProviderId
     );
 
     return await factory.GetEventsAsync();
 }
+```
+
+If you need a different token for a specific call, pass `authToken` on that call and it will take precedence:
+
+```csharp
+factory.WithGrpcEventRequestor(
+    "https://grpc-gateway:5090",
+    serviceName: "SpecialService",
+    authToken: "different-key",
+    p => p.specialId
+);
 ```
 
 ### Aggregate

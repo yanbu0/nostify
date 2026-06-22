@@ -19,7 +19,8 @@ public ExternalDataEventFactory(
     List<P> projectionsToInit,
     HttpClient? httpClient = null,
     DateTime? pointInTime = null,
-    IQueryExecutor? queryExecutor = null)
+    IQueryExecutor? queryExecutor = null,
+    string? authToken = null)
 ```
 
 ### Parameters
@@ -31,6 +32,7 @@ public ExternalDataEventFactory(
 | `httpClient` | `HttpClient?` | No | HTTP client for external service calls. Required if using `AddEventRequestors` or `WithEventRequestor` |
 | `pointInTime` | `DateTime?` | No | Point in time to query events up to. If null, queries all events |
 | `queryExecutor` | `IQueryExecutor?` | No | Query executor for unit testing. Defaults to `CosmosQueryExecutor.Default` |
+| `authToken` | `string?` | No | Default authentication token used by gRPC requestors when no per-call token is specified. When provided, all `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads that omit the `authToken` parameter will use this value. Per-call `authToken` parameters always take precedence. |
 
 ## Methods
 
@@ -218,7 +220,7 @@ public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P
 
 #### WithGrpcEventRequestor (with serviceName + authToken)
 
-Six overloads that additionally accept a `serviceName` for multi-service gRPC routing and an optional `authToken` sent as Bearer authorization metadata:
+Six overloads that additionally accept a `serviceName` for multi-service gRPC routing and an explicit `authToken` sent as Bearer authorization metadata. The per-call `authToken` **always takes precedence** over the constructor-level `authToken`.
 
 ```csharp
 // Nullable Guid selectors
@@ -241,7 +243,32 @@ public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string
 ```
 
 - `serviceName` is forwarded to `GrpcEventRequester<P>` and included in the `service_name` proto field on every gRPC call.
-- `authToken` (nullable) is coerced to `""` when null and set on `GrpcEventRequester<P>.AuthToken`. When non-empty, the value is sent as `"Bearer {token}"` in gRPC metadata.
+- `authToken` (nullable) is coerced to `""` when null and set on `GrpcEventRequester<P>.AuthToken`. When non-empty, the value is sent as `"Bearer {token}"` in the `"authorization"` gRPC metadata header.
+- The per-call `authToken` **always takes precedence** over the constructor-level `authToken`.
+
+#### WithGrpcEventRequestor (with serviceName, uses constructor authToken)
+
+Six overloads that accept a `serviceName` but omit `authToken`, falling back to the `authToken` supplied in the constructor. If no constructor `authToken` was provided, an empty string is used.
+
+```csharp
+// Nullable Guid selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, params Func<P, Guid?>[] foreignIdSelectors)
+
+// Non-nullable Guid selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, params Func<P, Guid>[] selectors)
+
+// Nullable Guid list selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, params Func<P, List<Guid?>>[] selectors)
+
+// Non-nullable Guid list selectors
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, params Func<P, List<Guid>>[] selectors)
+
+// Mixed nullable
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
+
+// Mixed non-nullable
+public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, string serviceName, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
+```
 
 #### AddDependantGrpcEventRequestors
 
@@ -257,7 +284,11 @@ Six overloads matching the primary address-only `WithGrpcEventRequestor` pattern
 
 #### WithDependantGrpcEventRequestor (with serviceName + authToken)
 
-Six overloads matching the primary `WithGrpcEventRequestor(address, serviceName, authToken, ...)` patterns. Evaluated after the first round of events are applied.
+Six overloads matching the primary `WithGrpcEventRequestor(address, serviceName, authToken, ...)` patterns. Evaluated after the first round of events are applied. The per-call `authToken` **always takes precedence** over the constructor-level `authToken`.
+
+#### WithDependantGrpcEventRequestor (with serviceName, uses constructor authToken)
+
+Six overloads matching the primary `WithGrpcEventRequestor(address, serviceName, ...)` patterns but for dependent requestors. Uses the constructor `authToken` when no per-call token is provided. Evaluated after the first round of events are applied.
 
 ### GetEventsAsync
 
@@ -401,13 +432,29 @@ var events = await new ExternalDataEventFactory<OrderProjection>(nostify, projec
 ### With gRPC Event Requestors (serviceName + authToken)
 
 ```csharp
-// Fetch events via gRPC with service routing and authentication
+// Fetch events via gRPC with service routing and authentication (per-call token)
 var events = await new ExternalDataEventFactory<OrderProjection>(nostify, projections)
     .WithSameServiceIdSelectors(p => p.CustomerId)
     .WithGrpcEventRequestor("https://unified-grpc:5001", "InventoryService", authToken,
         (Func<OrderProjection, Guid>)(p => p.ProductId))
     .WithDependantGrpcEventRequestor("https://unified-grpc:5001", "ShippingService", authToken,
         (Func<OrderProjection, Guid?>)(p => p.ShippingMethodId))
+    .GetEventsAsync();
+```
+
+### With gRPC Event Requestors (constructor authToken)
+
+```csharp
+// Set the auth token once in the constructor; omit it from every WithGrpcEventRequestor call
+var events = await new ExternalDataEventFactory<OrderProjection>(nostify, projections,
+        authToken: "<api-key>")
+    .WithSameServiceIdSelectors(p => p.CustomerId)
+    .WithGrpcEventRequestor("https://unified-grpc:5001", "InventoryService",
+        (Func<OrderProjection, Guid>)(p => p.ProductId))
+    .WithGrpcEventRequestor("https://unified-grpc:5001", "ShippingService",
+        (Func<OrderProjection, Guid?>)(p => p.ShippingMethodId))
+    .WithGrpcEventRequestor("https://unified-grpc:5001", "WarehouseService",
+        (Func<OrderProjection, Guid?>)(p => p.WarehouseId))
     .GetEventsAsync();
 ```
 
@@ -455,7 +502,8 @@ var factory = new ExternalDataEventFactory<TestProjection>(
 
 ## Version History
 
-- **4.7.2** - Added optional `enableLogging` parameter to `GetEventsAsync`, including per-stage timing logs, total elapsed-time logging, and console guidance when logging is enabled without a configured logger
+- **4.8.0** - Added constructor `authToken` parameter to `ExternalDataEventFactory`. Added 12 new overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` that accept `(address, serviceName, selectors)` without a per-call `authToken`, using the constructor token instead. Per-call `authToken` always takes precedence over the constructor token.
+- **4.7.1** - Added optional `enableLogging` parameter to `GetEventsAsync`, including per-stage timing logs, total elapsed-time logging, and console guidance when logging is enabled without a configured logger
 - **4.5.0** - Added `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads with `serviceName` + `authToken` parameters (12 new overloads). Added address-only gRPC overloads (12 overloads), `AddGrpcEventRequestors`, `AddDependantGrpcEventRequestors`. Added `WithAsyncEventRequestor`, `WithDependantAsyncEventRequestor`, `AddAsyncEventRequestors`, `AddDependantAsyncEventRequestors` for Kafka-based async event fetching
 - **4.3.0** - Added nullable `Guid?` overloads for all selector methods; all methods now return `this` for fluent chaining
 - **4.1.0** - Initial release with basic selector support
