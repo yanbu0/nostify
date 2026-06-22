@@ -511,7 +511,7 @@ public class ExternalDataEventFactoryGrpcTests
             _testProjections);
 
         // Should not throw — null authToken is coerced to ""
-        var result = factory.WithGrpcEventRequestor("https://localhost:5001", "MyService", null,
+        var result = factory.WithGrpcEventRequestor("https://localhost:5001", "MyService", (string?)null,
             (Func<FactoryTestProjection, Guid?>)(p => p.externalId));
 
         Assert.Same(factory, result);
@@ -586,6 +586,266 @@ public class ExternalDataEventFactoryGrpcTests
             .WithGrpcEventRequestor("https://grpc:5001", "GrpcSvc", "grpc-token",
                 (Func<FactoryTestProjection, Guid>)(p => p.ownerId))
             .WithDependantGrpcEventRequestor("https://dep-grpc:5002", "DepGrpc", "dep-grpc-token",
+                (Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId));
+
+        Assert.Same(factory, result);
+    }
+
+    #endregion
+
+    #region Constructor authToken Tests
+
+    [Fact]
+    public void Constructor_WithAuthToken_UsedByServiceNameOverloads()
+    {
+        // Arrange
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        // Act — serviceName-only overload should pick up constructor token
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            "MyService",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        // Assert
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_NullableGuid_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            "MyService",
+            (Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_NullableList_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            "MyService",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.tagIds.Cast<Guid?>().ToList()));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_NonNullableList_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            "MyService",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.tagIds));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_MixedNullable_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            "MyService",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.externalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.tagIds.Cast<Guid?>().ToList() });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_MixedNonNullable_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            "MyService",
+            new Func<FactoryTestProjection, Guid>[] { p => p.siteId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.tagIds });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_Dependant_NullableGuid_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "https://localhost:5001",
+            "DepService",
+            (Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_Dependant_NonNullableGuid_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "https://localhost:5001",
+            "DepService",
+            (Func<FactoryTestProjection, Guid>)(p => p.dependentId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_Dependant_NullableList_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "https://localhost:5001",
+            "DepService",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.dependentListIds.Cast<Guid?>().ToList()));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_Dependant_NonNullableList_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "https://localhost:5001",
+            "DepService",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.dependentListIds));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_Dependant_MixedNullable_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "https://localhost:5001",
+            "DepService",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.dependentExternalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.dependentListIds.Cast<Guid?>().ToList() });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithAuthToken_Dependant_MixedNonNullable_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "https://localhost:5001",
+            "DepService",
+            new Func<FactoryTestProjection, Guid>[] { p => p.dependentId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.dependentListIds });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithoutAuthToken_ServiceNameOnlyOverload_ReturnsThis()
+    {
+        // When no authToken in constructor, serviceName-only overloads work with empty string token
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections);
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            "MyService",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void ExplicitAuthToken_TakesPrecedenceOverConstructorToken()
+    {
+        // Per-call authToken (in the 4-param overload) takes precedence over constructor token
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "constructor-token");
+
+        // This uses the explicit 4-param overload — explicit token wins
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            "MyService",
+            "explicit-token",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void FluentChaining_MultipleServiceNameOnly_WithConstructorToken_ReturnsThis()
+    {
+        // Verifies the issue's primary use-case: set token once in constructor, omit from each call
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "shared-api-key");
+
+        var result = factory
+            .WithGrpcEventRequestor("https://gateway:5001", "Location",
+                (Func<FactoryTestProjection, Guid?>)(p => p.externalId))
+            .WithGrpcEventRequestor("https://gateway:5001", "Auth",
+                (Func<FactoryTestProjection, Guid>)(p => p.siteId))
+            .WithGrpcEventRequestor("https://gateway:5001", "Asset",
+                (Func<FactoryTestProjection, Guid?>)(p => p.anotherExternalId))
+            .WithDependantGrpcEventRequestor("https://gateway:5001", "WorkOrder",
                 (Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId));
 
         Assert.Same(factory, result);
