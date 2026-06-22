@@ -74,6 +74,8 @@
 
 ### Updates
 
+- 4.7.1
+    - **Add Logging to Event Requestors**: You can now call `await factory.GetEventsAsync(enableLogging: true)` to add logging to the external event selectors to include timing.
 - 4.7.0
     - **Default Retry Options in NostifyFactory**: `NostifyFactory.WithCosmos` now accepts a `defaultRetryOptions` parameter of type `RetryOptions`. This value is stored on the `Nostify` instance as `INostify.DefaultRetryOptions` (also added to the interface). If not set or `null` is passed, defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`).
     - **All Default Handlers Retry by Default**: Every single-event and bulk-event handler in `DefaultEventHandlers` and every bulk handler in `DefaultCommandHandler` now has an `allowRetry = true` parameter (default). When `allowRetry = true`, the handler resolves its effective `RetryOptions` from `nostify.DefaultRetryOptions` rather than creating a fresh `new RetryOptions()`. Explicitly passing `allowRetry: false` or `retryOptions: null` (to the `RetryOptions?` overload) disables retry.
