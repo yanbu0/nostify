@@ -220,7 +220,7 @@ public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P
 
 #### WithGrpcEventRequestor (with serviceName + authToken)
 
-Six overloads that additionally accept a `serviceName` for multi-service gRPC routing and an explicit `authToken` sent as ****** metadata. The per-call `authToken` **always takes precedence** over the constructor-level `authToken`.
+Six overloads that additionally accept a `serviceName` for multi-service gRPC routing and an explicit `authToken` sent as Bearer authorization metadata. The per-call `authToken` **always takes precedence** over the constructor-level `authToken`.
 
 ```csharp
 // Nullable Guid selectors
