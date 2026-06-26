@@ -20,7 +20,8 @@ public ExternalDataEventFactory(
     HttpClient? httpClient = null,
     DateTime? pointInTime = null,
     IQueryExecutor? queryExecutor = null,
-    string? authToken = null)
+    string? authToken = null,
+    string? grpcAddress = null)
 ```
 
 ### Parameters
@@ -33,6 +34,7 @@ public ExternalDataEventFactory(
 | `pointInTime` | `DateTime?` | No | Point in time to query events up to. If null, queries all events |
 | `queryExecutor` | `IQueryExecutor?` | No | Query executor for unit testing. Defaults to `CosmosQueryExecutor.Default` |
 | `authToken` | `string?` | No | Default authentication token used by gRPC requestors when no per-call token is specified. When provided, all `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads that omit the `authToken` parameter will use this value. Per-call `authToken` parameters always take precedence. |
+| `grpcAddress` | `string?` | No | Default gRPC endpoint address used by the single-string overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor`. When non-empty, those overloads treat their first parameter as a **service name** (for multi-service gateway routing) rather than an endpoint address. When null or empty (the default), those overloads treat the first parameter as the endpoint address directly (original behavior). |
 
 ## Methods
 
@@ -194,9 +196,12 @@ public ExternalDataEventFactory<P> AddGrpcEventRequestors(params GrpcEventReques
 
 Adds pre-configured gRPC event requestors. Useful when constructing `GrpcEventRequester<P>` instances directly (e.g. when setting `AuthToken` via object initializer).
 
-#### WithGrpcEventRequestor (address-only)
+#### WithGrpcEventRequestor (address-only / serviceName-only via constructor grpcAddress)
 
-Six overloads mirroring `GrpcEventRequester<P>` constructor families (address-only, no service name or auth token):
+Six overloads with a single string parameter followed by selectors. The behavior of the first parameter depends on the `grpcAddress` constructor argument:
+
+- **When `grpcAddress` was NOT set in the constructor** (default): the first parameter is the gRPC endpoint address (original address-only behavior).
+- **When `grpcAddress` WAS set in the constructor** (non-empty): the first parameter is treated as a **service name** for multi-service gateway routing, and the constructor `grpcAddress` is used as the endpoint. The constructor `authToken` (if set) is also applied automatically.
 
 ```csharp
 // Nullable Guid selectors
@@ -217,6 +222,25 @@ public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P
 // Mixed non-nullable
 public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
 ```
+
+**Example — original address-only usage (no constructor `grpcAddress`):**
+
+```csharp
+var factory = new ExternalDataEventFactory<OrderProjection>(nostify, projections)
+    .WithGrpcEventRequestor("https://grpc-service:5001", p => p.ProductId);
+```
+
+**Example — serviceName-only usage (constructor `grpcAddress` set):**
+
+```csharp
+var factory = new ExternalDataEventFactory<OrderProjection>(
+    nostify, projections,
+    authToken: "<auth token>",
+    grpcAddress: "https://gateway:5001")
+    .WithGrpcEventRequestor("Location", p => p.siteId);   // "Location" is the serviceName
+```
+
+When `grpcAddress` is `null` or `""`, the overload falls back to the original address-only behavior, so existing code without constructor `grpcAddress` continues to work unchanged.
 
 #### WithGrpcEventRequestor (with serviceName + authToken)
 
@@ -278,9 +302,9 @@ public ExternalDataEventFactory<P> AddDependantGrpcEventRequestors(params GrpcEv
 
 Adds pre-configured dependent gRPC event requestors. Evaluated after the first round of events are applied.
 
-#### WithDependantGrpcEventRequestor (address-only)
+#### WithDependantGrpcEventRequestor (address-only / serviceName-only via constructor grpcAddress)
 
-Six overloads matching the primary address-only `WithGrpcEventRequestor` patterns.
+Six overloads matching the primary address-only / serviceName-only `WithGrpcEventRequestor` patterns. Evaluated after the first round of events are applied. The same dual-purpose behavior applies: when `grpcAddress` is set in the constructor, the first string parameter is treated as a service name; otherwise it is the endpoint address.
 
 #### WithDependantGrpcEventRequestor (with serviceName + authToken)
 
