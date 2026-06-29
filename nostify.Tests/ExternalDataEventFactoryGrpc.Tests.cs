@@ -852,4 +852,515 @@ public class ExternalDataEventFactoryGrpcTests
     }
 
     #endregion
+
+    #region Constructor grpcAddress Tests
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_SingleStringOverload_UsesConstructorAddressAsServiceName_NullableGuid()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        // When grpcAddress is set, first string param is treated as serviceName
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            (Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_SingleStringOverload_UsesConstructorAddressAsServiceName_NonNullableGuid()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_SingleStringOverload_UsesConstructorAddressAsServiceName_NullableList()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.tagIds.Cast<Guid?>().ToList()));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_SingleStringOverload_UsesConstructorAddressAsServiceName_NonNullableList()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.tagIds));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_SingleStringOverload_UsesConstructorAddressAsServiceName_MixedNullable()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.externalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.tagIds.Cast<Guid?>().ToList() });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_SingleStringOverload_UsesConstructorAddressAsServiceName_MixedNonNullable()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            new Func<FactoryTestProjection, Guid>[] { p => p.siteId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.tagIds });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_SingleStringOverload_NullableGuid()
+    {
+        // Both grpcAddress and authToken set in constructor
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            (Func<FactoryTestProjection, Guid?>)(p => p.externalId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_SingleStringOverload_NonNullableGuid()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_SingleStringOverload_NullableList()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.tagIds.Cast<Guid?>().ToList()));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_SingleStringOverload_NonNullableList()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.tagIds));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_SingleStringOverload_MixedNullable()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.externalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.tagIds.Cast<Guid?>().ToList() });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_SingleStringOverload_MixedNonNullable()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "Location",
+            new Func<FactoryTestProjection, Guid>[] { p => p.siteId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.tagIds });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithEmptyGrpcAddress_SingleStringOverload_UsesAddressDirectly()
+    {
+        // When grpcAddress is empty string, single-string overload falls back to address behavior
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "");
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithNullGrpcAddress_SingleStringOverload_UsesAddressDirectly()
+    {
+        // When grpcAddress is null (default), single-string overload treats first param as address
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: null);
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://localhost:5001",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_ExplicitAddressInMethod_UsesMethodAddress()
+    {
+        // When using the address+serviceName overload (two strings), the method's address takes precedence
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://constructor-gateway:5001");
+
+        // Explicit two-string overload uses the method address, not constructor grpcAddress
+        var result = factory.WithGrpcEventRequestor(
+            "https://explicit-address:5001",
+            "Location",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_Dependant_NullableGuid_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            (Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_Dependant_NonNullableGuid_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            (Func<FactoryTestProjection, Guid>)(p => p.dependentId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_Dependant_NullableList_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.dependentListIds.Cast<Guid?>().ToList()));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_Dependant_NonNullableList_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.dependentListIds));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_Dependant_MixedNullable_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.dependentExternalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.dependentListIds.Cast<Guid?>().ToList() });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_Dependant_MixedNonNullable_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            new Func<FactoryTestProjection, Guid>[] { p => p.dependentId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.dependentListIds });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_Dependant_NullableGuid_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            (Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_Dependant_NonNullableGuid_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            (Func<FactoryTestProjection, Guid>)(p => p.dependentId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_Dependant_NullableList_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            (Func<FactoryTestProjection, List<Guid?>>)(p => p.dependentListIds.Cast<Guid?>().ToList()));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_Dependant_NonNullableList_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            (Func<FactoryTestProjection, List<Guid>>)(p => p.dependentListIds));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_Dependant_MixedNullable_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            new Func<FactoryTestProjection, Guid?>[] { p => p.dependentExternalId },
+            new Func<FactoryTestProjection, List<Guid?>>[] { p => p.dependentListIds.Cast<Guid?>().ToList() });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_AndAuthToken_Dependant_MixedNonNullable_ReturnsThis()
+    {
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "my-token",
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "DepService",
+            new Func<FactoryTestProjection, Guid>[] { p => p.dependentId },
+            new Func<FactoryTestProjection, List<Guid>>[] { p => p.dependentListIds });
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithEmptyGrpcAddress_Dependant_UsesAddressDirectly()
+    {
+        // When grpcAddress is empty string, the single-string overload falls back to address behavior
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "");
+
+        var result = factory.WithDependantGrpcEventRequestor(
+            "https://localhost:5001",
+            (Func<FactoryTestProjection, Guid>)(p => p.dependentId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void FluentChaining_GrpcAddress_IssuePrimaryUseCase_ReturnsThis()
+    {
+        // Verifies the issue's primary use-case: set both token and address once in constructor
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            authToken: "<auth token>",
+            grpcAddress: "https://gateway:5001");
+
+        // No address needed per call — only serviceName
+        var result = factory
+            .WithGrpcEventRequestor("Location",
+                (Func<FactoryTestProjection, Guid>)(p => p.siteId))
+            .WithGrpcEventRequestor("Auth",
+                (Func<FactoryTestProjection, Guid?>)(p => p.externalId))
+            .WithGrpcEventRequestor("Asset",
+                (Func<FactoryTestProjection, List<Guid?>>)(p => p.tagIds.Cast<Guid?>().ToList()))
+            .WithDependantGrpcEventRequestor("WorkOrder",
+                (Func<FactoryTestProjection, Guid?>)(p => p.dependentExternalId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_ExplicitTwoStringOverload_StillWorks()
+    {
+        // Even when grpcAddress is set in constructor, users can still pass explicit address + serviceName
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://other-server:5002",
+            "OtherService",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    [Fact]
+    public void Constructor_WithGrpcAddress_ExplicitThreeStringOverload_StillWorks()
+    {
+        // The explicit address+serviceName+authToken overload still works with constructor grpcAddress
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            grpcAddress: "https://gateway:5001");
+
+        var result = factory.WithGrpcEventRequestor(
+            "https://other-server:5002",
+            "OtherService",
+            "other-token",
+            (Func<FactoryTestProjection, Guid>)(p => p.siteId));
+
+        Assert.Same(factory, result);
+    }
+
+    #endregion
 }

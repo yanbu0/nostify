@@ -37,6 +37,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     private List<P> _projectionsToInit = new List<P>();
     private DateTime? _pointInTime;
     private string? _grpcAuthToken;
+    private string? _grpcAddress;
 
     /// <summary>
     /// Creates a new ExternalDataEventFactory
@@ -47,7 +48,8 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     /// <param name="pointInTime">Optional point in time to query events up to</param>
     /// <param name="queryExecutor">Optional query executor for unit testing. Defaults to CosmosQueryExecutor.</param>
     /// <param name="authToken">Optional default authentication token used by gRPC requestors when no per-call token is specified</param>
-    public ExternalDataEventFactory(INostify nostify, List<P> projectionsToInit, HttpClient? httpClient = null, DateTime? pointInTime = null, IQueryExecutor? queryExecutor = null, string? authToken = null)
+    /// <param name="grpcAddress">Optional default gRPC endpoint address used by <c>WithGrpcEventRequestor</c> and <c>WithDependantGrpcEventRequestor</c> overloads that omit the <c>address</c> parameter. When provided, the single-string overloads treat their first parameter as a service name rather than an endpoint address.</param>
+    public ExternalDataEventFactory(INostify nostify, List<P> projectionsToInit, HttpClient? httpClient = null, DateTime? pointInTime = null, IQueryExecutor? queryExecutor = null, string? authToken = null, string? grpcAddress = null)
     {
         this._nostify = nostify;
         this._httpClient = httpClient;
@@ -55,6 +57,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         this._pointInTime = pointInTime;
         this._queryExecutor = queryExecutor ?? CosmosQueryExecutor.Default;
         this._grpcAuthToken = authToken;
+        this._grpcAddress = grpcAddress;
     }
 
     /// <summary>
@@ -402,76 +405,136 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     }
 
     /// <summary>
-    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using nullable Guid selectors.
+    /// Adds a gRPC event requestor using nullable Guid selectors.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
-    /// <param name="address">The gRPC endpoint address (e.g. "https://localhost:5001")</param>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
     /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
     /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, Guid?>[] foreignIdSelectors)
     {
-        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, foreignIdSelectors)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, foreignIdSelectors) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, foreignIdSelectors)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using non-nullable Guid selectors.
+    /// Adds a gRPC event requestor using non-nullable Guid selectors.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
-    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
     /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
     /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, Guid>[] selectors)
     {
-        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, selectors) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using nullable Guid list selectors.
+    /// Adds a gRPC event requestor using nullable Guid list selectors.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
-    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
     /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
     /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, List<Guid?>>[] selectors)
     {
-        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, selectors) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds a gRPC event requestor for fetching events from an external service via gRPC, using non-nullable Guid list selectors.
+    /// Adds a gRPC event requestor using non-nullable Guid list selectors.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
-    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
     /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
     /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, params Func<P, List<Guid>>[] selectors)
     {
-        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, selectors) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
     /// Adds a gRPC event requestor using a mix of single nullable and list nullable selectors.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
-    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
     /// <param name="single">Functions that return a single nullable foreign id</param>
     /// <param name="list">Functions that return a list of nullable foreign ids</param>
     /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
     {
-        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, single, list) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
     /// Adds a gRPC event requestor using a mix of single non-nullable and list non-nullable selectors.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
-    /// <param name="address">The gRPC endpoint address</param>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
     /// <param name="single">Functions that return a single non-nullable foreign id</param>
     /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
     /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
     {
-        this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, single, list) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._grpcEventRequestors = this._grpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        }
         return this;
     }
 
@@ -663,62 +726,136 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     }
 
     /// <summary>
-    /// Adds a dependent gRPC event requestor via gRPC, using nullable Guid selectors.
-    /// Evaluated after the first round of events are applied.
+    /// Adds a dependent gRPC event requestor using nullable Guid selectors. Evaluated after the first round of events are applied.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
+    /// <param name="foreignIdSelectors">Functions that extract nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, Guid?>[] foreignIdSelectors)
     {
-        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, foreignIdSelectors)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, foreignIdSelectors) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, foreignIdSelectors)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds a dependent gRPC event requestor via gRPC, using non-nullable Guid selectors.
-    /// Evaluated after the first round of events are applied.
+    /// Adds a dependent gRPC event requestor using non-nullable Guid selectors. Evaluated after the first round of events are applied.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
+    /// <param name="selectors">Functions that extract non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, Guid>[] selectors)
     {
-        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, selectors) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds a dependent gRPC event requestor via gRPC, using nullable Guid list selectors.
-    /// Evaluated after the first round of events are applied.
+    /// Adds a dependent gRPC event requestor using nullable Guid list selectors. Evaluated after the first round of events are applied.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
+    /// <param name="selectors">Functions that extract lists of nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, List<Guid?>>[] selectors)
     {
-        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, selectors) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds a dependent gRPC event requestor via gRPC, using non-nullable Guid list selectors.
-    /// Evaluated after the first round of events are applied.
+    /// Adds a dependent gRPC event requestor using non-nullable Guid list selectors. Evaluated after the first round of events are applied.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
+    /// <param name="selectors">Functions that extract lists of non-nullable foreign key IDs from a projection</param>
+    /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, params Func<P, List<Guid>>[] selectors)
     {
-        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, selectors) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, selectors)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds a dependent gRPC event requestor using a mix of single nullable and list nullable selectors.
-    /// Evaluated after the first round of events are applied.
+    /// Adds a dependent gRPC event requestor using a mix of single nullable and list nullable selectors. Evaluated after the first round of events are applied.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
+    /// <param name="single">Functions that return a single nullable foreign id</param>
+    /// <param name="list">Functions that return a list of nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, Func<P, Guid?>[] single, Func<P, List<Guid?>>[] list)
     {
-        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, single, list) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds a dependent gRPC event requestor using a mix of single non-nullable and list non-nullable selectors.
-    /// Evaluated after the first round of events are applied.
+    /// Adds a dependent gRPC event requestor using a mix of single non-nullable and list non-nullable selectors. Evaluated after the first round of events are applied.
+    /// When <c>grpcAddress</c> was provided in the constructor, the <paramref name="address"/> parameter is treated as
+    /// a service name and the constructor-provided address is used as the endpoint. When no constructor
+    /// <c>grpcAddress</c> was provided, this parameter is treated as the gRPC endpoint address directly.
     /// </summary>
+    /// <param name="address">The gRPC endpoint address, or the service name when a constructor <c>grpcAddress</c> was set</param>
+    /// <param name="single">Functions that return a single non-nullable foreign id</param>
+    /// <param name="list">Functions that return a list of non-nullable foreign ids</param>
+    /// <returns>This factory instance for fluent chaining</returns>
     public ExternalDataEventFactory<P> WithDependantGrpcEventRequestor(string address, Func<P, Guid>[] single, Func<P, List<Guid>>[] list)
     {
-        this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        if (!string.IsNullOrEmpty(_grpcAddress))
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(_grpcAddress, address, single, list) { AuthToken = _grpcAuthToken ?? "" }).ToArray();
+        }
+        else
+        {
+            this._dependantGrpcEventRequestors = this._dependantGrpcEventRequestors.Append(new GrpcEventRequester<P>(address, single, list)).ToArray();
+        }
         return this;
     }
 

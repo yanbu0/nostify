@@ -74,6 +74,9 @@
 
 ### Updates
 
+- 4.8.1
+    - **Constructor grpcAddress for ExternalDataEventFactory**: `ExternalDataEventFactory<P>` now accepts an optional `grpcAddress` parameter in the constructor. When set to a non-empty string, the single-string overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` treat their first parameter as a **service name** (for multi-service gateway routing) and use the constructor address as the gRPC endpoint. When `grpcAddress` is null or empty (the default), those overloads continue to treat the first parameter as the endpoint address directly, preserving full backward compatibility. The constructor `authToken` (if set) is automatically applied when the constructor `grpcAddress` is used.
+
 - 4.8.0
     - **Constructor authToken for ExternalDataEventFactory**: `ExternalDataEventFactory<P>` now accepts an optional `authToken` parameter in the constructor. When set, all `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads that omit the per-call `authToken` will automatically use the constructor value. Per-call `authToken` parameters continue to take precedence over the constructor token, preserving backward compatibility.
     - **New gRPC overloads (serviceName only)**: Added 12 new overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` that accept `(address, serviceName, selectors)` without requiring a per-call `authToken`. This eliminates the need to repeat the API key for every call when all requests share the same token.
@@ -474,7 +477,7 @@ MyApp.Grpc/
 
 #### Connecting Clients
 
-Microservices fetch events from the gateway using `WithGrpcEventRequestor` with `serviceName` and optional `authToken`. Pass the API key once in the constructor to avoid repeating it on every call:
+Microservices fetch events from the gateway using `WithGrpcEventRequestor` with `serviceName` and optional `authToken`. Pass the API key and gateway address once in the constructor to avoid repeating them on every call:
 
 ```csharp
 public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
@@ -485,25 +488,35 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
 {
     var factory = new ExternalDataEventFactory<OrderProjection>(
         nostify, projectionsToInit, httpClient, pointInTime,
-        authToken: "my-secret-api-key"); // set once here
+        authToken: "my-secret-api-key",       // set once here
+        grpcAddress: "https://grpc-gateway:5090"); // set once here
 
     factory.WithSameServiceIdSelectors(p => p.customerId);
 
-    // Route through centralized gRPC gateway — no authToken needed per call
+    // Route through centralized gRPC gateway — no address or authToken needed per call
     factory.WithGrpcEventRequestor(
-        "https://grpc-gateway:5090",
-        serviceName: "InventoryService",
+        "InventoryService",   // serviceName only; address comes from constructor
         p => p.warehouseId
     );
 
     factory.WithDependantGrpcEventRequestor(
-        "https://grpc-gateway:5090",
-        serviceName: "ShippingService",
+        "ShippingService",    // serviceName only; address comes from constructor
         p => p.shippingProviderId
     );
 
     return await factory.GetEventsAsync();
 }
+```
+
+If you need a different address for a specific call, use the explicit two-string overload (it always takes precedence over the constructor `grpcAddress`):
+
+```csharp
+// Explicit address + serviceName — constructor grpcAddress is ignored for this call
+factory.WithGrpcEventRequestor(
+    "https://other-gateway:5091",
+    "SpecialService",
+    p => p.specialId
+);
 ```
 
 If you need a different token for a specific call, pass `authToken` on that call and it will take precedence:
@@ -2938,9 +2951,52 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
 }
 ```
 
-**gRPC with ServiceName and AuthToken (Centralized Gateway):**
+**gRPC with Constructor grpcAddress and AuthToken (Centralized Gateway — Recommended):**
 
-When using a centralized gRPC gateway (created via `dotnet new nostifyGrpc`), pass `serviceName` to route the request to the correct backend, and `authToken` if the gateway requires authentication:
+When using a centralized gRPC gateway (created via `dotnet new nostifyGrpc`), set `grpcAddress` and `authToken` once in the constructor. Each `WithGrpcEventRequestor` call then only needs the `serviceName`:
+
+```C#
+public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+    List<OrderProjection> projectionsToInit, 
+    INostify nostify, 
+    HttpClient? httpClient = null, 
+    DateTime? pointInTime = null)
+{
+    var factory = new ExternalDataEventFactory<OrderProjection>(
+        nostify,
+        projectionsToInit,
+        httpClient,
+        pointInTime,
+        authToken: "my-secret-api-key",        // set once — applied to all calls below
+        grpcAddress: "https://grpc-gateway:5090"); // set once — applied to all calls below
+
+    factory.WithSameServiceIdSelectors(p => p.customerId);
+
+    // Route through a centralized gRPC gateway — no address or token needed per call
+    factory.WithGrpcEventRequestor(
+        "InventoryService",   // serviceName only; address + token come from constructor
+        p => p.warehouseId
+    );
+
+    factory.WithGrpcEventRequestor(
+        "PaymentService",
+        p => p.paymentMethodId,
+        p => p.billingAccountId
+    );
+
+    // Dependent requestors also use constructor address + token
+    factory.WithDependantGrpcEventRequestor(
+        "ShippingService",
+        p => p.shippingProviderId
+    );
+
+    return await factory.GetEventsAsync();
+}
+```
+
+**gRPC with ServiceName and AuthToken per call (explicit address):**
+
+If you prefer per-call explicit addresses, or need to mix different gRPC servers in the same factory, pass `address` and `serviceName` on each call:
 
 ```C#
 public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
