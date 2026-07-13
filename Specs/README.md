@@ -100,6 +100,7 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 | [ContainerExtensions](ContainerExtensions.spec.md) | Cosmos Container extension methods for apply-and-persist operations |
 | [NostifyExtensions](NostifyExtensions.spec.md) | Extension methods |
 | [NewtonsoftJsonCosmosSerializer](NewtonsoftJsonCosmosSerializer.spec.md) | Custom JSON serializer |
+| [WorkerConfigurationExtensions](WorkerConfigurationExtensions.spec.md) | Azure Functions worker JSON configuration helpers |
 
 ## Quick Start
 

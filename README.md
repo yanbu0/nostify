@@ -868,7 +868,7 @@ public class Program
     var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults(builder =>
     {
-        builder.UseNewtonsoftJson();
+        builder.UseNostifyDefaultConfiguredNewtonsoftJson();
     })
     .ConfigureServices((context, services) =>
     {
@@ -908,6 +908,8 @@ public class Program
   }
 }
 ```
+
+`UseNostifyDefaultConfiguredNewtonsoftJson()` configures the Azure Functions worker to use nostify's default Newtonsoft.Json settings. If you prefer the shorter alias, `UseNostifyDefaultJson()` applies the same configuration. An experimental `UseNostifySystemTextJson()` helper is also available for evaluating a `System.Text.Json`-based worker serializer with nostify-compatible defaults.
 
 #### Using Azure Event Hubs
 

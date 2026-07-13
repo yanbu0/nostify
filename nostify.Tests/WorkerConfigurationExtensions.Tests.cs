@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text.Json;
 using Azure.Core.Serialization;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using SystemTextJsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace nostify.Tests;
 
@@ -40,8 +40,8 @@ public class WorkerConfigurationExtensionsTests
             aggregateId,
             new SerializerTestAggregate { id = aggregateId, Name = "Test Aggregate", Value = 123 });
 
-        var json = JsonSerializer.Serialize(originalEvent, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
-        var deserializedEvent = JsonSerializer.Deserialize<IEvent>(json, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+        var json = SystemTextJsonSerializer.Serialize(originalEvent, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+        var deserializedEvent = SystemTextJsonSerializer.Deserialize<IEvent>(json, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
 
         Assert.NotNull(deserializedEvent);
         Assert.IsType<Event>(deserializedEvent);
@@ -67,8 +67,8 @@ public class WorkerConfigurationExtensionsTests
             new SerializerTestAggregate { id = Guid.NewGuid(), Name = "Rollback", Value = 2 });
         ISaga originalSaga = new Saga("TestSaga", new List<SagaStep> { new SagaStep(1, triggerEvent, rollbackEvent) });
 
-        var json = JsonSerializer.Serialize(originalSaga, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
-        var deserializedSaga = JsonSerializer.Deserialize<ISaga>(json, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+        var json = SystemTextJsonSerializer.Serialize(originalSaga, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+        var deserializedSaga = SystemTextJsonSerializer.Deserialize<ISaga>(json, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
 
         Assert.NotNull(deserializedSaga);
         Assert.IsType<Saga>(deserializedSaga);
@@ -90,7 +90,7 @@ public class WorkerConfigurationExtensionsTests
             status = SagaStatus.Pending
         };
 
-        var json = JsonSerializer.Serialize(saga, options);
+        var json = SystemTextJsonSerializer.Serialize(saga, options);
 
         Assert.Contains("\"errorMessage\":null", json);
         Assert.Contains("\"rollbackErrorMessage\":null", json);
@@ -112,7 +112,7 @@ public class WorkerConfigurationExtensionsTests
         }
         """;
 
-        var deserialized = JsonSerializer.Deserialize<Dictionary<string, object?>>(json, options);
+        var deserialized = SystemTextJsonSerializer.Deserialize<Dictionary<string, object?>>(json, options);
 
         Assert.NotNull(deserialized);
         Assert.Equal("Test", deserialized["name"]);
@@ -139,8 +139,8 @@ public class WorkerConfigurationExtensionsTests
 
         var systemTextElapsed = Measure(iterations, () =>
         {
-            var json = JsonSerializer.Serialize(command, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
-            var result = JsonSerializer.Deserialize<NostifyCommand>(json, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+            var json = SystemTextJsonSerializer.Serialize(command, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+            var result = SystemTextJsonSerializer.Deserialize<NostifyCommand>(json, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
             Assert.NotNull(result);
             Assert.Equal(command.name, result.name);
         });
@@ -168,7 +168,7 @@ public class WorkerConfigurationExtensionsTests
 
         var systemTextElapsed = Measure(iterations, () =>
         {
-            var json = JsonSerializer.Serialize(evt, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+            var json = SystemTextJsonSerializer.Serialize(evt, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
             Assert.Contains("Publish Test", json);
         });
 
@@ -186,7 +186,7 @@ public class WorkerConfigurationExtensionsTests
             aggregateId,
             new SerializerTestAggregate { id = aggregateId, Name = "Consume Test", Value = 91 });
         var newtonsoftJson = JsonConvert.SerializeObject(evt, SerializationSettings.NostifyDefault);
-        var systemTextJson = JsonSerializer.Serialize(evt, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+        var systemTextJson = SystemTextJsonSerializer.Serialize(evt, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
         var iterations = 1_000;
 
         var newtonsoftElapsed = Measure(iterations, () =>
@@ -198,7 +198,7 @@ public class WorkerConfigurationExtensionsTests
 
         var systemTextElapsed = Measure(iterations, () =>
         {
-            var result = JsonSerializer.Deserialize<IEvent>(systemTextJson, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+            var result = SystemTextJsonSerializer.Deserialize<IEvent>(systemTextJson, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
             Assert.NotNull(result);
             Assert.Equal("Consume Test", result.GetPayload<SerializerTestAggregate>().Name);
         });
@@ -213,7 +213,9 @@ public class WorkerConfigurationExtensionsTests
     public void UseNostifySystemTextJson_ConfiguresSystemTextWorkerSerializer()
 #pragma warning restore NOSTIFY001
     {
+#pragma warning disable NOSTIFY001
         var workerOptions = BuildWorkerOptions(builder => builder.UseNostifySystemTextJson());
+#pragma warning restore NOSTIFY001
 
         Assert.NotNull(workerOptions.Serializer);
         Assert.IsType<JsonObjectSerializer>(workerOptions.Serializer);
