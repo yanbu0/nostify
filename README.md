@@ -76,9 +76,9 @@
 
 - 4.9.0
     - **WorkerConfigurationExtensions Moved Into Library**: Azure Functions worker JSON configuration now lives in reusable `nostify.WorkerConfigurationExtensions` instead of being duplicated inside every generated service `Program.cs`.
-    - **New Worker JSON Helpers**: Added `UseNostifyDefaultJson()` and the template-facing `UseNostifyDefaultConfiguredNewtonsoftJson()` helpers for configuring nostify's default Newtonsoft.Json worker serializer.
+    - **New Worker JSON Helpers**: Added `UseNostifyDefaultConfiguredNewtonsoftJson()` and the shorter `UseNostifyDefaultJson()` helper for configuring nostify's default Newtonsoft.Json worker serializer.
     - **Experimental System.Text.Json Worker Helper**: Added `UseNostifySystemTextJson()` as an experimental Azure Functions worker serializer option with nostify-compatible camelCase, null, enum, interface, and dynamic-object handling.
-    - **Template Update**: The `nostify` template now calls `UseNostifyDefaultConfiguredNewtonsoftJson()` and no longer ships its own local `WorkerConfigurationExtensions` class.
+    - **Template Update**: The `nostify` template now calls `UseNostifyDefaultJson()` and no longer ships its own local `WorkerConfigurationExtensions` class.
 
 - 4.8.1
     - **Constructor grpcAddress for ExternalDataEventFactory**: `ExternalDataEventFactory<P>` now accepts an optional `grpcAddress` parameter in the constructor. When set to a non-empty string, the single-string overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` treat their first parameter as a **service name** (for multi-service gateway routing) and use the constructor address as the gRPC endpoint. When `grpcAddress` is null or empty (the default), those overloads continue to treat the first parameter as the endpoint address directly, preserving full backward compatibility. The constructor `authToken` (if set) is automatically applied when the constructor `grpcAddress` is used.
@@ -874,7 +874,7 @@ public class Program
     var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults(builder =>
     {
-        builder.UseNostifyDefaultConfiguredNewtonsoftJson();
+        builder.UseNostifyDefaultJson();
     })
     .ConfigureServices((context, services) =>
     {
@@ -915,7 +915,7 @@ public class Program
 }
 ```
 
-`UseNostifyDefaultConfiguredNewtonsoftJson()` configures the Azure Functions worker to use nostify's default Newtonsoft.Json settings. If you prefer the shorter alias, `UseNostifyDefaultJson()` applies the same configuration. An experimental `UseNostifySystemTextJson()` helper is also available for evaluating a `System.Text.Json`-based worker serializer with nostify-compatible defaults.
+`UseNostifyDefaultConfiguredNewtonsoftJson()` configures the Azure Functions worker to use nostify's default Newtonsoft.Json settings. `UseNostifyDefaultJson()` is the shorter wrapper that applies the same configuration and is what the `nostify` template uses. An experimental `UseNostifySystemTextJson()` helper is also available for evaluating a `System.Text.Json`-based worker serializer with nostify-compatible defaults.
 
 #### Using Azure Event Hubs
 

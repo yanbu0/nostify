@@ -15,7 +15,7 @@ public class Program
         var host = new HostBuilder()
         .ConfigureFunctionsWorkerDefaults(builder =>
         {
-            builder.UseNostifyDefaultConfiguredNewtonsoftJson();
+            builder.UseNostifyDefaultJson();
         })
         .ConfigureServices((context, services) =>
         {

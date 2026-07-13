@@ -28,7 +28,9 @@ public static IFunctionsWorkerApplicationBuilder UseNostifyDefaultConfiguredNewt
     this IFunctionsWorkerApplicationBuilder builder)
 ```
 
-Alias for `UseNostifyDefaultJson()`. This is the method used by the `nostify` service template.
+Configures the Functions worker to use `NewtonsoftJsonObjectSerializer` with `SerializationSettings.NostifyDefault`.
+
+`UseNostifyDefaultJson()` is a shorter wrapper around this method. The underlying configuration lives here.
 
 ### UseNostifySystemTextJson
 
@@ -57,7 +59,7 @@ The experimental serializer is configured with:
 The `templates/nostify/_ReplaceMe_/Program.cs` file now calls:
 
 ```csharp
-builder.UseNostifyDefaultConfiguredNewtonsoftJson();
+builder.UseNostifyDefaultJson();
 ```
 
 This removes the old duplicated template-local `WorkerConfigurationExtensions` implementation.
@@ -71,7 +73,7 @@ var host = new HostBuilder()
         builder.UseWhenHttp<JwtAuthenticationMiddleware>();
         builder.UseWhenHttp<JwtAuthorizationMiddleware>();
         builder.UseMiddleware<HttpExceptionMiddleware>();
-        builder.UseNostifyDefaultConfiguredNewtonsoftJson();
+        builder.UseNostifyDefaultJson();
     })
     .Build();
 ```

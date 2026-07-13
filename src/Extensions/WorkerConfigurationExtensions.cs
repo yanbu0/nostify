@@ -19,7 +19,14 @@ public static class WorkerConfigurationExtensions
     /// </summary>
     /// <param name="builder">The Functions worker application builder.</param>
     /// <returns>The same builder instance for chaining.</returns>
-    public static IFunctionsWorkerApplicationBuilder UseNostifyDefaultJson(this IFunctionsWorkerApplicationBuilder builder)
+    public static IFunctionsWorkerApplicationBuilder UseNostifyDefaultJson(this IFunctionsWorkerApplicationBuilder builder) => builder.UseNostifyDefaultConfiguredNewtonsoftJson();
+
+    /// <summary>
+    /// Configures the Functions worker to use Newtonsoft.Json with <see cref="SerializationSettings.NostifyDefault"/>.
+    /// </summary>
+    /// <param name="builder">The Functions worker application builder.</param>
+    /// <returns>The same builder instance for chaining.</returns>
+    public static IFunctionsWorkerApplicationBuilder UseNostifyDefaultConfiguredNewtonsoftJson(this IFunctionsWorkerApplicationBuilder builder)
     {
         builder.Services.Configure<WorkerOptions>(workerOptions =>
         {
@@ -28,13 +35,6 @@ public static class WorkerConfigurationExtensions
 
         return builder;
     }
-
-    /// <summary>
-    /// Configures the Functions worker to use Newtonsoft.Json with <see cref="SerializationSettings.NostifyDefault"/>.
-    /// </summary>
-    /// <param name="builder">The Functions worker application builder.</param>
-    /// <returns>The same builder instance for chaining.</returns>
-    public static IFunctionsWorkerApplicationBuilder UseNostifyDefaultConfiguredNewtonsoftJson(this IFunctionsWorkerApplicationBuilder builder) => builder.UseNostifyDefaultJson();
 
     /// <summary>
     /// Configures the Functions worker to use System.Text.Json with nostify-compatible defaults.
