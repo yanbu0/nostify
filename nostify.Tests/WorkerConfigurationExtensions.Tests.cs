@@ -150,7 +150,7 @@ public class WorkerConfigurationExtensionsTests
         Assert.True(systemTextElapsed > TimeSpan.Zero);
     }
 
-    [Fact]
+[Fact(Skip = "Performance comparison; move to a benchmark/manual run to keep CI unit tests fast and deterministic.")]
     public void NewtonsoftAndSystemTextJson_EventPublishing_PerformanceComparison()
     {
         var aggregateId = Guid.NewGuid();
