@@ -74,7 +74,7 @@
 
 ### Updates
 
-- 4.8.2
+- 4.9.0
     - **WorkerConfigurationExtensions Moved Into Library**: Azure Functions worker JSON configuration now lives in reusable `nostify.WorkerConfigurationExtensions` instead of being duplicated inside every generated service `Program.cs`.
     - **New Worker JSON Helpers**: Added `UseNostifyDefaultJson()` and the template-facing `UseNostifyDefaultConfiguredNewtonsoftJson()` helpers for configuring nostify's default Newtonsoft.Json worker serializer.
     - **Experimental System.Text.Json Worker Helper**: Added `UseNostifySystemTextJson()` as an experimental Azure Functions worker serializer option with nostify-compatible camelCase, null, enum, interface, and dynamic-object handling.
