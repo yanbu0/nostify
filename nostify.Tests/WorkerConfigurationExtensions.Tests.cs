@@ -123,7 +123,7 @@ public class WorkerConfigurationExtensionsTests
         Assert.Equal(9L, nested["value"]);
     }
 
-    [Fact]
+[Fact(Skip = "Performance comparison; move to a benchmark/manual run to keep CI unit tests fast and deterministic.")]
     public void NewtonsoftAndSystemTextJson_CommandSerialization_PerformanceComparison()
     {
         var command = new NostifyCommand("Create_Test", isNew: true, allowNullPayload: true);
