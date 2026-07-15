@@ -100,6 +100,7 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 | [ContainerExtensions](ContainerExtensions.spec.md) | Cosmos Container extension methods for apply-and-persist operations |
 | [NostifyExtensions](NostifyExtensions.spec.md) | Extension methods |
 | [NewtonsoftJsonCosmosSerializer](NewtonsoftJsonCosmosSerializer.spec.md) | Custom JSON serializer |
+| [WorkerConfigurationExtensions](WorkerConfigurationExtensions.spec.md) | Azure Functions worker JSON configuration helpers |
 
 ## Quick Start
 
@@ -137,6 +138,7 @@ var order = await nostify.RehydrateAsync<Order>(orderId);
 
 ## Version History
 
+- **4.9.0** - Moved Azure Functions worker JSON configuration into reusable `WorkerConfigurationExtensions`; added `UseNostifyDefaultConfiguredNewtonsoftJson()`, shorter wrapper `UseNostifyDefaultJson()`, and experimental `UseNostifySystemTextJson()`; updated the `nostify` template to consume the library helper instead of generating its own local extension class
 - **4.7.0** - `NostifyFactory.WithCosmos` now accepts `defaultRetryOptions`; all default event and command handlers now have `allowRetry = true` by default, using `nostify.DefaultRetryOptions` when no explicit retry options are provided; `INostify.DefaultRetryOptions` property added; nostify template updated to read retry settings from local.settings.json
 - **4.6.6** - `RetryableContainer.CreateItemAsync` now treats ALL 409 Conflict responses as idempotent success (removed `attempt > 0` guard); `DoBulkCreateAsync` also catches 409 on the no-retry path — both changes fix Kafka at-least-once redelivery creating spurious undeliverable events
 - **4.6.5** - `PersistEventAsync` now logs and writes to the undeliverable container on failure before re-throwing; `HandleBulkUpdateAsync` and `HandleBulkDeleteAsync` (HttpRequestData) throw `NostifyException` on null deserialized body
