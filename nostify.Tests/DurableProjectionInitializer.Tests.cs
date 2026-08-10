@@ -1574,4 +1574,175 @@ public class DurableProjectionInitializerTests
     //   - ProcessBatch:            events are fetched, applied to projections, and InitAsync is called
 
     #endregion
+
+    #region Cancellation Tests
+
+    // Report cancelled for any orchestration that is done - Completed, Failed, Terminated, Canceled
+    [Theory]
+    [InlineData(OrchestrationRuntimeStatus.Running, false)]
+    [InlineData(OrchestrationRuntimeStatus.Pending, false)]
+    [InlineData(OrchestrationRuntimeStatus.Suspended, false)]
+    [InlineData(OrchestrationRuntimeStatus.Terminated, true)]
+    [InlineData(OrchestrationRuntimeStatus.Completed, true)]
+    [InlineData(OrchestrationRuntimeStatus.Failed, true)]
+    // .Canceled is obsolete, but test it anyways
+    [InlineData(OrchestrationRuntimeStatus.Canceled, true)]
+    public async Task IsCancellationRequestedAsync_ReportsCancelledForDoneTasks(
+        OrchestrationRuntimeStatus status,
+        bool expectedCancelled)
+    {
+        var clientMock = new Mock<DurableTaskClient>("test");
+        clientMock
+            .Setup(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateMetadataWithStatus(status));
+
+        var initializer = CreateInitializer("test-instance");
+
+        Assert.Equal(expectedCancelled, await initializer.IsCancellationRequestedAsync(clientMock.Object));
+    }
+
+    [Fact]
+    public async Task IsCancellationRequestedAsync_WhenInstanceMissing_ReturnsTrue()
+    {
+        var clientMock = new Mock<DurableTaskClient>("test");
+        clientMock
+            .Setup(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((OrchestrationMetadata?)null);
+
+        var initializer = CreateInitializer("test-instance");
+
+        Assert.True(await initializer.IsCancellationRequestedAsync(clientMock.Object));
+    }
+
+    [Fact]
+    public async Task ProcessBatch_WhenCancelled_DoesNotReadEventStore()
+    {
+        var clientMock = new Mock<DurableTaskClient>("test");
+        clientMock
+            .Setup(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateMetadataWithStatus(OrchestrationRuntimeStatus.Terminated));
+
+        var initializer = CreateInitializer("test-instance");
+
+        await initializer.ProcessBatch(new List<Guid> { Guid.NewGuid() }, clientMock.Object);
+
+        _nostifyMock.Verify(n => n.GetEventStoreContainerAsync(It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteAllProjections_WhenCancelled_DoesNotTouchProjectionContainer()
+    {
+        var clientMock = new Mock<DurableTaskClient>("test");
+        clientMock
+            .Setup(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateMetadataWithStatus(OrchestrationRuntimeStatus.Terminated));
+
+        var initializer = CreateInitializer("test-instance");
+
+        await initializer.DeleteAllProjections(clientMock.Object);
+
+        _nostifyMock.Verify(
+            n => n.GetBulkProjectionContainerAsync<TestProjection>(It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CancelOrchestration_WhenPendingInstance_Terminates()
+    {
+        var clientMock = new Mock<DurableTaskClient>("test");
+        var pendingMetadata = CreateMetadataWithStatus(OrchestrationRuntimeStatus.Pending);
+        var terminatedMetadata = CreateMetadataWithStatus(OrchestrationRuntimeStatus.Terminated);
+
+        clientMock
+            .SetupSequence(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(pendingMetadata)
+            .ReturnsAsync(terminatedMetadata);
+
+        clientMock
+            .Setup(c => c.TerminateInstanceAsync("test-instance", It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        clientMock
+            .Setup(c => c.WaitForInstanceCompletionAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(terminatedMetadata);
+
+        clientMock
+            .Setup(c => c.PurgeInstanceAsync("test-instance", It.IsAny<PurgeInstanceOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PurgeResult(1));
+
+        var initializer = CreateInitializer("test-instance");
+        var req = MockHttpRequestData.Create();
+
+        await initializer.CancelOrchestration(req, clientMock.Object);
+
+        clientMock.Verify(
+            c => c.TerminateInstanceAsync("test-instance", It.IsAny<object>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task CancelOrchestration_WhenSuspendedInstance_ResumesBeforeTerminating()
+    {
+        // Ensure that a suspended instance is resumed before termination, otherwise
+        // WaitForInstanceCompletionAsync blocks forever
+        var clientMock = new Mock<DurableTaskClient>("test");
+        var suspendedMetadata = CreateMetadataWithStatus(OrchestrationRuntimeStatus.Suspended);
+        var terminatedMetadata = CreateMetadataWithStatus(OrchestrationRuntimeStatus.Terminated);
+        var callOrder = new List<string>();
+
+        clientMock
+            .SetupSequence(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(suspendedMetadata)
+            .ReturnsAsync(terminatedMetadata);
+
+        clientMock
+            .Setup(c => c.ResumeInstanceAsync("test-instance", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback(() => callOrder.Add("Resume"))
+            .Returns(Task.CompletedTask);
+
+        clientMock
+            .Setup(c => c.TerminateInstanceAsync("test-instance", It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .Callback(() => callOrder.Add("Terminate"))
+            .Returns(Task.CompletedTask);
+
+        clientMock
+            .Setup(c => c.WaitForInstanceCompletionAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(terminatedMetadata);
+
+        clientMock
+            .Setup(c => c.PurgeInstanceAsync("test-instance", It.IsAny<PurgeInstanceOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PurgeResult(1));
+
+        var initializer = CreateInitializer("test-instance");
+        var req = MockHttpRequestData.Create();
+
+        await initializer.CancelOrchestration(req, clientMock.Object);
+
+        Assert.Equal(new[] { "Resume", "Terminate" }, callOrder);
+    }
+
+    [Fact]
+    public async Task StartOrchestration_WhenExistingInstanceIsSuspended_Returns409Conflict()
+    {
+        // Starting a new instance with the same ID returns 409 and not schedule a new one
+        var clientMock = new Mock<DurableTaskClient>("test");
+        clientMock
+            .Setup(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateMetadataWithStatus(OrchestrationRuntimeStatus.Suspended));
+
+        var initializer = CreateInitializer("test-instance");
+        var req = MockHttpRequestData.Create();
+
+        var response = await initializer.StartOrchestration(req, clientMock.Object, "OrchestratorName");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        clientMock.Verify(
+            c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    #endregion
 }

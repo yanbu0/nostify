@@ -62,9 +62,10 @@ public class _ProjectionName_DurableInit
 
     [Function(nameof(DeleteAll_ProjectionName_))]
     public async Task DeleteAll_ProjectionName_(
-        [ActivityTrigger] TaskActivityContext context)
+        [ActivityTrigger] TaskActivityContext context,
+        [DurableClient] DurableTaskClient client)
     {
-        await _initializer.DeleteAllProjections();
+        await _initializer.DeleteAllProjections(client);
     }
 
     [Function(nameof(GetDistinctTenantIds__ProjectionName_))]
@@ -83,8 +84,9 @@ public class _ProjectionName_DurableInit
 
     [Function(nameof(Process_ProjectionName_Batch))]
     public async Task Process_ProjectionName_Batch(
-        [ActivityTrigger] List<Guid> ids)
+        [ActivityTrigger] List<Guid> ids,
+        [DurableClient] DurableTaskClient client)
     {
-        await _initializer.ProcessBatch(ids);
+        await _initializer.ProcessBatch(ids, client);
     }
 }
