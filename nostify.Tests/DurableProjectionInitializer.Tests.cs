@@ -51,12 +51,15 @@ public class DurableProjectionInitializerTests
     private DurableProjectionInitializer<TestProjection, TestAggregate> CreateInitializer(
         string? instanceId = "test-instance",
         int batchSize = 10,
-        int concurrentBatchCount = 2)
+        int concurrentBatchCount = 2,
+        TaskOptions? durableTaskOptions = null,
+        RetryOptions? cosmosRetryOptions = null)
     {
         // instanceId! suppresses the nullable warning: the constructor accepts string (non-nullable)
         // but handles null internally via `?? $"{nameof(TProjection)}_Init"`, so null is valid here.
         return new DurableProjectionInitializer<TestProjection, TestAggregate>(
-            _httpClient, _nostifyMock.Object, instanceId!, batchSize, concurrentBatchCount);
+            _httpClient, _nostifyMock.Object, instanceId!, batchSize, concurrentBatchCount,
+            durableTaskOptions, cosmosRetryOptions);
     }
 
     /// <summary>
@@ -1572,6 +1575,10 @@ public class DurableProjectionInitializerTests
     //   - GetIdsForTenant:         delegates to GetIdsForPartition with tenantId.ToPartitionKey()
     //   - GetIdsForPartition:      correct page-based pagination (Skip/Take) per partition
     //   - ProcessBatch:            events are fetched, applied to projections, and InitAsync is called
+    //   - cosmosRetryOptions:      custom RetryOptions are forwarded to every WithRetry(...) call inside
+    //                              DeleteAllProjections, GetDistinctTenantIds, GetDistinctPartitionKeys,
+    //                              GetIdsForPartition, and ProcessBatch — verified via integration tests
+    //                              because WithRetry wraps a Cosmos Container that cannot be mocked.
 
     #endregion
 
@@ -1742,6 +1749,166 @@ public class DurableProjectionInitializerTests
                 It.IsAny<StartOrchestrationOptions?>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    #endregion
+
+    #region Configurable Retry Options Tests
+
+    [Fact]
+    public async Task OrchestrateInitAsync_WithCustomTaskOptions_PassesOptionsToAllActivityCalls()
+    {
+        // Arrange: create a custom TaskOptions that is distinct from the default
+        var customOptions = new TaskOptions(TaskRetryOptions.FromRetryPolicy(new RetryPolicy(
+            maxNumberOfAttempts: 1,
+            firstRetryInterval: TimeSpan.FromSeconds(1),
+            backoffCoefficient: 1.0)));
+
+        var capturedDeleteOptions = new List<TaskOptions?>();
+        var capturedGetTenantIdsOptions = new List<TaskOptions?>();
+        var capturedGetIdsOptions = new List<TaskOptions?>();
+        var capturedProcessBatchOptions = new List<TaskOptions?>();
+
+        var tenantId = Guid.NewGuid();
+        var ids = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "Delete"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedDeleteOptions.Add(opts))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == "GetTenantIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedGetTenantIdsOptions.Add(opts))
+            .ReturnsAsync(new List<Guid> { tenantId });
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == "GetIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedGetIdsOptions.Add(opts))
+            .ReturnsAsync(ids);
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "ProcessBatch"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedProcessBatchOptions.Add(opts))
+            .Returns(Task.CompletedTask);
+
+        var initializer = CreateInitializer(batchSize: 10, concurrentBatchCount: 2, durableTaskOptions: customOptions);
+
+        // Act
+        await initializer.OrchestrateInitAsync(contextMock.Object, "Delete", "GetTenantIds", "GetIds", "ProcessBatch");
+
+        // Assert: every activity call received the exact custom TaskOptions instance
+        Assert.All(capturedDeleteOptions, opts => Assert.Same(customOptions, opts));
+        Assert.All(capturedGetTenantIdsOptions, opts => Assert.Same(customOptions, opts));
+        Assert.All(capturedGetIdsOptions, opts => Assert.Same(customOptions, opts));
+        Assert.All(capturedProcessBatchOptions, opts => Assert.Same(customOptions, opts));
+    }
+
+    [Fact]
+    public async Task OrchestrateInitByPartitionAsync_WithCustomTaskOptions_PassesOptionsToAllActivityCalls()
+    {
+        // Arrange: create a custom TaskOptions that is distinct from the default
+        var customOptions = new TaskOptions(TaskRetryOptions.FromRetryPolicy(new RetryPolicy(
+            maxNumberOfAttempts: 1,
+            firstRetryInterval: TimeSpan.FromSeconds(1),
+            backoffCoefficient: 1.0)));
+
+        var capturedDeleteOptions = new List<TaskOptions?>();
+        var capturedGetPartitionKeysOptions = new List<TaskOptions?>();
+        var capturedGetIdsOptions = new List<TaskOptions?>();
+        var capturedProcessBatchOptions = new List<TaskOptions?>();
+
+        var ids = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "Delete"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedDeleteOptions.Add(opts))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => n.Name == "GetPartitionKeys"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedGetPartitionKeysOptions.Add(opts))
+            .ReturnsAsync(new List<string> { "pk-1" });
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == "GetIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedGetIdsOptions.Add(opts))
+            .ReturnsAsync(ids);
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "ProcessBatch"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedProcessBatchOptions.Add(opts))
+            .Returns(Task.CompletedTask);
+
+        var initializer = CreateInitializer(batchSize: 10, concurrentBatchCount: 2, durableTaskOptions: customOptions);
+
+        // Act
+        await initializer.OrchestrateInitByPartitionAsync(contextMock.Object, "Delete", "GetPartitionKeys", "GetIds", "ProcessBatch");
+
+        // Assert: every activity call received the exact custom TaskOptions instance
+        Assert.All(capturedDeleteOptions, opts => Assert.Same(customOptions, opts));
+        Assert.All(capturedGetPartitionKeysOptions, opts => Assert.Same(customOptions, opts));
+        Assert.All(capturedGetIdsOptions, opts => Assert.Same(customOptions, opts));
+        Assert.All(capturedProcessBatchOptions, opts => Assert.Same(customOptions, opts));
+    }
+
+    [Fact]
+    public async Task OrchestrateInitAsync_WithNullTaskOptions_UsesDefaultRetryPolicy()
+    {
+        // Verify that when no TaskOptions is supplied, the orchestrator still passes a non-null
+        // TaskOptions (the built-in default: 3 attempts / 5 s / 2× backoff) to every activity.
+        var capturedOptions = new List<TaskOptions?>();
+
+        var tenantId = Guid.NewGuid();
+        var ids = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedOptions.Add(opts))
+            .Returns(Task.CompletedTask);
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == "GetTenantIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedOptions.Add(opts))
+            .ReturnsAsync(new List<Guid> { tenantId });
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(n => n.Name == "GetIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, _, opts) => capturedOptions.Add(opts))
+            .ReturnsAsync(ids);
+
+        // durableTaskOptions: null → constructor falls back to CreateDefaultTaskOptions()
+        var initializer = CreateInitializer(batchSize: 10, concurrentBatchCount: 2, durableTaskOptions: null);
+
+        await initializer.OrchestrateInitAsync(contextMock.Object, "Delete", "GetTenantIds", "GetIds", "ProcessBatch");
+
+        // All activity calls must have received a non-null TaskOptions (the default)
+        Assert.All(capturedOptions, opts => Assert.NotNull(opts));
     }
 
     #endregion
