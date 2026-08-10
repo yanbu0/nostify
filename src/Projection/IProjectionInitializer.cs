@@ -27,8 +27,9 @@ public interface IProjectionInitializer
 
     /// <summary>
     /// Initializes a list of projections asynchronously. Will requery all needed data from all external services, set <c>initialized = true</c>, and update the projection container.
+    /// The bulk upsert retries individual writes on 429 TooManyRequests according to <paramref name="retryOptions"/>.
     /// </summary>
-    Task<List<P>> InitAsync<P>(List<P> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
+    Task<List<P>> InitAsync<P>(List<P> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null, RetryOptions? retryOptions = null)
         where P : NostifyObject, IProjection, IHasExternalData<P>, new();
 
     /// <summary>
