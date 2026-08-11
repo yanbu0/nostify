@@ -1907,7 +1907,7 @@ public class DurableProjectionInitializerTests
 
         await initializer.OrchestrateInitAsync(contextMock.Object, "Delete", "GetTenantIds", "GetIds", "ProcessBatch");
 
-        // All activity calls must have received a non-null TaskOptions (the default)
+        // All activity calls must have received a non-null TaskOptions
         Assert.All(capturedOptions, opts => Assert.NotNull(opts));
     }
 
