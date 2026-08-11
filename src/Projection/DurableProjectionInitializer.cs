@@ -109,8 +109,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         {
             if (IsInstanceActive(existing))
             {
-                // Resume a suspended orchestration so that it can be terminated.
-                if (existing.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
+                // Resume a suspended orchestration so that it can be terminated.Suspended)
                 {
                     await client.ResumeInstanceAsync(_instanceId, $"{_instanceId} resumed to cancel");
                 }
