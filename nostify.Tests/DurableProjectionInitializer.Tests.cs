@@ -1873,9 +1873,11 @@ public class DurableProjectionInitializerTests
     [Fact]
     public async Task OrchestrateInitAsync_WithNullTaskOptions_UsesDefaultRetryPolicy()
     {
-        // Verify that when no TaskOptions is supplied, the orchestrator still passes a non-null
-        // TaskOptions (the built-in default: 3 attempts / 5 s / 2× backoff) to every activity.
+        // Verify that when no TaskOptions is supplied, every activity receives the built-in
+        // default retry policy (3 attempts / 5 s / 2× backoff).
         var capturedOptions = new List<TaskOptions?>();
+        var expectedPolicy = DurableProjectionInitializer<TestProjection, TestAggregate>.CreateDefaultTaskOptions().Retry?.Policy;
+        Assert.NotNull(expectedPolicy);
 
         var tenantId = Guid.NewGuid();
         var ids = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList();
@@ -1907,8 +1909,17 @@ public class DurableProjectionInitializerTests
 
         await initializer.OrchestrateInitAsync(contextMock.Object, "Delete", "GetTenantIds", "GetIds", "ProcessBatch");
 
-        // All activity calls must have received a non-null TaskOptions
-        Assert.All(capturedOptions, opts => Assert.NotNull(opts));
+        Assert.All(capturedOptions, opts =>
+        {
+            Assert.NotNull(opts);
+            Assert.NotNull(opts!.Retry);
+            Assert.NotNull(opts.Retry!.Policy);
+
+            var actualPolicy = opts.Retry.Policy!;
+            Assert.Equal(expectedPolicy.MaxNumberOfAttempts, actualPolicy.MaxNumberOfAttempts);
+            Assert.Equal(expectedPolicy.FirstRetryInterval, actualPolicy.FirstRetryInterval);
+            Assert.Equal(expectedPolicy.BackoffCoefficient, actualPolicy.BackoffCoefficient);
+        });
     }
 
     #endregion
