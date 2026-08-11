@@ -51,8 +51,9 @@ public class ProjectionInitializer : IProjectionInitializer
     /// <param name="nostify">Reference to the Nostify singleton.</param>
     /// <param name="httpClient">Optional HttpClient instance for making HTTP requests.</param>
     /// <param name="pointInTime">Point in time to query external data up to. If null, queries current state.</param>
+    /// <param name="retryOptions">Retry options for CosmosDB. Defaults to default <see cref="RetryOptions"/> when null.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains a list of initialized projections of type T.</returns>
-    public async Task<List<P>> InitAsync<P>(List<P> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async Task<List<P>> InitAsync<P>(List<P> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null, RetryOptions? retryOptions = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
 
@@ -72,7 +73,7 @@ public class ProjectionInitializer : IProjectionInitializer
         });
 
         //Bulk upsert all projections
-        await projectionContainer.DoBulkUpsertAsync<P>(initializedProjections);
+        await projectionContainer.WithRetry(retryOptions ?? new RetryOptions()).DoBulkUpsertAsync<P>(initializedProjections);
         return initializedProjections;
     }
 

@@ -28,7 +28,9 @@ public DurableProjectionInitializer(
     INostify nostify,
     string instanceId,
     int batchSize = 1000,
-    int concurrentBatchCount = 5)
+    int concurrentBatchCount = 5,
+    TaskOptions? durableTaskOptions = null,
+    RetryOptions? cosmosRetryOptions = null)
 ```
 
 | Parameter | Type | Default | Description |
@@ -38,6 +40,8 @@ public DurableProjectionInitializer(
 | `instanceId` | `string` | — | Durable orchestration instance ID; only one orchestration with this ID may run at a time. Falls back to `"{nameof(TProjection)}_Init"` if null |
 | `batchSize` | `int` | 1000 | Number of aggregate IDs processed per activity invocation |
 | `concurrentBatchCount` | `int` | 5 | Number of batches dispatched concurrently per page; page size = `batchSize × concurrentBatchCount` |
+| `durableTaskOptions` | `TaskOptions?` | null | Durable retry policy applied to each activity call the orchestrator makes. When null, defaults to 3 attempts / 5 s initial delay / 2× backoff |
+| `cosmosRetryOptions` | `RetryOptions?` | null | Retry policy for the individual Cosmos reads and writes performed inside activity methods. When null, default `RetryOptions` are used (3 retries, 1 s delay, 2× backoff) |
 
 ## Public Methods
 
@@ -78,7 +82,10 @@ Tenant-partitioned orchestrator body. Use this overload when the aggregate's cur
 
 1. Call `deleteActivityName` — deletes all existing projections.
 2. Call `getTenantIdsActivityName` — fetches distinct tenant IDs (`List<Guid>`) from the aggregate's current-state container.
-3. For each tenant, page through aggregate IDs (calling `getIdsActivityName` with `DurableInitPageInfo`) and fan out `processBatchActivityName` calls concurrently (up to `concurrentBatchCount` at a time), with a 3-attempt retry policy (5 s initial delay, 2× backoff).
+3. For each tenant, page through aggregate IDs (calling `getIdsActivityName` with `DurableInitPageInfo`) and fan out `processBatchActivityName` calls concurrently (up to `concurrentBatchCount` at a time).
+
+By default, each activity is made with a 3-attempt retry policy (5 s initial delay, 2× backoff).
+
 
 Pass `context.CreateReplaySafeLogger` for the `logger` argument to avoid duplicate log entries during orchestration replay.
 
