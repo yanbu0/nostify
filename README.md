@@ -75,6 +75,9 @@
 ### Updates
 
 - 4.9.1
+    - **New DurableProjectionInitializer Class**: Added `DurableProjectionInitializer<TProjection, TAggregate>` for initializing projections using Azure Durable Functions orchestration. Designed for large datasets that may exceed single Azure Function execution time limits. Supports tenant-based and partition-key-based initialization paths with configurable batch size and concurrent batch count.
+    - **DurableProjectionInitializer RetryOptions Support**: `DurableProjectionInitializer` constructor accepts both `durableTaskOptions` (`TaskOptions?`) for controlling Durable Functions orchestration activity retries and `cosmosRetryOptions` (`RetryOptions?`) for Cosmos DB operation retries. When either is null, sensible defaults are used — `CreateDefaultTaskOptions()` for orchestration (5 retries, 30 s first retry, 1.5× backoff, 5 min max) and `new RetryOptions()` for Cosmos DB.
+    - **ProjectionInitializer.InitAsync RetryOptions Support**: The `InitAsync<P>(List<P>, INostify, HttpClient?, DateTime?, RetryOptions?)` overload now accepts an optional `RetryOptions?` parameter for Cosmos DB bulk upsert retries. Defaults to `new RetryOptions()` when null.
     - **DurableProjectionInitializer Retry-Options Test Coverage**: Added targeted tests that verify constructor-supplied `durableTaskOptions` are forwarded to every orchestration activity call for both tenant-based and partition-based initialization paths, and that null `durableTaskOptions` uses the built-in default retry policy values.
 
 - 4.9.0
