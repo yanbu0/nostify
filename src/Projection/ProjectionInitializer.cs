@@ -65,7 +65,7 @@ public class ProjectionInitializer : IProjectionInitializer
         projectionsToInit.ForEach(p =>
         {
             P initInProcess = p;
-            List<Event> eventsToApplyToThisProjection = externalDataEvents.Where(e => e.aggregateRootId == p.id).FirstOrDefault()?.events ?? new List<Event>();
+            List<Event> eventsToApplyToThisProjection = externalDataEvents.FirstOrDefault(e => e.aggregateRootId == p.id)?.events ?? new List<Event>();
             eventsToApplyToThisProjection.ForEach(e => initInProcess.Apply(e));
             initInProcess.initialized = true;
             initializedProjections.Add(initInProcess);
