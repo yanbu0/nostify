@@ -1,41 +1,45 @@
 using System;
-using System.ComponentModel.DataAnnotations;
-using System.Collections.Generic;
 
 namespace nostify;
 
 /// <summary>
-/// Represents events in event store
+/// Represents events in event store.
 /// </summary>
 public interface IEvent
 {
     /// <summary>
-    /// Timestamp of event
+    /// Timestamp of event.
     /// </summary>
     DateTime timestamp { get; set; }
 
     /// <summary>
-    /// Partition key to apply event to
+    /// Partition key to apply event to.
     /// </summary>
     Guid partitionKey { get; set; }
 
     /// <summary>
-    /// Id of user
+    /// Id of user.
     /// </summary>
     Guid userId { get; set; }
 
     /// <summary>
-    /// Id of event
+    /// Id of event.
     /// </summary>
     Guid id { get; set; }
 
     /// <summary>
-    /// Command to perform, defined in Aggregate implementation
+    /// Event type to perform, defined in Aggregate implementation.
     /// </summary>
+    EventType eventType { get; set; }
+
+    /// <summary>
+    /// Command metadata to perform, defined in Aggregate implementation.
+    /// </summary>
+    [Obsolete("Use eventType instead.")]
     NostifyCommand command { get; set; }
 
     /// <summary>
-    /// Key of the Aggregate to perform the event on
+    /// Key of the Aggregate to perform the event on.
     /// </summary>
     /// <para>
     /// <strong>The series of events for an Aggregate should have the same key.</strong>
@@ -43,7 +47,7 @@ public interface IEvent
     Guid aggregateRootId { get; set; }
 
     /// <summary>
-    /// Object containing properties of Aggregate to perform the command on
+    /// Object containing properties of Aggregate to perform the command on.
     /// </summary>
     /// <para>
     /// Properties must be the exact same name to have updates applied.
@@ -54,7 +58,7 @@ public interface IEvent
     object payload { get; set; }
 
     /// <summary>
-    /// Checks if the payload of this event has a property
+    /// Checks if the payload of this event has a property.
     /// </summary>
     /// <param name="propertyName">Property to check for</param>
     bool PayloadHasProperty(string propertyName);
@@ -65,7 +69,7 @@ public interface IEvent
     int schemaVersion { get; }
 
     /// <summary>
-    /// Returns typed value of payload
+    /// Returns typed value of payload.
     /// </summary>
     T GetPayload<T>();
 

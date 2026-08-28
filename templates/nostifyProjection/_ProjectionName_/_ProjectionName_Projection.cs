@@ -51,7 +51,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
 
     //**********************************************************************************************
 
-    public override void Apply(IEvent eventToApply)
+    private protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         //Should update the command tree below to not use string matching
         if (eventToApply.command.name.Equals("Create__ReplaceMe_") 

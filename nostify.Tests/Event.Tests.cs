@@ -31,7 +31,7 @@ public class EventTests
 
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        private protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -62,7 +62,7 @@ public class EventTests
 
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        private protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -1632,7 +1632,7 @@ public class EventTests
         public string? description { get; set; }
         public int? quantity { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        private protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -1655,7 +1655,7 @@ public class EventTests
         public string? name { get; set; }
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        private protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -1683,7 +1683,7 @@ public class EventTests
         public string? name { get; set; }
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        private protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }

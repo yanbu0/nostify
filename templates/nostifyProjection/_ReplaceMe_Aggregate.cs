@@ -16,7 +16,7 @@ public class _ReplaceMe_ : NostifyObject, IAggregate
     public static string aggregateType => "_ReplaceMe_";
     public static string currentStateContainerName => $"{aggregateType}CurrentState";
 
-    public override void Apply(IEvent eventToApply)
+    private protected override void Apply(EventType eventType, IEvent eventToApply)
     {
     }
 }

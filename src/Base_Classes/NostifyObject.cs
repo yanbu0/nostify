@@ -45,7 +45,12 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<summary>
     ///Applies event to this Aggregate or Projection
     ///</summary>
-    public abstract void Apply(IEvent eventToApply);
+    public void Apply(IEvent eventToApply) => Apply((dynamic)eventToApply.eventType, eventToApply);
+
+    ///<summary>
+    ///Applies event to this Aggregate or Projection based on its event type
+    ///</summary>
+    private protected abstract void Apply(EventType eventType, IEvent eventToApply);
 
     ///<summary>
     ///Updates properties of Aggregate or Projection

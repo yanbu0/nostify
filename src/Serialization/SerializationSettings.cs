@@ -39,6 +39,7 @@ public static class SerializationSettings
             {
                 var settings = NewtonsoftJsonObjectSerializer.CreateJsonSerializerSettings();
                 settings.Converters.Add(new InterfaceConverter<IEvent, Event>());
+                settings.Converters.Add(new NewtonsoftEventTypeJsonConverter());
                 settings.Converters.Add(new InterfaceConverter<ISaga, Saga>());
                 settings.Converters.Add(new InterfaceConverter<ISagaStep, SagaStep>());
                 settings.ContractResolver = new CamelCasePropertyNamesContractResolver();

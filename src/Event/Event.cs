@@ -8,36 +8,39 @@ using Newtonsoft.Json.Linq;
 using Confluent.Kafka;
 using Newtonsoft.Json;
 using System.Reflection;
+using NJson = Newtonsoft.Json;
+using STJ = System.Text.Json.Serialization;
 
 namespace nostify;
 
 /// <inheritdoc />
 public class Event : IEvent
 {
+    private EventType? _eventType;
+
     /// <summary>
-    /// Constructor for Event, use when creating object to save to event store
+    /// Constructor for Event, use when creating object to save to event store.
     /// </summary>
-    /// <param name="command">Command to persist</param>
-    /// <param name="aggregateRootId">Id of the root aggregate to perform the command on.</param>
+    /// <param name="eventType">Event type to persist.</param>
+    /// <param name="aggregateRootId">Id of the root aggregate to perform the event on.</param>
     /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
     /// <param name="userId">ID of User responsible for Event.</param>
     /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
-    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
+    public Event(EventType eventType, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
     {
-        SetUp(command, aggregateRootId, payload, userId, partitionKey);
+        SetUp(eventType, aggregateRootId, payload, userId, partitionKey);
     }
 
     /// <summary>
-    /// Constructor for Event, use when creating object to save to event store, will parse aggregateRootId from payload
+    /// Constructor for Event, use when creating object to save to event store, will parse aggregateRootId from payload.
     /// </summary>
-    /// <param name="command">Command to persist</param>
+    /// <param name="eventType">Event type to persist.</param>
     /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
     /// <param name="userId">ID of User responsible for Event.</param>
-    /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in</param>
-    public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
+    /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
+    public Event(EventType eventType, object payload, Guid userId = default, Guid partitionKey = default)
     {
         Guid aggregateRootId = default;
-        //Check payload is not null
         if (payload is null || !payload.GetType().GetProperties().Any())
         {
             throw new ArgumentNullException("Event Create Error: Payload cannot be null if you do not specify an aggregate root ID");
@@ -47,23 +50,22 @@ public class Event : IEvent
         {
             throw new ArgumentException("Event Create Errpr: Aggregate Root ID does not exist or is not parsable to a Guid");
         }
-        //Only do this if we didn't parse out the guid value above
         else if (aggregateRootId == default)
         {
             aggregateRootId = jPayload["id"].Value<Guid>();
         }
-        SetUp(command, aggregateRootId, payload, userId, partitionKey);
+        SetUp(eventType, aggregateRootId, payload, userId, partitionKey);
     }
 
     /// <summary>
-    /// Constructor for Event, use when creating object to save to event store, parses Id values to Guids, recommend using Guids instead of strings instead of this constructor
+    /// Constructor for Event, use when creating object to save to event store, parses Id values to Guids.
     /// </summary>
-    /// <param name="command">Command to persist</param>
-    /// <param name="aggregateRootId">Id of the root aggregate to perform the command on.  Must be a Guid string</param>
+    /// <param name="eventType">Event type to persist.</param>
+    /// <param name="aggregateRootId">Id of the root aggregate to perform the event on. Must be a Guid string.</param>
     /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
     /// <param name="userId">ID of User responsible for Event.</param>
     /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
-    public Event(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey)
+    public Event(EventType eventType, string aggregateRootId, object payload, string userId, string partitionKey)
     {
         Guid aggGuid;
         if (!Guid.TryParse(aggregateRootId, out aggGuid))
@@ -83,18 +85,18 @@ public class Event : IEvent
             throw new ArgumentException("Partition Key is not parsable to a Guid");
         }
 
-        SetUp(command, aggGuid, payload, userGuid, pKey);
+        SetUp(eventType, aggGuid, payload, userGuid, pKey);
     }
 
-    private void SetUp(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId, Guid partitionKey)
+    private void SetUp(EventType eventType, Guid aggregateRootId, object payload, Guid userId, Guid partitionKey)
     {
-        if (command is null)
+        if (eventType is null)
         {
-            throw new ArgumentNullException("Command cannot be null");
+            throw new ArgumentNullException("Event type cannot be null");
         }
         this.aggregateRootId = aggregateRootId;
         this.id = Guid.NewGuid();
-        this.command = command;
+        this.eventType = eventType;
         this.timestamp = DateTime.UtcNow;
         this.payload = payload;
         this.partitionKey = partitionKey;
@@ -102,7 +104,7 @@ public class Event : IEvent
     }
 
     /// <summary>
-    /// Empty constructor for Event, used when querying from db
+    /// Empty constructor for Event, used when querying from db.
     /// </summary>
     public Event() { }
 
@@ -119,13 +121,27 @@ public class Event : IEvent
     public Guid id { get; set; }
 
     /// <inheritdoc />
-    public NostifyCommand command { get; set; }
+    [NJson.JsonConverter(typeof(NewtonsoftEventTypeJsonConverter))]
+    [STJ.JsonConverter(typeof(SystemTextEventTypeJsonConverter))]
+    public EventType eventType
+    {
+        get => _eventType ?? throw new NullReferenceException("Event type cannot be null");
+        set => _eventType = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <inheritdoc />
+    [Obsolete("Use eventType instead.")]
+    public NostifyCommand command
+    {
+        get => _eventType as NostifyCommand ?? new NostifyCommand(eventType.name, eventType.isNew, eventType.allowNullPayload);
+        set => eventType = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     /// <inheritdoc />
     public Guid aggregateRootId { get; set; }
 
     /// <inheritdoc />
-    public int schemaVersion { get; init; } = 1; //Update to reflect schema changes in Event
+    public int schemaVersion { get; init; } = 1;
 
     /// <inheritdoc />
     public object payload { get; set; }
@@ -145,18 +161,19 @@ public class Event : IEvent
     /// <inheritdoc />
     public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : class
     {
-        // Remove properties that do not exist on the Aggregate, 
         JObject cleanedPayload = RemoveNonExistentPayloadProperties<T>(throwErrorIfExtraProps, out List<ValidationResult> validationMessages) as JObject ?? throw new NullReferenceException("Payload cannot be null after removing non-existent properties.");
-
-        // Covert to type
         var deserializedPayload = cleanedPayload.ToObject<T>() ?? throw new NullReferenceException("Payload cannot be null after deserialization.");
 
-        // Create a new validation context and add the command
-        ValidationContext validationContext = new ValidationContext(deserializedPayload, new Dictionary<object, object?> { { "command", command } });
+        ValidationContext validationContext = new ValidationContext(deserializedPayload);
+        validationContext.Items["eventType"] = eventType;
+#pragma warning disable CS0618
+        if (eventType is NostifyCommand legacyCommand)
+        {
+            validationContext.Items["command"] = legacyCommand;
+        }
+#pragma warning restore CS0618
         Validator.TryValidateObject(deserializedPayload, validationContext, validationMessages, true);
 
-        // If the property exists on T but does not exist in payload, remove the validation message unless
-        // it has an attribute that inheirits from RequiredAttribute
         validationMessages.RemoveAll(vm =>
         {
             int i = 0;
@@ -165,26 +182,20 @@ public class Event : IEvent
                 var property = typeof(T).GetProperty(memberName);
                 if (property != null && !cleanedPayload.ContainsKey(memberName))
                 {
-                    // If the property does not exist in payload, check if it has a RequiredAttribute
-                    // If it does not have a RequiredAttribute, remove the validation message
-                    // Otherwise, keep the validation message
                     var requiredAttributes = property.GetCustomAttributes(typeof(RequiredAttribute), false);
                     if (requiredAttributes.Length == 0)
                     {
-                        // If no RequiredAttribute, update the count for removal
                         i++;
                     }
                 }
             });
             if (i > 0 && i == vm.MemberNames.Count())
             {
-                // If all member names were removed, return true to remove the validation message
                 return true;
             }
-            return false; // Keep the validation message if it has a RequiredAttribute
+            return false;
         });
 
-        // If there are any validation messages left, throw a ValidationException
         if (validationMessages.Any())
         {
             throw new NostifyValidationException(validationMessages);
@@ -194,7 +205,7 @@ public class Event : IEvent
     }
 
     /// <summary>
-    /// Removes any properties from the payload that are not valid for the aggregate
+    /// Removes any properties from the payload that are not valid for the aggregate.
     /// </summary>
     /// <param name="errorMessageIfFound">If true, will add an error to output if any non-existent properties are found.</param>
     /// <param name="validationMessages">List of validation messages to populate with any errors found.</param>
@@ -204,7 +215,6 @@ public class Event : IEvent
 
         var validProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => p.Name).ToHashSet();
         var payloadObject = JObject.FromObject(payload) ?? throw new NullReferenceException("Payload cannot be null when removing non-existent properties.");
-        // Remove any properties from the payload that are not valid for the aggregate
         foreach (var prop in payloadObject.Properties().Select(p => p.Name).ToList())
         {
             if (!validProperties.Contains(prop))

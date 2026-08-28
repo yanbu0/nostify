@@ -204,7 +204,7 @@ public class Nostify : INostify, IDisposable
             List<Task> publishTasks = new List<Task>();
             foreach (IEvent pe in peList)
             {
-                string topic = pe.command.name;
+                string topic = pe.eventType.name;
                 publishTasks.Add(KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) }));
             }
             await Task.WhenAll(publishTasks).ContinueWith(result =>
@@ -213,11 +213,11 @@ public class Nostify : INostify, IDisposable
                     {                        
                         if (result.IsCompletedSuccessfully)
                         {
-                            Logger.LogInformation("Event published to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
+                            Logger.LogInformation("Event published to topic(s) {Topics}", peList.Select(p => p.eventType.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
                         }
                         else
                         {
-                            Logger.LogError(result.Exception, "Failed to publish event to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
+                            Logger.LogError(result.Exception, "Failed to publish event to topic(s) {Topics}", peList.Select(p => p.eventType.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
                         }
                     }
                 });

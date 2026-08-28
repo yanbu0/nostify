@@ -865,7 +865,7 @@ public class TestFactoryAggregate : NostifyObject, IAggregate
     public static string aggregateType => "TestFactoryAggregate";
     public static string currentStateContainerName => "TestFactoryAggregates";
     
-    public override void Apply(IEvent eventToApply)
+    private protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         UpdateProperties<TestFactoryAggregate>(eventToApply.payload);
     }

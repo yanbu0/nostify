@@ -19,7 +19,7 @@ public class EventFactoryTests
         public new Guid id { get; set; }
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        private protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }

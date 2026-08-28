@@ -21,7 +21,7 @@ public class FilteredQueryTests
         public string Name { get; set; } = string.Empty;
         public int Value { get; set; }
 
-        public override void Apply(IEvent e)
+        private protected override void Apply(EventType eventType, IEvent e)
         {
             UpdateProperties<TestTenantEntity>(e.payload);
         }

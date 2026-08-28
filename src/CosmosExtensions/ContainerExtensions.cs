@@ -259,7 +259,7 @@ public static class ContainerExtensions
         Guid idToMatch = projectionBaseAggregateId ?? firstEvent.aggregateRootId;
 
         //Null projectionBaseAggregateId means it is an event from the projection base aggregate
-        if (firstEvent.command.isNew && projectionBaseAggregateId == null)
+        if (firstEvent.eventType.isNew && projectionBaseAggregateId == null)
         {
             isNew = true;
         }
@@ -508,7 +508,7 @@ public static class ContainerExtensions
             Event? newEvent = triggerEvent.GetEvent(eventTypeFilters);
             if (newEvent is not null)
             {
-                if (!newEvent.command.isNew)
+                if (!newEvent.eventType.isNew)
                 {
                     throw new NostifyException("Event is not a create event");
                 }

@@ -8,7 +8,7 @@ using Xunit.Sdk;
 
 
 /// <summary>
-/// Attribute to specify that a property is required for an Event with a specified NostifyCommand.
+/// Attribute to specify that a property is required for an Event with a specified event type name.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public class RequiredForAttribute : RequiredAttribute, INostifyValidation
@@ -51,20 +51,19 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     /// </returns>
     protected override ValidationResult IsValid(object? value, ValidationContext validationContext)
     {
-        NostifyCommand? command = validationContext.Items.ContainsKey("command") ? validationContext.Items["command"] as NostifyCommand : null;
-        // If command is null return ValidationResult
-        if (command is null)
+        EventType? eventType = validationContext.Items.ContainsKey("eventType") ? validationContext.Items["eventType"] as EventType : validationContext.Items.ContainsKey("command") ? validationContext.Items["command"] as EventType : null;
+        if (eventType is null)
         {
-            return new ValidationResult($"The property '{validationContext.MemberName}' requires a command to be specified in the validation context.");
+            return new ValidationResult($"The property '{validationContext.MemberName}' requires an event type to be specified in the validation context.");
         }
 
-        if (Commands.Contains(command.name))
+        if (Commands.Contains(eventType.name))
         {
             bool baseResult = base.IsValid(value);
             // If baseResult is null return ValidationResult
             if (!baseResult)
             {
-                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the command '{command.name}'.");
+                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the command '{eventType.name}'.");
             }
         }
 

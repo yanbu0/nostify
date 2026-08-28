@@ -338,7 +338,7 @@ public static class NostifyFactory
 
 
     /// <summary>
-    /// Builds the Nostify instance. Will autocreate topics in Kafka for each NostifyCommand found in the assembly of T.
+    /// Builds the Nostify instance. Will autocreate topics in Kafka for each EventType found in the assembly of T.
     /// </summary>
     /// <param name="config">The Nostify configuration settings.</param>
     /// <param name="verbose">If true, will write to console the steps taken to create the containers and topics</param>
@@ -357,16 +357,16 @@ public static class NostifyFactory
             if (config.logger != null) config.logger.LogDebug("Admin Client built");
             else if (verbose) Console.WriteLine("Admin Client built");
 
-            //Find all NostifyCommand instances in this assembly of T and create a topic for each
+            //Find all EventType instances in this assembly of T and create a topic for each
             var assembly = typeof(T).Assembly;
-            var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
+            var commandTypes = assembly.GetTypes().Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract);
             if (config.logger != null) config.logger.LogDebug("Found {CommandTypes} command definitions in assembly {Assembly}", string.Join(", ", commandTypes.Select(c => c.Name)), assembly.FullName);
             else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
             
-            //Get any static properties of each commandType that inherit type NostifyCommand        
+            //Get any static fields of each commandType that inherit type EventType        
             var commandProperties = commandTypes
                 .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
-                .Where(p => p.FieldType.IsSubclassOf(typeof(NostifyCommand))));
+                .Where(p => typeof(EventType).IsAssignableFrom(p.FieldType)));
 
             if (config.logger != null) config.logger.LogDebug("Found {Commands} commands", string.Join(", ", commandProperties.Select(c => c.Name)));
             else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");

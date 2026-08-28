@@ -28,7 +28,7 @@ public static class GrpcEventMapping
             timestamp = msg.Timestamp?.ToDateTime() ?? DateTime.UtcNow,
             partitionKey = string.IsNullOrEmpty(msg.PartitionKey) ? Guid.Empty : Guid.Parse(msg.PartitionKey),
             userId = string.IsNullOrEmpty(msg.UserId) ? Guid.Empty : Guid.Parse(msg.UserId),
-            command = new NostifyCommand(
+            eventType = new NostifyCommand(
                 msg.Command?.Name ?? "Unknown",
                 msg.Command?.IsNew ?? false,
                 msg.Command?.AllowNullPayload ?? false
@@ -61,12 +61,12 @@ public static class GrpcEventMapping
             PayloadJson = evt.payload != null
                 ? JsonConvert.SerializeObject(evt.payload)
                 : string.Empty,
-            Command = evt.command != null
+            Command = evt.eventType != null
                 ? new CommandMessage
                 {
-                    Name = evt.command.name ?? "Unknown",
-                    IsNew = evt.command.isNew,
-                    AllowNullPayload = evt.command.allowNullPayload
+                    Name = evt.eventType.name ?? "Unknown",
+                    IsNew = evt.eventType.isNew,
+                    AllowNullPayload = evt.eventType.allowNullPayload
                 }
                 : new CommandMessage { Name = "Unknown" }
         };

@@ -13,7 +13,7 @@ public class TestAggregate : NostifyObject, IAggregate
     public bool isDeleted { get; set; } = false;
     public string name { get; set; } = "Test1";
 
-    public override void Apply(IEvent e)
+    private protected override void Apply(EventType eventType, IEvent e)
     {
         UpdateProperties<TestAggregate>(e.payload);
     }
@@ -26,7 +26,7 @@ public class TestProjection : NostifyObject, IProjection, IHasExternalData<TestP
 
     public static string containerName => "TestProjectionContainer";
 
-    public override void Apply(IEvent e)
+    private protected override void Apply(EventType eventType, IEvent e)
     {
         UpdateProperties<TestProjection>(e.payload);
     }

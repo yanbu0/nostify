@@ -657,7 +657,7 @@ public class TestProjectionForExternalData : NostifyObject, IUniquelyIdentifiabl
     public Guid? manufacturerId { get; set; }
     public List<Guid> listOfForeignIds { get; set; } = new List<Guid>();
 
-    public override void Apply(IEvent e)
+    private protected override void Apply(EventType eventType, IEvent e)
     {
         UpdateProperties<TestProjectionForExternalData>(e.payload);
     }
@@ -674,7 +674,7 @@ public class TestProjectionForApiTest : NostifyObject, IUniquelyIdentifiable
     public Guid? workSectionId { get; set; }
     public List<TestExpenditure> expenditures { get; set; } = new List<TestExpenditure>();
 
-    public override void Apply(IEvent e)
+    private protected override void Apply(EventType eventType, IEvent e)
     {
         UpdateProperties<TestProjectionForApiTest>(e.payload);
     }

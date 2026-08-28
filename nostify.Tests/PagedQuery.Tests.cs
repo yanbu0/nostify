@@ -22,7 +22,7 @@ public class PagedQueryTests
         public bool isActive { get; set; }
         public DateTime createdAt { get; set; }
 
-        public override void Apply(IEvent e)
+        private protected override void Apply(EventType eventType, IEvent e)
         {
             UpdateProperties<TestTenantItem>(e.payload);
         }
@@ -51,7 +51,7 @@ public class PagedQueryTests
         public Guid regionId { get; set; }
         public Guid customPartitionKey { get; set; }
 
-        public override void Apply(IEvent e)
+        private protected override void Apply(EventType eventType, IEvent e)
         {
             UpdateProperties<TestItem>(e.payload);
         }
