@@ -54,7 +54,7 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
         EventType? eventType = validationContext.Items.ContainsKey("eventType") ? validationContext.Items["eventType"] as EventType : validationContext.Items.ContainsKey("command") ? validationContext.Items["command"] as EventType : null;
         if (eventType is null)
         {
-            return new ValidationResult($"The property '{validationContext.MemberName}' requires an event type to be specified in the validation context.");
+            return new ValidationResult($"The property '{validationContext.MemberName}' requires a command to be specified in the validation context.");
         }
 
         if (Commands.Contains(eventType.name))

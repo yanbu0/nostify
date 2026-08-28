@@ -45,6 +45,37 @@ public class NostifyObjectTests
         }
     }
 
+
+
+    private sealed class CreateDispatchEventType : EventType
+    {
+        public CreateDispatchEventType() : base("Create_TestDispatch", true)
+        {
+        }
+    }
+
+    private sealed class DispatchingAggregate : NostifyObject, IAggregate
+    {
+        public static string aggregateType => "DispatchingAggregate";
+        public static string currentStateContainerName => $"{aggregateType}CurrentState";
+
+        public string? name { get; set; }
+        public bool isDeleted { get; set; }
+        public bool handledSpecificType { get; private set; }
+        public bool handledFallbackType { get; private set; }
+
+        private protected override void Apply(EventType eventType, IEvent eventToApply)
+        {
+            handledFallbackType = true;
+        }
+
+        private protected void Apply(CreateDispatchEventType eventType, IEvent eventToApply)
+        {
+            handledSpecificType = true;
+            UpdateProperties<DispatchingAggregate>(eventToApply.payload);
+        }
+    }
+
     [Fact]
     public void DefaultProperties_ShouldHaveCorrectDefaultValues()
     {

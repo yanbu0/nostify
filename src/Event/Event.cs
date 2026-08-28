@@ -125,16 +125,16 @@ public class Event : IEvent
     [STJ.JsonConverter(typeof(SystemTextEventTypeJsonConverter))]
     public EventType eventType
     {
-        get => _eventType ?? throw new NullReferenceException("Event type cannot be null");
-        set => _eventType = value ?? throw new ArgumentNullException(nameof(value));
+        get => _eventType!;
+        set => _eventType = value;
     }
 
     /// <inheritdoc />
     [Obsolete("Use eventType instead.")]
     public NostifyCommand command
     {
-        get => _eventType as NostifyCommand ?? new NostifyCommand(eventType.name, eventType.isNew, eventType.allowNullPayload);
-        set => eventType = value ?? throw new ArgumentNullException(nameof(value));
+        get => _eventType == null ? null! : _eventType as NostifyCommand ?? new NostifyCommand(eventType.name, eventType.isNew, eventType.allowNullPayload);
+        set => eventType = value;
     }
 
     /// <inheritdoc />

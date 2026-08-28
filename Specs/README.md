@@ -19,7 +19,8 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 | Spec | Description |
 |------|-------------|
 | [NostifyObject](NostifyObject.spec.md) | Abstract base class for all domain objects |
-| [NostifyCommand](NostifyCommand.spec.md) | Base class for commands |
+| [EventType](EventType.spec.md) | Abstract base class for typed event metadata |
+| [NostifyCommand](NostifyCommand.spec.md) | Obsolete compatibility subclass of EventType |
 | [NostifyCosmosClient](NostifyCosmosClient.spec.md) | Cosmos DB client wrapper |
 
 ## Event Module

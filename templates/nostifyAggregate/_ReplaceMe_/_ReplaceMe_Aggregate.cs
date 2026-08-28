@@ -15,11 +15,11 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
 
     private protected override void Apply(EventType eventType, IEvent eventToApply)
     {
-        if (eventToApply.command == _ReplaceMe_Command.BulkCreate || eventToApply.command == _ReplaceMe_Command.Create || eventToApply.command == _ReplaceMe_Command.Update)
+        if (eventType == _ReplaceMe_Command.BulkCreate || eventType == _ReplaceMe_Command.Create || eventType == _ReplaceMe_Command.Update)
         {
             this.UpdateProperties<_ReplaceMe_>(eventToApply.payload);
         }
-        else if (eventToApply.command == _ReplaceMe_Command.Delete)
+        else if (eventType == _ReplaceMe_Command.Delete)
         {
             this.isDeleted = true;
         }

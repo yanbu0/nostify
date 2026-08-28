@@ -2,12 +2,12 @@
 
 ## Overview
 
-`NostifyCommand` is the base class for all commands in the nostify framework. Commands represent user intentions that will be captured as events in the event store.
+`NostifyCommand` is an obsolete compatibility subclass of `EventType`. It remains available so existing command-based code continues to work while new code can move to typed `EventType` subclasses.
 
 ## Class Definition
 
 ```csharp
-public class NostifyCommand
+public class NostifyCommand : EventType
 ```
 
 ## Constructors
@@ -185,8 +185,13 @@ NostifyCommand b = null;
 
 Equality is based on the `name` property — two commands with the same name are considered equal.
 
+## Migration Note
+
+Prefer inheriting from `EventType` for new work. `NostifyCommand` is marked obsolete and should be treated as a temporary compatibility layer.
+
 ## Related Types
 
-- [Event](Event.spec.md) - Events contain commands
-- [RequiredForAttribute](RequiredForAttribute.spec.md) - Command-specific validation
+- [EventType](EventType.spec.md) - New base abstraction
+- [Event](Event.spec.md) - Events contain `eventType` and expose deprecated `command` compatibility
+- [RequiredForAttribute](RequiredForAttribute.spec.md) - Event-name-specific validation
 - [NostifyValidation](NostifyValidation.spec.md) - Validation utilities

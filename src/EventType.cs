@@ -28,10 +28,11 @@ public abstract class EventType
     /// <param name="name">Human readable friendly name of event type. MUST BE UNIQUE - should follow convention "{Action}_{Entity Name}", ie - "Create_User". This will also become the name of the related Kafka topic.</param>
     /// <param name="isNew">Signifies if this event type results in the creation of a new aggregate.</param>
     /// <param name="allowNullPayload">Allows null payloads to be sent with this event type.</param>
-    protected EventType(string name, bool isNew = false, bool allowNullPayload = false)
+    /// <param name="nameValidationLabel">Label used in validation exception messages.</param>
+    protected EventType(string name, bool isNew = false, bool allowNullPayload = false, string nameValidationLabel = "Event type")
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Event type name cannot be null or empty", nameof(name));
+            throw new ArgumentException($"{nameValidationLabel} name cannot be null or empty", nameof(name));
 
         this.name = name;
         this.isNew = isNew;

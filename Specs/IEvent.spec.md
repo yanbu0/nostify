@@ -18,7 +18,8 @@ public interface IEvent
 | `timestamp` | `DateTime` | When the event occurred (UTC) |
 | `partitionKey` | `string` | Partition key for event routing |
 | `createdBy` | `Guid` | ID of user who triggered the event |
-| `command` | `NostifyCommand` | The command being performed |
+| `eventType` | `EventType` | The typed event metadata being performed |
+| `command` | `NostifyCommand` | Obsolete compatibility alias for legacy command-based code |
 | `aggregateRootId` | `Guid` | ID of the aggregate this event applies to |
 | `payload` | `object` | Data containing properties to update |
 | `version` | `int` | Version for compatibility/migration |
@@ -59,9 +60,15 @@ public interface IEvent
 
 ### command
 
+- **Type**: `EventType`
+- **Description**: The typed event metadata that caused this event
+- **Usage**: Event categorization, Kafka topic routing, and dynamic `Apply(...)` dispatch
+
+### command
+
 - **Type**: `NostifyCommand`
-- **Description**: The command that caused this event
-- **Usage**: Event categorization, Kafka topic routing
+- **Description**: Obsolete compatibility alias for `eventType`
+- **Usage**: Legacy code paths only
 
 ### aggregateRootId
 
@@ -182,6 +189,7 @@ Events following this interface support:
 ## Related Types
 
 - [Event](Event.spec.md) - Primary implementation
-- [NostifyCommand](NostifyCommand.spec.md) - Command definition
+- [EventType](EventType.spec.md) - Typed event metadata
+- [NostifyCommand](NostifyCommand.spec.md) - Obsolete compatibility command type
 - [IAggregate](IAggregate.spec.md) - Aggregate interface
 - [NostifyKafkaTriggerEvent](NostifyKafkaTriggerEvent.spec.md) - Kafka wrapper

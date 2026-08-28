@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using STJ = System.Text.Json;
@@ -30,6 +31,42 @@ internal static class EventTypeResolver
         return typeof(NostifyCommand);
 #pragma warning restore CS0618
     }
+
+    internal static EventType CreateInstance(Type resolvedType, string? name, bool isNew, bool allowNullPayload)
+    {
+        var constructorArgs = new object?[] { name ?? "Unknown", isNew, allowNullPayload };
+        var signatures = new[]
+        {
+            new[] { typeof(string), typeof(bool), typeof(bool) },
+            new[] { typeof(string), typeof(bool) },
+            new[] { typeof(string) },
+            Type.EmptyTypes
+        };
+
+        foreach (var signature in signatures)
+        {
+            ConstructorInfo? constructor = resolvedType.GetConstructor(signature);
+            if (constructor == null)
+            {
+                continue;
+            }
+
+            object?[] args = signature.Length switch
+            {
+                3 => constructorArgs,
+                2 => constructorArgs.Take(2).ToArray(),
+                1 => constructorArgs.Take(1).ToArray(),
+                _ => Array.Empty<object?>()
+            };
+
+            if (constructor.Invoke(args) is EventType eventType)
+            {
+                return eventType;
+            }
+        }
+
+        throw new JsonSerializationException($"Unable to construct event type '{resolvedType.FullName}'. Ensure it exposes a supported constructor.");
+    }
 }
 
 internal sealed class NewtonsoftEventTypeJsonConverter : JsonConverter<EventType>
@@ -42,7 +79,7 @@ internal sealed class NewtonsoftEventTypeJsonConverter : JsonConverter<EventType
             return;
         }
 
-        var jObject = JObject.FromObject(value, serializer);
+        var jObject = JObject.FromObject(value, JsonSerializer.CreateDefault());
         jObject[EventTypeResolver.TypeDiscriminatorPropertyName] = value.GetType().AssemblyQualifiedName;
         jObject.WriteTo(writer);
     }
@@ -57,8 +94,11 @@ internal sealed class NewtonsoftEventTypeJsonConverter : JsonConverter<EventType
         var jObject = JObject.Load(reader);
         var typeName = jObject[EventTypeResolver.TypeDiscriminatorPropertyName]?.Value<string>();
         var resolvedType = EventTypeResolver.Resolve(typeName);
-        using var subReader = jObject.CreateReader();
-        return serializer.Deserialize(subReader, resolvedType) as EventType;
+        return EventTypeResolver.CreateInstance(
+            resolvedType,
+            jObject["name"]?.Value<string>(),
+            jObject["isNew"]?.Value<bool>() ?? false,
+            jObject["allowNullPayload"]?.Value<bool>() ?? false);
     }
 }
 
@@ -72,14 +112,19 @@ internal sealed class SystemTextEventTypeJsonConverter : STJS.JsonConverter<Even
         }
 
         using var document = STJ.JsonDocument.ParseValue(ref reader);
+        var root = document.RootElement;
+
         string? typeName = null;
-        if (document.RootElement.TryGetProperty(EventTypeResolver.TypeDiscriminatorPropertyName, out var typeProperty))
+        if (root.TryGetProperty(EventTypeResolver.TypeDiscriminatorPropertyName, out var typeProperty))
         {
             typeName = typeProperty.GetString();
         }
 
-        var resolvedType = EventTypeResolver.Resolve(typeName);
-        return STJ.JsonSerializer.Deserialize(document.RootElement.GetRawText(), resolvedType, CreateNestedOptions(options)) as EventType;
+        string? name = root.TryGetProperty("name", out var nameProperty) ? nameProperty.GetString() : null;
+        bool isNew = root.TryGetProperty("isNew", out var isNewProperty) && isNewProperty.GetBoolean();
+        bool allowNullPayload = root.TryGetProperty("allowNullPayload", out var allowNullPayloadProperty) && allowNullPayloadProperty.GetBoolean();
+
+        return EventTypeResolver.CreateInstance(EventTypeResolver.Resolve(typeName), name, isNew, allowNullPayload);
     }
 
     public override void Write(STJ.Utf8JsonWriter writer, EventType value, STJ.JsonSerializerOptions options)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-`Event` is the core immutable data structure representing state changes in the event store. Events capture what happened in the system as a series of commands with payloads.
+`Event` is the core immutable data structure representing state changes in the event store. Events now carry a typed `eventType` and keep the older `command` property as an obsolete compatibility alias.
 
 ## Class Definition
 
@@ -16,7 +16,7 @@ public class Event : IEvent
 
 ```csharp
 public Event(
-    NostifyCommand command,
+    EventType eventType,
     Guid aggregateRootId,
     object payload,
     Guid createdBy,
@@ -36,7 +36,7 @@ public Event(
 
 ```csharp
 public Event(
-    NostifyCommand command,
+    EventType eventType,
     object payload,
     Guid createdBy,
     int version = 1
@@ -49,7 +49,7 @@ Automatically extracts `aggregateRootId` from the payload's `id` property.
 
 ```csharp
 public Event(
-    NostifyCommand command,
+    EventType eventType,
     string aggregateRootId,
     object payload,
     string createdBy,
@@ -75,7 +75,8 @@ For JSON deserialization from Cosmos DB.
 | `timestamp` | `DateTime` | When the event occurred (UTC) |
 | `partitionKey` | `string` | Partition key for routing (aggregate type name) |
 | `createdBy` | `Guid` | User who triggered the event |
-| `command` | `NostifyCommand` | The command being performed |
+| `eventType` | `EventType` | The typed event metadata being performed |
+| `command` | `NostifyCommand` | Obsolete compatibility alias for `eventType` |
 | `aggregateRootId` | `Guid` | ID of the aggregate this event applies to |
 | `payload` | `object` | Data containing properties to update |
 | `version` | `int` | Version for compatibility/migration |
@@ -272,6 +273,7 @@ Events are published to Kafka topics:
 ## Related Types
 
 - [IEvent](IEvent.spec.md) - Event interface
-- [NostifyCommand](NostifyCommand.spec.md) - Command class
+- [EventType](EventType.spec.md) - Typed event metadata
+- [NostifyCommand](NostifyCommand.spec.md) - Obsolete compatibility command class
 - [IApplyable](IApplyable.spec.md) - Event application interface
 - [NostifyKafkaTriggerEvent](NostifyKafkaTriggerEvent.spec.md) - Kafka trigger wrapper
