@@ -15,7 +15,7 @@ public class NostifyCommand : EventType
     /// <param name="isNew">Signifies if this command results in the creation of a new aggregate.</param>
     /// <param name="allowNullPayload">Allows null payloads to be sent with this command.</param>
     public NostifyCommand(string name, bool isNew = false, bool allowNullPayload = false)
-        : base(name, isNew, allowNullPayload, "Command")
+        : base(name, isNew, allowNullPayload)
     {
     }
 
