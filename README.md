@@ -71,28 +71,20 @@
     - 11.4 [Event Store Optimization](#event-store-optimization)
 
 ## Current Status
-
+ 
 ### Updates
-
-- 5.0.0-beta1
-    - **Template Apply Dispatch Update**: Updated generated aggregate and projection templates to use the new typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style.
-    - **External Apply Override Support**: Widened `NostifyObject.Apply(EventType, IEvent)` to `protected` so generated services and other consuming assemblies can implement the new typed apply pattern.
-    - **Template Package Version Bump**: Updated packaged and generated template `.csproj` references to `5.0.0-beta1`.
-
-- 4.9.2
-    - **Dependency Security Patch**: Updated a dependency package to a patched version that addresses a known security vulnerability.
-
-- 4.9.1
-    - **New DurableProjectionInitializer Class**: Added `DurableProjectionInitializer<TProjection, TAggregate>` for initializing projections using Azure Durable Functions orchestration. Designed for large datasets that may exceed single Azure Function execution time limits. Supports tenant-based and partition-key-based initialization paths with configurable batch size and concurrent batch count.
-    - **DurableProjectionInitializer RetryOptions Support**: `DurableProjectionInitializer` constructor accepts both `durableTaskOptions` (`TaskOptions?`) for controlling Durable Functions orchestration activity retries and `cosmosRetryOptions` (`RetryOptions?`) for Cosmos DB operation retries. When either is null, sensible defaults are used — `CreateDefaultTaskOptions()` for orchestration (5 retries, 30 s first retry, 1.5× backoff, 5 min max) and `new RetryOptions()` for Cosmos DB.
-    - **ProjectionInitializer.InitAsync RetryOptions Support**: The `InitAsync<P>(List<P>, INostify, HttpClient?, DateTime?, RetryOptions?)` overload now accepts an optional `RetryOptions?` parameter for Cosmos DB bulk upsert retries. Defaults to `new RetryOptions()` when null.
-    - **DurableProjectionInitializer Retry-Options Test Coverage**: Added targeted tests that verify constructor-supplied `durableTaskOptions` are forwarded to every orchestration activity call for both tenant-based and partition-based initialization paths, and that null `durableTaskOptions` uses the built-in default retry policy values.
-
-- 4.9.0
-    - **WorkerConfigurationExtensions Moved Into Library**: Azure Functions worker JSON configuration now lives in reusable `nostify.WorkerConfigurationExtensions` instead of being duplicated inside every generated service `Program.cs`.
-    - **New Worker JSON Helpers**: Added `UseNostifyDefaultConfiguredNewtonsoftJson()` and the shorter `UseNostifyDefaultJson()` helper for configuring nostify's default Newtonsoft.Json worker serializer.
-    - **Experimental System.Text.Json Worker Helper**: Added `UseNostifySystemTextJson()` as an experimental Azure Functions worker serializer option with nostify-compatible camelCase, null, enum, interface, and dynamic-object handling.
-    - **Template Update**: The `nostify` template now calls `UseNostifyDefaultJson()` and no longer ships its own local `WorkerConfigurationExtensions` class.
+ 
+- 5.0.0
+    - **Typed Apply Pattern for Aggregates and Projections**: Generated aggregate and projection templates now use the typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style for clearer, strongly-typed event handling.
+    - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` was widened to `protected` so consuming services can implement the new typed apply pattern in their own aggregates and projections.
+    - **Template Package Version Bump**: All packaged and generated template `.csproj` references have been updated to target `nostify` 5.0.0.
+ 
+- 4.x Highlights
+    - **Durable Projection Initialization**: Introduced `DurableProjectionInitializer<TProjection, TAggregate>` and related helpers for large-scale, orchestrated projection initialization using Azure Durable Functions, including retry options for both orchestration activities and Cosmos DB operations.
+    - **RetryableContainer and RetryOptions**: Added `IRetryableContainer` with robust 429/404 retry handling and configurable `RetryOptions` (exponential backoff, logging hooks), then wired these through default handlers and bulk operations (`ApplyAndPersistAsync`, `BulkPersistEventAsync`, `BulkApplyAndPersistAsync`).
+    - **ExternalDataEventFactory and Cross-Service Event Requests**: Delivered a fluent builder for external data event gathering, plus HTTP, Kafka, and gRPC-based event requestors (including async Kafka request-response, gRPC mapping helpers, and a `dotnet new nostifyGrpc` template for centralized gRPC event request servers).
+    - **Bulk Operation Improvements and Idempotency**: Hardened bulk create/update/delete paths with 409 Conflict idempotent handling, safer undeliverable event persistence, and retry-aware bulk helpers in `RetryableContainer`.
+    - **Query and Sequence Enhancements**: Added paged query support for `IQueryable`/`IOrderedQueryable` with `IQueryExecutor` abstraction, and introduced the `Sequence` API for partition-scoped sequential number generation (including bulk sequence reservation).
 
 - 4.8.1
     - **Constructor grpcAddress for ExternalDataEventFactory**: `ExternalDataEventFactory<P>` now accepts an optional `grpcAddress` parameter in the constructor. When set to a non-empty string, the single-string overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` treat their first parameter as a **service name** (for multi-service gateway routing) and use the constructor address as the gRPC endpoint. When `grpcAddress` is null or empty (the default), those overloads continue to treat the first parameter as the endpoint address directly, preserving full backward compatibility. The constructor `authToken` (if set) is automatically applied when the constructor `grpcAddress` is used.
