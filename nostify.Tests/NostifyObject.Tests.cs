@@ -54,7 +54,7 @@ public class NostifyObjectTests
         }
     }
 
-    private sealed class DispatchingAggregate : NostifyObject, IAggregate
+    private class DispatchingAggregate : NostifyObject, IAggregate
     {
         public static string aggregateType => "DispatchingAggregate";
         public static string currentStateContainerName => $"{aggregateType}CurrentState";
