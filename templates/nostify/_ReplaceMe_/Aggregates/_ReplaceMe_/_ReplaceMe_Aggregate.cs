@@ -14,11 +14,11 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     public static string aggregateType => "_ReplaceMe_";
     public static string currentStateContainerName => $"{aggregateType}CurrentState";
 
-    private protected override void Apply(EventType eventType, IEvent eventToApply)
+    protected override void Apply(EventType eventType, IEvent eventToApply)
     {
     }
 
-    private protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
+    protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
     {
         if (eventType == _ReplaceMe_Command.Create
             || eventType == _ReplaceMe_Command.BulkCreate
@@ -35,5 +35,4 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
         }
     }
 }
-
 

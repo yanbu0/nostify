@@ -51,11 +51,11 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
 
     //**********************************************************************************************
 
-    private protected override void Apply(EventType eventType, IEvent eventToApply)
+    protected override void Apply(EventType eventType, IEvent eventToApply)
     {
     }
 
-    private protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
+    protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
     {
         if (eventType == _ReplaceMe_Command.Create
             || eventType == _ReplaceMe_Command.BulkCreate
