@@ -160,12 +160,12 @@ public static class NostifyValidationExceptionHandler
             var commandError = new ValidationErrorResponse
             {
                 Message = "Validation failed",
-                Errors = new Dictionary<string, List<string>> 
-                { 
-                    { "Command", new List<string> { "Command name cannot be null or empty" } } 
+                Errors = new Dictionary<string, List<string>>
+                {
+                    { "Event Type", new List<string> { "Event type name cannot be null or empty" } }
                 }
             };
-            logger?.LogWarning("Validation failed: Command name is null or empty");
+            logger?.LogWarning("Validation failed: Event type name is null or empty");
             return commandError;
         }
 

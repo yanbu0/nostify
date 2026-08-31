@@ -47,7 +47,7 @@ public class NostifyCommandTests
     {
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() => new NostifyCommand(invalidName));
-        Assert.Equal("Command name cannot be null or empty (Parameter 'name')", exception.Message);
+        Assert.Equal("Event type name cannot be null or empty (Parameter 'name')", exception.Message);
         Assert.Equal("name", exception.ParamName);
     }
 
@@ -56,7 +56,7 @@ public class NostifyCommandTests
     {
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() => new NostifyCommand(null!));
-        Assert.Equal("Command name cannot be null or empty (Parameter 'name')", exception.Message);
+        Assert.Equal("Event type name cannot be null or empty (Parameter 'name')", exception.Message);
         Assert.Equal("name", exception.ParamName);
     }
 
