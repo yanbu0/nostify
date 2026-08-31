@@ -49,7 +49,7 @@ public abstract class EventType
     /// </summary>
     public override bool Equals(object? obj)
     {
-        if (obj == null || !typeof(EventType).IsAssignableFrom(obj.GetType()))
+        if (obj == null || obj.GetType() != GetType())
             return false;
 
         var otherValue = obj as EventType;
@@ -64,6 +64,7 @@ public abstract class EventType
         unchecked
         {
             int hash = 17;
+            hash = hash * 23 + GetType().GetHashCode();
             hash = hash * 23 + name.GetHashCode();
             return hash;
         }

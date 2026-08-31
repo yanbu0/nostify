@@ -33,7 +33,9 @@ public interface IEvent
     EventType eventType { get; set; }
 
     /// <summary>
-    /// Command metadata to perform, defined in Aggregate implementation.
+    /// Legacy command compatibility metadata.
+    /// For non-legacy typed event types, this returns a cached <see cref="NostifyCommand"/>
+    /// shim that mirrors the current <see cref="eventType"/> metadata.
     /// </summary>
     [Obsolete("Use eventType instead.")]
     NostifyCommand command { get; set; }

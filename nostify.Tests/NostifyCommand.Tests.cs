@@ -131,7 +131,7 @@ public class NostifyCommandTests
     }
 
     [Fact]
-    public void Equals_WithInheritedCommand_ShouldReturnTrue()
+    public void Equals_WithInheritedCommand_ShouldReturnFalse()
     {
         // Arrange
         var baseCommand = new NostifyCommand("Test_Create");
@@ -141,7 +141,7 @@ public class NostifyCommandTests
         var result = baseCommand.Equals(inheritedCommand);
 
         // Assert
-        Assert.True(result);
+        Assert.False(result);
     }
 
     [Fact]

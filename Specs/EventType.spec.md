@@ -34,7 +34,7 @@ Creates a new typed event metadata object.
 
 ## Equality
 
-Equality is value-based on `name`. Two event types with the same `name` compare as equal even if they are different concrete subclasses.
+Equality is based on both the concrete CLR type and `name`. Two event types with the same `name` but different subclasses do not compare as equal.
 
 ## Usage Example
 

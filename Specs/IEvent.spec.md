@@ -19,7 +19,7 @@ public interface IEvent
 | `partitionKey` | `string` | Partition key for event routing |
 | `createdBy` | `Guid` | ID of user who triggered the event |
 | `eventType` | `EventType` | The typed event metadata being performed |
-| `command` | `NostifyCommand` | Obsolete compatibility alias for legacy command-based code |
+| `command` | `NostifyCommand` | Obsolete compatibility alias for legacy command-based code; typed events expose a cached metadata shim |
 | `aggregateRootId` | `Guid` | ID of the aggregate this event applies to |
 | `payload` | `object` | Data containing properties to update |
 | `version` | `int` | Version for compatibility/migration |
@@ -68,7 +68,7 @@ public interface IEvent
 
 - **Type**: `NostifyCommand`
 - **Description**: Obsolete compatibility alias for `eventType`
-- **Usage**: Legacy code paths only
+- **Usage**: Legacy code paths only; when the underlying event uses a non-legacy `EventType`, the event returns a cached compatibility `NostifyCommand` carrying the same metadata
 
 ### aggregateRootId
 

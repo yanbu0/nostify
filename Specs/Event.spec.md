@@ -76,7 +76,7 @@ For JSON deserialization from Cosmos DB.
 | `partitionKey` | `string` | Partition key for routing (aggregate type name) |
 | `createdBy` | `Guid` | User who triggered the event |
 | `eventType` | `EventType` | The typed event metadata being performed |
-| `command` | `NostifyCommand` | Obsolete compatibility alias for `eventType` |
+| `command` | `NostifyCommand` | Obsolete compatibility alias for `eventType`; typed events expose a cached metadata shim |
 | `aggregateRootId` | `Guid` | ID of the aggregate this event applies to |
 | `payload` | `object` | Data containing properties to update |
 | `version` | `int` | Version for compatibility/migration |
@@ -128,6 +128,10 @@ Applies the event's payload to a target object.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `target` | `T` | Object to apply payload properties to |
+
+## Backward Compatibility
+
+The obsolete `command` property remains available for legacy callers. If the event was created with a typed `EventType` that is not a `NostifyCommand`, `command` returns a cached compatibility `NostifyCommand` containing the same `name`, `isNew`, and `allowNullPayload` values. This preserves older metadata-based code paths without changing the underlying typed dispatch model.
 
 ## Usage Examples
 

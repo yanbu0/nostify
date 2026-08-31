@@ -183,7 +183,7 @@ NostifyCommand b = null;
 // a == someCommand → false  (null vs non-null)
 ```
 
-Equality is based on the `name` property — two commands with the same name are considered equal.
+Equality is based on both the concrete CLR type and the `name` property. Two `NostifyCommand` instances of the same type with the same `name` compare as equal; a derived command type with the same `name` does not.
 
 ## Migration Note
 

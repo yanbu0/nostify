@@ -21,6 +21,22 @@ public class EventTests
         }
     }
 
+    private sealed class TypedTestEventType : EventType
+    {
+        public TypedTestEventType(string name, bool isNew = false, bool allowNullPayload = false)
+            : base(name, isNew, allowNullPayload)
+        {
+        }
+    }
+
+    private sealed class OtherTypedTestEventType : EventType
+    {
+        public OtherTypedTestEventType(string name, bool isNew = false, bool allowNullPayload = false)
+            : base(name, isNew, allowNullPayload)
+        {
+        }
+    }
+
     public class TestAggregate : NostifyObject, IAggregate, ITenantFilterable
     {
         public static string aggregateType => "Test";
@@ -160,6 +176,34 @@ public class EventTests
         Assert.Equal(payload, eventToTest.payload);
         Assert.NotEqual(Guid.Empty, eventToTest.id);
         Assert.True(eventToTest.timestamp <= DateTime.UtcNow);
+    }
+
+    [Fact]
+    public void EventTypeEquality_WithDifferentTypedSubclassesAndSameName_ShouldReturnFalse()
+    {
+        var eventType1 = new TypedTestEventType("Same_Name");
+        var eventType2 = new OtherTypedTestEventType("Same_Name");
+
+        Assert.False(eventType1.Equals(eventType2));
+        Assert.NotEqual(eventType1.GetHashCode(), eventType2.GetHashCode());
+    }
+
+    [Fact]
+    public void CommandGetter_WithTypedEventType_ShouldReturnCachedCompatibilityCommand()
+    {
+        var eventType = new TypedTestEventType("Typed_Test", true, true);
+        var eventToTest = new Event(eventType, new { id = Guid.NewGuid(), name = "Test" });
+
+#pragma warning disable CS0618
+        var command1 = eventToTest.command;
+        var command2 = eventToTest.command;
+#pragma warning restore CS0618
+
+        Assert.Same(command1, command2);
+        Assert.Equal(eventType.name, command1.name);
+        Assert.Equal(eventType.isNew, command1.isNew);
+        Assert.Equal(eventType.allowNullPayload, command1.allowNullPayload);
+        Assert.False(eventType.Equals(command1));
     }
 
     [Fact]

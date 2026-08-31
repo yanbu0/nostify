@@ -17,6 +17,7 @@ namespace nostify;
 public class Event : IEvent
 {
     private EventType? _eventType;
+    private NostifyCommand? _legacyCommand;
 
     /// <summary>
     /// Constructor for Event, use when creating object to save to event store.
@@ -126,15 +127,31 @@ public class Event : IEvent
     public EventType eventType
     {
         get => _eventType!;
-        set => _eventType = value;
+        set
+        {
+            _eventType = value;
+            _legacyCommand = value as NostifyCommand;
+        }
     }
 
     /// <inheritdoc />
     [Obsolete("Use eventType instead.")]
     public NostifyCommand command
     {
-        get => _eventType == null ? null! : _eventType as NostifyCommand ?? new NostifyCommand(eventType.name, eventType.isNew, eventType.allowNullPayload);
-        set => eventType = value;
+        get
+        {
+            if (_eventType == null)
+            {
+                return null!;
+            }
+
+            return _legacyCommand ??= new NostifyCommand(eventType.name, eventType.isNew, eventType.allowNullPayload);
+        }
+        set
+        {
+            _legacyCommand = value;
+            _eventType = value;
+        }
     }
 
     /// <inheritdoc />
