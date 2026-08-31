@@ -49,7 +49,7 @@ public class Event : IEvent
         var jPayload = JObject.FromObject(payload);
         if (jPayload["id"] == null || (jPayload["id"].Type != JTokenType.Guid && !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId)))
         {
-            throw new ArgumentException("Event Create Errpr: Aggregate Root ID does not exist or is not parsable to a Guid");
+            throw new ArgumentException("Event Create Error: Aggregate Root ID does not exist or is not parsable to a Guid");
         }
         else if (aggregateRootId == default)
         {
