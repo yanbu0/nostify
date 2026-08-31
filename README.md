@@ -74,6 +74,10 @@
 
 ### Updates
 
+- 5.0.0-beta1
+    - **Template Apply Dispatch Update**: Updated generated aggregate and projection templates to use the new typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style.
+    - **Template Package Version Bump**: Updated packaged and generated template `.csproj` references to `5.0.0-beta1`.
+
 - 4.9.2
     - **Dependency Security Patch**: Updated a dependency package to a patched version that addresses a known security vulnerability.
 

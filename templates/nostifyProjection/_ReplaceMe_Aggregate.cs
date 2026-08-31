@@ -19,4 +19,8 @@ public class _ReplaceMe_ : NostifyObject, IAggregate
     private protected override void Apply(EventType eventType, IEvent eventToApply)
     {
     }
+
+    private protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
+    {
+    }
 }

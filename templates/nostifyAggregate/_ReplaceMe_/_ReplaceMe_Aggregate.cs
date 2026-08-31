@@ -15,16 +15,23 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
 
     private protected override void Apply(EventType eventType, IEvent eventToApply)
     {
-        if (eventType == _ReplaceMe_Command.BulkCreate || eventType == _ReplaceMe_Command.Create || eventType == _ReplaceMe_Command.Update)
+    }
+
+    private protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
+    {
+        if (eventType == _ReplaceMe_Command.BulkCreate
+            || eventType == _ReplaceMe_Command.Create
+            || eventType == _ReplaceMe_Command.Update
+            || eventType == _ReplaceMe_Command.BulkUpdate)
         {
             this.UpdateProperties<_ReplaceMe_>(eventToApply.payload);
         }
-        else if (eventType == _ReplaceMe_Command.Delete)
+        else if (eventType == _ReplaceMe_Command.Delete
+            || eventType == _ReplaceMe_Command.BulkDelete)
         {
             this.isDeleted = true;
         }
     }
 }
-
 
 

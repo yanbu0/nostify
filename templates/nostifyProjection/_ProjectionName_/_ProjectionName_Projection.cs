@@ -53,13 +53,19 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
 
     private protected override void Apply(EventType eventType, IEvent eventToApply)
     {
-        //Should update the command tree below to not use string matching
-        if (eventType.name.Equals("Create__ReplaceMe_") 
-                || eventType.name.Equals("Update__ReplaceMe_"))
+    }
+
+    private protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
+    {
+        if (eventType == _ReplaceMe_Command.Create
+            || eventType == _ReplaceMe_Command.BulkCreate
+            || eventType == _ReplaceMe_Command.Update
+            || eventType == _ReplaceMe_Command.BulkUpdate)
         {
             this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
         }
-        else if (eventType.name.Equals("Delete__ReplaceMe_"))
+        else if (eventType == _ReplaceMe_Command.Delete
+            || eventType == _ReplaceMe_Command.BulkDelete)
         {
             this.isDeleted = true;
             this.ttl = 1;
