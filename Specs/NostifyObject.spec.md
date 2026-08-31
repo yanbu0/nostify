@@ -2,7 +2,7 @@
 
 ## Overview
 
-`NostifyObject` is the abstract base class for all domain objects in the nostify framework, including aggregates and projections. It provides common identity/tenant fields and now centralizes `Apply(IEvent)` dispatch through `eventType` before invoking derived handlers.
+`NostifyObject` is the abstract base class for all domain objects in the nostify framework, including aggregates and projections. It provides common identity/tenant fields and now centralizes `Apply(IEvent)` dispatch through `eventType` before invoking derived handlers. The typed fallback override is `protected` so consumers in other assemblies can implement aggregates and projections.
 
 ## Class Definition
 
