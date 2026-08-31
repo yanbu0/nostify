@@ -51,19 +51,64 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
 
     //**********************************************************************************************
 
-    private protected override void Apply(EventType eventType, IEvent eventToApply)
+    // Apply handlers use the new typed EventType Apply overloads, matching the aggregate pattern.
+    // These methods are invoked by the Nostify infrastructure via dynamic dispatch based on the
+    // concrete EventType of the incoming event.
+
+    /// <summary>
+    /// Handles Create events for the projection.
+    /// Populates the projection properties from the event payload.
+    /// </summary>
+    protected void Apply(Create__ReplaceMe_ eventType, IEvent eventToApply)
     {
-        //Should update the command tree below to not use string matching
-        if (eventType.name.Equals("Create__ReplaceMe_") 
-                || eventType.name.Equals("Update__ReplaceMe_"))
-        {
-            this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
-        }
-        else if (eventType.name.Equals("Delete__ReplaceMe_"))
-        {
-            this.isDeleted = true;
-            this.ttl = 1;
-        }
+        this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+    }
+
+    /// <summary>
+    /// Handles Update events for the projection.
+    /// Populates the projection properties from the event payload.
+    /// </summary>
+    protected void Apply(Update__ReplaceMe_ eventType, IEvent eventToApply)
+    {
+        this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+    }
+
+    /// <summary>
+    /// Handles bulk create events for the projection.
+    /// Populates the projection properties from the event payload.
+    /// </summary>
+    protected void Apply(BulkCreate__ReplaceMe_ eventType, IEvent eventToApply)
+    {
+        this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+    }
+
+    /// <summary>
+    /// Handles bulk update events for the projection.
+    /// Populates the projection properties from the event payload.
+    /// </summary>
+    protected void Apply(BulkUpdate__ReplaceMe_ eventType, IEvent eventToApply)
+    {
+        this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+    }
+
+    /// <summary>
+    /// Handles delete events for the projection.
+    /// Marks the projection as deleted and sets a TTL for soft deletion.
+    /// </summary>
+    protected void Apply(Delete__ReplaceMe_ eventType, IEvent eventToApply)
+    {
+        this.isDeleted = true;
+        this.ttl = 1;
+    }
+
+    /// <summary>
+    /// Handles bulk delete events for the projection.
+    /// Marks the projection as deleted and sets a TTL for soft deletion.
+    /// </summary>
+    protected void Apply(BulkDelete__ReplaceMe_ eventType, IEvent eventToApply)
+    {
+        this.isDeleted = true;
+        this.ttl = 1;
     }
 
     public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<_ProjectionName_> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)

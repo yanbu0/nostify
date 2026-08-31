@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 namespace nostify;
 
@@ -17,13 +18,62 @@ public interface IApplyable
 ///</summary>
 public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, IApplyable
 {
+    /// <summary>
+    /// Cached MethodInfo for NostifyExtensions.GetValue to avoid repeated reflection
+    /// lookups on the NostifyExtensions type for each property update.
+    /// </summary>
+    private static readonly MethodInfo _getValueMethodInfo = typeof(NostifyExtensions)
+        .GetMethod("GetValue", BindingFlags.Public | BindingFlags.Static);
+
+    /// <summary>
+    /// Cache of writable properties for each NostifyObject-derived type T,
+    /// keyed by property name for fast lookup.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> _propertyMapCache = new();
+
+    /// <summary>
+    /// Get or build a dictionary of writable properties for type T keyed by property name.
+    /// This is the core reflection cache used by UpdateProperties and UpdateProperty.
+    /// </summary>
+    private static Dictionary<string, PropertyInfo> GetPropertyMap<T>() where T : NostifyObject
+    {
+        return _propertyMapCache.GetOrAdd(typeof(T), t =>
+        {
+            return t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.GetSetMethod() != null)
+                .ToDictionary(p => p.Name, p => p);
+        });
+    }
+
+    /// <summary>
+    /// Internal helper that performs a single property update using cached reflection
+    /// metadata to minimize overhead. All public UpdateProperties overloads delegate
+    /// into this method.
+    /// </summary>
+    private void UpdatePropertyInternal<T>(string propertyToSet, string propertyToGetValueFrom, JObject jPayload, Dictionary<string, PropertyInfo> propertyMap) where T : NostifyObject
+    {
+        if (!propertyMap.TryGetValue(propertyToSet, out var propToUpdate))
+        {
+            // Property does not exist on T; behavior matches original implementation (no-op).
+            return;
+        }
+
+        // Reuse cached MethodInfo for GetValue and only construct the closed generic method
+        // for the specific property type we are updating.
+        var getValueRef = _getValueMethodInfo.MakeGenericMethod(propToUpdate.PropertyType);
+        var valueToSet = getValueRef.Invoke(null, new object[] { jPayload, propertyToGetValueFrom });
+
+        // Use the PropertyInfo we already have instead of querying typeof(T) again.
+        propToUpdate.SetValue(this, valueToSet);
+    }
+
     ///<summary>
     ///This type should never be directly instantiated
     ///</summary>
     protected internal NostifyObject()
     {
     }
-
+    
     /// <summary>
     /// Time to live in seconds, default is -1 which means never expire.  Can be set to any positive integer to bulk delete from container using spare RUs.
     /// Container must have TTL enabled for the delete to work.
@@ -50,7 +100,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<summary>
     ///Applies event to this Aggregate or Projection based on its event type
     ///</summary>
-    private protected abstract void Apply(EventType eventType, IEvent eventToApply);
+    protected abstract void Apply(EventType eventType, IEvent eventToApply);
 
     ///<summary>
     ///Updates properties of Aggregate or Projection
@@ -58,15 +108,17 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="payload">Must be payload from Event, name of property in payload must match property name in T</param>
     public void UpdateProperties<T>(object payload) where T : NostifyObject
     {
-        var nosObjProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.GetSetMethod() != null)
-            .ToList();
+        // Convert the payload to a JObject once and reuse for all property updates
         var jPayload = JObject.FromObject(payload);
         var payloadProps = jPayload.Children<JProperty>();
 
+        // Use cached reflection metadata for writable properties of T
+        var propertyMap = GetPropertyMap<T>();
+
         foreach (JProperty prop in payloadProps)
         {
-            UpdateProperty<T>(prop.Name, prop.Name, jPayload, nosObjProps);
+            // Default behavior: map payload property to projection/aggregate property by name
+            UpdatePropertyInternal<T>(prop.Name, prop.Name, jPayload, propertyMap);
         }
     }
 
@@ -88,17 +140,22 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="strict">If true, only properties in the propertyPairs dictionary will be updated, if false, will also automatically match up properties by their name. The propertyPair dictionary will take precedence.</param>
     public void UpdateProperties<T>(object payload, Dictionary<string, string> propertyPairs, bool strict = false) where T : NostifyObject
     {
-        var nosObjProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
+        // Convert the payload to a JObject once and reuse for all property updates
         var jPayload = JObject.FromObject(payload);
         var payloadProps = jPayload.Children<JProperty>();
 
+        // Use cached reflection metadata for writable properties of T
+        var propertyMap = GetPropertyMap<T>();
+
         foreach (JProperty prop in payloadProps)
         {
+            // Determine whether this payload property should be applied
             bool doUpdate = !strict || propertyPairs.ContainsKey(prop.Name);
             if (doUpdate)
             {
+                // If a mapping exists, use the mapped target property name, otherwise fall back to the same name
                 string propToSet = propertyPairs.ContainsKey(prop.Name) ? propertyPairs[prop.Name] : prop.Name;
-                UpdateProperty<T>(propToSet, prop.Name, jPayload, nosObjProps);
+                UpdatePropertyInternal<T>(propToSet, prop.Name, jPayload, propertyMap);
             }
         }
 
@@ -126,15 +183,21 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="thisNostifyObjectProps">Optional. List of properties of this object. Set this if you are looping through a list to avoid calling GetProperties() multiple times.</param>
     public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, JObject jPayload, List<PropertyInfo> thisNostifyObjectProps = null) where T : NostifyObject
     {
-        var nosObjProps = thisNostifyObjectProps ?? typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
-        PropertyInfo propToUpdate = nosObjProps.Where(p => p.Name == propertyToSet).SingleOrDefault();
-        if (propToUpdate != null)
+        // For callers that still pass a List<PropertyInfo> (for example legacy code paths),
+        // honor that list and perform a one-off update using the optimized internal helper.
+        if (thisNostifyObjectProps != null)
         {
-            var eg = typeof(NostifyExtensions).GetMethod("GetValue");
-            var getValueRef = eg.MakeGenericMethod(propToUpdate.PropertyType);
-            var valueToSet = getValueRef.Invoke(null, new object[] { jPayload, propertyToGetValueFrom });
-            typeof(T).GetProperty(propToUpdate.Name).SetValue(this, valueToSet);
+            var propertyMap = thisNostifyObjectProps
+                .Where(p => p.GetSetMethod() != null)
+                .ToDictionary(p => p.Name, p => p);
+
+            UpdatePropertyInternal<T>(propertyToSet, propertyToGetValueFrom, jPayload, propertyMap);
+            return;
         }
+
+        // If no List<PropertyInfo> is supplied, fall back to the cached property map for T.
+        var cachedPropertyMap = GetPropertyMap<T>();
+        UpdatePropertyInternal<T>(propertyToSet, propertyToGetValueFrom, jPayload, cachedPropertyMap);
     }
 
     ///<summary>
@@ -165,17 +228,22 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="propertyCheckValues">List of PropertyCheck objects defining the conditional mapping rules</param>
     public void UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
     {
-        List<PropertyInfo> thisNostifyObjectProps = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public).ToList();
+        // Convert the payload to a JObject once and reuse for all property updates
         JObject jObject = JObject.FromObject(payload);
+
+        // Use cached reflection metadata for writable properties of T
+        var propertyMap = GetPropertyMap<T>();
 
         foreach (PropertyCheck propertyCheck in propertyCheckValues)
         {
+            // Only apply mappings where the projectionIdPropertyValue matches the aggregate root id (if provided)
             if (!propertyCheck.projectionIdPropertyValue.HasValue || eventAggregateRootId == propertyCheck.projectionIdPropertyValue.Value)
             {
                 JToken? jt = jObject[propertyCheck.eventPropertyName];
                 if (jt != null)
                 {
-                    UpdateProperty<T>(propertyCheck.projectionPropertyName, propertyCheck.eventPropertyName, jObject, thisNostifyObjectProps);
+                    // Conditional mapping: projectionPropertyName is the target, eventPropertyName is the source
+                    UpdatePropertyInternal<T>(propertyCheck.projectionPropertyName, propertyCheck.eventPropertyName, jObject, propertyMap);
                 }
             }
         }

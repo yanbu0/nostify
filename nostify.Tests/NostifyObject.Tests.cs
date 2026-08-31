@@ -22,7 +22,7 @@ public class NostifyObjectTests
         public DateTime? createdDate { get; set; }
         public List<string>? tags { get; set; }
 
-        private protected override void Apply(EventType eventType, IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             // Implementation not needed for these tests
             throw new NotImplementedException("Apply method not implemented for test");
@@ -39,7 +39,7 @@ public class NostifyObjectTests
         public int userAge { get; set; }
         public string? status { get; set; }
 
-        private protected override void Apply(EventType eventType, IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException("Apply method not implemented for test");
         }
@@ -54,7 +54,7 @@ public class NostifyObjectTests
         }
     }
 
-    private sealed class DispatchingAggregate : NostifyObject, IAggregate
+    private class DispatchingAggregate : NostifyObject, IAggregate
     {
         public static string aggregateType => "DispatchingAggregate";
         public static string currentStateContainerName => $"{aggregateType}CurrentState";
@@ -64,12 +64,12 @@ public class NostifyObjectTests
         public bool handledSpecificType { get; private set; }
         public bool handledFallbackType { get; private set; }
 
-        private protected override void Apply(EventType eventType, IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             handledFallbackType = true;
         }
 
-        private protected void Apply(CreateDispatchEventType eventType, IEvent eventToApply)
+        protected void Apply(CreateDispatchEventType eventType, IEvent eventToApply)
         {
             handledSpecificType = true;
             UpdateProperties<DispatchingAggregate>(eventToApply.payload);
@@ -481,7 +481,7 @@ public class NostifyObjectPropertyCheckTests
         public DateTime? lastUpdated { get; set; }
         public bool isActive { get; set; }
 
-        private protected override void Apply(EventType eventType, IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException("Apply method not implemented for test");
         }

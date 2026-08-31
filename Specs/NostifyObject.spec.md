@@ -2,7 +2,7 @@
 
 ## Overview
 
-`NostifyObject` is the abstract base class for all domain objects in the nostify framework, including aggregates and projections. It provides common identity/tenant fields and now centralizes `Apply(IEvent)` dispatch through `eventType` before invoking derived handlers.
+`NostifyObject` is the abstract base class for all domain objects in the nostify framework, including aggregates and projections. It provides common identity/tenant fields and now centralizes `Apply(IEvent)` dispatch through `eventType` before invoking derived handlers. The typed fallback override is `protected` so consumers in other assemblies can implement aggregates and projections.
 
 ## Class Definition
 
@@ -69,7 +69,7 @@ public class Order : NostifyObject, IAggregate, IApplyable
     public Order() : base() { }
     public Order(Guid id) : base(id) { }
     
-    private protected override void Apply(EventType eventType, IEvent eventToApply)
+    protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         UpdateProperties<Order>(eventToApply.payload);
     }
@@ -91,7 +91,7 @@ public class OrderSummary : NostifyObject, IProjection, IApplyable
     public OrderSummary() : base() { }
     public OrderSummary(Guid id) : base(id) { }
     
-    private protected override void Apply(EventType eventType, IEvent eventToApply)
+    protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         UpdateProperties<OrderSummary>(eventToApply.payload);
     }
@@ -162,7 +162,7 @@ public class MyAggregate : NostifyObject, IAggregate, IApplyable
     public static string currentStateContainerName => "my-aggregates-current";
     public bool isDeleted { get; set; }
     
-    private protected override void Apply(EventType eventType, IEvent eventToApply) { /* ... */ }
+    protected override void Apply(EventType eventType, IEvent eventToApply) { /* ... */ }
 }
 ```
 
@@ -174,7 +174,7 @@ public class MyProjection : NostifyObject, IProjection, IApplyable
     public static string containerName => "my-projections";
     public bool initialized { get; set; }
     
-    private protected override void Apply(EventType eventType, IEvent eventToApply) { /* ... */ }
+    protected override void Apply(EventType eventType, IEvent eventToApply) { /* ... */ }
 }
 ```
 

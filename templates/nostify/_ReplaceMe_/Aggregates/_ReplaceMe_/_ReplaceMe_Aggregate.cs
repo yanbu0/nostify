@@ -14,19 +14,25 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     public static string aggregateType => "_ReplaceMe_";
     public static string currentStateContainerName => $"{aggregateType}CurrentState";
 
-    private protected override void Apply(EventType eventType, IEvent eventToApply)
+    protected override void Apply(EventType eventType, IEvent eventToApply)
     {
-        if (eventType == _ReplaceMe_Command.Create || eventType == _ReplaceMe_Command.BulkCreate || eventType == _ReplaceMe_Command.Update)
+    }
+
+    protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
+    {
+        if (eventType == _ReplaceMe_Command.Create
+            || eventType == _ReplaceMe_Command.BulkCreate
+            || eventType == _ReplaceMe_Command.Update
+            || eventType == _ReplaceMe_Command.BulkUpdate)
         {
             //Note: this uses reflection, may be desirable to optimize
             this.UpdateProperties<_ReplaceMe_>(eventToApply.payload);
         }
-        else if (eventType == _ReplaceMe_Command.Delete)
+        else if (eventType == _ReplaceMe_Command.Delete
+            || eventType == _ReplaceMe_Command.BulkDelete)
         {
             this.isDeleted = true;
         }
     }
 }
-
-
 

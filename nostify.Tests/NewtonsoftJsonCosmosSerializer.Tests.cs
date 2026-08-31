@@ -312,7 +312,7 @@ public class SerializerTestAggregate : NostifyObject, IAggregate
     public string Name { get; set; } = string.Empty;
     public int Value { get; set; }
 
-    private protected override void Apply(EventType eventType, IEvent e)
+    protected override void Apply(EventType eventType, IEvent e)
     {
         UpdateProperties<SerializerTestAggregate>(e.payload);
     }

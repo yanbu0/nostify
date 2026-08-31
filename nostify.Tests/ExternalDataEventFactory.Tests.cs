@@ -3544,7 +3544,7 @@ public class FactoryTestProjection : NostifyObject, IProjection, IUniquelyIdenti
     public bool initialized { get; set; } = false;
     public static string containerName => "FactoryTestProjections";
 
-    private protected override void Apply(EventType eventType, IEvent e)
+    protected override void Apply(EventType eventType, IEvent e)
     {
         UpdateProperties<FactoryTestProjection>(e.payload);
     }
