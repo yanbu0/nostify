@@ -58,15 +58,13 @@ public interface IEvent
 - **Description**: The user ID who initiated the event
 - **Usage**: Audit trails, access control, analytics
 
-### command
+### eventType
 
 - **Type**: `EventType`
 - **Description**: The typed event metadata that caused this event
 - **Usage**: Event categorization, Kafka topic routing, and dynamic `Apply(...)` dispatch
 
 ### command
-
-- **Type**: `NostifyCommand`
 - **Description**: Obsolete compatibility alias for `eventType`
 - **Usage**: Legacy code paths only; when the underlying event uses a non-legacy `EventType`, the event returns a cached compatibility `NostifyCommand` carrying the same metadata
 
