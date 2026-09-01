@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
+using nostify.Attributes;
 
 namespace nostify;
 
@@ -93,12 +94,67 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
 
 
     ///<summary>
-    ///Applies event to this Aggregate or Projection
+    ///Applies event to this Aggregate or Projection.
+    ///
+    /// Dispatch order:
+    /// 1. If any methods on the concrete type are decorated with <see cref="ApplyEventsAttribute"/>
+    ///    for the event's <see cref="EventType"/>, they are invoked first.
+    /// 2. If no attribute-based handler exists, falls back to the existing dynamic
+    ///    overload-based dispatch: <c>Apply((dynamic)eventToApply.eventType, eventToApply)</c>.
+    ///
+    /// This allows aggregates and projections to opt into attribute-based handling
+    /// without breaking existing overload patterns.
     ///</summary>
-    public void Apply(IEvent eventToApply) => Apply((dynamic)eventToApply.eventType, eventToApply);
+    public void Apply(IEvent eventToApply)
+    {
+        if (!TryApplyWithAttributes(eventToApply))
+        {
+            // Fallback to existing dynamic overload dispatch
+            Apply((dynamic)eventToApply.eventType, eventToApply);
+        }
+    }
+
+    /// <summary>
+    /// Applies an event to this object using attribute-based dispatch if possible.
+    /// </summary>
+    /// <param name="eventToApply">The event instance to apply.</param>
+    /// <returns>
+    /// <c>true</c> if an attribute-based handler was found and invoked; otherwise <c>false</c>.
+    /// </returns>
+    protected virtual bool TryApplyWithAttributes(IEvent eventToApply)
+    {
+        if (eventToApply == null)
+        {
+            throw new ArgumentNullException(nameof(eventToApply));
+        }
+
+        var eventType = eventToApply.eventType;
+        if (eventType == null)
+        {
+            // If there is no event type, we cannot perform attribute-based routing.
+            return false;
+        }
+
+        // Resolve the concrete type of this NostifyObject (aggregate or projection).
+        var targetType = GetType();
+
+        // Build or retrieve the handler map for this type.
+        var handlerMap = ApplyEventsHandlerCache.GetOrBuildHandlerMap(targetType);
+        if (!handlerMap.TryGetValue(eventType, out var handler))
+        {
+            // No attribute-based handler for this event type on this object.
+            return false;
+        }
+
+        // Invoke the handler. We expect methods to accept a single IEvent parameter.
+        handler(this, eventToApply);
+        return true;
+    }
 
     ///<summary>
-    ///Applies event to this Aggregate or Projection based on its event type
+    ///Applies event to this Aggregate or Projection based on its event type.
+    /// Implementors should provide overloads like <c>Apply(SpecificEventType, IEvent)</c>
+    /// to participate in the dynamic dispatch fallback.
     ///</summary>
     protected abstract void Apply(EventType eventType, IEvent eventToApply);
 
