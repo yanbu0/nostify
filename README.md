@@ -74,7 +74,7 @@
  
 ### Updates
  
-- 5.0.0
+- 5.0.0 (BREAKING CHANGES!)
     - **Typed Apply Pattern for Aggregates and Projections**: Generated aggregate and projection templates now use the typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style for clearer, strongly-typed event handling.
     - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` was widened to `protected` so consuming services can implement the new typed apply pattern in their own aggregates and projections.
     - **Template Package Version Bump**: All packaged and generated template `.csproj` references have been updated to target `nostify` 5.0.0.
