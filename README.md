@@ -552,7 +552,7 @@ An aggregate encapsulates the logic around the "C" or Command part of the CQRS p
 
 For example a Purchase Requisition might have a `id`, `pr_number`,  and `lineItems` properties where `lineItems` is a `List<LineItem>` type.  The aggregate would be composed of multiple types of objects as well as simple types in this case, and the line items of the requisition would never be edited outside the context of their containing req.
 
-In `nostify` all state changes coming from the UI are called a `NostifyCommand` and must be performed against an aggregate.  This is done by composing an `Event`, which is written to the event store.  This triggers the event getting pushed to the messaging system (Kafka) which the event handler subscribes to.  Once triggered the event  handler updates the current state container of the aggregate.
+In `nostify` all state changes coming from the UI are associated with an `EventType` (formerly `NostifyCommand`) and must be performed against an aggregate.  This is done by composing an `Event`, which is written to the event store.  This triggers the event getting pushed to the messaging system (Kafka) which the event handler subscribes to.  Once triggered the event  handler updates the current state container of the aggregate.
 
 #### Rules
 
@@ -724,7 +724,6 @@ Historically, `nostify` used `NostifyCommand` as the dispatch primitive for even
 
 An `EventType` is functionally similar to the old `NostifyCommand` concept: it names the event, indicates whether it creates a new aggregate instance (`isNew`), and whether null payloads are allowed. The name still becomes the Kafka/Event Hubs topic.
 
-<!-- BEGIN-GPT-EDIT: EventType examples introduced/modified by GPT model -->
 #### Example: EventTypes for Test Aggregate
 
 The templates use a separate concrete `EventType` subclass for each logical operation:
@@ -764,13 +763,11 @@ public sealed class BulkDelete_Test : EventType
 Each event type is represented by its own class (matching the pattern used in the aggregate templates), and the `name` passed to the base `EventType` constructor is the value that will be stored in the event and used for routing.
 
 You can continue to use `NostifyCommand` in the same style, but it is now conceptually a specialized `EventType` pattern.
-<!-- END-GPT-EDIT -->
 
 #### Attribute-Based Dispatch (Preferred Pattern)
 
 The preferred dispatch model for aggregates and projections is to use the [`ApplyEventsAttribute`](src/Attributes/ApplyEventsAttribute.cs) on strongly-typed handler methods. This removes manual `switch`/`if` chaining and centralizes dispatch mapping.
 
-<!-- BEGIN-GPT-EDIT: Aggregate attribute-dispatch example introduced/modified by GPT model -->
 **Aggregate Example Using Attribute Dispatch:**
 
 ```C#
@@ -779,59 +776,57 @@ public class Test : NostifyObject, IAggregate
     public bool isDeleted { get; set; } = false;
     public static string aggregateType => "Test";
     public static string currentStateContainerName => "Test";
- 
+
     [ApplyEvents(typeof(Create_Test), typeof(Update_Test))]
     private void OnTestCreatedOrUpdated(IEvent eventToApply)
     {
-        // Strongly-typed, reflection-discovered handler for both Create and Update
         this.UpdateProperties<Test>(eventToApply.payload);
     }
- 
+
     [ApplyEvents(typeof(Delete_Test))]
     private void OnTestDeleted(IEvent eventToApply)
     {
         this.isDeleted = true;
     }
+
+    // Required: the base Apply(EventType, IEvent) is abstract and must be overridden.
+    // When all events are handled by [ApplyEvents] attributes above, this body stays empty.
+    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 ```
 
 In this pattern:
 
-- `Apply(IEvent)` is the public entry point used everywhere by the framework.
-- `Apply(EventType, IEvent)` is the dynamic dispatch hook; the base implementation uses [`ApplyEventsHandlerCache`](src/Base_Classes/ApplyEventsHandlerCache.cs) to resolve a handler method decorated with [`ApplyEventsAttribute`](src/Attributes/ApplyEventsAttribute.cs).
-- Individual handler methods are decorated with `ApplyEvents` and accept `IEvent` (or a more specific payload wrapper) to perform updates.
+- `Apply(IEvent)` is the public entry point used everywhere by the framework. It first checks for `[ApplyEvents]` decorated handler methods; if found, it invokes them directly.
+- If no attribute-based handler exists for an event, the framework falls back to `Apply(EventType, IEvent)` via C# dynamic dispatch.
+- `Apply(EventType, IEvent)` is `protected abstract` in `NostifyObject` and must be overridden in every concrete class — even when all events are handled by attributes (the override can simply be empty in that case).
+- Individual handler methods are decorated with `[ApplyEvents]` and accept `IEvent` to perform updates.
 
-<!-- BEGIN-GPT-EDIT: Projection attribute-dispatch example introduced/modified by GPT model -->
 #### Projection Example Using Attribute Dispatch
 
 ```C#
 public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestWithStatus>
 {
     public static string containerName => "TestWithStatus";
- 
+
     //Test properties
     public string testName { get; set; }
     public Guid? statusId { get; set; }
     public Guid? testTypeId { get; set; }
- 
+
     //Status properties
     public string? statusName { get; set; }
     public string? statusCategory { get; set; }
- 
+
     //Test Type properties
     public string? testType { get; set; }
- 
-    public override void Apply(IEvent eventToApply)
-    {
-        Apply(eventToApply.eventType, eventToApply);
-    }
- 
+
     [ApplyEvents(typeof(Create_Test), typeof(Update_Test))]
     private void OnTestCreatedOrUpdated(IEvent eventToApply)
     {
         this.UpdateProperties<TestWithStatus>(eventToApply.payload);
     }
- 
+
     [ApplyEvents(typeof(Create_Status), typeof(Update_Status))]
     private void OnStatusCreatedOrUpdated(IEvent eventToApply)
     {
@@ -840,73 +835,61 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
             { "name", "statusName" },
             { "category", "statusCategory" }
         };
- 
+
         this.UpdateProperties<TestWithStatus>(eventToApply.payload, propMap, strict: true);
     }
- 
+
     [ApplyEvents(typeof(Delete_Test))]
     private void OnTestDeleted(IEvent eventToApply)
     {
         this.isDeleted = true;
     }
+
+    // Required: Apply(EventType, IEvent) is abstract in NostifyObject and must be overridden.
+    // With all events handled by [ApplyEvents] attributes above, the body stays empty.
+    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 ```
-
-This replaces the previous string-based comparisons:
-
-```C#
-// legacy (pre-attribute) pattern
-if (eventToApply.command.name.Equals("Create_Test") || eventToApply.command.name.Equals("Update_Test"))
-{
-    this.UpdateProperties<TestWithStatus>(eventToApply.payload);
-}
-else if (eventToApply.command.name.Equals("Update_Status") || eventToApply.command.name.Equals("Create_Status"))
-{
-    // ...
-}
-```
-
-with a declarative, strongly-typed mapping.
 
 #### EventType Dynamic Dispatch Pattern (Advanced)
 
-In some scenarios you may want full control over dynamic dispatch using `EventType` without attribute decoration, for example when micro-optimizing hot paths or when you prefer explicit `switch`/`if` logic.
+In some scenarios you may want full control over dispatch using typed `EventType` overloads without attribute decoration — for example when micro-optimizing hot paths or when you prefer explicit per-type methods. The framework calls `Apply((dynamic)eventToApply.eventType, eventToApply)` as a fallback, which C# resolves at runtime to the most specific matching overload.
 
 ```C#
-public class PerfCriticalAggregate : NostifyObject, IAggregate
+public class Test : NostifyObject, IAggregate
 {
-    public static string aggregateType => "PerfCritical";
-    public static string currentStateContainerName => "PerfCritical";
+    public bool isDeleted { get; set; } = false;
+    public static string aggregateType => "Test";
+    public static string currentStateContainerName => "Test";
 
-    public override void Apply(IEvent eventToApply)
+    // Specific overloads per event type — resolved automatically via C# dynamic dispatch.
+    protected void Apply(Create_Test eventType, IEvent eventToApply)
     {
-        Apply(eventToApply.eventType, eventToApply);
+        this.UpdateProperties<Test>(eventToApply.payload);
     }
 
+    protected void Apply(Update_Test eventType, IEvent eventToApply)
+    {
+        this.UpdateProperties<Test>(eventToApply.payload);
+    }
+
+    protected void Apply(Delete_Test eventType, IEvent eventToApply)
+    {
+        this.isDeleted = true;
+    }
+
+    // Required: Apply(EventType, IEvent) is abstract and must be overridden.
+    // This is called only when no specific overload matches (e.g. an unknown event type).
     protected override void Apply(EventType eventType, IEvent eventToApply)
     {
-        // Prefer attribute-based dispatch for most cases, but you
-        // can opt into explicit dynamic dispatch when needed.
-        if (eventType == PerfCriticalEventType.Create || eventType == PerfCriticalEventType.Update)
-        {
-            this.UpdateProperties<PerfCriticalAggregate>(eventToApply.payload);
-        }
-        else if (eventType == PerfCriticalEventType.Delete)
-        {
-            this.isDeleted = true;
-        }
-        else
-        {
-            // Fallback to base handler cache (in case attributes are also used)
-            base.Apply(eventType, eventToApply);
-        }
+        // Ignore or log unknown event types
     }
 }
 ```
 
-> **Guidance**: Prefer the attribute-based pattern for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. The explicit `EventType` dynamic dispatch pattern is available when you have specific performance or code-style requirements.
+> **Guidance**: Prefer the attribute-based pattern for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. The typed overload pattern is available when you have specific performance or code-style requirements.
 
-> **Interop**: Existing code that relies on `eventToApply.command` and `NostifyCommand` continues to work. New code should migrate to `eventToApply.eventType` and `EventType`-based dispatch, either via attributes or explicit `EventType` checks.
+> **Interop**: Existing code that relies on `eventToApply.command` and `NostifyCommand` continues to work. New code should migrate to `eventToApply.eventType` and `EventType`-based dispatch, either via attributes or typed overloads.
 
 ### Saga
 
@@ -1118,37 +1101,73 @@ var nostify = NostifyFactory
 
 Without `.WithAsyncEventRequest()`, no `_EventRequest` topics are created. These topics are used by the async event request/response feature (`AsyncEventRequester<T>` / `ExternalDataEventFactory`) for cross-service Kafka-based event retrieval. See [Projection Initialization and External Data](#projection-initialization-and-external-data) for details.
 
-By default, the template will contain the single Aggregate specified. In the Aggregates folder you will find Aggregate and AggregateCommand class files already stubbed out. The AggregateCommand base class contains default implementations for Create, Update, and Delete. The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name. Note that `UpdateProperties<T>()` uses reflection, so extremely high performance may require writing code to directly handle the updates for your Aggregate's specific properties.
+By default, the template will contain the single Aggregate specified. In the Aggregates folder you will find the Aggregate and its base class already stubbed out. The `UpdateProperties<T>()` method will update any properties of the Aggregate with the value of the Event payload with the same property name. Note that `UpdateProperties<T>()` uses reflection, so extremely high performance may require writing code to directly handle the updates for your Aggregate's specific properties.
+
+There are two patterns for implementing `Apply` in an aggregate. The **attribute-based pattern** is preferred:
 
 ```C#
-
-public  class  Test : NostifyObject, IAggregate
+// Preferred: attribute-based dispatch
+public class Test : NostifyObject, IAggregate
 {
+    public Test() { }
 
-  public  Test()
-  {
-  }   
+    public bool isDeleted { get; set; } = false;
 
-  public  bool  isDeleted { get; set; } = false;  
+    public static string aggregateType => "Test";
+    public static string currentStateContainerName => "Test";
 
-  public  static  string  aggregateType => "Test";
-  
-  public  static  string  currentStateContainerName => "Test";
-
-
-  public  override  void  Apply(IEvent  eventToApply)
-  {
-    if (eventToApply.command == TestCommand.Create || eventToApply.command == TestCommand.Update)
+    [ApplyEvents(typeof(Create_Test), typeof(Update_Test))]
+    private void OnTestCreatedOrUpdated(IEvent eventToApply)
     {
-      this.UpdateProperties<Test>(eventToApply.payload);
+        this.UpdateProperties<Test>(eventToApply.payload);
     }
-    else  if (eventToApply.command == TestCommand.Delete)
-    {
-      this.isDeleted = true;
-    }
-  }
-}  
 
+    [ApplyEvents(typeof(Delete_Test))]
+    private void OnTestDeleted(IEvent eventToApply)
+    {
+        this.isDeleted = true;
+    }
+
+    // Required: Apply(EventType, IEvent) is abstract in NostifyObject.
+    // With all events handled by [ApplyEvents] attributes, the body stays empty.
+    protected override void Apply(EventType eventType, IEvent eventToApply) { }
+}
+```
+
+Alternatively, the **typed overload pattern** skips attributes and relies on C# dynamic dispatch. The framework calls `Apply((dynamic)eventToApply.eventType, eventToApply)`, which resolves to the specific overload at runtime:
+
+```C#
+// Alternative: typed overload dispatch (matches template-generated code style)
+public class Test : NostifyObject, IAggregate
+{
+    public Test() { }
+
+    public bool isDeleted { get; set; } = false;
+
+    public static string aggregateType => "Test";
+    public static string currentStateContainerName => "Test";
+
+    protected void Apply(Create_Test eventType, IEvent eventToApply)
+    {
+        this.UpdateProperties<Test>(eventToApply.payload);
+    }
+
+    protected void Apply(Update_Test eventType, IEvent eventToApply)
+    {
+        this.UpdateProperties<Test>(eventToApply.payload);
+    }
+
+    protected void Apply(Delete_Test eventType, IEvent eventToApply)
+    {
+        this.isDeleted = true;
+    }
+
+    // Required: called when no specific overload matches.
+    protected override void Apply(EventType eventType, IEvent eventToApply)
+    {
+        // Ignore or log unknown event types
+    }
+}
 ```
 
 ## Basic Tasks
@@ -1256,29 +1275,58 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
   public string? testType { get; set; }
 
 
-  public override void Apply(IEvent eventToApply)
+  // Preferred: attribute-based dispatch. Each method handles one or more event types.
+  [ApplyEvents(typeof(Create_Test), typeof(Update_Test))]
+  private void OnTestCreatedOrUpdated(IEvent eventToApply)
   {
-      //Should update the command tree below to not use string matching
-      if (eventToApply.command.name.Equals("Create_Test") || eventToApply.command.name.Equals("Update_Test"))
-      {
-          this.UpdateProperties<TestWithStatus>(eventToApply.payload);
-      }
-      else if (eventToApply.command.name.Equals("Update_Status") 
-        || eventToApply.command.name.Equals("Create_Status"))
-      {
-        //If property names don't match up or there are duplicates, you can map them using a simple Dictionary
-        var propMap = new Dictionary<string, string> {
+      this.UpdateProperties<TestWithStatus>(eventToApply.payload);
+  }
+
+  [ApplyEvents(typeof(Create_Status), typeof(Update_Status))]
+  private void OnStatusCreatedOrUpdated(IEvent eventToApply)
+  {
+      //If property names don't match up or there are duplicates, you can map them using a simple Dictionary
+      var propMap = new Dictionary<string, string> {
           {"name","statusName"},
           {"category","statusCategory"}
-        };
-        //The method signature is a little different in this case
-        this.UpdateProperties<TestWithStatus>(eventToApply.payload, propMap, true);
-      }
-      else if (eventToApply.command.name.Equals("Delete_Test"))
-      {
-          this.isDeleted = true;
-      }
+      };
+      this.UpdateProperties<TestWithStatus>(eventToApply.payload, propMap, true);
   }
+
+  [ApplyEvents(typeof(Delete_Test))]
+  private void OnTestDeleted(IEvent eventToApply)
+  {
+      this.isDeleted = true;
+  }
+
+  // Required: Apply(EventType, IEvent) is abstract in NostifyObject.
+  // With all events handled by [ApplyEvents] attributes above, the body stays empty.
+  protected override void Apply(EventType eventType, IEvent eventToApply) { }
+
+  /* Alternative: typed overload pattern (no attributes, C# dynamic dispatch)
+  protected void Apply(Create_Test eventType, IEvent eventToApply)
+      => this.UpdateProperties<TestWithStatus>(eventToApply.payload);
+
+  protected void Apply(Update_Test eventType, IEvent eventToApply)
+      => this.UpdateProperties<TestWithStatus>(eventToApply.payload);
+
+  protected void Apply(Create_Status eventType, IEvent eventToApply)
+  {
+      var propMap = new Dictionary<string, string> { {"name","statusName"}, {"category","statusCategory"} };
+      this.UpdateProperties<TestWithStatus>(eventToApply.payload, propMap, true);
+  }
+
+  protected void Apply(Update_Status eventType, IEvent eventToApply)
+  {
+      var propMap = new Dictionary<string, string> { {"name","statusName"}, {"category","statusCategory"} };
+      this.UpdateProperties<TestWithStatus>(eventToApply.payload, propMap, true);
+  }
+
+  protected void Apply(Delete_Test eventType, IEvent eventToApply)
+      => this.isDeleted = true;
+
+  protected override void Apply(EventType eventType, IEvent eventToApply) { }
+  */
 
   public class StatusName
   {
@@ -1432,7 +1480,9 @@ public class ExampleProjection : ExampleAggregateBase, IProjection, IHasExternal
     public List<Vehicle> vehicles { get; set; }
     public List<Department> departments { get; set; }
 
-    public override void Apply(IEvent eventToApply)
+    // Required: Apply(EventType, IEvent) is abstract in NostifyObject and must be overridden.
+    // Add [ApplyEvents]-decorated methods or typed overloads here to handle events.
+    protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         // Logic to apply events goes here
     }
@@ -3544,26 +3594,27 @@ public class OrderProjection : NostifyObject, IProjection
     public string secondaryContactName { get; set; }
     public string secondaryContactEmail { get; set; }
 
-    public override void Apply(IEvent eventToApply)
+    [ApplyEvents(typeof(Update_Contact))]
+    private void OnContactUpdated(IEvent eventToApply)
     {
-        if (eventToApply.command.name == "Update_Contact")
+        // Only update properties where the ID matches the event's aggregateRootId
+        List<PropertyCheck> propertyChecks = new List<PropertyCheck>
         {
-            // Only update properties where the ID matches the event's aggregateRootId
-            List<PropertyCheck> propertyChecks = new List<PropertyCheck>
-            {
-                new PropertyCheck(this.primaryContactId, "name", "primaryContactName"),
-                new PropertyCheck(this.primaryContactId, "email", "primaryContactEmail"),
-                new PropertyCheck(this.secondaryContactId, "name", "secondaryContactName"),
-                new PropertyCheck(this.secondaryContactId, "email", "secondaryContactEmail")
-            };
-            
-            this.UpdateProperties<OrderProjection>(
-                eventToApply.aggregateRootId, 
-                eventToApply.payload, 
-                propertyChecks
-            );
-        }
+            new PropertyCheck(this.primaryContactId, "name", "primaryContactName"),
+            new PropertyCheck(this.primaryContactId, "email", "primaryContactEmail"),
+            new PropertyCheck(this.secondaryContactId, "name", "secondaryContactName"),
+            new PropertyCheck(this.secondaryContactId, "email", "secondaryContactEmail")
+        };
+        
+        this.UpdateProperties<OrderProjection>(
+            eventToApply.aggregateRootId, 
+            eventToApply.payload, 
+            propertyChecks
+        );
     }
+
+    // Required: Apply(EventType, IEvent) is abstract in NostifyObject.
+    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 ```
 
@@ -3810,22 +3861,40 @@ public class OrderAggregate : NostifyObject, IAggregate
     public Guid customerId { get; set; }
     public decimal totalAmount { get; set; }
     public string status { get; set; } = "Pending";
-    
-    public override void Apply(IEvent e)
+
+    [ApplyEvents(typeof(Create_Order), typeof(Update_Order))]
+    private void OnOrderCreatedOrUpdated(IEvent e)
     {
         UpdateProperties<OrderAggregate>(e.payload);
     }
+
+    [ApplyEvents(typeof(Delete_Order))]
+    private void OnOrderDeleted(IEvent e)
+    {
+        isDeleted = true;
+    }
+
+    // Required: Apply(EventType, IEvent) is abstract in NostifyObject.
+    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 
-// OrderCommand.cs
-public class OrderCommand : NostifyCommand
+// OrderEventTypes.cs
+public sealed class Create_Order : EventType
 {
-    public static OrderCommand Create = new OrderCommand("Create_Order", true);
-    public static OrderCommand Update = new OrderCommand("Update_Order", false);
-    public static OrderCommand Delete = new OrderCommand("Delete_Order", false);
-    
-    public OrderCommand(string name, bool isNew) : base(name, isNew) { }
+    public Create_Order() : base("Create_Order", isNew: true) { }
 }
+public sealed class Update_Order : EventType
+{
+    public Update_Order() : base("Update_Order") { }
+}
+public sealed class Delete_Order : EventType
+{
+    public Delete_Order() : base("Delete_Order", allowNullPayload: true) { }
+}
+
+// Legacy NostifyCommand style (still supported for backward compatibility)
+// public class OrderCommand : NostifyCommand { ... }
+```
 
 // CreateOrder.cs - HTTP Trigger
 public class CreateOrder
@@ -3863,7 +3932,7 @@ public class CreateOrder
         
         // Create and persist the event
         IEvent orderEvent = new EventFactory().Create<OrderAggregate>(
-            OrderCommand.Create, orderId, payload, Guid.Empty, tenantId);
+            new Create_Order(), orderId, payload, Guid.Empty, tenantId);
         await _nostify.PersistEventAsync(orderEvent);
         
         var response = req.CreateResponse(HttpStatusCode.Created);
