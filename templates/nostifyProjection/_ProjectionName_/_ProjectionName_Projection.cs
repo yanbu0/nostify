@@ -6,13 +6,15 @@ using Newtonsoft.Json;
 using nostify;
 
 namespace _ReplaceMe__Service;
-
+ 
 public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_ProjectionName_>
 {
-    public _ProjectionName_()
+    private readonly ILogger<_ProjectionName_> _logger;
+ 
+    public _ProjectionName_(ILogger<_ProjectionName_> logger)
     {
-        
-    }   
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
 
     public static string containerName => "_ProjectionName_";
 
@@ -61,7 +63,19 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// </summary>
     protected void Apply(Create__ReplaceMe_ eventType, IEvent eventToApply)
     {
-        this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        try
+        {
+            this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error applying Create event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
+                containerName,
+                eventType,
+                eventToApply);
+            throw;
+        }
     }
 
     /// <summary>
@@ -70,7 +84,19 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// </summary>
     protected void Apply(Update__ReplaceMe_ eventType, IEvent eventToApply)
     {
-        this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        try
+        {
+            this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error applying Update event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
+                containerName,
+                eventType,
+                eventToApply);
+            throw;
+        }
     }
 
     /// <summary>
@@ -79,7 +105,19 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// </summary>
     protected void Apply(BulkCreate__ReplaceMe_ eventType, IEvent eventToApply)
     {
-        this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        try
+        {
+            this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error applying BulkCreate event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
+                containerName,
+                eventType,
+                eventToApply);
+            throw;
+        }
     }
 
     /// <summary>
@@ -88,7 +126,19 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// </summary>
     protected void Apply(BulkUpdate__ReplaceMe_ eventType, IEvent eventToApply)
     {
-        this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        try
+        {
+            this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error applying BulkUpdate event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
+                containerName,
+                eventType,
+                eventToApply);
+            throw;
+        }
     }
 
     /// <summary>
