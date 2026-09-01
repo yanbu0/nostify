@@ -7,7 +7,7 @@
 
 ## Features
 
-- Microservice Architecture: Encapsulates domain logic within services, promoting modularity and scalability.
+- Event Dispatch Flexibility: New `EventType` base class and attribute-based apply/dispatch patterns provide strongly-typed, high-performance event routing for aggregates and projections. `NostifyCommand` remains for backward compatibility but is deprecated in favor of `EventType`-based dispatch.
 
 - CQRS Implementation: Separates command and query responsibilities to optimize performance and maintainability.
 
@@ -77,7 +77,8 @@
 - 5.0.0 (BREAKING CHANGES!)
     - **Typed Apply Pattern for Aggregates and Projections**: Generated aggregate and projection templates now use the typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style for clearer, strongly-typed event handling.
     - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` was widened to `protected` so consuming services can implement the new typed apply pattern in their own aggregates and projections.
-    - **Template Package Version Bump**: All packaged and generated template `.csproj` references have been updated to target `nostify` 5.0.0.
+    - **Attribute-Based Event Dispatch**: New `ApplyEventsAttribute` enables declarative mapping of event types to strongly-typed handler methods in aggregates and projections, removing manual switch/case dispatch. Handlers are discovered and cached via `ApplyEventsHandlerCache` the first time they are used and then invoked directly for subsequent events.
+    - **HandleUpdates Performance Improvements**: Optimized the `HandleUpdates` path in default command handlers to reduce unnecessary serialization and patch operations during update commands, significantly improving throughput for high-volume update scenarios while preserving existing behavior.
  
 - 4.x Highlights
     - **Durable Projection Initialization**: Introduced `DurableProjectionInitializer<TProjection, TAggregate>` and related helpers for large-scale, orchestrated projection initialization using Azure Durable Functions, including retry options for both orchestration activities and Cosmos DB operations.
@@ -712,75 +713,200 @@ IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delet
 await _nostify.PersistEventAsync(deleteEvent);
 ```
 
-### Command
+### Command and EventType (Dispatch Options)
 
-A `Command` is an `Event` that comes from the user interface.  All `Aggregate` classes should have a matching `Command` class where you must register all commands that the user may issue.  This class must extend the `NostifyCommand` class.
+Historically, `nostify` used `NostifyCommand` as the dispatch primitive for events. In v5+, this has been generalized to the `EventType` base class to support both traditional command-style dispatch and attribute-based dispatch on aggregates and projections.
 
-#### NostifyCommand Constructor
+> **Deprecation Note**: `NostifyCommand` continues to work and is fully supported for backward compatibility, but new code should prefer `EventType` + attribute-based dispatch. `NostifyCommand` will be treated as a specialized `EventType` pattern going forward.
+
+#### EventType Base Class
+
+
+An `EventType` is functionally similar to the old `NostifyCommand` concept: it names the event, indicates whether it creates a new aggregate instance (`isNew`), and whether null payloads are allowed. The name still becomes the Kafka/Event Hubs topic.
+
+<!-- BEGIN-GPT-EDIT: EventType examples introduced/modified by GPT model -->
+#### Example: EventTypes for Test Aggregate
+
+The templates use a separate concrete `EventType` subclass for each logical operation:
 
 ```C#
-public NostifyCommand(string name, bool isNew = false, bool allowNullPayload = false)
-```
-
-- **name**: Human-readable command name (MUST BE UNIQUE). Convention: `{Action}_{EntityName}` (e.g., `Create_User`). This becomes the Kafka topic name.
-- **isNew**: Set to `true` if this command creates a new aggregate instance.
-- **allowNullPayload**: Set to `true` for commands that don't require payload data (e.g., delete commands).
-
-It will look like this by default:
-
-```C#
-public class TestCommand : NostifyCommand
+public sealed class Create_Test : EventType
 {
-  ///<summary>
-  ///Base Create Command
-  ///</summary>
-  public static readonly TestCommand Create = new TestCommand("Create_Test", true);
-  ///<summary>
-  ///Base Update Command
-  ///</summary>
-  public static readonly TestCommand Update = new TestCommand("Update_Test");
-  ///<summary>
-  ///Base Delete Command
-  ///</summary>
-  public static readonly TestCommand Delete = new TestCommand("Delete_Test", false, true);
-  ///<summary>
-  ///Bulk Create Command
-  ///</summary>
-  public static readonly TestCommand BulkCreate = new TestCommand("BulkCreate_Test", true);
-  ///<summary>
-  ///Bulk Update Command
-  ///</summary>
-  public static readonly TestCommand BulkUpdate = new TestCommand("BulkUpdate_Test");
-  ///<summary>
-  ///Bulk Delete Command
-  ///</summary>
-  public static readonly TestCommand BulkDelete = new TestCommand("BulkDelete_Test", false, true);
+    public Create_Test() : base("Create_Test", isNew: true) { }
+}
 
+public sealed class Update_Test : EventType
+{
+    public Update_Test() : base("Update_Test") { }
+}
 
-  // Constructor signature: NostifyCommand(string name, bool isNew = false, bool allowNullPayload = false)
-  public TestCommand(string name, bool isNew = false, bool allowNullPayload = false)
-  : base(name, isNew, allowNullPayload)
-  {
+public sealed class Delete_Test : EventType
+{
+    public Delete_Test() : base("Delete_Test", isNew: false, allowNullPayload: true) { }
+}
 
-  }
+public sealed class BulkCreate_Test : EventType
+{
+    public BulkCreate_Test() : base("BulkCreate_Test", isNew: true) { }
+}
+
+public sealed class BulkUpdate_Test : EventType
+{
+    public BulkUpdate_Test() : base("BulkUpdate_Test") { }
+}
+
+public sealed class BulkDelete_Test : EventType
+{
+    public BulkDelete_Test() : base("BulkDelete_Test", isNew: false, allowNullPayload: true) { }
 }
 ```
 
-The commands may then be handled in the `Apply()` method:
+Each event type is represented by its own class (matching the pattern used in the aggregate templates), and the `name` passed to the base `EventType` constructor is the value that will be stored in the event and used for routing.
+
+You can continue to use `NostifyCommand` in the same style, but it is now conceptually a specialized `EventType` pattern.
+<!-- END-GPT-EDIT -->
+
+#### Attribute-Based Dispatch (Preferred Pattern)
+
+The preferred dispatch model for aggregates and projections is to use the [`ApplyEventsAttribute`](src/Attributes/ApplyEventsAttribute.cs) on strongly-typed handler methods. This removes manual `switch`/`if` chaining and centralizes dispatch mapping.
+
+<!-- BEGIN-GPT-EDIT: Aggregate attribute-dispatch example introduced/modified by GPT model -->
+**Aggregate Example Using Attribute Dispatch:**
 
 ```C#
-public override void Apply(IEvent eventToApply)
+public class Test : NostifyObject, IAggregate
 {
-    if (eventToApply.command == TestCommand.Create || eventToApply.command == TestCommand.Update)
+    public bool isDeleted { get; set; } = false;
+    public static string aggregateType => "Test";
+    public static string currentStateContainerName => "Test";
+ 
+    [ApplyEvents(typeof(Create_Test), typeof(Update_Test))]
+    private void OnTestCreatedOrUpdated(IEvent eventToApply)
     {
+        // Strongly-typed, reflection-discovered handler for both Create and Update
         this.UpdateProperties<Test>(eventToApply.payload);
     }
-    else if (eventToApply.command == TestCommand.Delete)
+ 
+    [ApplyEvents(typeof(Delete_Test))]
+    private void OnTestDeleted(IEvent eventToApply)
     {
         this.isDeleted = true;
     }
 }
 ```
+
+In this pattern:
+
+- `Apply(IEvent)` is the public entry point used everywhere by the framework.
+- `Apply(EventType, IEvent)` is the dynamic dispatch hook; the base implementation uses [`ApplyEventsHandlerCache`](src/Base_Classes/ApplyEventsHandlerCache.cs) to resolve a handler method decorated with [`ApplyEventsAttribute`](src/Attributes/ApplyEventsAttribute.cs).
+- Individual handler methods are decorated with `ApplyEvents` and accept `IEvent` (or a more specific payload wrapper) to perform updates.
+
+<!-- BEGIN-GPT-EDIT: Projection attribute-dispatch example introduced/modified by GPT model -->
+#### Projection Example Using Attribute Dispatch
+
+```C#
+public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestWithStatus>
+{
+    public static string containerName => "TestWithStatus";
+ 
+    //Test properties
+    public string testName { get; set; }
+    public Guid? statusId { get; set; }
+    public Guid? testTypeId { get; set; }
+ 
+    //Status properties
+    public string? statusName { get; set; }
+    public string? statusCategory { get; set; }
+ 
+    //Test Type properties
+    public string? testType { get; set; }
+ 
+    public override void Apply(IEvent eventToApply)
+    {
+        Apply(eventToApply.eventType, eventToApply);
+    }
+ 
+    [ApplyEvents(typeof(Create_Test), typeof(Update_Test))]
+    private void OnTestCreatedOrUpdated(IEvent eventToApply)
+    {
+        this.UpdateProperties<TestWithStatus>(eventToApply.payload);
+    }
+ 
+    [ApplyEvents(typeof(Create_Status), typeof(Update_Status))]
+    private void OnStatusCreatedOrUpdated(IEvent eventToApply)
+    {
+        var propMap = new Dictionary<string, string>
+        {
+            { "name", "statusName" },
+            { "category", "statusCategory" }
+        };
+ 
+        this.UpdateProperties<TestWithStatus>(eventToApply.payload, propMap, strict: true);
+    }
+ 
+    [ApplyEvents(typeof(Delete_Test))]
+    private void OnTestDeleted(IEvent eventToApply)
+    {
+        this.isDeleted = true;
+    }
+}
+```
+
+This replaces the previous string-based comparisons:
+
+```C#
+// legacy (pre-attribute) pattern
+if (eventToApply.command.name.Equals("Create_Test") || eventToApply.command.name.Equals("Update_Test"))
+{
+    this.UpdateProperties<TestWithStatus>(eventToApply.payload);
+}
+else if (eventToApply.command.name.Equals("Update_Status") || eventToApply.command.name.Equals("Create_Status"))
+{
+    // ...
+}
+```
+
+with a declarative, strongly-typed mapping.
+
+#### EventType Dynamic Dispatch Pattern (Advanced)
+
+In some scenarios you may want full control over dynamic dispatch using `EventType` without attribute decoration, for example when micro-optimizing hot paths or when you prefer explicit `switch`/`if` logic.
+
+```C#
+public class PerfCriticalAggregate : NostifyObject, IAggregate
+{
+    public static string aggregateType => "PerfCritical";
+    public static string currentStateContainerName => "PerfCritical";
+
+    public override void Apply(IEvent eventToApply)
+    {
+        Apply(eventToApply.eventType, eventToApply);
+    }
+
+    protected override void Apply(EventType eventType, IEvent eventToApply)
+    {
+        // Prefer attribute-based dispatch for most cases, but you
+        // can opt into explicit dynamic dispatch when needed.
+        if (eventType == PerfCriticalEventType.Create || eventType == PerfCriticalEventType.Update)
+        {
+            this.UpdateProperties<PerfCriticalAggregate>(eventToApply.payload);
+        }
+        else if (eventType == PerfCriticalEventType.Delete)
+        {
+            this.isDeleted = true;
+        }
+        else
+        {
+            // Fallback to base handler cache (in case attributes are also used)
+            base.Apply(eventType, eventToApply);
+        }
+    }
+}
+```
+
+> **Guidance**: Prefer the attribute-based pattern for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. The explicit `EventType` dynamic dispatch pattern is available when you have specific performance or code-style requirements.
+
+> **Interop**: Existing code that relies on `eventToApply.command` and `NostifyCommand` continues to work. New code should migrate to `eventToApply.eventType` and `EventType`-based dispatch, either via attributes or explicit `EventType` checks.
 
 ### Saga
 
