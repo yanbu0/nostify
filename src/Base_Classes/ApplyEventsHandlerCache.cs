@@ -69,6 +69,12 @@ namespace nostify
                     continue; // No ApplyEvents attributes on this method.
                 }
 
+                if (method.ReturnType != typeof(void))
+                {
+                    throw new InvalidOperationException(
+                        $"ApplyEventsAttribute handler '{targetType.FullName}.{method.Name}' must return void.");
+                }
+
                 // Create a delegate that invokes the method on a NostifyObject target.
                 Action<NostifyObject, IEvent> handler = (nostifyObject, evt) =>
                 {

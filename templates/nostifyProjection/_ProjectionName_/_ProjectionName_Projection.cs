@@ -2,6 +2,7 @@
 
 using System.Net.Http.Json;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using nostify;
 
