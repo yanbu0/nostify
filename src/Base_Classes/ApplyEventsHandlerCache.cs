@@ -171,15 +171,26 @@ namespace nostify
         {
             var result = new Dictionary<string, EventType>(StringComparer.Ordinal);
 
-            // First, consider nested types on the target type itself.
-            PopulateFromNestedTypes(targetType, result);
-
-            // If nothing was found on the target type, fall back to the declaring type.
-            // This supports test layouts where EventType types and aggregates are siblings
-            // under a common declaring type (e.g., ApplyEventsAttributeTests).
-            if (result.Count == 0 && targetType.DeclaringType != null)
+            // Discover EventType implementations in the target assembly. Generated command/event types are typically
+            // top-level (not nested on the aggregate/projection), so nested-type scanning alone is insufficient.
+            foreach (var etType in targetType.Assembly.GetTypes().Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract))
             {
-                PopulateFromNestedTypes(targetType.DeclaringType, result);
+                var hasPublicInstanceField = etType.GetField("Instance", BindingFlags.Public | BindingFlags.Static) != null;
+                var hasPublicParameterlessCtor = etType.GetConstructor(Type.EmptyTypes) != null;
+                if (!hasPublicInstanceField && !hasPublicParameterlessCtor)
+                {
+                    continue;
+                }
+
+                var eventTypeInstance = ResolveEventTypeInstance(etType, targetType, member: null);
+                if (result.ContainsKey(eventTypeInstance.name))
+                {
+                    throw new InvalidOperationException(
+                        $"Multiple EventType instances with the same name '{eventTypeInstance.name}' were discovered in assembly '{targetType.Assembly.FullName}'. " +
+                        "EventType.name must be unique when using string-based ApplyEventsAttribute mappings.");
+                }
+
+                result[eventTypeInstance.name] = eventTypeInstance;
             }
 
             return result;
