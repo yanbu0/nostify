@@ -161,7 +161,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     protected virtual void Apply(EventType eventType, IEvent eventToApply)
     {
         throw new InvalidOperationException(
-            $"Unsupported event type '{eventType?.GetType().Name ?? "<null>"}' for '{GetType().Name}'.");
+            $"Unsupported event type '{eventType?.ToString() ?? "<null>"}' for '{GetType().Name}'.");
     }
 
     ///<summary>
