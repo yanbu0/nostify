@@ -7,8 +7,6 @@
 
 ## Features
 
-- Event Dispatch Flexibility: New `EventType` base class and attribute-based apply/dispatch patterns provide strongly-typed, high-performance event routing for aggregates and projections. `NostifyCommand` remains for backward compatibility but is deprecated in favor of `EventType`-based dispatch.
-
 - CQRS Implementation: Separates command and query responsibilities to optimize performance and maintainability.
 
 - Event Sourcing: Utilizes events to represent state changes, enabling traceability and auditability.
