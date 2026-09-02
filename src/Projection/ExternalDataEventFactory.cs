@@ -1250,29 +1250,29 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             // Create a deep copy of the projection using JSON serialization
             var json = JsonConvert.SerializeObject(projection);
             var projectionCopy = JsonConvert.DeserializeObject<P>(json);
-            
+
             if (projectionCopy == null)
             {
                 continue;
             }
-            
+
             // Find events for this projection and apply them
             var eventsForProjection = initialEvents
                 .Where(e => e.aggregateRootId == projection.id)
                 .SelectMany(e => e.events)
                 .OrderBy(e => e.timestamp);
-            
+
             foreach (var evt in eventsForProjection)
             {
                 projectionCopy.Apply(evt);
             }
-            
+
             projectionsWithAppliedEvents.Add(projectionCopy);
         }
 
         // Collect all dependent IDs from the updated projections
         var dependantIds = new HashSet<Guid>();
-        
+
         foreach (var projection in projectionsWithAppliedEvents)
         {
             // Extract single IDs
@@ -1374,7 +1374,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             foreach (var projection in projectionsWithAppliedEvents)
             {
                 var projectionDependantIds = new HashSet<Guid>();
-                
+
                 // Get IDs from this projection's selectors
                 foreach (var selector in _dependantIdSelectors)
                 {
@@ -1466,23 +1466,23 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             // Create a deep copy of the projection using JSON serialization
             var json = JsonConvert.SerializeObject(projection);
             var projectionCopy = JsonConvert.DeserializeObject<P>(json);
-            
+
             if (projectionCopy == null)
             {
                 continue;
             }
-            
+
             // Find events for this projection and apply them
             var eventsForProjection = initialEvents
                 .Where(e => e.aggregateRootId == projection.id)
                 .SelectMany(e => e.events)
                 .OrderBy(e => e.timestamp);
-            
+
             foreach (var evt in eventsForProjection)
             {
                 projectionCopy.Apply(evt);
             }
-            
+
             projectionsWithAppliedEvents.Add(projectionCopy);
         }
 
@@ -1616,115 +1616,115 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
         try
         {
-        // Process each requestor
-        foreach (var requestor in requestors)
-        {
-            // Collect all foreign IDs for this requestor
-            var allSelectors = requestor.ListSelectors.Any()
-                ? requestor.GetAllForeignIdSelectors(projections)
-                : requestor.ForeignIdSelectors;
-
-            var foreignIds = (
-                from p in projections
-                from f in allSelectors
-                let foreignId = f(p)
-                where foreignId.HasValue && foreignId.Value != Guid.Empty
-                select foreignId!.Value
-            ).Distinct().ToList();
-
-            if (!foreignIds.Any())
+            // Process each requestor
+            foreach (var requestor in requestors)
             {
-                continue;
-            }
+                // Collect all foreign IDs for this requestor
+                var allSelectors = requestor.ListSelectors.Any()
+                    ? requestor.GetAllForeignIdSelectors(projections)
+                    : requestor.ForeignIdSelectors;
 
-            // Ensure consumer is subscribed to the response topic
-            var responseTopic = requestor.ResponseTopicName;
-            var currentSubscription = consumer.Subscription ?? new List<string>();
-            if (!currentSubscription.Contains(responseTopic))
-            {
-                var newSubscription = currentSubscription.Concat(new[] { responseTopic }).Distinct().ToList();
-                consumer.Subscribe(newSubscription);
-                // Poll briefly to trigger partition assignment
-                consumer.Consume(TimeSpan.FromMilliseconds(100));
-            }
-
-            // Generate correlation ID for this request
-            var correlationId = Guid.NewGuid().ToString();
-
-            // Produce the request
-            var request = new AsyncEventRequest
-            {
-                topic = requestor.TopicName,
-                responseTopic = responseTopic,
-                subtopic = "",
-                aggregateRootIds = foreignIds,
-                pointInTime = _pointInTime,
-                correlationId = correlationId
-            };
-            var requestJson = JsonConvert.SerializeObject(request);
-            await _nostify.KafkaProducer.ProduceAsync(requestor.TopicName, new Message<string, string> { Value = requestJson });
-
-            // Consume responses until complete or timeout
-            var accumulatedEvents = new List<Event>();
-            var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-            bool complete = false;
-
-            while (!complete && DateTime.UtcNow < deadline)
-            {
-                var remaining = deadline - DateTime.UtcNow;
-                if (remaining <= TimeSpan.Zero) break;
-
-                var consumeResult = consumer.Consume(remaining < TimeSpan.FromSeconds(1) ? remaining : TimeSpan.FromSeconds(1));
-                if (consumeResult == null) continue;
-
-                // Try to deserialize as a response
-                AsyncEventRequestResponse response;
-                try
-                {
-                    response = JsonConvert.DeserializeObject<AsyncEventRequestResponse>(consumeResult.Message.Value);
-                }
-                catch
-                {
-                    // Not a response message (could be a request from another service), skip
-                    continue;
-                }
-
-                // Check if this response matches our correlation ID
-                if (response?.correlationId != correlationId) continue;
-
-                // Accumulate events
-                if (response.events != null)
-                {
-                    accumulatedEvents.AddRange(response.events);
-                }
-
-                // Reset deadline on each matching message
-                deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-
-                if (response.complete)
-                {
-                    complete = true;
-                }
-            }
-
-            // Map accumulated events back to projections
-            if (accumulatedEvents.Any())
-            {
-                var eventsByAggRoot = accumulatedEvents.ToLookup(e => e.aggregateRootId);
-
-                var mappedEvents = (
+                var foreignIds = (
                     from p in projections
                     from f in allSelectors
                     let foreignId = f(p)
-                    where foreignId.HasValue
-                    let eventList = eventsByAggRoot[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
-                    where eventList.Any()
-                    select new ExternalDataEvent(p.id, eventList)
-                ).ToList();
+                    where foreignId.HasValue && foreignId.Value != Guid.Empty
+                    select foreignId!.Value
+                ).Distinct().ToList();
 
-                result.AddRange(mappedEvents);
+                if (!foreignIds.Any())
+                {
+                    continue;
+                }
+
+                // Ensure consumer is subscribed to the response topic
+                var responseTopic = requestor.ResponseTopicName;
+                var currentSubscription = consumer.Subscription ?? new List<string>();
+                if (!currentSubscription.Contains(responseTopic))
+                {
+                    var newSubscription = currentSubscription.Concat(new[] { responseTopic }).Distinct().ToList();
+                    consumer.Subscribe(newSubscription);
+                    // Poll briefly to trigger partition assignment
+                    consumer.Consume(TimeSpan.FromMilliseconds(100));
+                }
+
+                // Generate correlation ID for this request
+                var correlationId = Guid.NewGuid().ToString();
+
+                // Produce the request
+                var request = new AsyncEventRequest
+                {
+                    topic = requestor.TopicName,
+                    responseTopic = responseTopic,
+                    subtopic = "",
+                    aggregateRootIds = foreignIds,
+                    pointInTime = _pointInTime,
+                    correlationId = correlationId
+                };
+                var requestJson = JsonConvert.SerializeObject(request);
+                await _nostify.KafkaProducer.ProduceAsync(requestor.TopicName, new Message<string, string> { Value = requestJson });
+
+                // Consume responses until complete or timeout
+                var accumulatedEvents = new List<Event>();
+                var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+                bool complete = false;
+
+                while (!complete && DateTime.UtcNow < deadline)
+                {
+                    var remaining = deadline - DateTime.UtcNow;
+                    if (remaining <= TimeSpan.Zero) break;
+
+                    var consumeResult = consumer.Consume(remaining < TimeSpan.FromSeconds(1) ? remaining : TimeSpan.FromSeconds(1));
+                    if (consumeResult == null) continue;
+
+                    // Try to deserialize as a response
+                    AsyncEventRequestResponse response;
+                    try
+                    {
+                        response = JsonConvert.DeserializeObject<AsyncEventRequestResponse>(consumeResult.Message.Value);
+                    }
+                    catch
+                    {
+                        // Not a response message (could be a request from another service), skip
+                        continue;
+                    }
+
+                    // Check if this response matches our correlation ID
+                    if (response?.correlationId != correlationId) continue;
+
+                    // Accumulate events
+                    if (response.events != null)
+                    {
+                        accumulatedEvents.AddRange(response.events);
+                    }
+
+                    // Reset deadline on each matching message
+                    deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+
+                    if (response.complete)
+                    {
+                        complete = true;
+                    }
+                }
+
+                // Map accumulated events back to projections
+                if (accumulatedEvents.Any())
+                {
+                    var eventsByAggRoot = accumulatedEvents.ToLookup(e => e.aggregateRootId);
+
+                    var mappedEvents = (
+                        from p in projections
+                        from f in allSelectors
+                        let foreignId = f(p)
+                        where foreignId.HasValue
+                        let eventList = eventsByAggRoot[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
+                        where eventList.Any()
+                        select new ExternalDataEvent(p.id, eventList)
+                    ).ToList();
+
+                    result.AddRange(mappedEvents);
+                }
             }
-        }
         }
         finally
         {

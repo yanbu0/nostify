@@ -5,7 +5,6 @@ using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
-using nostify.Attributes;
 
 namespace nostify;
 
@@ -74,7 +73,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     protected internal NostifyObject()
     {
     }
-    
+
     /// <summary>
     /// Time to live in seconds, default is -1 which means never expire.  Can be set to any positive integer to bulk delete from container using spare RUs.
     /// Container must have TTL enabled for the delete to work.
@@ -332,7 +331,7 @@ public class PropertyCheck
         this.projectionIdPropertyValue = projectionIdPropertyValue;
     }
 
-    public string eventPropertyName { get; set; } 
-    public string projectionPropertyName { get; set; } 
+    public string eventPropertyName { get; set; }
+    public string projectionPropertyName { get; set; }
     public Guid? projectionIdPropertyValue { get; set; }
 }

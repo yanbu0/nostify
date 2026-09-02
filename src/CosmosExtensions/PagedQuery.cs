@@ -223,7 +223,7 @@ public static class PagedQueryExtensions
         {
             throw new ArgumentException($"Page size must be greater than or equal to 1. Received: {tableState.pageSize}", "tableState.pageSize");
         }
-        
+
         // Check for potential overflow in offset calculation: (page - 1) * pageSize
         try
         {
@@ -258,11 +258,11 @@ public static class PagedQueryExtensions
             // Build expression: x => x.PropertyName == filterValue
             var parameter = Expression.Parameter(typeof(T), "x");
             var property = Expression.Property(parameter, filter.Key);
-            
+
             // Convert filter value to the property type
             var propertyType = typeof(T).GetProperty(filter.Key)?.PropertyType ?? typeof(string);
             object? convertedValue = ConvertFilterValue(filter.Key, filter.Value, propertyType);
-            
+
             var constant = Expression.Constant(convertedValue, propertyType);
             var equality = Expression.Equal(property, constant);
             var lambda = Expression.Lambda<Func<T, bool>>(equality, parameter);
@@ -396,7 +396,7 @@ public interface IPagedResult<T>
     /// Gets or sets the list of items for the current page.
     /// </summary>
     public List<T> items { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the total count of items matching the query criteria.
     /// </summary>
@@ -424,22 +424,22 @@ public interface ITableStateChange
     /// Gets or sets the current page number.
     /// </summary>
     public int page { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the number of items per page.
     /// </summary>
     public int pageSize { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the filter criteria as a list of key-value pairs.
     /// </summary>
     public List<KeyValuePair<string, string>>? filters { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the column to sort by.
     /// </summary>
     public string? sortColumn { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the sort direction (ascending or descending).
     /// </summary>

@@ -20,7 +20,7 @@ public static class NostifyValidationExceptionHandler
     /// <param name="logger">Optional logger for recording the validation failure.</param>
     /// <returns>A structured validation error response.</returns>
     public static ValidationErrorResponse HandleValidationException(
-        NostifyValidationException validationException, 
+        NostifyValidationException validationException,
         ILogger? logger = null)
     {
         if (validationException == null)
@@ -47,7 +47,7 @@ public static class NostifyValidationExceptionHandler
     /// <param name="logger">Optional logger for recording the validation failure.</param>
     /// <returns>A structured validation error response.</returns>
     public static ValidationErrorResponse HandleValidationResults(
-        List<ValidationResult> validationResults, 
+        List<ValidationResult> validationResults,
         ILogger? logger = null)
     {
         if (validationResults == null || !validationResults.Any())
@@ -107,9 +107,9 @@ public static class NostifyValidationExceptionHandler
             var nullError = new ValidationErrorResponse
             {
                 Message = "Validation failed",
-                Errors = new Dictionary<string, List<string>> 
-                { 
-                    { "Object", new List<string> { "Object cannot be null" } } 
+                Errors = new Dictionary<string, List<string>>
+                {
+                    { "Object", new List<string> { "Object cannot be null" } }
                 }
             };
             logger?.LogWarning("Validation failed: Object is null");
@@ -118,9 +118,9 @@ public static class NostifyValidationExceptionHandler
 
         var validationResults = new List<ValidationResult>();
         var validationContext = new ValidationContext(obj);
-        
+
         bool isValid = Validator.TryValidateObject(obj, validationContext, validationResults, true);
-        
+
         if (!isValid && validationResults.Any())
         {
             return HandleValidationResults(validationResults, logger);
@@ -137,8 +137,8 @@ public static class NostifyValidationExceptionHandler
     /// <param name="logger">Optional logger for recording validation failures.</param>
     /// <returns>A validation error response if validation fails, null if validation passes.</returns>
     public static ValidationErrorResponse? ValidateObjectForCommandAndGetErrorResponse(
-        object obj, 
-        string commandName, 
+        object obj,
+        string commandName,
         ILogger? logger = null)
     {
         if (obj == null)
@@ -146,9 +146,9 @@ public static class NostifyValidationExceptionHandler
             var nullError = new ValidationErrorResponse
             {
                 Message = "Validation failed",
-                Errors = new Dictionary<string, List<string>> 
-                { 
-                    { "Object", new List<string> { "Object cannot be null" } } 
+                Errors = new Dictionary<string, List<string>>
+                {
+                    { "Object", new List<string> { "Object cannot be null" } }
                 }
             };
             logger?.LogWarning("Validation failed: Object is null");
@@ -171,13 +171,13 @@ public static class NostifyValidationExceptionHandler
 
         var validationResults = new List<ValidationResult>();
         var validationContext = new ValidationContext(obj);
-        
+
         // Add command context for RequiredFor attribute validation
         var command = new NostifyCommand(commandName, true);
         validationContext.Items["command"] = command;
-        
+
         bool isValid = Validator.TryValidateObject(obj, validationContext, validationResults, true);
-        
+
         if (!isValid && validationResults.Any())
         {
             return HandleValidationResults(validationResults, logger);

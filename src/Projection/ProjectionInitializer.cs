@@ -107,17 +107,17 @@ public class ProjectionInitializer : IProjectionInitializer
         {
             List<P> projectionList = new List<P>();
             List<Guid> ids = baseAggregateIds.Skip(i).Take(loopSize).ToList();
-            
+
             var eventsQuery = eventStoreContainer.GetItemLinqQueryable<Event>().Where(x => ids.Contains(x.aggregateRootId));
-            
+
             // Apply pointInTime filter if provided
             if (pointInTime.HasValue)
             {
                 eventsQuery = eventsQuery.Where(x => x.timestamp <= pointInTime.Value);
             }
-            
+
             List<Event> events = await eventsQuery.ReadAllAsync();
-            
+
             ids.ForEach(id =>
             {
                 P newProjection = new P();

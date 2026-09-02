@@ -85,7 +85,7 @@ public class NostifyValidationExceptionMiddleware : IFunctionsWorkerMiddleware
             {
                 httpResponseData.StatusCode = HttpStatusCode.BadRequest;
                 httpResponseData.Headers.Add("Content-Type", "application/json");
-                
+
                 using var writer = new StreamWriter(httpResponseData.Body);
                 await writer.WriteAsync(jsonResponse);
             }
@@ -98,7 +98,7 @@ public class NostifyValidationExceptionMiddleware : IFunctionsWorkerMiddleware
         catch (Exception ex)
         {
             // Fallback: log the validation error if we can't set HTTP response
-            _logger.LogError(ex, "Failed to set HTTP response for validation error. Original validation errors: {ValidationErrors}", 
+            _logger.LogError(ex, "Failed to set HTTP response for validation error. Original validation errors: {ValidationErrors}",
                 validationEx.GetAllErrorMessages());
         }
     }

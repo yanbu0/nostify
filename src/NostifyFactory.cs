@@ -195,7 +195,7 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Azure Event Hubs.
     /// </summary>
-    public static NostifyConfig WithEventHubs(string eventHubsConnectionString, bool diagnosticLogging = false, int kafkaTopicAutoCreatePartitions = 2  )
+    public static NostifyConfig WithEventHubs(string eventHubsConnectionString, bool diagnosticLogging = false, int kafkaTopicAutoCreatePartitions = 2)
     {
         NostifyConfig config = new NostifyConfig();
         return config.WithEventHubs(eventHubsConnectionString, diagnosticLogging, kafkaTopicAutoCreatePartitions);
@@ -255,7 +255,7 @@ public static class NostifyFactory
     {
         config.logger = logger;
         config.logger.LogInformation("ILogger configured for Nostify. Structured logging enabled.");
-        
+
         return config;
     }
 
@@ -344,9 +344,9 @@ public static class NostifyFactory
     /// <param name="verbose">If true, will write to console the steps taken to create the containers and topics</param>
     public static INostify Build<T>(this NostifyConfig config, bool verbose = false) where T : IAggregate
     {
-        try 
+        try
         {
-        
+
             if (config.logger != null) config.logger.LogDebug("ILogger is available and will be used for logging.");
             else if (verbose) Console.WriteLine("******* Logger is null. Will try to fall back to console logging. Enable logging by using .WithLogger(yourLogger). There isn't really a reason not to enable logging, you should do it. *********");
             //Create Confluent admin client
@@ -362,7 +362,7 @@ public static class NostifyFactory
             var commandTypes = assembly.GetTypes().Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract);
             if (config.logger != null) config.logger.LogDebug("Found {CommandTypes} command definitions in assembly {Assembly}", string.Join(", ", commandTypes.Select(c => c.Name)), assembly.FullName);
             else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
-            
+
             //Get any static fields of each commandType that inherit type EventType        
             var commandProperties = commandTypes
                 .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -438,6 +438,6 @@ public static class NostifyFactory
             else Console.WriteLine("Error building Nostify with autocreate topics: " + ex.Message + " " + ex.InnerException?.Message);
             throw new NostifyException("Error building Nostify with autocreate topics " + ex.Message + " " + ex.InnerException?.Message);
         }
-        
+
     }
 }
