@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using nostify;
-using nostify.Attributes;
 using Xunit;
 
 namespace nostify.Tests
