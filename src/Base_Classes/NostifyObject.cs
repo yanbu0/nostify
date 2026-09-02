@@ -137,12 +137,16 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
         // Resolve the concrete type of this NostifyObject (aggregate or projection).
         var targetType = GetType();
 
-        // Build or retrieve the handler map for this type.
-        var handlerMap = ApplyEventsHandlerCache.GetOrBuildHandlerMap(targetType);
-        if (!handlerMap.TryGetValue(eventType, out var handler))
+        // Build or retrieve the handler lookup for this type.
+        var handlerLookup = ApplyEventsHandlerCache.GetOrBuildHandlerLookup(targetType);
+        if (!handlerLookup.TypedHandlers.TryGetValue(eventType, out var handler))
         {
-            // No attribute-based handler for this event type on this object.
-            return false;
+            if (string.IsNullOrWhiteSpace(eventType.name) ||
+                !handlerLookup.NameHandlers.TryGetValue(eventType.name, out handler))
+            {
+                // No attribute-based handler for this event type on this object.
+                return false;
+            }
         }
 
         // Invoke the handler. We expect methods to accept a single IEvent parameter.

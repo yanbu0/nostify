@@ -356,6 +356,27 @@ namespace nostify.Tests
         }
 
         [Fact]
+        public void AttributeOnlyAggregateByName_MatchesByEventTypeNameAcrossDifferentClrTypes()
+        {
+            // Arrange
+            var aggregate = new AttributeOnlyAggregateByName
+            {
+                id = Guid.NewGuid(),
+                tenantId = Guid.NewGuid()
+            };
+
+            var createEvent = new TestEvent(new NostifyCommand("Create_Order", isNew: true));
+
+            // Act
+            aggregate.Apply(createEvent);
+
+            // Assert
+            Assert.Equal(1, aggregate.CreateHandledCount);
+            Assert.Equal(0, aggregate.UpdateHandledCount);
+            Assert.Equal(0, aggregate.MultiHandledCount);
+        }
+
+        [Fact]
         public void HybridAggregate_PrefersAttributesAndFallsBackToDynamic()
         {
             // Arrange

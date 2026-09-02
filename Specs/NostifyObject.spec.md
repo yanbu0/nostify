@@ -2,7 +2,7 @@
 
 ## Overview
 
-`NostifyObject` is the abstract base class for all domain objects in the nostify framework, including aggregates and projections. It provides common identity/tenant fields and centralizes `Apply(IEvent)` dispatch by first trying `[ApplyEvents]`-decorated handlers and then falling back to typed `EventType` dispatch. The catch-all `Apply(EventType, IEvent)` hook is `protected virtual`, so attribute-only types can omit it while typed-dispatch implementations can still override it.
+`NostifyObject` is the abstract base class for all domain objects in the nostify framework, including aggregates and projections. It provides common identity/tenant fields and centralizes `Apply(IEvent)` dispatch by first trying `[ApplyEvents]`-decorated handlers and then falling back to typed `EventType` dispatch. For string-based `[ApplyEvents("...")]` mappings, dispatch matches by `eventType.name` (ordinal) so handlers work across different `EventType` CLR subclasses that share the same name. The catch-all `Apply(EventType, IEvent)` hook is `protected virtual`, so attribute-only types can omit it while typed-dispatch implementations can still override it.
 
 ## Class Definition
 
