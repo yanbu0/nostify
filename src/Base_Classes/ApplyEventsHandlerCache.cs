@@ -47,12 +47,15 @@ namespace nostify
         {
             var map = new Dictionary<EventType, Action<NostifyObject, IEvent>>();
 
-            // Build a lookup of known EventType instances for this target type keyed by EventType.name.
-            // This is used to resolve string-based ApplyEventsAttribute mappings.
-            var nameToEventType = BuildEventTypeNameLookup(targetType);
-
             // Scan instance methods (public and non-public) to allow protected Apply methods.
             var methods = targetType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var hasNameBasedMappings = methods.Any(method =>
+                method.GetCustomAttributes(typeof(ApplyEventsAttribute), inherit: true)
+                    .Cast<ApplyEventsAttribute>()
+                    .Any(attribute => attribute.EventTypeNames.Length > 0));
+            var nameToEventType = hasNameBasedMappings
+                ? BuildEventTypeNameLookup(targetType)
+                : new Dictionary<string, EventType>(StringComparer.Ordinal);
 
             foreach (var method in methods)
             {
