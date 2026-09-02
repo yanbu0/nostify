@@ -799,6 +799,12 @@ In this pattern:
 - `Apply(EventType, IEvent)` is `protected virtual` in `NostifyObject`. Override it when you want custom catch-all behavior; if all events are handled by attributes, you can omit it entirely.
 - Individual handler methods are decorated with `[ApplyEvents]` and accept `IEvent` to perform updates.
 
+> **Dispatch rules:**
+> - `[ApplyEvents]` handlers can have any method name; the framework matches them by attribute metadata, not by method name.
+> - Each handler must return `void` and accept exactly one `IEvent` parameter.
+> - If both an attribute handler and a typed `Apply(SpecificEventType, IEvent)` overload could handle the same event, the attribute handler wins because attribute dispatch runs first.
+> - A single `EventType` can map to only one `[ApplyEvents]` handler on a concrete class. Duplicate mappings throw `InvalidOperationException` when the handler cache is built.
+
 #### Projection Example Using Attribute Dispatch
 
 ```C#
