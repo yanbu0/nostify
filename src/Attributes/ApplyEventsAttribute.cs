@@ -16,14 +16,14 @@ namespace nostify.Attributes
         /// These must be types deriving from <see cref="EventType"/> such as command/event
         /// classes following the nostify templates (e.g. <c>Create__ReplaceMe_</c>).
         /// </summary>
-        public Type[] EventTypeTypes { get; }
+        public Type[] EventTypeTypes { get; } = Array.Empty<Type>();
 
         /// <summary>
         /// Gets the logical <see cref="EventType.name"/> values that this method handles.
         /// These must match the <see cref="EventType.name"/> of a concrete event type that can be
         /// resolved for the containing aggregate or projection.
         /// </summary>
-        public string[] EventTypeNames { get; }
+        public string[] EventTypeNames { get; } = Array.Empty<string>();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ApplyEventsAttribute"/> class using CLR types.
