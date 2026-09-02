@@ -789,17 +789,14 @@ public class Test : NostifyObject, IAggregate
         this.isDeleted = true;
     }
 
-    // Required: the base Apply(EventType, IEvent) is abstract and must be overridden.
-    // When all events are handled by [ApplyEvents] attributes above, this body stays empty.
-    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 ```
 
 In this pattern:
 
 - `Apply(IEvent)` is the public entry point used everywhere by the framework. It first checks for `[ApplyEvents]` decorated handler methods; if found, it invokes them directly.
-- If no attribute-based handler exists for an event, the framework falls back to `Apply(EventType, IEvent)` via C# dynamic dispatch.
-- `Apply(EventType, IEvent)` is `protected abstract` in `NostifyObject` and must be overridden in every concrete class — even when all events are handled by attributes (the override can simply be empty in that case).
+- If no attribute-based handler exists for an event, the framework falls back to `Apply((dynamic)eventToApply.eventType, eventToApply)`, so any matching `Apply(SpecificEventType, IEvent)` overload is preferred and `Apply(EventType, IEvent)` is the catch-all.
+- `Apply(EventType, IEvent)` is `protected virtual` in `NostifyObject`. Override it when you want custom catch-all behavior; if all events are handled by attributes, you can omit it entirely.
 - Individual handler methods are decorated with `[ApplyEvents]` and accept `IEvent` to perform updates.
 
 #### Projection Example Using Attribute Dispatch
@@ -845,9 +842,6 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
         this.isDeleted = true;
     }
 
-    // Required: Apply(EventType, IEvent) is abstract in NostifyObject and must be overridden.
-    // With all events handled by [ApplyEvents] attributes above, the body stays empty.
-    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 ```
 
@@ -878,8 +872,7 @@ public class Test : NostifyObject, IAggregate
         this.isDeleted = true;
     }
 
-    // Required: Apply(EventType, IEvent) is abstract and must be overridden.
-    // This is called only when no specific overload matches (e.g. an unknown event type).
+    // Optional catch-all: called only when no specific overload matches.
     protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         // Ignore or log unknown event types
@@ -1128,9 +1121,6 @@ public class Test : NostifyObject, IAggregate
         this.isDeleted = true;
     }
 
-    // Required: Apply(EventType, IEvent) is abstract in NostifyObject.
-    // With all events handled by [ApplyEvents] attributes, the body stays empty.
-    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 ```
 
@@ -1162,7 +1152,7 @@ public class Test : NostifyObject, IAggregate
         this.isDeleted = true;
     }
 
-    // Required: called when no specific overload matches.
+    // Optional catch-all: called when no specific overload matches.
     protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         // Ignore or log unknown event types
@@ -1298,10 +1288,6 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
   {
       this.isDeleted = true;
   }
-
-  // Required: Apply(EventType, IEvent) is abstract in NostifyObject.
-  // With all events handled by [ApplyEvents] attributes above, the body stays empty.
-  protected override void Apply(EventType eventType, IEvent eventToApply) { }
 
   /* Alternative: typed overload pattern (no attributes, C# dynamic dispatch)
   protected void Apply(Create_Test eventType, IEvent eventToApply)
@@ -1480,8 +1466,8 @@ public class ExampleProjection : ExampleAggregateBase, IProjection, IHasExternal
     public List<Vehicle> vehicles { get; set; }
     public List<Department> departments { get; set; }
 
-    // Required: Apply(EventType, IEvent) is abstract in NostifyObject and must be overridden.
-    // Add [ApplyEvents]-decorated methods or typed overloads here to handle events.
+    // Optional catch-all for unknown event types.
+    // Add [ApplyEvents]-decorated methods or typed overloads here to handle known events.
     protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         // Logic to apply events goes here
@@ -3613,8 +3599,6 @@ public class OrderProjection : NostifyObject, IProjection
         );
     }
 
-    // Required: Apply(EventType, IEvent) is abstract in NostifyObject.
-    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 ```
 
@@ -3874,8 +3858,6 @@ public class OrderAggregate : NostifyObject, IAggregate
         isDeleted = true;
     }
 
-    // Required: Apply(EventType, IEvent) is abstract in NostifyObject.
-    protected override void Apply(EventType eventType, IEvent eventToApply) { }
 }
 
 // OrderEventTypes.cs

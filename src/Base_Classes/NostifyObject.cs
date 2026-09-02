@@ -153,10 +153,16 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
 
     ///<summary>
     ///Applies event to this Aggregate or Projection based on its event type.
-    /// Implementors should provide overloads like <c>Apply(SpecificEventType, IEvent)</c>
-    /// to participate in the dynamic dispatch fallback.
+    /// Override this method to customize the catch-all fallback behavior, or add
+    /// overloads like <c>Apply(SpecificEventType, IEvent)</c> to participate in the
+    /// dynamic dispatch fallback. The default implementation throws for unhandled
+    /// event types.
     ///</summary>
-    protected abstract void Apply(EventType eventType, IEvent eventToApply);
+    protected virtual void Apply(EventType eventType, IEvent eventToApply)
+    {
+        throw new InvalidOperationException(
+            $"Unsupported event type '{eventType?.GetType().Name ?? "<null>"}' for '{GetType().Name}'.");
+    }
 
     ///<summary>
     ///Updates properties of Aggregate or Projection

@@ -29,8 +29,8 @@ namespace nostify.Tests
             public static BulkCreate__Order_ BulkCreate => BulkCreate__Order_.Instance;
             public static BulkUpdate__Order_ BulkUpdate => BulkUpdate__Order_.Instance;
 
-            protected OrderCommand(string name, bool isNew = false)
-                : base(name, isNew)
+            protected OrderCommand(string name, bool isNew = false, bool allowNullPayload = false)
+                : base(name, isNew, allowNullPayload)
             {
             }
         }
@@ -67,6 +67,15 @@ namespace nostify.Tests
             public static readonly BulkUpdate__Order_ Instance = new BulkUpdate__Order_();
 
             private BulkUpdate__Order_() : base("BulkUpdate__Order_")
+            {
+            }
+        }
+
+        private sealed class Delete__Order_ : OrderCommand
+        {
+            public static readonly Delete__Order_ Instance = new Delete__Order_();
+
+            private Delete__Order_() : base("Delete__Order_", allowNullPayload: true)
             {
             }
         }
@@ -122,13 +131,6 @@ namespace nostify.Tests
                 MultiHandledCount++;
             }
 
-            /// <summary>
-            /// Dynamic fallback is not used in this aggregate.
-            /// </summary>
-            protected override void Apply(EventType eventType, IEvent eventToApply)
-            {
-                throw new InvalidOperationException("Dynamic Apply should not be called for AttributeOnlyAggregate in these tests.");
-            }
         }
 
         /// <summary>
@@ -292,6 +294,24 @@ namespace nostify.Tests
 
             // Assert
             Assert.Equal(2, aggregate.MultiHandledCount);
+        }
+
+        [Fact]
+        public void AttributeOnlyAggregate_UsesDefaultFallbackForUnhandledEvents()
+        {
+            // Arrange
+            var aggregate = new AttributeOnlyAggregate
+            {
+                id = Guid.NewGuid(),
+                tenantId = Guid.NewGuid()
+            };
+
+            var deleteEvent = new TestEvent(Delete__Order_.Instance);
+
+            // Act & Assert
+            var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(deleteEvent));
+            Assert.Contains("Unsupported event type", ex.Message);
+            Assert.Contains(nameof(AttributeOnlyAggregate), ex.Message);
         }
 
         [Fact]
