@@ -881,7 +881,7 @@ public class Test : NostifyObject, IAggregate
     // Optional catch-all: called only when no specific overload matches.
     protected override void Apply(EventType eventType, IEvent eventToApply)
     {
-        // Ignore or log unknown event types
+        base.Apply(eventType, eventToApply);
     }
 }
 ```
@@ -1162,7 +1162,7 @@ public class Test : NostifyObject, IAggregate
     // Optional catch-all: called when no specific overload matches.
     protected override void Apply(EventType eventType, IEvent eventToApply)
     {
-        // Ignore or log unknown event types
+        base.Apply(eventType, eventToApply);
     }
 }
 ```
