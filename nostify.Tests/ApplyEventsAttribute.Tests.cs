@@ -13,7 +13,7 @@ namespace nostify.Tests
     ///
     /// These tests follow the same EventType pattern as the generated command templates
     /// in templates/nostify/_ReplaceMe_/Aggregates/_ReplaceMe_/_ReplaceMe_Command.cs, using
-    /// an OrderCommand base with concrete Create__Order_, Update__Order_, etc. types.
+    /// an OrderCommand base with concrete Create_Order, Update_Order, etc. types.
     /// </summary>
     public class ApplyEventsAttributeTests
     {
@@ -24,10 +24,10 @@ namespace nostify.Tests
         /// </summary>
         private abstract class OrderCommand : EventType
         {
-            public static Create__Order_ Create => Create__Order_.Instance;
-            public static Update__Order_ Update => Update__Order_.Instance;
-            public static BulkCreate__Order_ BulkCreate => BulkCreate__Order_.Instance;
-            public static BulkUpdate__Order_ BulkUpdate => BulkUpdate__Order_.Instance;
+            public static Create_Order Create => Create_Order.Instance;
+            public static Update_Order Update => Update_Order.Instance;
+            public static BulkCreate_Order BulkCreate => BulkCreate_Order.Instance;
+            public static BulkUpdate_Order BulkUpdate => BulkUpdate_Order.Instance;
 
             protected OrderCommand(string name, bool isNew = false, bool allowNullPayload = false)
                 : base(name, isNew, allowNullPayload)
@@ -35,47 +35,47 @@ namespace nostify.Tests
             }
         }
 
-        private sealed class Create__Order_ : OrderCommand
+        private sealed class Create_Order : OrderCommand
         {
-            public static readonly Create__Order_ Instance = new Create__Order_();
+            public static readonly Create_Order Instance = new Create_Order();
 
-            private Create__Order_() : base("Create__Order_", isNew: true)
+            private Create_Order() : base("Create_Order", isNew: true)
             {
             }
         }
 
-        private sealed class Update__Order_ : OrderCommand
+        private sealed class Update_Order : OrderCommand
         {
-            public static readonly Update__Order_ Instance = new Update__Order_();
+            public static readonly Update_Order Instance = new Update_Order();
 
-            private Update__Order_() : base("Update__Order_")
+            private Update_Order() : base("Update_Order")
             {
             }
         }
 
-        private sealed class BulkCreate__Order_ : OrderCommand
+        private sealed class BulkCreate_Order : OrderCommand
         {
-            public static readonly BulkCreate__Order_ Instance = new BulkCreate__Order_();
+            public static readonly BulkCreate_Order Instance = new BulkCreate_Order();
 
-            private BulkCreate__Order_() : base("BulkCreate__Order_", isNew: true)
+            private BulkCreate_Order() : base("BulkCreate_Order", isNew: true)
             {
             }
         }
 
-        private sealed class BulkUpdate__Order_ : OrderCommand
+        private sealed class BulkUpdate_Order : OrderCommand
         {
-            public static readonly BulkUpdate__Order_ Instance = new BulkUpdate__Order_();
+            public static readonly BulkUpdate_Order Instance = new BulkUpdate_Order();
 
-            private BulkUpdate__Order_() : base("BulkUpdate__Order_")
+            private BulkUpdate_Order() : base("BulkUpdate_Order")
             {
             }
         }
 
-        private sealed class Delete__Order_ : OrderCommand
+        private sealed class Delete_Order : OrderCommand
         {
-            public static readonly Delete__Order_ Instance = new Delete__Order_();
+            public static readonly Delete_Order Instance = new Delete_Order();
 
-            private Delete__Order_() : base("Delete__Order_", allowNullPayload: true)
+            private Delete_Order() : base("Delete_Order", allowNullPayload: true)
             {
             }
         }
@@ -113,19 +113,19 @@ namespace nostify.Tests
             public int UpdateHandledCount { get; private set; }
             public int MultiHandledCount { get; private set; }
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void ApplyCreate(IEvent e)
             {
                 CreateHandledCount++;
             }
 
-            [ApplyEvents(typeof(Update__Order_))]
+            [ApplyEvents(typeof(Update_Order))]
             protected void ApplyUpdate(IEvent e)
             {
                 UpdateHandledCount++;
             }
 
-            [ApplyEvents(typeof(BulkCreate__Order_), typeof(BulkUpdate__Order_))]
+            [ApplyEvents(typeof(BulkCreate_Order), typeof(BulkUpdate_Order))]
             protected void ApplyBulk(IEvent e)
             {
                 MultiHandledCount++;
@@ -146,19 +146,19 @@ namespace nostify.Tests
             public int UpdateHandledCount { get; private set; }
             public int MultiHandledCount { get; private set; }
 
-            [ApplyEvents("Create__Order_")]
+            [ApplyEvents("Create_Order")]
             protected void ApplyCreate(IEvent e)
             {
                 CreateHandledCount++;
             }
 
-            [ApplyEvents("Update__Order_")]
+            [ApplyEvents("Update_Order")]
             protected void ApplyUpdate(IEvent e)
             {
                 UpdateHandledCount++;
             }
 
-            [ApplyEvents("BulkCreate__Order_", "BulkUpdate__Order_")]
+            [ApplyEvents("BulkCreate_Order", "BulkUpdate_Order")]
             protected void ApplyBulk(IEvent e)
             {
                 MultiHandledCount++;
@@ -177,7 +177,7 @@ namespace nostify.Tests
             public int AttributeHandledCount { get; private set; }
             public int DynamicHandledCount { get; private set; }
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void ApplyCreateAttribute(IEvent e)
             {
                 AttributeHandledCount++;
@@ -204,7 +204,7 @@ namespace nostify.Tests
             public int AttributeHandledCount { get; private set; }
             public int DynamicHandledCount { get; private set; }
 
-            [ApplyEvents("Create__Order_")]
+            [ApplyEvents("Create_Order")]
             protected void ApplyCreateAttribute(IEvent e)
             {
                 AttributeHandledCount++;
@@ -228,10 +228,10 @@ namespace nostify.Tests
             public static string aggregateType => "Order";
             public static string currentStateContainerName => "OrderCurrentState";
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void FirstHandler(IEvent e) { }
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void SecondHandler(IEvent e) { }
 
             protected override void Apply(EventType eventType, IEvent eventToApply)
@@ -249,10 +249,10 @@ namespace nostify.Tests
             public static string aggregateType => "Order";
             public static string currentStateContainerName => "OrderCurrentState";
 
-            [ApplyEvents("Create__Order_")]
+            [ApplyEvents("Create_Order")]
             protected void FirstHandler(IEvent e) { }
 
-            [ApplyEvents("Create__Order_")]
+            [ApplyEvents("Create_Order")]
             protected void SecondHandler(IEvent e) { }
 
             protected override void Apply(EventType eventType, IEvent eventToApply)
@@ -270,7 +270,7 @@ namespace nostify.Tests
             public static string aggregateType => "Order";
             public static string currentStateContainerName => "OrderCurrentState";
 
-            [ApplyEvents("DoesNotExist__Order_")]
+            [ApplyEvents("DoesNotExist_Order")]
             protected void Handler(IEvent e) { }
         }
 
@@ -286,7 +286,7 @@ namespace nostify.Tests
             public int AttributeHandledCount { get; set; }
             public int DynamicHandledCount { get; set; }
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void ApplyViaAttribute(IEvent e)
             {
                 AttributeHandledCount++;
@@ -486,7 +486,7 @@ namespace nostify.Tests
                 tenantId = Guid.NewGuid()
             };
 
-            var deleteEvent = new TestEvent(Delete__Order_.Instance);
+            var deleteEvent = new TestEvent(Delete_Order.Instance);
 
             // Act & Assert
             var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(deleteEvent));
