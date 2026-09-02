@@ -76,7 +76,7 @@
  
 - 5.0.0 (BREAKING CHANGES!)
     - **Typed Apply Pattern for Aggregates and Projections**: Generated aggregate and projection templates now use the typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style for clearer, strongly-typed event handling.
-    - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` was widened to `protected` so consuming services can implement the new typed apply pattern in their own aggregates and projections.
+    - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` is `protected virtual` so consuming services can override the catch-all fallback when needed while still using typed overloads or attribute-based handlers.
     - **Attribute-Based Event Dispatch**: New `ApplyEventsAttribute` enables declarative mapping of event types to strongly-typed handler methods in aggregates and projections, removing manual switch/case dispatch. Handlers are discovered and cached via `ApplyEventsHandlerCache` the first time they are used and then invoked directly for subsequent events.
     - **HandleUpdates Performance Improvements**: Optimized the `HandleUpdates` path in default command handlers to reduce unnecessary serialization and patch operations during update commands, significantly improving throughput for high-volume update scenarios while preserving existing behavior.
  
@@ -949,7 +949,8 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     public Guid tenantId { get; set; }
     public Guid id { get; set; }
     
-    public abstract void Apply(IEvent eventToApply);
+    public void Apply(IEvent eventToApply);
+    protected virtual void Apply(EventType eventType, IEvent eventToApply);
     
     // Update properties from event payload (automatic property matching)
     public void UpdateProperties<T>(object payload) where T : NostifyObject;
@@ -1311,7 +1312,7 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
   protected void Apply(Delete_Test eventType, IEvent eventToApply)
       => this.isDeleted = true;
 
-  protected override void Apply(EventType eventType, IEvent eventToApply) { }
+  // Optional catch-all: override only if you want custom behavior for unknown event types.
   */
 
   public class StatusName
@@ -1605,7 +1606,7 @@ This endpoint is automatically generated in each nostify service and is used by 
 
 A `Projection` will have a "base" aggregate when it is defined. Projection create event handlers should subscribe to the create event of the base aggregate.
 
-Adding a new instance of a projection requires implementing the `Apply()` method to handle all necessary events, and the `GetExternalDataEventsAsync()` method to get events external to the base aggregate when initializing new instances of the projection. **It is strongly recommended to use `ExternalDataEventFactory` in your `GetExternalDataEventsAsync()` implementation** - see [ExternalDataEventFactory (Recommended)](#externaldataeventfactory-recommended) for examples.
+Adding a new instance of a projection requires implementing `Apply` handlers for all necessary events, and the `GetExternalDataEventsAsync()` method to get events external to the base aggregate when initializing new instances of the projection. **It is strongly recommended to use `ExternalDataEventFactory` in your `GetExternalDataEventsAsync()` implementation** - see [ExternalDataEventFactory (Recommended)](#externaldataeventfactory-recommended) for examples.
 
 This method is called in the event handler function to update the projection with any exsiting external data and then applied and saved to the projection container along with the `Event` signifying the creation of the `Test`
 
@@ -1624,7 +1625,7 @@ This method is called in the event handler function to update the projection wit
 
 Updating a `Projection` works the same as updating the current state projection of an aggregate, except you're more likely to be subscribing to multiple events and you may be subscribing to various events from multiple services.
 
-For instance, with our `TestWithStatus` projection, we will need to subscribe to the update event for both `Test` and `Status` aggregates to capture and handle them in the `Apply()` method, see example above.
+For instance, with our `TestWithStatus` projection, we will need to subscribe to the update event for both `Test` and `Status` aggregates to capture and handle them in `Apply` handlers, see example above.
 
 This means we will need two event handler functions, `OnTestUpdated_For_TestWithStatus` and `OnStatusUpdated_For_TestWithStatus`.  Note the naming convention.
 
