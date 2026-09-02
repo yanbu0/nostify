@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using nostify;
 
 namespace nostify.Attributes
@@ -18,14 +19,19 @@ namespace nostify.Attributes
         public Type[] EventTypeTypes { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ApplyEventsAttribute"/> class.
-        /// Uses <see cref="Type"/> parameters to remain compatible with C# attribute
-        /// constructor rules while still allowing resolution to concrete <see cref="EventType"/>
-        /// instances at runtime.
+        /// Gets the logical <see cref="EventType.name"/> values that this method handles.
+        /// These must match the <see cref="EventType.name"/> of a concrete event type that can be
+        /// resolved for the containing aggregate or projection.
+        /// </summary>
+        public string[] EventTypeNames { get; }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ApplyEventsAttribute"/> class using CLR types.
+        /// Uses <see cref="Type"/> parameters to remain compatible with C# attribute constructor rules
+        /// while still allowing resolution to concrete <see cref="EventType"/> instances at runtime.
         /// </summary>
         /// <param name="eventTypeTypes">
-        /// One or more CLR types deriving from <see cref="EventType"/> that the target
-        /// method can handle.
+        /// One or more CLR types deriving from <see cref="EventType"/> that the target method can handle.
         /// </param>
         public ApplyEventsAttribute(params Type[] eventTypeTypes)
         {
@@ -35,6 +41,30 @@ namespace nostify.Attributes
             }
 
             EventTypeTypes = eventTypeTypes;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ApplyEventsAttribute"/> class using logical
+        /// <see cref="EventType.name"/> values instead of CLR types.
+        /// </summary>
+        /// <param name="eventTypeNames">
+        /// One or more logical event type names that the target method can handle. These must match the
+        /// <see cref="EventType.name"/> of a concrete event type that can be resolved for the containing
+        /// aggregate or projection.
+        /// </param>
+        public ApplyEventsAttribute(params string[] eventTypeNames)
+        {
+            if (eventTypeNames == null || eventTypeNames.Length == 0)
+            {
+                throw new ArgumentException("At least one EventType name must be provided.", nameof(eventTypeNames));
+            }
+
+            if (eventTypeNames.Any(string.IsNullOrWhiteSpace))
+            {
+                throw new ArgumentException("EventType names cannot be null, empty, or whitespace.", nameof(eventTypeNames));
+            }
+
+            EventTypeNames = eventTypeNames;
         }
     }
 }
