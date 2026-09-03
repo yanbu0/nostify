@@ -261,16 +261,20 @@ namespace nostify.Tests
         }
 
         /// <summary>
-        /// Aggregate used to validate behaviour when a name does not resolve to a known EventType.
+        /// Aggregate used to validate string-only event name handling without a local EventType class.
         /// </summary>
-        private sealed class MisconfiguredAggregateByName : NostifyObject, IAggregate
+        private sealed class StringOnlyAggregateByName : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
             public static string currentStateContainerName => "OrderCurrentState";
+            public int HandledCount { get; private set; }
 
             [ApplyEvents("DoesNotExist_Order")]
-            protected void Handler(IEvent e) { }
+            protected void Handler(IEvent e)
+            {
+                HandledCount++;
+            }
         }
 
         /// <summary>
@@ -515,20 +519,22 @@ namespace nostify.Tests
         }
 
         [Fact]
-        public void MisconfiguredAggregateByName_ThrowsWhenNameDoesNotResolve()
+        public void StringOnlyAggregateByName_HandlesMatchingNameWithoutTypeResolution()
         {
             // Arrange
-            var aggregate = new MisconfiguredAggregateByName
+            var aggregate = new StringOnlyAggregateByName
             {
                 id = Guid.NewGuid(),
                 tenantId = Guid.NewGuid()
             };
 
-            var evt = new TestEvent(OrderCommand.Create);
+            var evt = new TestEvent(new NostifyCommand("DoesNotExist_Order"));
 
-            // Act & Assert
-            var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(evt));
-            Assert.Contains("Unable to resolve an EventType instance for name", ex.Message);
+            // Act
+            aggregate.Apply(evt);
+
+            // Assert
+            Assert.Equal(1, aggregate.HandledCount);
         }
 
         [Fact]

@@ -65,14 +65,6 @@ namespace nostify
 
             // Scan instance methods (public and non-public) to allow protected Apply methods.
             var methods = targetType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var hasNameBasedMappings = methods.Any(method =>
-                method.GetCustomAttributes(typeof(ApplyEventsAttribute), inherit: true)
-                    .Cast<ApplyEventsAttribute>()
-                    .Any(attribute => attribute.EventTypeNames.Length > 0));
-            var nameToEventType = hasNameBasedMappings
-                ? BuildEventTypeNameLookup(targetType)
-                : new Dictionary<string, EventType>(StringComparer.Ordinal);
-
             foreach (var method in methods)
             {
                 // Only consider methods that take a single IEvent parameter.
@@ -158,23 +150,6 @@ namespace nostify
                                     "cannot be null, empty, or whitespace.");
                             }
 
-                            if (!nameToEventType.TryGetValue(eventName, out var eventTypeInstance))
-                            {
-                                // Treat missing name the same way we treat an invalid EventType Type: configuration error.
-                                throw new InvalidOperationException(
-                                    $"Unable to resolve an EventType instance for name '{eventName}' " +
-                                    $"used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}'.");
-                            }
-
-                            if (typedMap.ContainsKey(eventTypeInstance))
-                            {
-                                throw new InvalidOperationException(
-                                    $"Multiple ApplyEventsAttribute handlers found for event type '{eventTypeInstance}' on type '{targetType.FullName}'. " +
-                                    "Each event type must map to exactly one method.");
-                            }
-
-                            typedMap[eventTypeInstance] = handler;
-
                             if (nameMap.ContainsKey(eventName))
                             {
                                 throw new InvalidOperationException(
@@ -189,83 +164,6 @@ namespace nostify
             }
 
             return new HandlerLookup(typedMap, nameMap);
-        }
-
-        /// <summary>
-        /// Builds a lookup of EventType instances for the specified target type, keyed by EventType.name.
-        /// This is used to resolve string-based ApplyEventsAttribute mappings.
-        /// </summary>
-        private static Dictionary<string, EventType> BuildEventTypeNameLookup(Type targetType)
-        {
-            var result = new Dictionary<string, EventType>(StringComparer.Ordinal);
-
-            // Discover EventType implementations in the target assembly. Generated command/event types are typically
-            // top-level (not nested on the aggregate/projection), so nested-type scanning alone is insufficient.
-            foreach (var etType in targetType.Assembly.GetTypes().Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract))
-            {
-                var hasPublicInstanceField = etType.GetField("Instance", BindingFlags.Public | BindingFlags.Static) != null;
-                var hasPublicParameterlessCtor = etType.GetConstructor(Type.EmptyTypes) != null;
-                if (!hasPublicInstanceField && !hasPublicParameterlessCtor)
-                {
-                    continue;
-                }
-
-                var eventTypeInstance = ResolveEventTypeInstance(etType, targetType, member: null);
-                if (result.ContainsKey(eventTypeInstance.name))
-                {
-                    throw new InvalidOperationException(
-                        $"Multiple EventType instances with the same name '{eventTypeInstance.name}' were discovered in assembly '{targetType.Assembly.FullName}'. " +
-                        "EventType.name must be unique when using string-based ApplyEventsAttribute mappings.");
-                }
-
-                result[eventTypeInstance.name] = eventTypeInstance;
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Populates the provided dictionary with EventType instances discovered from
-        /// nested types of the specified container type.
-        /// </summary>
-        private static void PopulateFromNestedTypes(Type container, Dictionary<string, EventType> result)
-        {
-            var nestedTypes = container.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic);
-            foreach (var nested in nestedTypes)
-            {
-                if (!typeof(EventType).IsAssignableFrom(nested))
-                {
-                    continue;
-                }
-
-                // Skip abstract EventType types; they cannot be instantiated and are not
-                // directly used as concrete event types in the handler map.
-                if (nested.IsAbstract)
-                {
-                    continue;
-                }
-
-                var eventTypeInstance = ResolveEventTypeInstance(nested, container, member: null);
-                if (eventTypeInstance == null)
-                {
-                    continue;
-                }
-
-                var name = eventTypeInstance.name;
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    continue;
-                }
-
-                if (result.ContainsKey(name))
-                {
-                    throw new InvalidOperationException(
-                        $"Multiple EventType instances with the same name '{name}' were discovered on type '{container.FullName}'. " +
-                        "EventType.name must be unique per aggregate or projection type when using string-based ApplyEventsAttribute mappings.");
-                }
-
-                result[name] = eventTypeInstance;
-            }
         }
 
         /// <summary>
