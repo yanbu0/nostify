@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using nostify.Attributes;
 
 namespace nostify
 {
@@ -14,43 +13,58 @@ namespace nostify
     /// </summary>
     internal static class ApplyEventsHandlerCache
     {
-        /// <summary>
-        /// Cache of handler maps per concrete NostifyObject type.
-        /// </summary>
-        private static readonly ConcurrentDictionary<Type, Dictionary<EventType, Action<NostifyObject, IEvent>>> _handlerMaps
-            = new ConcurrentDictionary<Type, Dictionary<EventType, Action<NostifyObject, IEvent>>>();
+        internal sealed class HandlerLookup
+        {
+            public HandlerLookup(
+                Dictionary<EventType, Action<NostifyObject, IEvent>> typedHandlers,
+                Dictionary<string, Action<NostifyObject, IEvent>> nameHandlers)
+            {
+                TypedHandlers = typedHandlers;
+                NameHandlers = nameHandlers;
+            }
+
+            public Dictionary<EventType, Action<NostifyObject, IEvent>> TypedHandlers { get; }
+
+            public Dictionary<string, Action<NostifyObject, IEvent>> NameHandlers { get; }
+        }
 
         /// <summary>
-        /// Gets or builds the handler map for the specified type.
+        /// Cache of handler lookups per concrete NostifyObject type.
+        /// </summary>
+        private static readonly ConcurrentDictionary<Type, HandlerLookup> _handlerLookups
+            = new ConcurrentDictionary<Type, HandlerLookup>();
+
+        /// <summary>
+        /// Gets or builds the handler lookup for the specified type.
         /// </summary>
         /// <param name="targetType">Concrete aggregate or projection type deriving from <see cref="NostifyObject"/>.</param>
         /// <returns>
-        /// A dictionary mapping <see cref="EventType"/> to an invocation delegate for attribute-based handlers.
-        /// May be empty if the type defines no <see cref="ApplyEventsAttribute"/> handlers.
+        /// A lookup containing both typed and name-based handler maps for attribute-based dispatch.
+        /// Both maps may be empty if the type defines no <see cref="ApplyEventsAttribute"/> handlers.
         /// </returns>
-        public static Dictionary<EventType, Action<NostifyObject, IEvent>> GetOrBuildHandlerMap(Type targetType)
+        public static HandlerLookup GetOrBuildHandlerLookup(Type targetType)
         {
             if (targetType == null)
             {
                 throw new ArgumentNullException(nameof(targetType));
             }
 
-            return _handlerMaps.GetOrAdd(targetType, BuildHandlerMap);
+            return _handlerLookups.GetOrAdd(targetType, BuildHandlerLookup);
         }
 
         /// <summary>
-        /// Builds the handler map for the given type by scanning for methods decorated
+        /// Builds typed and name-based handler maps for the given type by scanning for methods decorated
         /// with <see cref="ApplyEventsAttribute"/>.
         /// </summary>
         /// <param name="targetType">Concrete aggregate or projection type.</param>
-        /// <returns>A new handler map for the type.</returns>
-        private static Dictionary<EventType, Action<NostifyObject, IEvent>> BuildHandlerMap(Type targetType)
+        /// <returns>A new handler lookup for the type.</returns>
+        private static HandlerLookup BuildHandlerLookup(Type targetType)
         {
-            var map = new Dictionary<EventType, Action<NostifyObject, IEvent>>();
+            var typedMap = new Dictionary<EventType, Action<NostifyObject, IEvent>>();
+            var nameMap = new Dictionary<string, Action<NostifyObject, IEvent>>(StringComparer.Ordinal);
 
             // Scan instance methods (public and non-public) to allow protected Apply methods.
             var methods = targetType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
             foreach (var method in methods)
             {
                 // Only consider methods that take a single IEvent parameter.
@@ -83,55 +97,105 @@ namespace nostify
 
                 foreach (var attr in attributes)
                 {
-                    foreach (var etType in attr.EventTypeTypes)
+                    // Type-based mappings (existing behaviour).
+                    if (attr.EventTypeTypes != null)
                     {
-                        if (etType == null)
+                        foreach (var etType in attr.EventTypeTypes)
                         {
-                            continue;
-                        }
+                            if (etType == null)
+                            {
+                                continue;
+                            }
 
-                        if (!typeof(EventType).IsAssignableFrom(etType))
-                        {
-                            throw new InvalidOperationException(
-                                $"Type '{etType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}' " +
-                                "does not derive from EventType.");
-                        }
+                            if (!typeof(EventType).IsAssignableFrom(etType))
+                            {
+                                throw new InvalidOperationException(
+                                    $"Type '{etType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}' " +
+                                    "does not derive from EventType.");
+                            }
 
-                        // Resolve a concrete EventType instance for this CLR type. For nostify command/event types
-                        // following the template pattern, prefer a public static 'Instance' field if present; otherwise
-                        // fall back to Activator.CreateInstance.
-                        EventType eventTypeInstance;
-                        var instanceField = etType.GetField("Instance", BindingFlags.Public | BindingFlags.Static);
-                        if (instanceField != null && typeof(EventType).IsAssignableFrom(instanceField.FieldType))
-                        {
-                            eventTypeInstance = (EventType)instanceField.GetValue(null);
-                        }
-                        else
-                        {
-                            eventTypeInstance = (EventType)Activator.CreateInstance(etType);
-                        }
+                            // Resolve a concrete EventType instance for this CLR type. For nostify command/event types
+                            // following the template pattern, prefer a public static 'Instance' field if present; otherwise
+                            // fall back to Activator.CreateInstance.
+                            var eventTypeInstance = ResolveEventTypeInstance(etType, targetType, method);
 
-                        if (eventTypeInstance == null)
-                        {
-                            throw new InvalidOperationException(
-                                $"Unable to create or resolve an EventType instance for type '{etType.FullName}' " +
-                                $"used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}'.");
-                        }
+                            if (eventTypeInstance == null)
+                            {
+                                throw new InvalidOperationException(
+                                    $"Unable to create or resolve an EventType instance for type '{etType.FullName}' " +
+                                    $"used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}'.");
+                            }
 
-                        if (map.ContainsKey(eventTypeInstance))
-                        {
-                            // Conflict: same EventType mapped to more than one method on this type.
-                            throw new InvalidOperationException(
-                                $"Multiple ApplyEventsAttribute handlers found for event type '{eventTypeInstance}' on type '{targetType.FullName}'. " +
-                                "Each event type must map to exactly one method.");
-                        }
+                            if (typedMap.ContainsKey(eventTypeInstance))
+                            {
+                                // Conflict: same EventType mapped to more than one method on this type.
+                                throw new InvalidOperationException(
+                                    $"Multiple ApplyEventsAttribute handlers found for event type '{eventTypeInstance}' on type '{targetType.FullName}'. " +
+                                    "Each event type must map to exactly one method.");
+                            }
 
-                        map[eventTypeInstance] = handler;
+                            typedMap[eventTypeInstance] = handler;
+                        }
+                    }
+
+                    // Name-based mappings (new behaviour).
+                    if (attr.EventTypeNames != null)
+                    {
+                        foreach (var eventName in attr.EventTypeNames)
+                        {
+                            if (string.IsNullOrWhiteSpace(eventName))
+                            {
+                                throw new InvalidOperationException(
+                                    $"EventType name used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}' " +
+                                    "cannot be null, empty, or whitespace.");
+                            }
+
+                            if (nameMap.ContainsKey(eventName))
+                            {
+                                throw new InvalidOperationException(
+                                    $"Multiple ApplyEventsAttribute handlers found for event name '{eventName}' on type '{targetType.FullName}'. " +
+                                    "Each event name must map to exactly one method.");
+                            }
+
+                            nameMap[eventName] = handler;
+                        }
                     }
                 }
             }
 
-            return map;
+            return new HandlerLookup(typedMap, nameMap);
+        }
+
+        /// <summary>
+        /// Resolves a concrete EventType instance for the given CLR type using the same rules
+        /// as the original ApplyEventsHandlerCache implementation.
+        /// </summary>
+        private static EventType ResolveEventTypeInstance(Type etType, Type targetType, MemberInfo? member)
+        {
+            // For nostify command/event types following the template pattern, prefer a public static 'Instance'
+            // field if present; otherwise fall back to Activator.CreateInstance.
+            var instanceField = etType.GetField("Instance", BindingFlags.Public | BindingFlags.Static);
+            if (instanceField != null && typeof(EventType).IsAssignableFrom(instanceField.FieldType))
+            {
+                var value = instanceField.GetValue(null);
+                if (value is EventType eventType)
+                {
+                    return eventType;
+                }
+
+                throw new InvalidOperationException(
+                    $"Static field 'Instance' on type '{etType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}{(member != null ? "." + member.Name : string.Empty)}' " +
+                    "does not contain a valid EventType instance.");
+            }
+
+            var created = Activator.CreateInstance(etType) as EventType;
+            if (created == null)
+            {
+                throw new InvalidOperationException(
+                    $"Unable to create an EventType instance for type '{etType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}{(member != null ? "." + member.Name : string.Empty)}'.");
+            }
+
+            return created;
         }
     }
 }

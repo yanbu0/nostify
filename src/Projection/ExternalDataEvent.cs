@@ -163,7 +163,7 @@ public class ExternalDataEvent
             select new ExternalDataEvent(p.id, eventList)
         ).ToList();
 
-        return result; 
+        return result;
     }
 
     /// <summary>
@@ -383,7 +383,7 @@ public class ExternalDataEvent
         var tasks = eventRequests.Select(request =>
         {
             // Use the new method to get all foreign ID selectors if available, otherwise use the existing ones
-            var allSelectors = request.ListSelectors.Any() 
+            var allSelectors = request.ListSelectors.Any()
                 ? request.GetAllForeignIdSelectors(projectionsToInit)
                 : request.ForeignIdSelectors;
             return GetEventsAsync(httpClient, request.Url, projectionsToInit, pointInTime, allSelectors);
@@ -588,6 +588,6 @@ class ProjectionToEventGuid<TProjection>
         this.projection = p;
         this.guid = guid;
     }
-    public TProjection projection  { get; set; }
+    public TProjection projection { get; set; }
     public Guid? guid { get; set; }
 }

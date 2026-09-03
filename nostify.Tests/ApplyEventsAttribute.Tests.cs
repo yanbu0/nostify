@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using nostify;
-using nostify.Attributes;
 using Xunit;
 
 namespace nostify.Tests
@@ -13,7 +12,7 @@ namespace nostify.Tests
     ///
     /// These tests follow the same EventType pattern as the generated command templates
     /// in templates/nostify/_ReplaceMe_/Aggregates/_ReplaceMe_/_ReplaceMe_Command.cs, using
-    /// an OrderCommand base with concrete Create__Order_, Update__Order_, etc. types.
+    /// an OrderCommand base with concrete Create_Order, Update_Order, etc. types.
     /// </summary>
     public class ApplyEventsAttributeTests
     {
@@ -24,10 +23,10 @@ namespace nostify.Tests
         /// </summary>
         private abstract class OrderCommand : EventType
         {
-            public static Create__Order_ Create => Create__Order_.Instance;
-            public static Update__Order_ Update => Update__Order_.Instance;
-            public static BulkCreate__Order_ BulkCreate => BulkCreate__Order_.Instance;
-            public static BulkUpdate__Order_ BulkUpdate => BulkUpdate__Order_.Instance;
+            public static Create_Order Create => Create_Order.Instance;
+            public static Update_Order Update => Update_Order.Instance;
+            public static BulkCreate_Order BulkCreate => BulkCreate_Order.Instance;
+            public static BulkUpdate_Order BulkUpdate => BulkUpdate_Order.Instance;
 
             protected OrderCommand(string name, bool isNew = false, bool allowNullPayload = false)
                 : base(name, isNew, allowNullPayload)
@@ -35,47 +34,47 @@ namespace nostify.Tests
             }
         }
 
-        private sealed class Create__Order_ : OrderCommand
+        private sealed class Create_Order : OrderCommand
         {
-            public static readonly Create__Order_ Instance = new Create__Order_();
+            public static readonly Create_Order Instance = new Create_Order();
 
-            private Create__Order_() : base("Create__Order_", isNew: true)
+            private Create_Order() : base("Create_Order", isNew: true)
             {
             }
         }
 
-        private sealed class Update__Order_ : OrderCommand
+        private sealed class Update_Order : OrderCommand
         {
-            public static readonly Update__Order_ Instance = new Update__Order_();
+            public static readonly Update_Order Instance = new Update_Order();
 
-            private Update__Order_() : base("Update__Order_")
+            private Update_Order() : base("Update_Order")
             {
             }
         }
 
-        private sealed class BulkCreate__Order_ : OrderCommand
+        private sealed class BulkCreate_Order : OrderCommand
         {
-            public static readonly BulkCreate__Order_ Instance = new BulkCreate__Order_();
+            public static readonly BulkCreate_Order Instance = new BulkCreate_Order();
 
-            private BulkCreate__Order_() : base("BulkCreate__Order_", isNew: true)
+            private BulkCreate_Order() : base("BulkCreate_Order", isNew: true)
             {
             }
         }
 
-        private sealed class BulkUpdate__Order_ : OrderCommand
+        private sealed class BulkUpdate_Order : OrderCommand
         {
-            public static readonly BulkUpdate__Order_ Instance = new BulkUpdate__Order_();
+            public static readonly BulkUpdate_Order Instance = new BulkUpdate_Order();
 
-            private BulkUpdate__Order_() : base("BulkUpdate__Order_")
+            private BulkUpdate_Order() : base("BulkUpdate_Order")
             {
             }
         }
 
-        private sealed class Delete__Order_ : OrderCommand
+        private sealed class Delete_Order : OrderCommand
         {
-            public static readonly Delete__Order_ Instance = new Delete__Order_();
+            public static readonly Delete_Order Instance = new Delete_Order();
 
-            private Delete__Order_() : base("Delete__Order_", allowNullPayload: true)
+            private Delete_Order() : base("Delete_Order", allowNullPayload: true)
             {
             }
         }
@@ -113,24 +112,56 @@ namespace nostify.Tests
             public int UpdateHandledCount { get; private set; }
             public int MultiHandledCount { get; private set; }
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void ApplyCreate(IEvent e)
             {
                 CreateHandledCount++;
             }
 
-            [ApplyEvents(typeof(Update__Order_))]
+            [ApplyEvents(typeof(Update_Order))]
             protected void ApplyUpdate(IEvent e)
             {
                 UpdateHandledCount++;
             }
 
-            [ApplyEvents(typeof(BulkCreate__Order_), typeof(BulkUpdate__Order_))]
+            [ApplyEvents(typeof(BulkCreate_Order), typeof(BulkUpdate_Order))]
             protected void ApplyBulk(IEvent e)
             {
                 MultiHandledCount++;
             }
 
+        }
+
+        /// <summary>
+        /// Simple aggregate that uses string-based attribute Apply handlers.
+        /// </summary>
+        private sealed class AttributeOnlyAggregateByName : NostifyObject, IAggregate
+        {
+            public bool isDeleted { get; set; }
+            public static string aggregateType => "Order";
+            public static string currentStateContainerName => "OrderCurrentState";
+
+            public int CreateHandledCount { get; private set; }
+            public int UpdateHandledCount { get; private set; }
+            public int MultiHandledCount { get; private set; }
+
+            [ApplyEvents("Create_Order")]
+            protected void ApplyCreate(IEvent e)
+            {
+                CreateHandledCount++;
+            }
+
+            [ApplyEvents("Update_Order")]
+            protected void ApplyUpdate(IEvent e)
+            {
+                UpdateHandledCount++;
+            }
+
+            [ApplyEvents("BulkCreate_Order", "BulkUpdate_Order")]
+            protected void ApplyBulk(IEvent e)
+            {
+                MultiHandledCount++;
+            }
         }
 
         /// <summary>
@@ -145,7 +176,34 @@ namespace nostify.Tests
             public int AttributeHandledCount { get; private set; }
             public int DynamicHandledCount { get; private set; }
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
+            protected void ApplyCreateAttribute(IEvent e)
+            {
+                AttributeHandledCount++;
+            }
+
+            /// <summary>
+            /// Dynamic overload used as a fallback for events without attributes.
+            /// </summary>
+            protected override void Apply(EventType eventType, IEvent eventToApply)
+            {
+                DynamicHandledCount++;
+            }
+        }
+
+        /// <summary>
+        /// Aggregate that supports both string-based attribute handlers and dynamic overloads.
+        /// </summary>
+        private sealed class HybridAggregateByName : NostifyObject, IAggregate
+        {
+            public bool isDeleted { get; set; }
+            public static string aggregateType => "Order";
+            public static string currentStateContainerName => "OrderCurrentState";
+
+            public int AttributeHandledCount { get; private set; }
+            public int DynamicHandledCount { get; private set; }
+
+            [ApplyEvents("Create_Order")]
             protected void ApplyCreateAttribute(IEvent e)
             {
                 AttributeHandledCount++;
@@ -169,15 +227,53 @@ namespace nostify.Tests
             public static string aggregateType => "Order";
             public static string currentStateContainerName => "OrderCurrentState";
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void FirstHandler(IEvent e) { }
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void SecondHandler(IEvent e) { }
 
             protected override void Apply(EventType eventType, IEvent eventToApply)
             {
                 // not used
+            }
+        }
+
+        /// <summary>
+        /// Aggregate used to verify conflict detection when multiple methods handle the same event type name.
+        /// </summary>
+        private sealed class ConflictingAggregateByName : NostifyObject, IAggregate
+        {
+            public bool isDeleted { get; set; }
+            public static string aggregateType => "Order";
+            public static string currentStateContainerName => "OrderCurrentState";
+
+            [ApplyEvents("Create_Order")]
+            protected void FirstHandler(IEvent e) { }
+
+            [ApplyEvents("Create_Order")]
+            protected void SecondHandler(IEvent e) { }
+
+            protected override void Apply(EventType eventType, IEvent eventToApply)
+            {
+                // not used
+            }
+        }
+
+        /// <summary>
+        /// Aggregate used to validate string-only event name handling without a local EventType class.
+        /// </summary>
+        private sealed class StringOnlyAggregateByName : NostifyObject, IAggregate
+        {
+            public bool isDeleted { get; set; }
+            public static string aggregateType => "Order";
+            public static string currentStateContainerName => "OrderCurrentState";
+            public int HandledCount { get; private set; }
+
+            [ApplyEvents("DoesNotExist_Order")]
+            protected void Handler(IEvent e)
+            {
+                HandledCount++;
             }
         }
 
@@ -193,7 +289,7 @@ namespace nostify.Tests
             public int AttributeHandledCount { get; set; }
             public int DynamicHandledCount { get; set; }
 
-            [ApplyEvents(typeof(Create__Order_))]
+            [ApplyEvents(typeof(Create_Order))]
             protected void ApplyViaAttribute(IEvent e)
             {
                 AttributeHandledCount++;
@@ -237,10 +333,80 @@ namespace nostify.Tests
         }
 
         [Fact]
+        public void AttributeOnlyAggregateByName_UsesAttributeHandlersForMappedEvents()
+        {
+            // Arrange
+            var aggregate = new AttributeOnlyAggregateByName
+            {
+                id = Guid.NewGuid(),
+                tenantId = Guid.NewGuid()
+            };
+
+            var createEvent = new TestEvent(OrderCommand.Create);
+            var updateEvent = new TestEvent(OrderCommand.Update);
+            var bulkCreateEvent = new TestEvent(OrderCommand.BulkCreate);
+            var bulkUpdateEvent = new TestEvent(OrderCommand.BulkUpdate);
+
+            // Act
+            aggregate.Apply(createEvent);
+            aggregate.Apply(updateEvent);
+            aggregate.Apply(bulkCreateEvent);
+            aggregate.Apply(bulkUpdateEvent);
+
+            // Assert
+            Assert.Equal(1, aggregate.CreateHandledCount);
+            Assert.Equal(1, aggregate.UpdateHandledCount);
+            Assert.Equal(2, aggregate.MultiHandledCount); // BulkCreate + BulkUpdate
+        }
+
+        [Fact]
+        public void AttributeOnlyAggregateByName_MatchesByEventTypeNameAcrossDifferentClrTypes()
+        {
+            // Arrange
+            var aggregate = new AttributeOnlyAggregateByName
+            {
+                id = Guid.NewGuid(),
+                tenantId = Guid.NewGuid()
+            };
+
+            var createEvent = new TestEvent(new NostifyCommand("Create_Order", isNew: true));
+
+            // Act
+            aggregate.Apply(createEvent);
+
+            // Assert
+            Assert.Equal(1, aggregate.CreateHandledCount);
+            Assert.Equal(0, aggregate.UpdateHandledCount);
+            Assert.Equal(0, aggregate.MultiHandledCount);
+        }
+
+        [Fact]
         public void HybridAggregate_PrefersAttributesAndFallsBackToDynamic()
         {
             // Arrange
             var aggregate = new HybridAggregate
+            {
+                id = Guid.NewGuid(),
+                tenantId = Guid.NewGuid()
+            };
+
+            var createEvent = new TestEvent(OrderCommand.Create); // has attribute handler
+            var updateEvent = new TestEvent(OrderCommand.Update); // no attribute handler
+
+            // Act
+            aggregate.Apply(createEvent); // should use attribute-based handler
+            aggregate.Apply(updateEvent); // should use dynamic fallback
+
+            // Assert
+            Assert.Equal(1, aggregate.AttributeHandledCount);
+            Assert.Equal(1, aggregate.DynamicHandledCount);
+        }
+
+        [Fact]
+        public void HybridAggregateByName_PrefersAttributesAndFallsBackToDynamic()
+        {
+            // Arrange
+            var aggregate = new HybridAggregateByName
             {
                 id = Guid.NewGuid(),
                 tenantId = Guid.NewGuid()
@@ -276,10 +442,48 @@ namespace nostify.Tests
         }
 
         [Fact]
+        public void ConflictingAggregateByName_ThrowsOnConflictingAttributeHandlers()
+        {
+            // Arrange
+            var aggregate = new ConflictingAggregateByName
+            {
+                id = Guid.NewGuid(),
+                tenantId = Guid.NewGuid()
+            };
+
+            var createEvent = new TestEvent(OrderCommand.Create);
+
+            // Act & Assert
+            var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(createEvent));
+            Assert.Contains("Multiple ApplyEventsAttribute handlers", ex.Message);
+        }
+
+        [Fact]
         public void AttributeOnlyAggregate_SupportsMultipleEventsOnSingleHandler()
         {
             // Arrange
             var aggregate = new AttributeOnlyAggregate
+            {
+                id = Guid.NewGuid(),
+                tenantId = Guid.NewGuid()
+            };
+
+            var bulkCreateEvent = new TestEvent(OrderCommand.BulkCreate);
+            var bulkUpdateEvent = new TestEvent(OrderCommand.BulkUpdate);
+
+            // Act
+            aggregate.Apply(bulkCreateEvent);
+            aggregate.Apply(bulkUpdateEvent);
+
+            // Assert
+            Assert.Equal(2, aggregate.MultiHandledCount);
+        }
+
+        [Fact]
+        public void AttributeOnlyAggregateByName_SupportsMultipleEventsOnSingleHandler()
+        {
+            // Arrange
+            var aggregate = new AttributeOnlyAggregateByName
             {
                 id = Guid.NewGuid(),
                 tenantId = Guid.NewGuid()
@@ -306,12 +510,31 @@ namespace nostify.Tests
                 tenantId = Guid.NewGuid()
             };
 
-            var deleteEvent = new TestEvent(Delete__Order_.Instance);
+            var deleteEvent = new TestEvent(Delete_Order.Instance);
 
             // Act & Assert
             var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(deleteEvent));
             Assert.Contains("Unsupported event type", ex.Message);
             Assert.Contains(nameof(AttributeOnlyAggregate), ex.Message);
+        }
+
+        [Fact]
+        public void StringOnlyAggregateByName_HandlesMatchingNameWithoutTypeResolution()
+        {
+            // Arrange
+            var aggregate = new StringOnlyAggregateByName
+            {
+                id = Guid.NewGuid(),
+                tenantId = Guid.NewGuid()
+            };
+
+            var evt = new TestEvent(new NostifyCommand("DoesNotExist_Order"));
+
+            // Act
+            aggregate.Apply(evt);
+
+            // Assert
+            Assert.Equal(1, aggregate.HandledCount);
         }
 
         [Fact]

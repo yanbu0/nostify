@@ -31,7 +31,7 @@ public class NostifyValidationException : ValidationException
     /// with a list of validation messages.
     /// </summary>
     /// <param name="validationMessages">The list of validation messages.</param>
-    public NostifyValidationException(List<ValidationResult> validationMessages) 
+    public NostifyValidationException(List<ValidationResult> validationMessages)
         : base(BuildErrorMessage(validationMessages))
     {
         ValidationMessages = validationMessages ?? new List<ValidationResult>();
@@ -43,7 +43,7 @@ public class NostifyValidationException : ValidationException
     /// </summary>
     /// <param name="validationMessages">The list of validation messages.</param>
     /// <param name="innerException">The inner exception.</param>
-    public NostifyValidationException(List<ValidationResult> validationMessages, Exception innerException) 
+    public NostifyValidationException(List<ValidationResult> validationMessages, Exception innerException)
         : base(BuildErrorMessage(validationMessages), innerException)
     {
         ValidationMessages = validationMessages ?? new List<ValidationResult>();
@@ -55,7 +55,7 @@ public class NostifyValidationException : ValidationException
     /// </summary>
     /// <param name="message">The custom error message.</param>
     /// <param name="validationMessages">The list of validation messages.</param>
-    public NostifyValidationException(string message, List<ValidationResult> validationMessages) 
+    public NostifyValidationException(string message, List<ValidationResult> validationMessages)
         : base(message)
     {
         ValidationMessages = validationMessages ?? new List<ValidationResult>();
@@ -87,7 +87,7 @@ public class NostifyValidationException : ValidationException
         foreach (var validationResult in ValidationMessages)
         {
             var memberNames = validationResult.MemberNames?.ToList() ?? new List<string> { "Unknown" };
-            
+
             foreach (var memberName in memberNames)
             {
                 if (!errorsByMember.ContainsKey(memberName))

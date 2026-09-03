@@ -424,7 +424,8 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
 /// <summary>
 /// Paging request for durable projection initialization: tenant Id and page number.
 /// </summary>
-public struct DurableInitPageInfo{
+public struct DurableInitPageInfo
+{
     public readonly Guid TenantId;
     public readonly int PageNumber;
 

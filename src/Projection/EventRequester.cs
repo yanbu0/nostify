@@ -52,7 +52,7 @@ public class EventRequester<TProjection> where TProjection : IUniquelyIdentifiab
         Url = url;
         SingleSelectors = singleIdSelectors ?? Array.Empty<Func<TProjection, Guid?>>();
         ListSelectors = listIdSelectors ?? Array.Empty<Func<TProjection, List<Guid?>>>();
-        
+
         // We'll compute ForeignIdSelectors when needed, but for backward compatibility,
         // we'll store the single selectors directly
         ForeignIdSelectors = SingleSelectors;
@@ -73,7 +73,7 @@ public class EventRequester<TProjection> where TProjection : IUniquelyIdentifiab
         Url = url;
         SingleSelectors = Array.Empty<Func<TProjection, Guid?>>();
         ListSelectors = listIdSelectors ?? Array.Empty<Func<TProjection, List<Guid?>>>();
-        
+
         // For backward compatibility, ForeignIdSelectors will be empty initially
         // They will be expanded when GetAllForeignIdSelectors is called
         ForeignIdSelectors = Array.Empty<Func<TProjection, Guid?>>();
@@ -152,10 +152,10 @@ public class EventRequester<TProjection> where TProjection : IUniquelyIdentifiab
     public Func<TProjection, Guid?>[] GetAllForeignIdSelectors(List<TProjection> projectionsToInit)
     {
         var allSelectors = new List<Func<TProjection, Guid?>>();
-        
+
         // Add single selectors directly
         allSelectors.AddRange(SingleSelectors);
-        
+
         // Transform list selectors using the same logic as TransformForeignIdSelectors
         if (ListSelectors.Any())
         {
@@ -163,10 +163,10 @@ public class EventRequester<TProjection> where TProjection : IUniquelyIdentifiab
                 .SelectMany(p => ListSelectors.SelectMany(selector => selector(p)))
                 .Select(guid => new Func<TProjection, Guid?>(_ => guid))
                 .ToArray();
-            
+
             allSelectors.AddRange(expandedSelectors);
         }
-        
+
         return allSelectors.ToArray();
     }
 }

@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>5.0.0-beta2</Version>
+    <Version>5.0.0-beta3</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -11,7 +11,7 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);Tests\**</DefaultItemExcludes>
     <NoDefaultExcludes>true</NoDefaultExcludes>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>   
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <IsPackable>true</IsPackable>
     <IsTestProject>false</IsTestProject>

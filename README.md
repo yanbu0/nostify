@@ -78,6 +78,8 @@
     - **Attribute-Based Event Dispatch**: New `ApplyEventsAttribute` enables declarative mapping of event types to strongly-typed handler methods in aggregates and projections, removing manual switch/case dispatch. Handlers are discovered and cached via `ApplyEventsHandlerCache` the first time they are used and then invoked directly for subsequent events.
     - **Typed Apply Pattern for Aggregates and Projections**: Generated aggregate and projection templates now use the typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style for clear, strongly-typed event handling.
     - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` is `protected virtual` so consuming services can override the catch-all fallback when needed while still using typed overloads or attribute-based handlers.
+    - **String and Type-Based Event Matching**: `ApplyEventsAttribute` supports both CLR type-based mappings (e.g., `ApplyEvents(typeof(Create_Order))`) and string-based mappings by `EventType.name` (e.g., `ApplyEvents("Create_Order")`). Under the hood, `ApplyEventsHandlerCache` builds a name-to-`EventType` lookup for the target aggregate/projection so that string names are resolved to concrete `EventType` instances at startup, with conflict detection for duplicate names or handlers.
+    - **Handler Conflict Detection and Validation**: At startup, the handler cache validates that each `EventType` (or event type name) maps to exactly one handler method per aggregate/projection. Misconfigurations such as multiple handlers for the same event, non-`EventType` types, missing `EventType` instances, or invalid `EventType` names cause `InvalidOperationException` during handler map construction, failing fast in development/test.
     - **HandleUpdates Performance Improvements**: Optimized the `HandleUpdates` path in default command handlers to reduce unnecessary serialization and patch operations during update commands, significantly improving throughput for high-volume update scenarios while preserving existing behavior.
  
 - 4.x Highlights
@@ -547,7 +549,7 @@ You can continue to use `NostifyCommand` in the same style, but it is now concep
 
 The preferred dispatch model for aggregates and projections is to use the [`ApplyEventsAttribute`](src/Attributes/ApplyEventsAttribute.cs) on strongly-typed handler methods. This removes manual `switch`/`if` chaining and centralizes dispatch mapping.
 
-**Aggregate Example Using Attribute Dispatch:**
+**Aggregate Example Using Attribute Dispatch (Type-Based Mapping):**
 
 ```C#
 public class Test : NostifyObject, IAggregate
@@ -556,6 +558,7 @@ public class Test : NostifyObject, IAggregate
     public static string aggregateType => "Test";
     public static string currentStateContainerName => "Test";
 
+    // Map by CLR EventType types (Create_Test, Update_Test, Delete_Test)
     [ApplyEvents(typeof(Create_Test), typeof(Update_Test))]
     private void OnTestCreatedOrUpdated(IEvent eventToApply)
     {
@@ -567,11 +570,34 @@ public class Test : NostifyObject, IAggregate
     {
         this.isDeleted = true;
     }
-
 }
 ```
 
-In this pattern:
+**Aggregate Example Using Attribute Dispatch (String-Based Mapping):**
+
+```C#
+public class TestByName : NostifyObject, IAggregate
+{
+    public bool isDeleted { get; set; } = false;
+    public static string aggregateType => "Test";
+    public static string currentStateContainerName => "Test";
+
+    // Map by EventType.name values. These must match the names on the concrete EventType classes.
+    [ApplyEvents("Create_Test", "Update_Test")]
+    private void OnTestCreatedOrUpdated(IEvent eventToApply)
+    {
+        this.UpdateProperties<TestByName>(eventToApply.payload);
+    }
+
+    [ApplyEvents("Delete_Test")]
+    private void OnTestDeleted(IEvent eventToApply)
+    {
+        this.isDeleted = true;
+    }
+}
+```
+
+In both patterns:
 
 - `Apply(IEvent)` is the public entry point used everywhere by the framework. It first checks for `[ApplyEvents]` decorated handler methods; if found, it invokes them directly.
 - If no attribute-based handler exists for an event, the framework falls back to `Apply((dynamic)eventToApply.eventType, eventToApply)`, so any matching `Apply(SpecificEventType, IEvent)` overload is preferred and `Apply(EventType, IEvent)` is the catch-all.

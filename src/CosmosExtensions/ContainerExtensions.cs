@@ -468,7 +468,7 @@ public static class ContainerExtensions
     /// <param name="retryOptions">Optional retry options for handling transient errors. When provided, per-item retry is applied via <see cref="IRetryableContainer"/>.</param>
     public static async Task BulkCreateFromKafkaTriggerEventsAsync<T>(this Container bulkContainer, string[] events, string eventTypeFilter, RetryOptions? retryOptions = null) where T : NostifyObject, new()
     {
-        await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, new List<string>(){eventTypeFilter}, retryOptions);
+        await bulkContainer.BulkCreateFromKafkaTriggerEventsAsync<T>(events, new List<string>() { eventTypeFilter }, retryOptions);
     }
 
     /// <summary>

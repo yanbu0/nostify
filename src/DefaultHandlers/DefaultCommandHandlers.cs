@@ -37,7 +37,7 @@ public static class DefaultCommandHandler
         {
             throw new ArgumentException($"Invalid id: {unparsedGuid}");
         }
-        
+
         return await HandlePatchAsync<T>(nostify, eventType, (object)patchObj, aggRootId, userId, partitionKey);
     }
 
@@ -76,7 +76,7 @@ public static class DefaultCommandHandler
     {
         // Read the post object from the request body
         object postObj = await req.Body.ReadFromRequestBodyAsync(true);
-        
+
         return await HandlePostAsync<T>(nostify, eventType, postObj, userId, partitionKey, partitionKeyName);
     }
 
@@ -99,7 +99,7 @@ public static class DefaultCommandHandler
 
         // Also ensure the partitionKey is set if it's not provided
         dynamicPostObj[partitionKeyName] = partitionKey;
-        
+
         // Create and persist the event using the EventFactory, with validation enabled
         IEvent pe = new EventFactory().Create<T>(eventType, aggRootId, dynamicPostObj, userId, partitionKey);
         await nostify.PersistEventAsync(pe);
@@ -125,7 +125,7 @@ public static class DefaultCommandHandler
         {
             throw new ArgumentException("No id provided in route");
         }
-        
+
         if (!Guid.TryParse(idStr, out Guid aggRootId))
         {
             throw new ArgumentException($"Invalid id: {idStr}");
@@ -192,7 +192,7 @@ public static class DefaultCommandHandler
     /// <returns>The count of aggregate roots that were created</returns>
     public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
-        List<T> newObjects = JsonConvert.DeserializeObject<List<T>>(await new StreamReader(req.Body).ReadToEndAsync()) 
+        List<T> newObjects = JsonConvert.DeserializeObject<List<T>>(await new StreamReader(req.Body).ReadToEndAsync())
             ?? throw new NostifyException($"Failed to deserialize request body to list of objects of type {typeof(T).Name}.");
         return await HandleBulkCreateAsync<T>(nostify, eventType, newObjects, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
     }
@@ -214,14 +214,14 @@ public static class DefaultCommandHandler
     /// <returns>The count of aggregate roots that were created</returns>
     public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, bool allowRetry = true, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
     {
-        return await HandleBulkCreateAsync<T>(nostify, 
-                        eventType, 
-                        newObjects, 
-                        userId, 
-                        partitionKey, 
-                        batchSize, 
-                        allowRetry ? nostify.DefaultRetryOptions : null, 
-                        publishErrorEvents, 
+        return await HandleBulkCreateAsync<T>(nostify,
+                        eventType,
+                        newObjects,
+                        userId,
+                        partitionKey,
+                        batchSize,
+                        allowRetry ? nostify.DefaultRetryOptions : null,
+                        publishErrorEvents,
                         partitionKeyName);
     }
 
@@ -313,7 +313,7 @@ public static class DefaultCommandHandler
     /// <returns>The count of aggregate roots that were updated</returns>
     public async static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
     {
-        List<dynamic> updateObjects = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync()) 
+        List<dynamic> updateObjects = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync())
             ?? throw new NostifyException($"Failed to deserialize request body to list of objects.");
         List<IEvent> peList = new List<IEvent>();
 
@@ -323,7 +323,7 @@ public static class DefaultCommandHandler
             {
                 throw new ArgumentException($"Each object must have a valid 'id' property");
             }
-            
+
             IEvent pe = new EventFactory().Create<T>(eventType, Guid.Parse(e.id.ToString()), e, userId, partitionKey);
             peList.Add(pe);
         });
@@ -387,7 +387,7 @@ public static class DefaultCommandHandler
         }
 
         if (idStrings == null) throw new NostifyException("Failed to deserialize request body to list of IDs.");
-        
+
         List<IEvent> peList = new List<IEvent>();
 
         idStrings.ForEach(idStr =>
@@ -396,7 +396,7 @@ public static class DefaultCommandHandler
             {
                 throw new ArgumentException($"Invalid id: {idStr}");
             }
-            
+
             IEvent pe = new EventFactory().CreateNullPayloadEvent(eventType, aggRootId, userId, partitionKey);
             peList.Add(pe);
         });

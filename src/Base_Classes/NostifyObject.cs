@@ -5,7 +5,6 @@ using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
-using nostify.Attributes;
 
 namespace nostify;
 
@@ -74,7 +73,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     protected internal NostifyObject()
     {
     }
-    
+
     /// <summary>
     /// Time to live in seconds, default is -1 which means never expire.  Can be set to any positive integer to bulk delete from container using spare RUs.
     /// Container must have TTL enabled for the delete to work.
@@ -138,12 +137,16 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
         // Resolve the concrete type of this NostifyObject (aggregate or projection).
         var targetType = GetType();
 
-        // Build or retrieve the handler map for this type.
-        var handlerMap = ApplyEventsHandlerCache.GetOrBuildHandlerMap(targetType);
-        if (!handlerMap.TryGetValue(eventType, out var handler))
+        // Build or retrieve the handler lookup for this type.
+        var handlerLookup = ApplyEventsHandlerCache.GetOrBuildHandlerLookup(targetType);
+        if (!handlerLookup.TypedHandlers.TryGetValue(eventType, out var handler))
         {
-            // No attribute-based handler for this event type on this object.
-            return false;
+            if (string.IsNullOrWhiteSpace(eventType.name) ||
+                !handlerLookup.NameHandlers.TryGetValue(eventType.name, out handler))
+            {
+                // No attribute-based handler for this event type on this object.
+                return false;
+            }
         }
 
         // Invoke the handler. We expect methods to accept a single IEvent parameter.
@@ -332,7 +335,7 @@ public class PropertyCheck
         this.projectionIdPropertyValue = projectionIdPropertyValue;
     }
 
-    public string eventPropertyName { get; set; } 
-    public string projectionPropertyName { get; set; } 
+    public string eventPropertyName { get; set; }
+    public string projectionPropertyName { get; set; }
     public Guid? projectionIdPropertyValue { get; set; }
 }

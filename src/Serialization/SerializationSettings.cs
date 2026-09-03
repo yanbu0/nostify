@@ -33,19 +33,19 @@ public static class SerializationSettings
     /// <summary>
     /// Gets the default <see cref="JsonSerializerSettings"/> used by the nostify framework for serialization.
     /// </summary>
-        public static JsonSerializerSettings NostifyDefault
+    public static JsonSerializerSettings NostifyDefault
+    {
+        get
         {
-            get
-            {
-                var settings = NewtonsoftJsonObjectSerializer.CreateJsonSerializerSettings();
-                settings.Converters.Add(new InterfaceConverter<IEvent, Event>());
-                settings.Converters.Add(new NewtonsoftEventTypeJsonConverter());
-                settings.Converters.Add(new InterfaceConverter<ISaga, Saga>());
-                settings.Converters.Add(new InterfaceConverter<ISagaStep, SagaStep>());
-                settings.ContractResolver = new CamelCasePropertyNamesContractResolver();
-                settings.NullValueHandling = NullValueHandling.Include;
-                return settings;
-            }
+            var settings = NewtonsoftJsonObjectSerializer.CreateJsonSerializerSettings();
+            settings.Converters.Add(new InterfaceConverter<IEvent, Event>());
+            settings.Converters.Add(new NewtonsoftEventTypeJsonConverter());
+            settings.Converters.Add(new InterfaceConverter<ISaga, Saga>());
+            settings.Converters.Add(new InterfaceConverter<ISagaStep, SagaStep>());
+            settings.ContractResolver = new CamelCasePropertyNamesContractResolver();
+            settings.NullValueHandling = NullValueHandling.Include;
+            return settings;
         }
-    
+    }
+
 }

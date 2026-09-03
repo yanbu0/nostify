@@ -210,7 +210,7 @@ public class Nostify : INostify, IDisposable
             await Task.WhenAll(publishTasks).ContinueWith(result =>
                 {
                     if (showOutput && Logger != null)
-                    {                        
+                    {
                         if (result.IsCompletedSuccessfully)
                         {
                             Logger.LogInformation("Event published to topic(s) {Topics}", peList.Select(p => p.eventType.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
@@ -398,7 +398,8 @@ public class Nostify : INostify, IDisposable
                 var retryable = eventContainer.WithRetry(retryOptions);
                 await retryable.DoBulkCreateEventAsync(
                     eventBatch,
-                    onException: async (pe, ex) => {
+                    onException: async (pe, ex) =>
+                    {
                         Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
                         await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
                     }
@@ -617,23 +618,23 @@ public class Nostify : INostify, IDisposable
         var container = await GetSequenceContainerAsync();
         var documentId = Sequence.GenerateId(partitionKeyValue, sequenceName);
         var partitionKey = new PartitionKey(partitionKeyValue);
-        
+
         const int maxRetries = 3;
         int retryCount = 0;
-        
+
         while (true)
         {
             try
             {
                 // Try to read the existing sequence
                 var response = await container.ReadItemAsync<Sequence>(documentId, partitionKey);
-                
+
                 // Sequence exists, increment atomically using patch
                 var patchOperations = new List<PatchOperation>
                 {
                     PatchOperation.Increment("/currentValue", 1)
                 };
-                
+
                 var patchResponse = await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
                 return patchResponse.Resource.currentValue;
             }
@@ -644,13 +645,13 @@ public class Nostify : INostify, IDisposable
                 {
                     var newSequence = new Sequence(sequenceName, partitionKeyValue, startingValue);
                     await container.CreateItemAsync(newSequence, partitionKey);
-                    
+
                     // Now increment and return
                     var patchOperations = new List<PatchOperation>
                     {
                         PatchOperation.Increment("/currentValue", 1)
                     };
-                    
+
                     var patchResponse = await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
                     return patchResponse.Resource.currentValue;
                 }
@@ -662,7 +663,7 @@ public class Nostify : INostify, IDisposable
                     {
                         throw new NostifyException($"Failed to get next sequence value after {maxRetries} retries due to concurrent creation conflicts.");
                     }
-                    
+
                     // Exponential backoff
                     await Task.Delay(TimeSpan.FromMilliseconds(Math.Pow(2, retryCount) * 50));
                     continue;
@@ -700,10 +701,10 @@ public class Nostify : INostify, IDisposable
         var container = await GetSequenceContainerAsync();
         var documentId = Sequence.GenerateId(partitionKeyValue, sequenceName);
         var partitionKey = new PartitionKey(partitionKeyValue);
-        
+
         const int maxRetries = 3;
         int retryCount = 0;
-        
+
         while (true)
         {
             try
@@ -711,15 +712,15 @@ public class Nostify : INostify, IDisposable
                 // Try to read the existing sequence to get the current value before incrementing
                 var response = await container.ReadItemAsync<Sequence>(documentId, partitionKey);
                 long currentValue = response.Resource.currentValue;
-                
+
                 // Sequence exists, increment atomically by count using patch
                 var patchOperations = new List<PatchOperation>
                 {
                     PatchOperation.Increment("/currentValue", count)
                 };
-                
+
                 await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
-                
+
                 // Return the range: from (currentValue + 1) to (currentValue + count)
                 return new SequenceRange(currentValue + 1, currentValue + count);
             }
@@ -730,15 +731,15 @@ public class Nostify : INostify, IDisposable
                 {
                     var newSequence = new Sequence(sequenceName, partitionKeyValue, startingValue);
                     await container.CreateItemAsync(newSequence, partitionKey);
-                    
+
                     // Now increment by count and return
                     var patchOperations = new List<PatchOperation>
                     {
                         PatchOperation.Increment("/currentValue", count)
                     };
-                    
+
                     await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
-                    
+
                     // Return the range: from (startingValue + 1) to (startingValue + count)
                     return new SequenceRange(startingValue + 1, startingValue + count);
                 }
@@ -750,7 +751,7 @@ public class Nostify : INostify, IDisposable
                     {
                         throw new NostifyException($"Failed to get next sequence values after {maxRetries} retries due to concurrent creation conflicts.");
                     }
-                    
+
                     // Exponential backoff
                     await Task.Delay(TimeSpan.FromMilliseconds(Math.Pow(2, retryCount) * 50));
                     continue;
