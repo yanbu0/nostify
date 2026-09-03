@@ -471,6 +471,9 @@ public class TestAggregate : NostifyObject, IAggregate
     [RequiredFor("Create_Test")]
     public string Name { get; set; }
     
+    [RequiredFor(typeof(Update_Test))]
+    public decimal Price { get; set; }
+    
     [RequiredFor(["Update_Test", "Create_Test"])]
     public int Value { get; set; }
 }
@@ -3756,6 +3759,10 @@ public class OrderAggregate : NostifyObject, IAggregate
     // Required only for Create_Order command
     [RequiredFor("Create_Order")]
     public string customerName { get; set; }
+
+    // Required only for the typed Create_Order event type
+    [RequiredFor(typeof(Create_Order))]
+    public string orderNumber { get; set; }
     
     // Required for multiple commands
     [RequiredFor(new[] { "Create_Order", "Update_Order" })]

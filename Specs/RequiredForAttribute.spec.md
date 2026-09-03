@@ -2,12 +2,12 @@
 
 ## Overview
 
-`RequiredForAttribute` is a custom validation attribute that marks properties as required only for specific commands. It enables command-specific validation in event-sourcing applications.
+`RequiredForAttribute` is a custom validation attribute that marks properties as required only for specific event types. It enables event-type-specific validation in event-sourcing applications and accepts either event type names or `EventType` CLR types.
 
 ## Class Definition
 
 ```csharp
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public class RequiredForAttribute : RequiredAttribute, INostifyValidation
 ```
 
@@ -38,20 +38,40 @@ public RequiredForAttribute(params string[] commands)
 |-----------|------|-------------|
 | `commands` | `string[]` | Command names for which this property is required |
 
+### Single Event Type
+
+```csharp
+public RequiredForAttribute(Type eventType)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `eventType` | `Type` | Concrete `EventType` CLR type for which this property is required |
+
+### Multiple Event Types
+
+```csharp
+public RequiredForAttribute(Type[] eventTypes)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `eventTypes` | `Type[]` | Concrete `EventType` CLR types for which this property is required |
+
 ## Properties
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Commands` | `List<string>` | List of commands requiring this property |
+| `Commands` | `List<string>` | List of event type names requiring this property |
 
 ## Behavior
 
 The `IsValid` method:
 
 1. Gets the validation context
-2. Extracts the current `NostifyCommand` from context
-3. If command is not in the `Commands` list, returns `ValidationResult.Success` (skips validation)
-4. If command is in the list, invokes base `RequiredAttribute` validation
+2. Extracts the current `EventType` from context
+3. If the current event type name is not in the `Commands` list, returns `ValidationResult.Success` (skips validation)
+4. If the current event type name is in the list, invokes base `RequiredAttribute` validation
 
 ```csharp
 protected override ValidationResult IsValid(object value, ValidationContext context)
@@ -91,6 +111,29 @@ public class Order : NostifyObject, IAggregate, IApplyable
     
     // Not validated (no attribute)
     public string Notes { get; set; }
+}
+```
+
+### With Typed EventType Classes
+
+```csharp
+public sealed class Create_Order : EventType
+{
+    public Create_Order() : base("Create_Order", isNew: true) { }
+}
+
+public sealed class Update_Order : EventType
+{
+    public Update_Order() : base("Update_Order") { }
+}
+
+public class Order : NostifyObject, IAggregate, IApplyable
+{
+    [RequiredFor(typeof(Create_Order))]
+    public Guid CustomerId { get; set; }
+
+    [RequiredFor(new[] { typeof(Create_Order), typeof(Update_Order) })]
+    public decimal Total { get; set; }
 }
 ```
 
@@ -161,7 +204,7 @@ Event Received
 Extract Payload
      │
      ▼
-Get Command Name
+Get Event Type Name
      │
      ▼
 For Each Property:
@@ -173,7 +216,7 @@ For Each Property:
      │        Yes
      │        │
      │        ▼
-     │   Command in List?
+     │   Event Type in List?
      │        │
      │        No ──▶ Skip Validation
      │        │
@@ -199,11 +242,11 @@ public interface INostifyValidation
 }
 ```
 
-This interface allows the validation system to identify command-aware validation attributes.
+This interface allows the validation system to identify event-type-aware validation attributes.
 
 ## Best Practices
 
-1. **Use Constants** - Define command names as constants
+1. **Use Typed EventTypes or Constants** - Prefer `typeof(MyEventType)` or shared string constants
 2. **Document Requirements** - Comment which properties each command needs
 3. **Group Related Commands** - Use multiple commands in single attribute when logical
 4. **Custom Messages** - Provide clear error messages for better UX
@@ -214,7 +257,7 @@ This interface allows the validation system to identify command-aware validation
 | Feature | `[Required]` | `[RequiredFor]` |
 |---------|--------------|-----------------|
 | Always validates | ✓ | ✗ |
-| Command-specific | ✗ | ✓ |
+| Event-type-specific | ✗ | ✓ |
 | Multiple conditions | ✗ | ✓ |
 | Event sourcing aware | ✗ | ✓ |
 
@@ -223,4 +266,5 @@ This interface allows the validation system to identify command-aware validation
 - [INostifyValidation](INostifyValidation.spec.md) - Validation interface
 - [NostifyValidationException](NostifyValidationException.spec.md) - Validation exception
 - [NostifyValidationExceptionHandler](NostifyValidationExceptionHandler.spec.md) - Validation utilities
-- [NostifyCommand](NostifyCommand.spec.md) - Command class
+- [EventType](EventType.spec.md) - Typed event metadata base class
+- [NostifyCommand](NostifyCommand.spec.md) - Legacy command class

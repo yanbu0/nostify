@@ -8,6 +8,27 @@ namespace nostify.Tests;
 
 public class RequiredForAttributeTests
 {
+    private sealed class Create_Order : EventType
+    {
+        private Create_Order() : base("Create_Order", isNew: true)
+        {
+        }
+    }
+
+    private sealed class Renamed_OrderCreate : EventType
+    {
+        public Renamed_OrderCreate() : base("Create_Order", isNew: true)
+        {
+        }
+    }
+
+    private abstract class Abstract_OrderEvent : EventType
+    {
+        protected Abstract_OrderEvent(string name) : base(name)
+        {
+        }
+    }
+
     [Fact]
     public void Constructor_WithSingleCommand_ShouldCreateAttributeWithOneCommand()
     {
@@ -36,6 +57,48 @@ public class RequiredForAttributeTests
         Assert.Equal("Test_Create", attribute.Commands[0]);
         Assert.Equal("Test_Update", attribute.Commands[1]);
         Assert.Equal("Test_Delete", attribute.Commands[2]);
+    }
+
+    [Fact]
+    public void Constructor_WithSingleEventType_ShouldCreateAttributeWithResolvedEventTypeName()
+    {
+        // Act
+        var attribute = new RequiredForAttribute(typeof(Create_Order));
+
+        // Assert
+        Assert.Single(attribute.Commands);
+        Assert.Equal("Create_Order", attribute.Commands[0]);
+    }
+
+    [Fact]
+    public void Constructor_WithMultipleEventTypes_ShouldCreateAttributeWithAllResolvedEventTypeNames()
+    {
+        // Arrange
+        var eventTypes = new[] { typeof(Create_Order), typeof(Renamed_OrderCreate) };
+
+        // Act
+        var attribute = new RequiredForAttribute(eventTypes);
+
+        // Assert
+        Assert.Equal(2, attribute.Commands.Count);
+        Assert.Equal("Create_Order", attribute.Commands[0]);
+        Assert.Equal("Create_Order", attribute.Commands[1]);
+    }
+
+    [Fact]
+    public void Constructor_WithAbstractEventType_ShouldThrowArgumentException()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => new RequiredForAttribute(typeof(Abstract_OrderEvent)));
+
+        Assert.Contains(nameof(EventType), exception.Message);
+    }
+
+    [Fact]
+    public void Constructor_WithNonEventType_ShouldThrowArgumentException()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => new RequiredForAttribute(typeof(string)));
+
+        Assert.Contains(nameof(EventType), exception.Message);
     }
 
     [Fact]
@@ -83,6 +146,28 @@ public class RequiredForAttributeTests
 
         // Assert
         Assert.Equal(ValidationResult.Success, result);
+    }
+
+    [Fact]
+    public void IsValid_WithTypeBasedCommandAndMatchingEventType_ShouldReturnValidationError()
+    {
+        // Arrange
+        var attribute = new RequiredForAttribute(typeof(Create_Order));
+        var command = new Create_Order();
+        var validationContext = new ValidationContext(new object())
+        {
+            MemberName = "TestProperty"
+        };
+        validationContext.Items["command"] = command;
+        object? value = null;
+
+        // Act
+        var result = attribute.GetValidationResult(value, validationContext);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.NotEqual(ValidationResult.Success, result);
+        Assert.Contains("Create_Order", result.ErrorMessage);
     }
 
     [Fact]

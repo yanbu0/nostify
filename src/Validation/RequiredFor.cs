@@ -3,8 +3,7 @@ namespace nostify;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using Newtonsoft.Json;
-using Xunit.Sdk;
+using System.Linq;
 
 
 /// <summary>
@@ -32,11 +31,57 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
         Commands = [.. commands];
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class for a typed event type.
+    /// </summary>
+    /// <param name="eventType">The event type for which this property is required.</param>
+    public RequiredForAttribute(Type eventType) : base()
+    {
+        Commands = [ResolveEventTypeName(eventType)];
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class for multiple typed event types.
+    /// </summary>
+    /// <param name="eventTypes">The event types for which this property is required.</param>
+    public RequiredForAttribute(Type[] eventTypes) : base()
+    {
+        Commands = [.. eventTypes.Select(ResolveEventTypeName)];
+    }
+
 
     /// <summary>
     /// Gets the list of commands for which this property requires validation.
     /// </summary>
     public List<string> Commands { get; }
+
+    private static string ResolveEventTypeName(Type eventType)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+
+        if (!typeof(EventType).IsAssignableFrom(eventType))
+        {
+            throw new ArgumentException($"Type '{eventType.FullName}' must inherit from {nameof(EventType)}.", nameof(eventType));
+        }
+
+        if (eventType.IsAbstract)
+        {
+            throw new ArgumentException($"Type '{eventType.FullName}' must be a concrete {nameof(EventType)}.", nameof(eventType));
+        }
+
+        try
+        {
+            if (Activator.CreateInstance(eventType, nonPublic: true) is EventType eventTypeInstance)
+            {
+                return eventTypeInstance.name;
+            }
+        }
+        catch (MissingMethodException)
+        {
+        }
+
+        return eventType.Name;
+    }
 
     // Override the isValid(object, validationcontext) method such that the Commands property is passed in validation context
     // and the validation logic checks if the current command is in the Commands list.
