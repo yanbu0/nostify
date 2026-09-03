@@ -7,7 +7,7 @@ using System.Linq;
 
 
 /// <summary>
-/// Attribute to specify that a property is required for an Event with a specified event type name.
+/// Attribute to specify that a property is required for specific event types.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public class RequiredForAttribute : RequiredAttribute, INostifyValidation
@@ -16,7 +16,7 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     /// <summary>
     /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class.
     /// </summary>
-    /// <param name="command">The command for which this property is required.</param>
+    /// <param name="command">The event type name for which this property is required.</param>
     public RequiredForAttribute(string command) : base()
     {
         Commands = new List<string> { command };
@@ -25,7 +25,7 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     /// <summary>
     /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class with multiple commands.
     /// </summary>
-    /// <param name="commands">The commands for which this property is required.</param>
+    /// <param name="commands">The event type names for which this property is required.</param>
     public RequiredForAttribute(string[] commands) : base()
     {
         Commands = [.. commands];
@@ -51,7 +51,7 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
 
 
     /// <summary>
-    /// Gets the list of commands for which this property requires validation.
+    /// Gets the list of event type names for which this property requires validation.
     /// </summary>
     public List<string> Commands { get; }
 
@@ -84,10 +84,10 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     }
 
     // Override the isValid(object, validationcontext) method such that the Commands property is passed in validation context
-    // and the validation logic checks if the current command is in the Commands list.
+    // and the validation logic checks if the current event type is in the Commands list.
     /// <summary>
     /// Determines whether the specified value of the object is valid for the given validation context,
-    /// considering whether the current command is in the list of required commands.
+    /// considering whether the current event type is in the list of required event types.
     /// </summary>
     /// <param name="value">The value of the object to validate.</param>
     /// <param name="validationContext">The context information about the validation operation.</param>
@@ -108,11 +108,11 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
             // If baseResult is null return ValidationResult
             if (!baseResult)
             {
-                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the command '{eventType.name}'.");
+                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the event type '{eventType.name}'.");
             }
         }
 
-        // If the command is not in the list of required commands, return success
+        // If the event type is not in the list of required event types, return success
         return ValidationResult.Success!;
     }
 }

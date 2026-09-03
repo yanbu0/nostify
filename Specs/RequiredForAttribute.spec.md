@@ -76,17 +76,20 @@ The `IsValid` method:
 ```csharp
 protected override ValidationResult IsValid(object value, ValidationContext context)
 {
-    // Get current command from context
-    var command = context.Items["NostifyCommand"] as NostifyCommand;
+    // Get current event type from context
+    var eventType = context.Items["eventType"] as EventType
+        ?? context.Items["command"] as EventType;
     
-    // Skip validation if command not in list
-    if (command == null || !Commands.Contains(command.name))
+    // Skip validation if event type not in list
+    if (eventType == null || !Commands.Contains(eventType.name))
     {
         return ValidationResult.Success;
     }
     
     // Apply required validation
-    return base.IsValid(value, context);
+    return base.IsValid(value)
+        ? ValidationResult.Success
+        : new ValidationResult($"The property '{context.MemberName}' is required for the event type '{eventType.name}'.");
 }
 ```
 

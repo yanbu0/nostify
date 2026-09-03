@@ -153,7 +153,7 @@ public class RequiredForAttributeTests
     {
         // Arrange
         var attribute = new RequiredForAttribute(typeof(Create_Order));
-        var command = new Create_Order();
+        var command = (EventType)Activator.CreateInstance(typeof(Create_Order), nonPublic: true)!;
         var validationContext = new ValidationContext(new object())
         {
             MemberName = "TestProperty"
