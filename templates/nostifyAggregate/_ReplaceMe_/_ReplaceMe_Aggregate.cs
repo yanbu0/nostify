@@ -21,7 +21,8 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     /// Handles Create events for the aggregate.
     /// Populates the aggregate properties from the event payload.
     /// </summary>
-    protected void Apply(Create__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(Create__ReplaceMe_))]
+    protected void OnCreate(IEvent eventToApply)
     {
         try
         {
@@ -32,7 +33,7 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
             _logger.LogError(ex,
                 "Error applying Create event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                 aggregateType,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -42,7 +43,8 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     /// Handles Update events for the aggregate.
     /// Populates the aggregate properties from the event payload.
     /// </summary>
-    protected void Apply(Update__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(Update__ReplaceMe_))]
+    protected void OnUpdate(IEvent eventToApply)
     {
         try
         {
@@ -53,7 +55,7 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
             _logger.LogError(ex,
                 "Error applying Update event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                 aggregateType,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -63,7 +65,8 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     /// Handles bulk create events for the aggregate.
     /// Populates the aggregate properties from the event payload.
     /// </summary>
-    protected void Apply(BulkCreate__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(BulkCreate__ReplaceMe_))]
+    protected void OnBulkCreate(IEvent eventToApply)
     {
         try
         {
@@ -74,7 +77,7 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
             _logger.LogError(ex,
                 "Error applying BulkCreate event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                 aggregateType,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -84,7 +87,8 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     /// Handles bulk update events for the aggregate.
     /// Populates the aggregate properties from the event payload.
     /// </summary>
-    protected void Apply(BulkUpdate__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(BulkUpdate__ReplaceMe_))]
+    protected void OnBulkUpdate(IEvent eventToApply)
     {
         try
         {
@@ -95,7 +99,7 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
             _logger.LogError(ex,
                 "Error applying BulkUpdate event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                 aggregateType,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -105,7 +109,8 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     /// Handles delete events for the aggregate.
     /// Marks the aggregate as deleted.
     /// </summary>
-    protected void Apply(Delete__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(Delete__ReplaceMe_))]
+    protected void OnDelete(IEvent eventToApply)
     {
         try
         {
@@ -116,7 +121,7 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
             _logger.LogError(ex,
                 "Error applying Delete event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                 aggregateType,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -126,7 +131,8 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
     /// Handles bulk delete events for the aggregate.
     /// Marks the aggregate as deleted.
     /// </summary>
-    protected void Apply(BulkDelete__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(BulkDelete__ReplaceMe_))]
+    protected void OnBulkDelete(IEvent eventToApply)
     {
         try
         {
@@ -137,7 +143,7 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
             _logger.LogError(ex,
                 "Error applying BulkDelete event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                 aggregateType,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }

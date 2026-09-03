@@ -54,15 +54,14 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
 
     //**********************************************************************************************
 
-    // Apply handlers use the new typed EventType Apply overloads, matching the aggregate pattern.
-    // These methods are invoked by the Nostify infrastructure via dynamic dispatch based on the
-    // concrete EventType of the incoming event.
+    // Apply handlers use [ApplyEvents] attribute dispatch.
 
     /// <summary>
     /// Handles Create events for the projection.
     /// Populates the projection properties from the event payload.
     /// </summary>
-    protected void Apply(Create__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(Create__ReplaceMe_))]
+    protected void OnCreate(IEvent eventToApply)
     {
         try
         {
@@ -73,7 +72,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
             _logger.LogError(ex,
                 "Error applying Create event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
                 containerName,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -83,7 +82,8 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// Handles Update events for the projection.
     /// Populates the projection properties from the event payload.
     /// </summary>
-    protected void Apply(Update__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(Update__ReplaceMe_))]
+    protected void OnUpdate(IEvent eventToApply)
     {
         try
         {
@@ -94,7 +94,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
             _logger.LogError(ex,
                 "Error applying Update event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
                 containerName,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -104,7 +104,8 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// Handles bulk create events for the projection.
     /// Populates the projection properties from the event payload.
     /// </summary>
-    protected void Apply(BulkCreate__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(BulkCreate__ReplaceMe_))]
+    protected void OnBulkCreate(IEvent eventToApply)
     {
         try
         {
@@ -115,7 +116,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
             _logger.LogError(ex,
                 "Error applying BulkCreate event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
                 containerName,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -125,7 +126,8 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// Handles bulk update events for the projection.
     /// Populates the projection properties from the event payload.
     /// </summary>
-    protected void Apply(BulkUpdate__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(BulkUpdate__ReplaceMe_))]
+    protected void OnBulkUpdate(IEvent eventToApply)
     {
         try
         {
@@ -136,7 +138,7 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
             _logger.LogError(ex,
                 "Error applying BulkUpdate event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
                 containerName,
-                eventType,
+                eventToApply.eventType,
                 eventToApply);
             throw;
         }
@@ -146,7 +148,8 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// Handles delete events for the projection.
     /// Marks the projection as deleted and sets a TTL for soft deletion.
     /// </summary>
-    protected void Apply(Delete__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(Delete__ReplaceMe_))]
+    protected void OnDelete(IEvent eventToApply)
     {
         this.isDeleted = true;
         this.ttl = 1;
@@ -156,7 +159,8 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
     /// Handles bulk delete events for the projection.
     /// Marks the projection as deleted and sets a TTL for soft deletion.
     /// </summary>
-    protected void Apply(BulkDelete__ReplaceMe_ eventType, IEvent eventToApply)
+    [ApplyEvents(typeof(BulkDelete__ReplaceMe_))]
+    protected void OnBulkDelete(IEvent eventToApply)
     {
         this.isDeleted = true;
         this.ttl = 1;
