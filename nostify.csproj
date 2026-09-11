@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>5.0.0-beta3</Version>
+    <Version>5.0.0-beta4</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
