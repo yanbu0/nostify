@@ -12,7 +12,8 @@ namespace nostify;
 internal static class EventTypeResolver
 {
     internal const string TypeDiscriminatorPropertyName = "$eventTypeClrType";
-    private static readonly ConcurrentDictionary<string, Type?> _eventTypeByNameCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Type MissingEventTypeSentinel = typeof(void);
+    private static readonly ConcurrentDictionary<string, Type> _eventTypeByNameCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<Type, object> _eventTypeInstanceCache = new();
     private static readonly object _missingEventTypeInstance = new();
 
@@ -107,7 +108,7 @@ internal static class EventTypeResolver
 
         if (_eventTypeByNameCache.TryGetValue(eventTypeName, out var cachedType))
         {
-            return cachedType;
+            return cachedType == MissingEventTypeSentinel ? null : cachedType;
         }
 
         var resolvedType = AppDomain.CurrentDomain
@@ -135,7 +136,7 @@ internal static class EventTypeResolver
             .OrderBy(t => t.AssemblyQualifiedName, StringComparer.Ordinal)
             .FirstOrDefault();
 
-        _eventTypeByNameCache[eventTypeName] = resolvedType;
+        _eventTypeByNameCache[eventTypeName] = resolvedType ?? MissingEventTypeSentinel;
         return resolvedType;
     }
 
