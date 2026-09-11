@@ -27,6 +27,57 @@ public class ProjectionInitializerTests
         _projectionInitializer = new ProjectionInitializer();
     }
 
+    [Fact]
+    public void INostify_InitContainerAsync_DefaultLoopSize_ShouldBe100()
+    {
+        var method = typeof(INostify)
+            .GetMethods()
+            .Single(m => m.Name == nameof(INostify.InitContainerAsync) && m.GetParameters().Length == 2);
+
+        var loopSizeParameter = method.GetParameters().Single(p => p.Name == "loopSize");
+
+        Assert.True(loopSizeParameter.IsOptional);
+        Assert.Equal(100, Assert.IsType<int>(loopSizeParameter.DefaultValue));
+    }
+
+    [Fact]
+    public void Nostify_InitContainerAsync_DefaultLoopSize_ShouldBe100()
+    {
+        var method = typeof(Nostify)
+            .GetMethods()
+            .Single(m => m.Name == nameof(Nostify.InitContainerAsync) && m.GetParameters().Length == 2);
+
+        var loopSizeParameter = method.GetParameters().Single(p => p.Name == "loopSize");
+
+        Assert.True(loopSizeParameter.IsOptional);
+        Assert.Equal(100, Assert.IsType<int>(loopSizeParameter.DefaultValue));
+    }
+
+    [Fact]
+    public void ProjectionInitializer_InitContainerAsync_DefaultLoopSize_ShouldBe100()
+    {
+        var interfaceMethod = typeof(IProjectionInitializer)
+            .GetMethods()
+            .Single(m => m.Name == nameof(IProjectionInitializer.InitContainerAsync));
+        var interfaceLoopSizeParameter = interfaceMethod.GetParameters().Single(p => p.Name == "loopSize");
+
+        Assert.True(interfaceLoopSizeParameter.IsOptional);
+        Assert.Equal(100, Assert.IsType<int>(interfaceLoopSizeParameter.DefaultValue));
+
+        var implementationMethods = typeof(ProjectionInitializer)
+            .GetMethods()
+            .Where(m => m.Name == nameof(ProjectionInitializer.InitContainerAsync))
+            .ToList();
+
+        Assert.NotEmpty(implementationMethods);
+        Assert.All(implementationMethods, method =>
+        {
+            var loopSizeParameter = method.GetParameters().Single(p => p.Name == "loopSize");
+            Assert.True(loopSizeParameter.IsOptional);
+            Assert.Equal(100, Assert.IsType<int>(loopSizeParameter.DefaultValue));
+        });
+    }
+
     //WHY DID MICROSOFT MAKE IT SO HARD TO TEST THIS?! ToFeedIterator can't be mocked without wrapping it, ugh
     //TODO: Figure out how to work around this limitation or refactor the code to make it more testable
     //https://stackoverflow.com/questions/58212697/mocking-getitemlinqqueryable-and-extension-method-tofeediterator

@@ -197,6 +197,10 @@ public async Task<Container> GetContainerAsync(
 }
 ```
 
+### InitContainerAsync
+
+`InitContainerAsync<P, A>` delegates projection container rebuilds to `ProjectionInitializer` and uses a default `loopSize` of 100 so initialization batches stay in line with the framework's other bulk loop sizes.
+
 ### GetNextSequenceValueAsync
 
 Atomically increments a sequence:

@@ -78,6 +78,7 @@ public interface INostify
 | `UpsertProjectionAsync<P>` | `Task<List<P>> UpsertProjectionAsync<P>(List<P> projections) where P : IProjection` | Persists multiple projections |
 | `GetProjectionAsync<P>` | `Task<P?> GetProjectionAsync<P>(Guid id) where P : IProjection` | Retrieves a projection by ID |
 | `DeleteProjectionAsync<P>` | `Task DeleteProjectionAsync<P>(Guid id) where P : IProjection` | Deletes a projection by ID |
+| `InitContainerAsync<P, A>` | `Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 100)` | Rebuilds a projection container in batches of 100 by default to stay aligned with other loop-sized bulk operations |
 
 ### Bulk Apply and Persist
 
