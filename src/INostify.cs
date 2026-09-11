@@ -414,8 +414,8 @@ public interface INostify
     ///</para>
     ///</summary>
     ///<param name="partitionKeyPath">Path to the partition key.  Defaults to "/tenantId".</param>
-    ///<param name="loopSize">Number of items to init at a time.  Defaults to 1000.</param>
-    public Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 1000) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new();
+    ///<param name="loopSize">Number of items to init at a time.  Defaults to 100.</param>
+    public Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 100) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new();
 
     ///<summary>
     ///Init all non-initialized projections in the container.  Will requery all needed data from all external services by calling InitAsync  

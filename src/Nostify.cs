@@ -878,7 +878,7 @@ public class Nostify : INostify, IDisposable
     }
 
     ///<inheritdoc />
-    public async Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 1000) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 100) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         //throw error if no HttpClientFactory
         if (HttpClientFactory == null)

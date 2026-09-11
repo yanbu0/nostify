@@ -3200,7 +3200,7 @@ Initialize entire projection containers:
 await nostify.InitContainerAsync<TestProjection, TestAggregate>(
     httpClient, 
     partitionKeyPath: "/tenantId", 
-    loopSize: 1000
+    loopSize: 100
 );
 
 // Initialize only uninitialized projections (where initialized == false)

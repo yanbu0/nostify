@@ -87,9 +87,9 @@ public class ProjectionInitializer : IProjectionInitializer
     ///<param name="nostify">Reference to the Nostify singleton.</param>
     ///<param name="httpClient">Reference to an HttpClient instance.</param>
     ///<param name="partitionKeyPath">Path to the partition key.  Defaults to "/tenantId".</param>
-    ///<param name="loopSize">Number of items to init at a time.  Defaults to 1000.</param>
+    ///<param name="loopSize">Number of items to init at a time.  Defaults to 100.</param>
     ///<param name="pointInTime">Point in time to query external data up to. If null, queries current state.</param>
-    public async Task InitContainerAsync<P, A>(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async Task InitContainerAsync<P, A>(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 100, DateTime? pointInTime = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         //Delete all items from container
         Container deleteAllFromThis = await nostify.GetBulkProjectionContainerAsync<P>(partitionKeyPath);
@@ -173,7 +173,7 @@ public class ProjectionInitializer : IProjectionInitializer
         return await InitAsync<P>(projectionsToInit, nostify, httpClient, null);
     }
 
-    public async Task InitContainerAsync<P, A>(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async Task InitContainerAsync<P, A>(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 100) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         await InitContainerAsync<P, A>(nostify, httpClient, partitionKeyPath, loopSize, null);
     }

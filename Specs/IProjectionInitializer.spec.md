@@ -4,6 +4,8 @@
 
 `IProjectionInitializer` defines the contract for initializing projections with external data and managing projection containers.
 
+Its container rebuild entry point, `InitContainerAsync`, processes aggregate IDs in batches of 100 by default to avoid overly large gRPC payloads during initialization.
+
 ## Interface Definition
 
 ```csharp
