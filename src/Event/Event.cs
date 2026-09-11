@@ -150,7 +150,12 @@ public class Event : IEvent
         set
         {
             _legacyCommand = value;
-            _eventType = value;
+#pragma warning disable CS0618
+            if (_eventType == null || _eventType is NostifyCommand)
+            {
+                _eventType = value;
+            }
+#pragma warning restore CS0618
         }
     }
 

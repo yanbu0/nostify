@@ -12,7 +12,7 @@ namespace nostify;
 internal static class EventTypeResolver
 {
     internal const string TypeDiscriminatorPropertyName = "$eventTypeClrType";
-    private static readonly ConcurrentDictionary<string, Type> _eventTypeByNameCache = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Type?> _eventTypeByNameCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<Type, EventType?> _eventTypeInstanceCache = new();
 
     internal static Type Resolve(string? typeName, string? eventTypeName = null)
@@ -129,16 +129,12 @@ internal static class EventTypeResolver
             .Where(t => t != typeof(NostifyCommand))
 #pragma warning restore CS0618
             .Select(t => new { Type = t, EventType = GetOrCreateEventTypeInstance(t) })
-            .Where(x => x.EventType != null && string.Equals(x.EventType.name, eventTypeName, StringComparison.Ordinal))
+            .Where(x => x.EventType != null && string.Equals(x.EventType.name, eventTypeName, StringComparison.OrdinalIgnoreCase))
             .Select(x => x.Type)
             .OrderBy(t => t.AssemblyQualifiedName, StringComparer.Ordinal)
             .FirstOrDefault();
 
-        if (resolvedType != null)
-        {
-            _eventTypeByNameCache[eventTypeName] = resolvedType;
-        }
-
+        _eventTypeByNameCache[eventTypeName] = resolvedType;
         return resolvedType;
     }
 
@@ -233,6 +229,13 @@ internal sealed class NewtonsoftEventTypeJsonConverter : JsonConverter<EventType
         var typeName = jObject[EventTypeResolver.TypeDiscriminatorPropertyName]?.Value<string>();
         var eventTypeName = jObject["name"]?.Value<string>();
         var resolvedType = EventTypeResolver.Resolve(typeName, eventTypeName);
+#pragma warning disable CS0618
+        if (typeof(NostifyCommand).IsAssignableFrom(objectType) &&
+            !typeof(NostifyCommand).IsAssignableFrom(resolvedType))
+        {
+            resolvedType = typeof(NostifyCommand);
+        }
+#pragma warning restore CS0618
         return EventTypeResolver.CreateInstance(
             resolvedType,
             eventTypeName,
@@ -263,7 +266,16 @@ internal sealed class SystemTextEventTypeJsonConverter : STJS.JsonConverter<Even
         bool isNew = root.TryGetProperty("isNew", out var isNewProperty) && isNewProperty.GetBoolean();
         bool allowNullPayload = root.TryGetProperty("allowNullPayload", out var allowNullPayloadProperty) && allowNullPayloadProperty.GetBoolean();
 
-        return EventTypeResolver.CreateInstance(EventTypeResolver.Resolve(typeName, name), name, isNew, allowNullPayload);
+        var resolvedType = EventTypeResolver.Resolve(typeName, name);
+#pragma warning disable CS0618
+        if (typeof(NostifyCommand).IsAssignableFrom(typeToConvert) &&
+            !typeof(NostifyCommand).IsAssignableFrom(resolvedType))
+        {
+            resolvedType = typeof(NostifyCommand);
+        }
+#pragma warning restore CS0618
+
+        return EventTypeResolver.CreateInstance(resolvedType, name, isNew, allowNullPayload);
     }
 
     public override void Write(STJ.Utf8JsonWriter writer, EventType value, STJ.JsonSerializerOptions options)
