@@ -151,7 +151,7 @@ public class Event : IEvent
         {
             _legacyCommand = value;
 #pragma warning disable CS0618
-            if (_eventType == null || _eventType is NostifyCommand)
+            if (_eventType == null || _eventType.GetType() == typeof(NostifyCommand))
             {
                 _eventType = value;
             }
