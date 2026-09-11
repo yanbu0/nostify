@@ -13,7 +13,8 @@ internal static class EventTypeResolver
 {
     internal const string TypeDiscriminatorPropertyName = "$eventTypeClrType";
     private static readonly ConcurrentDictionary<string, Type?> _eventTypeByNameCache = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly ConcurrentDictionary<Type, EventType?> _eventTypeInstanceCache = new();
+    private static readonly ConcurrentDictionary<Type, object> _eventTypeInstanceCache = new();
+    private static readonly object _missingEventTypeInstance = new();
 
     internal static Type Resolve(string? typeName, string? eventTypeName = null)
     {
@@ -140,7 +141,7 @@ internal static class EventTypeResolver
 
     private static EventType? GetOrCreateEventTypeInstance(Type eventTypeType)
     {
-        return _eventTypeInstanceCache.GetOrAdd(eventTypeType, static type =>
+        var cached = _eventTypeInstanceCache.GetOrAdd(eventTypeType, static type =>
         {
             try
             {
@@ -184,8 +185,10 @@ internal static class EventTypeResolver
                 // Ignore types we cannot instantiate while probing by name.
             }
 
-            return null;
+            return _missingEventTypeInstance;
         });
+
+        return ReferenceEquals(cached, _missingEventTypeInstance) ? null : (EventType)cached;
     }
 
     private static bool TryGetStaticInstance(Type resolvedType, out EventType? instance)

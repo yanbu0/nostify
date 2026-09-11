@@ -20,6 +20,13 @@ public class NostifyKafkaTriggerEventTests
         }
     }
 
+    public sealed class Unconstructable_ResourceGrade : EventType
+    {
+        private Unconstructable_ResourceGrade(int _) : base("Unconstructable_ResourceGrade")
+        {
+        }
+    }
+
     private NostifyKafkaTriggerEvent CreateKafkaEvent(string commandName)
     {
         var originalEvent = new Event
@@ -820,6 +827,37 @@ public class NostifyKafkaTriggerEventTests
         // Assert
         Assert.NotNull(result);
         Assert.Same(Update_ResourceGrade.Instance, result.eventType);
+    }
+
+    [Fact]
+    public void GetEvent_WithUnconstructableLoadedEventType_ResolvesOtherConcreteEventTypeByName()
+    {
+        // Arrange
+        var originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            command = new NostifyCommand("Update_ResourceGrade"),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var kafkaEvent = new NostifyKafkaTriggerEvent
+        {
+            Value = JsonConvert.SerializeObject(originalEvent, SerializationSettings.NostifyDefault),
+            Offset = 1,
+            Partition = 0,
+            Topic = "test-topic"
+        };
+
+        // Act
+        var result = kafkaEvent.GetEvent("Update_ResourceGrade");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
+        Assert.Equal("Update_ResourceGrade", result.eventType.name);
     }
 
     #endregion
