@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Nodes;
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using nostify;
+using SystemTextJsonSerializer = System.Text.Json.JsonSerializer;
 using Xunit;
 
 namespace nostify.Tests;
@@ -858,6 +860,45 @@ public class NostifyKafkaTriggerEventTests
         Assert.NotNull(result);
         Assert.IsType<Update_ResourceGrade>(result.eventType);
         Assert.Equal("Update_ResourceGrade", result.eventType.name);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SystemTextJson_RoundTrip_WithMissingOrLegacyDiscriminator_ResolvesStaticInstanceByName(bool removeClrTypeDiscriminator)
+    {
+        // Arrange
+        var options = WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions();
+        IEvent originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            eventType = Update_ResourceGrade.Instance,
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var root = JsonNode.Parse(SystemTextJsonSerializer.Serialize(originalEvent, options))!.AsObject();
+        var eventType = root["eventType"]!.AsObject();
+        if (removeClrTypeDiscriminator)
+        {
+            eventType.Remove(EventTypeResolver.TypeDiscriminatorPropertyName);
+        }
+        else
+        {
+#pragma warning disable CS0618
+            eventType[EventTypeResolver.TypeDiscriminatorPropertyName] = typeof(NostifyCommand).AssemblyQualifiedName;
+#pragma warning restore CS0618
+        }
+
+        // Act
+        var result = SystemTextJsonSerializer.Deserialize<IEvent>(root.ToJsonString(), options);
+
+        // Assert
+        var deserializedEvent = Assert.IsType<Event>(result);
+        Assert.Same(Update_ResourceGrade.Instance, deserializedEvent.eventType);
+        Assert.Equal(Update_ResourceGrade.Instance.name, deserializedEvent.command.name);
     }
 
     #endregion
