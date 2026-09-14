@@ -29,6 +29,13 @@ public class NostifyKafkaTriggerEventTests
         }
     }
 
+    public sealed class Legacy_Update_ResourceGrade : NostifyCommand
+    {
+        public Legacy_Update_ResourceGrade() : base("Update_ResourceGrade")
+        {
+        }
+    }
+
     private NostifyKafkaTriggerEvent CreateKafkaEvent(string commandName)
     {
         var originalEvent = new Event
@@ -794,6 +801,37 @@ public class NostifyKafkaTriggerEventTests
 
         // Act
         var result = kafkaEvent.GetEvent();
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
+        Assert.Equal("Update_ResourceGrade", result.eventType.name);
+    }
+
+    [Fact]
+    public void GetEvent_WithDerivedLegacyCommand_Discriminator_ResolvesToConcreteEventTypeByName()
+    {
+        // Arrange
+        var originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            command = new Legacy_Update_ResourceGrade(),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var kafkaEvent = new NostifyKafkaTriggerEvent
+        {
+            Value = JsonConvert.SerializeObject(originalEvent, SerializationSettings.NostifyDefault),
+            Offset = 1,
+            Partition = 0,
+            Topic = "test-topic"
+        };
+
+        // Act
+        var result = kafkaEvent.GetEvent("Update_ResourceGrade");
 
         // Assert
         Assert.NotNull(result);

@@ -29,12 +29,10 @@ internal static class EventTypeResolver
         var resolved = Type.GetType(typeName, throwOnError: false);
         if (resolved != null && typeof(EventType).IsAssignableFrom(resolved))
         {
-#pragma warning disable CS0618
-            if (resolved == typeof(NostifyCommand))
+            if (IsLegacyNostifyCommandType(resolved))
             {
                 return ResolveByName(eventTypeName) ?? resolved;
             }
-#pragma warning restore CS0618
             return resolved;
         }
 
@@ -43,12 +41,10 @@ internal static class EventTypeResolver
             resolved = assembly.GetType(typeName, throwOnError: false);
             if (resolved != null && typeof(EventType).IsAssignableFrom(resolved))
             {
-#pragma warning disable CS0618
-                if (resolved == typeof(NostifyCommand))
+                if (IsLegacyNostifyCommandType(resolved))
                 {
                     return ResolveByName(eventTypeName) ?? resolved;
                 }
-#pragma warning restore CS0618
                 return resolved;
             }
         }
@@ -127,9 +123,7 @@ internal static class EventTypeResolver
             .Where(t => t != null
                 && !t.IsAbstract
                 && typeof(EventType).IsAssignableFrom(t))
-#pragma warning disable CS0618
-            .Where(t => t != typeof(NostifyCommand))
-#pragma warning restore CS0618
+            .Where(t => !IsLegacyNostifyCommandType(t))
             .Select(t => new { Type = t, EventType = GetOrCreateEventTypeInstance(t) })
             .Where(x => x.EventType != null && string.Equals(x.EventType.name, eventTypeName, StringComparison.OrdinalIgnoreCase))
             .Select(x => x.Type)
@@ -138,6 +132,13 @@ internal static class EventTypeResolver
 
         _eventTypeByNameCache[eventTypeName] = resolvedType ?? MissingEventTypeSentinel;
         return resolvedType;
+    }
+
+    private static bool IsLegacyNostifyCommandType(Type resolvedType)
+    {
+#pragma warning disable CS0618
+        return typeof(NostifyCommand).IsAssignableFrom(resolvedType);
+#pragma warning restore CS0618
     }
 
     private static EventType? GetOrCreateEventTypeInstance(Type eventTypeType)

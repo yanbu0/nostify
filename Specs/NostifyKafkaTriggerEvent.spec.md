@@ -171,7 +171,7 @@ The constructor:
 3. Deserializes the event JSON to an `Event` object
 4. Stores both the raw Kafka data and the parsed event
 
-`GetEvent(...)` and `GetIEvent(...)` deserialize with `SerializationSettings.NostifyDefault`, including the typed `EventType` converter. Event type restoration prefers `$eventTypeClrType`, and when that is missing/legacy/unresolvable it attempts to map by logical event type name before falling back to `NostifyCommand`.
+`GetEvent(...)` and `GetIEvent(...)` deserialize with `SerializationSettings.NostifyDefault`, including the typed `EventType` converter. Event type restoration prefers `$eventTypeClrType`, and when that is missing, unresolvable, or identifies a legacy `NostifyCommand`-derived type, it attempts to map by logical event type name before falling back to `NostifyCommand`.
 
 ## Error Handling
 
