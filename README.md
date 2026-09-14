@@ -73,7 +73,12 @@
 ## Current Status
  
 ### Updates
- 
+  
+- 5.0.0-beta4
+    - **Kafka EventType Restoration Hardening**: Kafka-triggered event deserialization now restores the concrete `EventType` by logical event name when legacy or unresolved CLR discriminators are present, preserving typed `Apply` dispatch for migrated events.
+    - **Legacy Compatibility Safeguards**: Legacy `command` alias hydration no longer overwrites an already-resolved concrete `eventType`, improving compatibility with older payloads while keeping strongly-typed event handling intact.
+    - **Regression Coverage**: Added regression tests covering legacy discriminator fallback, case-insensitive event type name resolution, and static-instance event type restoration for Kafka-triggered events.
+
 - 5.0.0 (BREAKING CHANGES!)
     - **Attribute-Based Event Dispatch**: New `ApplyEventsAttribute` enables declarative mapping of event types to strongly-typed handler methods in aggregates and projections, removing manual switch/case dispatch. Handlers are discovered and cached via `ApplyEventsHandlerCache` the first time they are used and then invoked directly for subsequent events.
     - **Typed Apply Pattern for Aggregates and Projections**: Generated aggregate and projection templates now use the typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style for clear, strongly-typed event handling.

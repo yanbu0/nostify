@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
@@ -11,29 +12,55 @@ namespace nostify;
 internal static class EventTypeResolver
 {
     internal const string TypeDiscriminatorPropertyName = "$eventTypeClrType";
+    private static readonly Type MissingEventTypeSentinel = typeof(void);
+    private static readonly ConcurrentDictionary<string, Type> _eventTypeByNameCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<Type, object> _eventTypeInstanceCache = new();
+    private static readonly object _missingEventTypeInstance = new();
 
-    internal static Type Resolve(string? typeName)
+    internal static Type Resolve(string? typeName, string? eventTypeName = null)
     {
 #pragma warning disable CS0618
-        if (string.IsNullOrWhiteSpace(typeName)) return typeof(NostifyCommand);
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            return ResolveByName(eventTypeName) ?? typeof(NostifyCommand);
+        }
 #pragma warning restore CS0618
 
         var resolved = Type.GetType(typeName, throwOnError: false);
-        if (resolved != null && typeof(EventType).IsAssignableFrom(resolved)) return resolved;
+        if (resolved != null && typeof(EventType).IsAssignableFrom(resolved))
+        {
+            if (IsLegacyNostifyCommandType(resolved))
+            {
+                return ResolveByName(eventTypeName) ?? resolved;
+            }
+            return resolved;
+        }
 
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
             resolved = assembly.GetType(typeName, throwOnError: false);
-            if (resolved != null && typeof(EventType).IsAssignableFrom(resolved)) return resolved;
+            if (resolved != null && typeof(EventType).IsAssignableFrom(resolved))
+            {
+                if (IsLegacyNostifyCommandType(resolved))
+                {
+                    return ResolveByName(eventTypeName) ?? resolved;
+                }
+                return resolved;
+            }
         }
 
 #pragma warning disable CS0618
-        return typeof(NostifyCommand);
+        return ResolveByName(eventTypeName) ?? typeof(NostifyCommand);
 #pragma warning restore CS0618
     }
 
     internal static EventType CreateInstance(Type resolvedType, string? name, bool isNew, bool allowNullPayload)
     {
+        if (TryGetStaticInstance(resolvedType, out var staticInstance))
+        {
+            return staticInstance;
+        }
+
         var constructorArgs = new object?[] { name ?? "Unknown", isNew, allowNullPayload };
         var signatures = new[]
         {
@@ -67,6 +94,118 @@ internal static class EventTypeResolver
 
         throw new JsonSerializationException($"Unable to construct event type '{resolvedType.FullName}'. Ensure it exposes a supported constructor.");
     }
+
+    private static Type? ResolveByName(string? eventTypeName)
+    {
+        if (string.IsNullOrWhiteSpace(eventTypeName))
+        {
+            return null;
+        }
+
+        if (_eventTypeByNameCache.TryGetValue(eventTypeName, out var cachedType))
+        {
+            return cachedType == MissingEventTypeSentinel ? null : cachedType;
+        }
+
+        var resolvedType = AppDomain.CurrentDomain
+            .GetAssemblies()
+            .SelectMany(a =>
+            {
+                try
+                {
+                    return a.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    return ex.Types.Where(t => t != null)!;
+                }
+            })
+            .Where(t => t != null
+                && !t.IsAbstract
+                && typeof(EventType).IsAssignableFrom(t))
+            .Where(t => !IsLegacyNostifyCommandType(t))
+            .Select(t => new { Type = t, EventType = GetOrCreateEventTypeInstance(t) })
+            .Where(x => x.EventType != null && string.Equals(x.EventType.name, eventTypeName, StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.Type)
+            .OrderBy(t => t.AssemblyQualifiedName, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+        _eventTypeByNameCache[eventTypeName] = resolvedType ?? MissingEventTypeSentinel;
+        return resolvedType;
+    }
+
+    private static bool IsLegacyNostifyCommandType(Type resolvedType)
+    {
+#pragma warning disable CS0618
+        return typeof(NostifyCommand).IsAssignableFrom(resolvedType);
+#pragma warning restore CS0618
+    }
+
+    private static EventType? GetOrCreateEventTypeInstance(Type eventTypeType)
+    {
+        var cached = _eventTypeInstanceCache.GetOrAdd(eventTypeType, static type =>
+        {
+            try
+            {
+                if (TryGetStaticInstance(type, out var staticInstance))
+                {
+                    return staticInstance;
+                }
+
+                var signatures = new[]
+                {
+                    new[] { typeof(string), typeof(bool), typeof(bool) },
+                    new[] { typeof(string), typeof(bool) },
+                    new[] { typeof(string) },
+                    Type.EmptyTypes
+                };
+
+                foreach (var signature in signatures)
+                {
+                    var ctor = type.GetConstructor(signature);
+                    if (ctor == null)
+                    {
+                        continue;
+                    }
+
+                    object?[] args = signature.Length switch
+                    {
+                        3 => new object?[] { "Unknown", false, false },
+                        2 => new object?[] { "Unknown", false },
+                        1 => new object?[] { "Unknown" },
+                        _ => Array.Empty<object?>()
+                    };
+
+                    if (ctor.Invoke(args) is EventType created)
+                    {
+                        return created;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore types we cannot instantiate while probing by name.
+            }
+
+            return _missingEventTypeInstance;
+        });
+
+        return ReferenceEquals(cached, _missingEventTypeInstance) ? null : (EventType)cached;
+    }
+
+    private static bool TryGetStaticInstance(Type resolvedType, out EventType? instance)
+    {
+        instance = null;
+
+        var instanceField = resolvedType.GetField("Instance", BindingFlags.Public | BindingFlags.Static);
+        if (instanceField == null || !typeof(EventType).IsAssignableFrom(instanceField.FieldType))
+        {
+            return false;
+        }
+
+        instance = instanceField.GetValue(null) as EventType;
+        return instance != null;
+    }
 }
 
 internal sealed class NewtonsoftEventTypeJsonConverter : JsonConverter<EventType>
@@ -93,10 +232,18 @@ internal sealed class NewtonsoftEventTypeJsonConverter : JsonConverter<EventType
 
         var jObject = JObject.Load(reader);
         var typeName = jObject[EventTypeResolver.TypeDiscriminatorPropertyName]?.Value<string>();
-        var resolvedType = EventTypeResolver.Resolve(typeName);
+        var eventTypeName = jObject["name"]?.Value<string>();
+        var resolvedType = EventTypeResolver.Resolve(typeName, eventTypeName);
+#pragma warning disable CS0618
+        if (typeof(NostifyCommand).IsAssignableFrom(objectType) &&
+            !typeof(NostifyCommand).IsAssignableFrom(resolvedType))
+        {
+            resolvedType = typeof(NostifyCommand);
+        }
+#pragma warning restore CS0618
         return EventTypeResolver.CreateInstance(
             resolvedType,
-            jObject["name"]?.Value<string>(),
+            eventTypeName,
             jObject["isNew"]?.Value<bool>() ?? false,
             jObject["allowNullPayload"]?.Value<bool>() ?? false);
     }
@@ -124,7 +271,16 @@ internal sealed class SystemTextEventTypeJsonConverter : STJS.JsonConverter<Even
         bool isNew = root.TryGetProperty("isNew", out var isNewProperty) && isNewProperty.GetBoolean();
         bool allowNullPayload = root.TryGetProperty("allowNullPayload", out var allowNullPayloadProperty) && allowNullPayloadProperty.GetBoolean();
 
-        return EventTypeResolver.CreateInstance(EventTypeResolver.Resolve(typeName), name, isNew, allowNullPayload);
+        var resolvedType = EventTypeResolver.Resolve(typeName, name);
+#pragma warning disable CS0618
+        if (typeof(NostifyCommand).IsAssignableFrom(typeToConvert) &&
+            !typeof(NostifyCommand).IsAssignableFrom(resolvedType))
+        {
+            resolvedType = typeof(NostifyCommand);
+        }
+#pragma warning restore CS0618
+
+        return EventTypeResolver.CreateInstance(resolvedType, name, isNew, allowNullPayload);
     }
 
     public override void Write(STJ.Utf8JsonWriter writer, EventType value, STJ.JsonSerializerOptions options)

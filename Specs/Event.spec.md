@@ -133,6 +133,10 @@ Applies the event's payload to a target object.
 
 The obsolete `command` property remains available for legacy callers. If the event was created with a typed `EventType` that is not a `NostifyCommand`, `command` returns a cached compatibility `NostifyCommand` containing the same `name`, `isNew`, and `allowNullPayload` values. This preserves older metadata-based code paths without changing the underlying typed dispatch model.
 
+During JSON deserialization, nostify first uses the `$eventTypeClrType` discriminator when present. If the discriminator is missing, unresolved, or resolves to a legacy `NostifyCommand`-derived type, the resolver now attempts to map by logical `eventType.name` to a loaded concrete `EventType` class before falling back to `NostifyCommand`.
+
+When both `eventType` and legacy `command` are present in incoming JSON, `command` no longer overwrites an already resolved concrete `eventType`; it only hydrates `eventType` when no concrete value exists yet (or when the current value is still legacy `NostifyCommand`).
+
 ## Usage Examples
 
 ### Creating Events
