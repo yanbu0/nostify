@@ -34,6 +34,21 @@ public class Event : IEvent
     }
 
     /// <summary>
+    /// Constructor for Event, use when creating object to save to event store with legacy command metadata.
+    /// </summary>
+    /// <param name="command">Legacy command metadata to persist.</param>
+    /// <param name="aggregateRootId">Id of the root aggregate to perform the event on.</param>
+    /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
+    /// <param name="userId">ID of User responsible for Event.</param>
+    /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
+    [Obsolete("Use Event(EventType, ...) instead.")]
+    public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
+        : this(CreateLegacyEventType(command), aggregateRootId, payload, userId, partitionKey)
+    {
+        _legacyCommand = command;
+    }
+
+    /// <summary>
     /// Constructor for Event, use when creating object to save to event store, will parse aggregateRootId from payload.
     /// </summary>
     /// <param name="eventType">Event type to persist.</param>
@@ -57,6 +72,20 @@ public class Event : IEvent
             aggregateRootId = jPayload["id"].Value<Guid>();
         }
         SetUp(eventType, aggregateRootId, payload, userId, partitionKey);
+    }
+
+    /// <summary>
+    /// Constructor for Event, use when creating object to save to event store, will parse aggregateRootId from payload.
+    /// </summary>
+    /// <param name="command">Legacy command metadata to persist.</param>
+    /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
+    /// <param name="userId">ID of User responsible for Event.</param>
+    /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
+    [Obsolete("Use Event(EventType, ...) instead.")]
+    public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
+        : this(CreateLegacyEventType(command), payload, userId, partitionKey)
+    {
+        _legacyCommand = command;
     }
 
     /// <summary>
@@ -88,6 +117,31 @@ public class Event : IEvent
         }
 
         SetUp(eventType, aggGuid, payload, userGuid, pKey);
+    }
+
+    /// <summary>
+    /// Constructor for Event, use when creating object to save to event store, parses Id values to Guids.
+    /// </summary>
+    /// <param name="command">Legacy command metadata to persist.</param>
+    /// <param name="aggregateRootId">Id of the root aggregate to perform the event on. Must be a Guid string.</param>
+    /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
+    /// <param name="userId">ID of User responsible for Event.</param>
+    /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
+    [Obsolete("Use Event(EventType, ...) instead.")]
+    public Event(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey)
+        : this(CreateLegacyEventType(command), aggregateRootId, payload, userId, partitionKey)
+    {
+        _legacyCommand = command;
+    }
+
+    private static EventType CreateLegacyEventType(NostifyCommand command)
+    {
+        if (command == null)
+        {
+            throw new ArgumentNullException(nameof(command));
+        }
+
+        return new LegacyNostifyCommandEventType(command.name, command.isNew, command.allowNullPayload);
     }
 
     private void SetUp(EventType eventType, Guid aggregateRootId, object payload, Guid userId, Guid partitionKey)
@@ -131,7 +185,9 @@ public class Event : IEvent
         set
         {
             _eventType = value;
-            _legacyCommand = value as NostifyCommand;
+            _legacyCommand = value is LegacyNostifyCommandEventType
+                ? new NostifyCommand(value.name, value.isNew, value.allowNullPayload)
+                : null;
         }
     }
 
@@ -141,22 +197,34 @@ public class Event : IEvent
     {
         get
         {
+            if (_legacyCommand != null)
+            {
+                return _legacyCommand;
+            }
+
             if (_eventType == null)
             {
                 return null!;
             }
 
-            return _legacyCommand ??= new NostifyCommand(eventType.name, eventType.isNew, eventType.allowNullPayload);
+            return _legacyCommand = new NostifyCommand(eventType.name, eventType.isNew, eventType.allowNullPayload);
         }
         set
         {
             _legacyCommand = value;
-#pragma warning disable CS0618
-            if (_eventType == null || _eventType.GetType() == typeof(NostifyCommand))
+            if (value == null)
             {
-                _eventType = value;
+                if (_eventType is LegacyNostifyCommandEventType)
+                {
+                    _eventType = null;
+                }
+                return;
             }
-#pragma warning restore CS0618
+
+            if (_eventType == null || _eventType is LegacyNostifyCommandEventType)
+            {
+                _eventType = new LegacyNostifyCommandEventType(value.name, value.isNew, value.allowNullPayload);
+            }
         }
     }
 
@@ -174,7 +242,7 @@ public class Event : IEvent
                 return _schemaVersion.Value;
             }
 
-            return _eventType is not null && _eventType is not NostifyCommand ? 2 : 1;
+            return _eventType is not null && _eventType is not LegacyNostifyCommandEventType ? 2 : 1;
 #pragma warning restore CS0618
         }
         init => _schemaVersion = value;
@@ -204,9 +272,9 @@ public class Event : IEvent
         ValidationContext validationContext = new ValidationContext(deserializedPayload);
         validationContext.Items["eventType"] = eventType;
 #pragma warning disable CS0618
-        if (eventType is NostifyCommand legacyCommand)
+        if (_legacyCommand != null)
         {
-            validationContext.Items["command"] = legacyCommand;
+            validationContext.Items["command"] = _legacyCommand;
         }
 #pragma warning restore CS0618
         Validator.TryValidateObject(deserializedPayload, validationContext, validationMessages, true);

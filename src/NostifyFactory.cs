@@ -422,9 +422,6 @@ public static class NostifyFactory
     {
         var eventTypes = assembly.GetTypes()
             .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
-#pragma warning disable CS0618
-            .Where(t => !typeof(NostifyCommand).IsAssignableFrom(t))
-#pragma warning restore CS0618
             .SelectMany(t => GetTopicNames(t, config, verbose))
             .ToList();
 

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
-using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using STJ = System.Text.Json;
@@ -17,20 +16,14 @@ internal static class EventTypeResolver
 
     internal static Type Resolve(string? typeName, string? eventTypeName = null)
     {
-#pragma warning disable CS0618
         if (string.IsNullOrWhiteSpace(typeName))
         {
-            return ResolveByName(eventTypeName) ?? typeof(NostifyCommand);
+            return ResolveByName(eventTypeName) ?? typeof(LegacyNostifyCommandEventType);
         }
-#pragma warning restore CS0618
 
         var resolved = Type.GetType(typeName, throwOnError: false);
         if (resolved != null && typeof(EventType).IsAssignableFrom(resolved))
         {
-            if (IsLegacyNostifyCommandType(resolved))
-            {
-                return ResolveByName(eventTypeName) ?? resolved;
-            }
             return resolved;
         }
 
@@ -39,59 +32,21 @@ internal static class EventTypeResolver
             resolved = assembly.GetType(typeName, throwOnError: false);
             if (resolved != null && typeof(EventType).IsAssignableFrom(resolved))
             {
-                if (IsLegacyNostifyCommandType(resolved))
-                {
-                    return ResolveByName(eventTypeName) ?? resolved;
-                }
                 return resolved;
             }
         }
 
-#pragma warning disable CS0618
-        return ResolveByName(eventTypeName) ?? typeof(NostifyCommand);
-#pragma warning restore CS0618
+        return ResolveByName(eventTypeName) ?? typeof(LegacyNostifyCommandEventType);
     }
 
     internal static EventType CreateInstance(Type resolvedType, string? name, bool isNew, bool allowNullPayload)
     {
-        if (!IsLegacyNostifyCommandType(resolvedType))
+        if (!IsLegacyCompatibilityType(resolvedType))
         {
             return EventType.GetRequiredInstance(resolvedType);
         }
 
-        var constructorArgs = new object?[] { name ?? "Unknown", isNew, allowNullPayload };
-        var signatures = new[]
-        {
-            new[] { typeof(string), typeof(bool), typeof(bool) },
-            new[] { typeof(string), typeof(bool) },
-            new[] { typeof(string) },
-            Type.EmptyTypes
-        };
-
-        foreach (var signature in signatures)
-        {
-            ConstructorInfo? constructor = resolvedType.GetConstructor(signature);
-            if (constructor == null)
-            {
-                continue;
-            }
-
-            object?[] args = signature.Length switch
-            {
-                3 => constructorArgs,
-                2 => constructorArgs.Take(2).ToArray(),
-                1 => constructorArgs.Take(1).ToArray(),
-                _ => Array.Empty<object?>()
-            };
-
-            if (constructor.Invoke(args) is EventType eventType)
-            {
-                return eventType;
-            }
-        }
-
-        throw new JsonSerializationException(
-            $"Unable to construct legacy command event type '{resolvedType.FullName}'. Ensure it exposes a supported constructor.");
+        return new LegacyNostifyCommandEventType(name ?? "Unknown", isNew, allowNullPayload);
     }
 
     private static Type? ResolveByName(string? eventTypeName)
@@ -122,7 +77,7 @@ internal static class EventTypeResolver
             .Where(t => t != null
                 && !t.IsAbstract
                 && typeof(EventType).IsAssignableFrom(t))
-            .Where(t => !IsLegacyNostifyCommandType(t))
+            .Where(t => !IsLegacyCompatibilityType(t))
             .Select(t => new { Type = t, EventType = TryGetRequiredInstance(t) })
             .Where(x => x.EventType != null && string.Equals(x.EventType.name, eventTypeName, StringComparison.OrdinalIgnoreCase))
             .Select(x => x.Type)
@@ -133,12 +88,7 @@ internal static class EventTypeResolver
         return resolvedType;
     }
 
-    private static bool IsLegacyNostifyCommandType(Type resolvedType)
-    {
-#pragma warning disable CS0618
-        return typeof(NostifyCommand).IsAssignableFrom(resolvedType);
-#pragma warning restore CS0618
-    }
+    private static bool IsLegacyCompatibilityType(Type resolvedType) => resolvedType == typeof(LegacyNostifyCommandEventType);
 
     private static EventType? TryGetRequiredInstance(Type eventTypeType)
     {
@@ -179,13 +129,6 @@ internal sealed class NewtonsoftEventTypeJsonConverter : JsonConverter<EventType
         var typeName = jObject[EventTypeResolver.TypeDiscriminatorPropertyName]?.Value<string>();
         var eventTypeName = jObject["name"]?.Value<string>();
         var resolvedType = EventTypeResolver.Resolve(typeName, eventTypeName);
-#pragma warning disable CS0618
-        if (typeof(NostifyCommand).IsAssignableFrom(objectType) &&
-            !typeof(NostifyCommand).IsAssignableFrom(resolvedType))
-        {
-            resolvedType = typeof(NostifyCommand);
-        }
-#pragma warning restore CS0618
         return EventTypeResolver.CreateInstance(
             resolvedType,
             eventTypeName,
@@ -217,13 +160,6 @@ internal sealed class SystemTextEventTypeJsonConverter : STJS.JsonConverter<Even
         bool allowNullPayload = root.TryGetProperty("allowNullPayload", out var allowNullPayloadProperty) && allowNullPayloadProperty.GetBoolean();
 
         var resolvedType = EventTypeResolver.Resolve(typeName, name);
-#pragma warning disable CS0618
-        if (typeof(NostifyCommand).IsAssignableFrom(typeToConvert) &&
-            !typeof(NostifyCommand).IsAssignableFrom(resolvedType))
-        {
-            resolvedType = typeof(NostifyCommand);
-        }
-#pragma warning restore CS0618
 
         return EventTypeResolver.CreateInstance(resolvedType, name, isNew, allowNullPayload);
     }

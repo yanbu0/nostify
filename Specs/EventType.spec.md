@@ -75,10 +75,10 @@ EventType eventType = CreateOrder.Instance;
 
 ## Backward Compatibility
 
-`NostifyCommand` currently remains in the codebase as an obsolete subclass of `EventType`. Existing code that still uses `NostifyCommand` continues to work as a legacy compatibility exception, while new code should inherit from `EventType<TSelf>` and use the inherited canonical `Instance`.
+`NostifyCommand` remains in the codebase as an obsolete legacy metadata object, but it is no longer an `EventType` subclass. Legacy command-only envelopes map to an internal compatibility adapter (`LegacyNostifyCommandEventType`) so `Event.eventType` stays canonical while old payloads remain readable.
 
 ## Related Types
 
-- [NostifyCommand](NostifyCommand.spec.md) - Obsolete compatibility subclass
+- [NostifyCommand](NostifyCommand.spec.md) - Obsolete compatibility metadata type
 - [Event](Event.spec.md) - Events carry an `eventType`
 - [NostifyObject](NostifyObject.spec.md) - Dispatches `Apply(IEvent)` through `eventType`

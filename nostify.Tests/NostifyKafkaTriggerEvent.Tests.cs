@@ -938,7 +938,7 @@ public class NostifyKafkaTriggerEventTests
 
         Assert.NotNull(result);
         Assert.Equal(1, result.schemaVersion);
-        Assert.IsType<NostifyCommand>(result.eventType);
+        Assert.IsType<LegacyNostifyCommandEventType>(result.eventType);
         Assert.Equal("Update_ResourceGrade", result.eventType.name);
     }
 

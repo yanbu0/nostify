@@ -28,7 +28,7 @@ public static class GrpcEventMapping
             timestamp = msg.Timestamp?.ToDateTime() ?? DateTime.UtcNow,
             partitionKey = string.IsNullOrEmpty(msg.PartitionKey) ? Guid.Empty : Guid.Parse(msg.PartitionKey),
             userId = string.IsNullOrEmpty(msg.UserId) ? Guid.Empty : Guid.Parse(msg.UserId),
-            eventType = new NostifyCommand(
+            command = new NostifyCommand(
                 msg.Command?.Name ?? "Unknown",
                 msg.Command?.IsNew ?? false,
                 msg.Command?.AllowNullPayload ?? false

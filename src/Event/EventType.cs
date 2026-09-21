@@ -151,6 +151,17 @@ public abstract class EventType
 }
 
 /// <summary>
+/// Internal compatibility adapter used to represent legacy command-only metadata as an <see cref="EventType"/>.
+/// </summary>
+internal sealed class LegacyNostifyCommandEventType : EventType
+{
+    internal LegacyNostifyCommandEventType(string name, bool isNew = false, bool allowNullPayload = false)
+        : base(name, isNew, allowNullPayload)
+    {
+    }
+}
+
+/// <summary>
 /// Generic base for concrete event types that exposes a canonical singleton-style <see cref="Instance"/>.
 /// </summary>
 /// <typeparam name="TSelf">The concrete event type.</typeparam>
