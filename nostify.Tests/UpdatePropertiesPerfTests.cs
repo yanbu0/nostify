@@ -366,7 +366,7 @@ namespace nostify.Tests
         /// This is not a formal benchmark; it is intended to give a rough
         /// indication of order-of-magnitude improvement.
         /// </summary>
-        [Fact]
+        [Fact(Skip = "Performance comparison; run manually or in a benchmark project.")]
         public void Compare_original_vs_optimized_UpdateProperties_performance()
         {
             const int aggregateCount = 200;   // number of aggregate instances
