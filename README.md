@@ -74,6 +74,9 @@
 
 ### Updates
 
+- 5.0.0
+    - **Release Readiness Update**: Completed release readiness review, aligned template package references to `nostify` 5.0.0, and synchronized release documentation/instructions for the 5.0.0 template package.
+
 - 4.9.2
     - **Dependency Security Patch**: Updated a dependency package to a patched version that addresses a known security vulnerability.
 

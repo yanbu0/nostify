@@ -138,6 +138,7 @@ var order = await nostify.RehydrateAsync<Order>(orderId);
 
 ## Version History
 
+- **5.0.0** - Release-readiness documentation sweep and template/package version alignment to 5.0.0 across the main package and service templates
 - **4.9.2** - Updated a dependency package to a patched version to address a known security vulnerability
 - **4.9.1** - Added durable projection initializer retry-options coverage tests verifying `durableTaskOptions` propagation across orchestrator activity calls and default retry-policy fallback behavior when options are omitted
 - **4.9.0** - Moved Azure Functions worker JSON configuration into reusable `WorkerConfigurationExtensions`; added `UseNostifyDefaultConfiguredNewtonsoftJson()`, shorter wrapper `UseNostifyDefaultJson()`, and experimental `UseNostifySystemTextJson()`; updated the `nostify` template to consume the library helper instead of generating its own local extension class
