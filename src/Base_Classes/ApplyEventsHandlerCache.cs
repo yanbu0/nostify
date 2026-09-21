@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace nostify
@@ -89,11 +90,16 @@ namespace nostify
                         $"ApplyEventsAttribute handler '{targetType.FullName}.{method.Name}' must return void.");
                 }
 
-                // Create a delegate that invokes the method on a NostifyObject target.
-                Action<NostifyObject, IEvent> handler = (nostifyObject, evt) =>
-                {
-                    method.Invoke(nostifyObject, new object[] { evt });
-                };
+                // Create a compiled delegate that invokes the method on a NostifyObject target.
+                var targetParameter = Expression.Parameter(typeof(NostifyObject), "target");
+                var eventParameter = Expression.Parameter(typeof(IEvent), "evt");
+                var methodCall = Expression.Call(
+                    Expression.Convert(targetParameter, targetType),
+                    method,
+                    eventParameter);
+                var handler = Expression
+                    .Lambda<Action<NostifyObject, IEvent>>(methodCall, targetParameter, eventParameter)
+                    .Compile();
 
                 foreach (var attr in attributes)
                 {
