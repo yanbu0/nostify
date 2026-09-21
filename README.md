@@ -343,7 +343,7 @@ In `nostify` all state changes coming from the UI are associated with an `EventT
 - All state changes must be applied to an aggregate, and not directly to a projection or to an entity within an aggregate.  
 - Aggregates may only refer to other aggregates by id value.
 - An aggregate must implement the `NostifyObject` abstract class and the `IAggregate` interface.
-- All state changes must be applied through `NostifyObject.Apply(IEvent)`, either directly or via `ApplyAndPersistAsync<T>()`. That entry point routes to `[ApplyEvents(typeof(...))]` handlers first (preferred), then string-based `[ApplyEvents("...")]` handlers, then typed `Apply(SpecificEventType, IEvent)` overloads, and finally an overridden `Apply(EventType, IEvent)` catch-all. The current state projection of an aggregate is simply the sum of all events in the event store applied to a new instance of that aggregate object.
+- All state changes must be applied through `NostifyObject.Apply(IEvent)`, either directly or via `ApplyAndPersistAsync<T>()`. That entry point routes to attribute-based `[ApplyEvents]` handlers first (prefer the `typeof(...)` form when available), then typed `Apply(SpecificEventType, IEvent)` overloads, and finally an overridden `Apply(EventType, IEvent)` catch-all. The current state projection of an aggregate is simply the sum of all events in the event store applied to a new instance of that aggregate object.
 - In `nostify` only the changed properties should be included when creating an `Event`, best practice is to not send the entire aggregate.
 - A service generally contains one or more aggregates.  A read-only service, such as for BI purposes might not.  Domain boundaries should be respected when grouping aggregates together in a service.  IE - grouping a `WorkOrder` aggregate in the same service as a `WorkOrderStatus` aggregate (which might be an aggregate if your application allows users to add and update them) might make sense, where as putting a `PurchaseRequest` and a `WorkOrder` in the same service might not.  This is an art not a science so do what makes sense to your application.  It is theoretically possible to completely abandon the microservice concept and group an entire application into a single service, but probably not a good idea for scalability and maintainability.
 
@@ -602,7 +602,7 @@ public class TestByName : NostifyObject, IAggregate
 
 Across these patterns:
 
-- `NostifyObject.Apply(IEvent)` is the framework entry point. It checks `[ApplyEvents(typeof(...))]` and `[ApplyEvents("...")]` handlers first, then falls back to typed overload dispatch.
+- `NostifyObject.Apply(IEvent)` is the framework entry point. It checks attribute-based `[ApplyEvents]` handlers first, then falls back to typed overload dispatch.
 - If no attribute-based handler exists for an event, the framework calls `Apply((dynamic)eventToApply.eventType, eventToApply)`, so any matching `Apply(SpecificEventType, IEvent)` overload is preferred and `Apply(EventType, IEvent)` is the final catch-all.
 - `Apply(EventType, IEvent)` is `protected virtual` in `NostifyObject`. Override it when you want custom catch-all behavior; if all events are handled by attributes, you can omit it entirely.
 - Individual handler methods are decorated with `[ApplyEvents]` and accept `IEvent` to perform updates. Prefer the `typeof(...)` form when the concrete `EventType` class is available.
@@ -1457,7 +1457,7 @@ Events are things that have already happened and need to be handled by the syste
 
 As such there should not be any validation to perform in an Event Handler, the "thing" has already happened.  An Event Handler is there to process the Event and perform any necessary state updates such as updating the data stored in a Projection container. After the Event is stored, it is published to the event bus (Kafka being used that way in this case), and then the Event Handlers pick it up by subscribing to the event.  Kafka makes sure each Event Handler receives each event it is subscribed to.
 
-The event should be applied to the object's (Aggregate/Projection) current state through `NostifyObject.Apply(IEvent)`, which then routes to `[ApplyEvents(typeof(...))]` handlers, string-based `[ApplyEvents("...")]` handlers, typed `Apply(SpecificEventType, IEvent)` overloads, or the `Apply(EventType, IEvent)` catch-all. A "Create" event might start with a new instance of the object and then update properties of that object based on the event payload.  
+The event should be applied to the object's (Aggregate/Projection) current state through `NostifyObject.Apply(IEvent)`, which then routes to attribute-based `[ApplyEvents]` handlers, typed `Apply(SpecificEventType, IEvent)` overloads, or the `Apply(EventType, IEvent)` catch-all. A "Create" event might start with a new instance of the object and then update properties of that object based on the event payload.  
 
 #### Helper Methods
 
