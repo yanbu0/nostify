@@ -36,11 +36,6 @@ public class Event : IEvent
     /// <summary>
     /// Constructor for Event, use when creating object to save to event store with legacy command metadata.
     /// </summary>
-    /// <param name="command">Legacy command metadata to persist.</param>
-    /// <param name="aggregateRootId">Id of the root aggregate to perform the event on.</param>
-    /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
-    /// <param name="userId">ID of User responsible for Event.</param>
-    /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
     [Obsolete("Use Event(EventType, ...) instead.")]
     public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
         : this(CreateLegacyEventType(command), aggregateRootId, payload, userId, partitionKey)
@@ -77,10 +72,6 @@ public class Event : IEvent
     /// <summary>
     /// Constructor for Event, use when creating object to save to event store, will parse aggregateRootId from payload.
     /// </summary>
-    /// <param name="command">Legacy command metadata to persist.</param>
-    /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
-    /// <param name="userId">ID of User responsible for Event.</param>
-    /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
     [Obsolete("Use Event(EventType, ...) instead.")]
     public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
         : this(CreateLegacyEventType(command), payload, userId, partitionKey)
@@ -122,11 +113,6 @@ public class Event : IEvent
     /// <summary>
     /// Constructor for Event, use when creating object to save to event store, parses Id values to Guids.
     /// </summary>
-    /// <param name="command">Legacy command metadata to persist.</param>
-    /// <param name="aggregateRootId">Id of the root aggregate to perform the event on. Must be a Guid string.</param>
-    /// <param name="payload">Properties to update or the id of the Aggregate to delete.</param>
-    /// <param name="userId">ID of User responsible for Event.</param>
-    /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
     [Obsolete("Use Event(EventType, ...) instead.")]
     public Event(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey)
         : this(CreateLegacyEventType(command), aggregateRootId, payload, userId, partitionKey)

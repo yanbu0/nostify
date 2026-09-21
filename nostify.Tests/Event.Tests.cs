@@ -231,7 +231,7 @@ public class EventTests
         var payload = new { name = "Test", id = Guid.NewGuid() };
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new Event(null!, payload));
+        Assert.Throws<ArgumentNullException>(() => new Event((NostifyCommand)null!, payload));
     }
 
     [Fact]

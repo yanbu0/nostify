@@ -700,7 +700,7 @@ public class Test : NostifyObject, IAggregate
 
 > **Guidance**: Prefer `[ApplyEvents(typeof(...))]` for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. Use string-based `[ApplyEvents("...")]` mappings when you cannot reference the concrete `EventType` class directly, such as projection handlers that consume events from another service, and use typed overload dispatch when you need explicit control or maximum performance.
 
-> **Interop**: Existing code that relies on `eventToApply.command` and `NostifyCommand` continues to work. New code should migrate to `eventToApply.eventType` and `EventType`-based dispatch, either via attributes or typed overloads.
+> **Interop**: Existing code that relies on `eventToApply.command` and `NostifyCommand` continues to work. `NostifyCommand` is now a legacy compatibility metadata type (separate from `EventType`), while `eventToApply.eventType` remains the canonical dispatch metadata. New code should migrate to `eventToApply.eventType` and `EventType`-based dispatch, either via attributes or typed overloads.
 
 ### Saga
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using STJ = System.Text.Json;
@@ -24,6 +25,10 @@ internal static class EventTypeResolver
         var resolved = Type.GetType(typeName, throwOnError: false);
         if (resolved != null && typeof(EventType).IsAssignableFrom(resolved))
         {
+            if (IsLegacyCompatibilityType(resolved))
+            {
+                return ResolveByName(eventTypeName) ?? resolved;
+            }
             return resolved;
         }
 
@@ -32,6 +37,10 @@ internal static class EventTypeResolver
             resolved = assembly.GetType(typeName, throwOnError: false);
             if (resolved != null && typeof(EventType).IsAssignableFrom(resolved))
             {
+                if (IsLegacyCompatibilityType(resolved))
+                {
+                    return ResolveByName(eventTypeName) ?? resolved;
+                }
                 return resolved;
             }
         }

@@ -72,6 +72,19 @@ public class NostifyCommand
     public int CompareTo(object other) => name.CompareTo(((NostifyCommand)other).name);
 
     /// <summary>
+    /// Converts legacy command metadata to the internal legacy <see cref="EventType"/> adapter.
+    /// </summary>
+    public static implicit operator EventType(NostifyCommand command)
+    {
+        if (command == null)
+        {
+            throw new ArgumentNullException(nameof(command));
+        }
+
+        return new LegacyNostifyCommandEventType(command.name, command.isNew, command.allowNullPayload);
+    }
+
+    /// <summary>
     /// Tests if NostifyCommand equals another NostifyCommand.
     /// </summary>
     public static bool operator ==(NostifyCommand? a, NostifyCommand? b)
