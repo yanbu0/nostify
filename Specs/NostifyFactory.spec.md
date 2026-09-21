@@ -240,6 +240,7 @@ When a logger is provided:
 - Error output uses `ILogger.LogError()` instead of `Console.Error.WriteLine`
 - The logger is automatically propagated to `RetryOptions` in `DefaultEventHandlers` and internal retry sites
 - If no logger is set, the framework falls back to `Console.WriteLine` for backwards compatibility
+- The `verbose` flag only controls that console fallback path; once a logger is configured it takes precedence, which avoids duplicate output when the logger itself already targets the console
 
 ### WithAsyncEventRequest
 
@@ -276,6 +277,8 @@ The generic `Build<T>()` method (where `T : IAggregate`) performs all steps abov
 2. **Scan for IAggregate types (opt-in)** - When `config.autoCreateEventRequestTopics` is `true` (set via `.WithAsyncEventRequest()`), finds all concrete `IAggregate` implementations in the same assembly and creates an `{aggregateType}_EventRequest` topic for each. Without `.WithAsyncEventRequest()`, this step is skipped entirely.
 3. **Filter existing topics** - Queries the Kafka AdminClient for existing topics and only creates new ones.
 4. **Create topics** - Calls `CreateTopicsAsync` for all new topics.
+
+During this startup flow, diagnostics are emitted through `ILogger` when configured. `verbose: true` is only used as a fallback console trace mode when no logger was supplied.
 
 The `_EventRequest` topics use the same partition count (`kafkaTopicAutoCreatePartitions`) and replication factor as command topics. For Event Hubs, this requires `WithEventHubsManagement()` credentials (same as command topic auto-creation).
 
