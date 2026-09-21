@@ -77,7 +77,7 @@
 - 5.0.0 (BREAKING CHANGES!)
     - **EventType Replaces Command Enum Dispatch**: `EventType` is now the primary event metadata abstraction and recommended authoring model for new code. `NostifyCommand` remains supported as an obsolete compatibility layer, but new events, examples, and templates should be modeled as concrete `EventType` classes.
     - **Attribute-Based Event Dispatch (Preferred)**: `ApplyEventsAttribute` enables declarative, strongly-typed event application with examples like `[ApplyEvents(typeof(Create_Order))]`. `ApplyEventsHandlerCache` discovers and caches handlers once, then invokes them directly for subsequent events.
-    - **String and Type-Based Event Matching**: `[ApplyEvents]` supports both CLR type mappings (preferred) and string-based mappings by `EventType.name` when only logical event names are available.
+    - **String and Type-Based Event Matching**: `[ApplyEvents]` supports both CLR type mappings (preferred) and string-based mappings by `EventType.name` when only logical event names are available, including cross-service projection handlers that cannot reference another service's concrete `EventType` class.
     - **Typed Apply Pattern Still Supported**: Aggregates and projections can still use typed `Apply(SpecificEventType, IEvent)` overloads plus an optional `Apply(EventType, IEvent)` catch-all for explicit, high-performance dispatch.
     - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` is `protected virtual` so consuming services can override the catch-all fallback while still using attribute-based or typed handlers.
     - **Handler Conflict Detection and Validation**: The handler cache validates one-and-only-one mapping per event type/name and fails fast for duplicate handlers, invalid `EventType` declarations, unresolved names, or missing static instances.
@@ -576,7 +576,7 @@ public class Test : NostifyObject, IAggregate
 }
 ```
 
-**Aggregate Example Using Attribute Dispatch (String-Based Mapping, Alternative):**
+**Aggregate or Projection Example Using Attribute Dispatch (String-Based Mapping, Alternative):**
 
 ```C#
 public class TestByName : NostifyObject, IAggregate
@@ -586,6 +586,8 @@ public class TestByName : NostifyObject, IAggregate
     public static string currentStateContainerName => "Test";
 
     // Map by EventType.name values. These must match the names on the concrete EventType classes.
+    // This is especially useful for projection events coming from a different service when the
+    // other service's concrete EventType CLR types are not referenced locally.
     [ApplyEvents("Create_Test", "Update_Test")]
     private void OnTestCreatedOrUpdated(IEvent eventToApply)
     {
@@ -694,7 +696,7 @@ public class Test : NostifyObject, IAggregate
 }
 ```
 
-> **Guidance**: Prefer `[ApplyEvents(typeof(...))]` for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. Use string-based `[ApplyEvents("...")]` mappings only when you cannot reference the concrete `EventType` class directly, and use typed overload dispatch when you need explicit control or maximum performance.
+> **Guidance**: Prefer `[ApplyEvents(typeof(...))]` for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. Use string-based `[ApplyEvents("...")]` mappings when you cannot reference the concrete `EventType` class directly, such as projection handlers that consume events from another service, and use typed overload dispatch when you need explicit control or maximum performance.
 
 > **Interop**: Existing code that relies on `eventToApply.command` and `NostifyCommand` continues to work. New code should migrate to `eventToApply.eventType` and `EventType`-based dispatch, either via attributes or typed overloads.
 
