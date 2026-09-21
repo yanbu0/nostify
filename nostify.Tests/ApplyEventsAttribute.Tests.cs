@@ -12,71 +12,53 @@ namespace nostify.Tests
     ///
     /// These tests follow the same EventType pattern as the generated command templates
     /// in templates/nostify/_ReplaceMe_/Aggregates/_ReplaceMe_/_ReplaceMe_Command.cs, using
-    /// an OrderCommand base with concrete Create_Order, Update_Order, etc. types.
+    /// concrete Create_Order, Update_Order, etc. classes plus a static OrderCommand facade.
     /// </summary>
     public class ApplyEventsAttributeTests
     {
         #region Test helpers - EventType model
 
         /// <summary>
-        /// Base command type for the Order aggregate, mirroring the _ReplaceMe_Command template.
+        /// Concrete event types plus a static command facade, mirroring the current templates.
         /// </summary>
-        private abstract class OrderCommand : EventType
+        private sealed class Create_Order : EventType
         {
-            public static Create_Order Create => Create_Order.Instance;
-            public static Update_Order Update => Update_Order.Instance;
-            public static BulkCreate_Order BulkCreate => BulkCreate_Order.Instance;
-            public static BulkUpdate_Order BulkUpdate => BulkUpdate_Order.Instance;
-
-            protected OrderCommand(string name, bool isNew = false, bool allowNullPayload = false)
-                : base(name, isNew, allowNullPayload)
-            {
-            }
+            public Create_Order() : base("Create_Order", isNew: true) { }
         }
 
-        private sealed class Create_Order : OrderCommand
+        private sealed class Update_Order : EventType
         {
-            public static readonly Create_Order Instance = new Create_Order();
-
-            private Create_Order() : base("Create_Order", isNew: true)
-            {
-            }
+            public Update_Order() : base("Update_Order") { }
         }
 
-        private sealed class Update_Order : OrderCommand
+        private sealed class Delete_Order : EventType
         {
-            public static readonly Update_Order Instance = new Update_Order();
-
-            private Update_Order() : base("Update_Order")
-            {
-            }
+            public Delete_Order() : base("Delete_Order", isNew: false, allowNullPayload: true) { }
         }
 
-        private sealed class BulkCreate_Order : OrderCommand
+        private sealed class BulkCreate_Order : EventType
         {
-            public static readonly BulkCreate_Order Instance = new BulkCreate_Order();
-
-            private BulkCreate_Order() : base("BulkCreate_Order", isNew: true)
-            {
-            }
+            public BulkCreate_Order() : base("BulkCreate_Order", isNew: true) { }
         }
 
-        private sealed class BulkUpdate_Order : OrderCommand
+        private sealed class BulkUpdate_Order : EventType
         {
-            public static readonly BulkUpdate_Order Instance = new BulkUpdate_Order();
-
-            private BulkUpdate_Order() : base("BulkUpdate_Order")
-            {
-            }
+            public BulkUpdate_Order() : base("BulkUpdate_Order") { }
         }
 
-        private sealed class Delete_Order : OrderCommand
+        private sealed class BulkDelete_Order : EventType
         {
-            public static readonly Delete_Order Instance = new Delete_Order();
+            public BulkDelete_Order() : base("BulkDelete_Order", isNew: false, allowNullPayload: true) { }
+        }
 
-            private Delete_Order() : base("Delete_Order", allowNullPayload: true)
-            {
-            }
+        private static class OrderCommand
+        {
+            public static Create_Order Create => new Create_Order();
+            public static Update_Order Update => new Update_Order();
+            public static Delete_Order Delete => new Delete_Order();
+            public static BulkCreate_Order BulkCreate => new BulkCreate_Order();
+            public static BulkUpdate_Order BulkUpdate => new BulkUpdate_Order();
+            public static BulkDelete_Order BulkDelete => new BulkDelete_Order();
         }
 
         /// <summary>
@@ -333,6 +315,28 @@ namespace nostify.Tests
         }
 
         [Fact]
+        public void TemplateStyleEventTypes_ExposeExpectedFlags()
+        {
+            Assert.True(OrderCommand.Create.isNew);
+            Assert.False(OrderCommand.Create.allowNullPayload);
+
+            Assert.False(OrderCommand.Update.isNew);
+            Assert.False(OrderCommand.Update.allowNullPayload);
+
+            Assert.False(OrderCommand.Delete.isNew);
+            Assert.True(OrderCommand.Delete.allowNullPayload);
+
+            Assert.True(OrderCommand.BulkCreate.isNew);
+            Assert.False(OrderCommand.BulkCreate.allowNullPayload);
+
+            Assert.False(OrderCommand.BulkUpdate.isNew);
+            Assert.False(OrderCommand.BulkUpdate.allowNullPayload);
+
+            Assert.False(OrderCommand.BulkDelete.isNew);
+            Assert.True(OrderCommand.BulkDelete.allowNullPayload);
+        }
+
+        [Fact]
         public void AttributeOnlyAggregateByName_UsesAttributeHandlersForMappedEvents()
         {
             // Arrange
@@ -510,7 +514,7 @@ namespace nostify.Tests
                 tenantId = Guid.NewGuid()
             };
 
-            var deleteEvent = new TestEvent(Delete_Order.Instance);
+            var deleteEvent = new TestEvent(OrderCommand.Delete);
 
             // Act & Assert
             var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(deleteEvent));

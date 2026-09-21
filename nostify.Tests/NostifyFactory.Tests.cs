@@ -852,6 +852,59 @@ public class NostifyFactoryTests
         Assert.Equal(mockHttpClientFactory.Object, config.httpClientFactory);
     }
 
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_ShouldDetectConcreteEventTypesWithoutStaticFields()
+    {
+        // Arrange
+        var config = new NostifyConfig
+        {
+            kafkaTopicAutoCreatePartitions = 5
+        };
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
+
+        // Assert
+        var topic = Assert.Single(topics, t => t.Name == "Create_TopicDiscoveryAggregate");
+        Assert.Equal(5, topic.NumPartitions);
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_WithAsyncEventRequest_ShouldAlsoAddEventRequestTopics()
+    {
+        // Arrange
+        var config = new NostifyConfig
+        {
+            kafkaTopicAutoCreatePartitions = 4,
+            autoCreateEventRequestTopics = true
+        };
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
+
+        // Assert
+        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAggregate");
+        Assert.Contains(topics, t => t.Name == "TopicDiscoveryAggregate_EventRequest");
+        Assert.Contains(topics, t => t.Name == "TopicDiscoveryAggregate_EventRequestResponse");
+        Assert.All(
+            topics.Where(t => t.Name is "Create_TopicDiscoveryAggregate" or "TopicDiscoveryAggregate_EventRequest" or "TopicDiscoveryAggregate_EventRequestResponse"),
+            t => Assert.Equal(4, t.NumPartitions));
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_ShouldIncludeAllStaticEventTypeFieldTopics()
+    {
+        // Arrange
+        var config = new NostifyConfig();
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
+
+        // Assert
+        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAliasAggregate");
+        Assert.Contains(topics, t => t.Name == "Update_TopicDiscoveryAliasAggregate");
+    }
+
     #endregion
 
 }
@@ -868,5 +921,35 @@ public class TestFactoryAggregate : NostifyObject, IAggregate
     protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         UpdateProperties<TestFactoryAggregate>(eventToApply.payload);
+    }
+}
+
+public sealed class Create_TopicDiscoveryAggregate : EventType
+{
+    public Create_TopicDiscoveryAggregate() : base("Create_TopicDiscoveryAggregate", isNew: true)
+    {
+    }
+}
+
+public sealed class TopicDiscoveryAliasEventType : EventType
+{
+    public static TopicDiscoveryAliasEventType Create = new("Create_TopicDiscoveryAliasAggregate");
+    public static TopicDiscoveryAliasEventType Update = new("Update_TopicDiscoveryAliasAggregate");
+
+    private TopicDiscoveryAliasEventType(string name) : base(name)
+    {
+    }
+}
+
+public class TopicDiscoveryAggregate : NostifyObject, IAggregate
+{
+    public string Name { get; set; } = "";
+    public bool isDeleted { get; set; }
+    public static string aggregateType => "TopicDiscoveryAggregate";
+    public static string currentStateContainerName => "TopicDiscoveryAggregates";
+
+    protected override void Apply(EventType eventType, IEvent eventToApply)
+    {
+        UpdateProperties<TopicDiscoveryAggregate>(eventToApply.payload);
     }
 }

@@ -27,7 +27,8 @@ using nostify;
      /// Handles Create events for the aggregate.
      /// Populates the aggregate properties from the event payload and logs the operation.
      /// </summary>
-     protected void Apply(Create__ReplaceMe_ eventType, IEvent eventToApply)
+     [ApplyEvents(typeof(Create__ReplaceMe_))]
+     protected void ApplyCreate(IEvent eventToApply)
      {
          try
          {
@@ -38,7 +39,7 @@ using nostify;
              _logger.LogError(ex,
                  "Error applying Create event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                  aggregateType,
-                 eventType,
+                 typeof(Create__ReplaceMe_).Name,
                  eventToApply);
              throw;
          }
@@ -48,7 +49,8 @@ using nostify;
      /// Handles Update events for the aggregate.
      /// Populates the aggregate properties from the event payload and logs the operation.
      /// </summary>
-     protected void Apply(Update__ReplaceMe_ eventType, IEvent eventToApply)
+     [ApplyEvents(typeof(Update__ReplaceMe_))]
+     protected void ApplyUpdate(IEvent eventToApply)
      {
          try
          {
@@ -59,7 +61,7 @@ using nostify;
              _logger.LogError(ex,
                  "Error applying Update event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                  aggregateType,
-                 eventType,
+                 typeof(Update__ReplaceMe_).Name,
                  eventToApply);
              throw;
          }
@@ -69,7 +71,8 @@ using nostify;
      /// Handles bulk create events for the aggregate.
      /// Populates the aggregate properties from the event payload and logs the operation.
      /// </summary>
-     protected void Apply(BulkCreate__ReplaceMe_ eventType, IEvent eventToApply)
+     [ApplyEvents(typeof(BulkCreate__ReplaceMe_))]
+     protected void ApplyBulkCreate(IEvent eventToApply)
      {
          try
          {
@@ -80,7 +83,7 @@ using nostify;
              _logger.LogError(ex,
                  "Error applying BulkCreate event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                  aggregateType,
-                 eventType,
+                 typeof(BulkCreate__ReplaceMe_).Name,
                  eventToApply);
              throw;
          }
@@ -90,7 +93,8 @@ using nostify;
      /// Handles bulk update events for the aggregate.
      /// Populates the aggregate properties from the event payload and logs the operation.
      /// </summary>
-     protected void Apply(BulkUpdate__ReplaceMe_ eventType, IEvent eventToApply)
+     [ApplyEvents(typeof(BulkUpdate__ReplaceMe_))]
+     protected void ApplyBulkUpdate(IEvent eventToApply)
      {
          try
          {
@@ -101,7 +105,7 @@ using nostify;
              _logger.LogError(ex,
                  "Error applying BulkUpdate event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                  aggregateType,
-                 eventType,
+                 typeof(BulkUpdate__ReplaceMe_).Name,
                  eventToApply);
              throw;
          }
@@ -111,7 +115,8 @@ using nostify;
      /// Handles delete events for the aggregate.
      /// Marks the aggregate as deleted and logs the operation.
      /// </summary>
-     protected void Apply(Delete__ReplaceMe_ eventType, IEvent eventToApply)
+     [ApplyEvents(typeof(Delete__ReplaceMe_))]
+     protected void ApplyDelete(IEvent eventToApply)
      {
          try
          {
@@ -122,7 +127,7 @@ using nostify;
              _logger.LogError(ex,
                  "Error applying Delete event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                  aggregateType,
-                 eventType,
+                 typeof(Delete__ReplaceMe_).Name,
                  eventToApply);
              throw;
          }
@@ -132,7 +137,8 @@ using nostify;
      /// Handles bulk delete events for the aggregate.
      /// Marks the aggregate as deleted and logs the operation.
      /// </summary>
-     protected void Apply(BulkDelete__ReplaceMe_ eventType, IEvent eventToApply)
+     [ApplyEvents(typeof(BulkDelete__ReplaceMe_))]
+     protected void ApplyBulkDelete(IEvent eventToApply)
      {
          try
          {
@@ -143,7 +149,7 @@ using nostify;
              _logger.LogError(ex,
                  "Error applying BulkDelete event to aggregate {AggregateType}. EventType: {EventType}, Event: {@Event}",
                  aggregateType,
-                 eventType,
+                 typeof(BulkDelete__ReplaceMe_).Name,
                  eventToApply);
              throw;
          }

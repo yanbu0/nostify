@@ -7,20 +7,8 @@ namespace _ReplaceMe__Service;
 
 public class _ReplaceMe_ : NostifyObject, IAggregate
 {
-    public _ReplaceMe_()
-    {
-    }
-
     public bool isDeleted { get; set; } = false;
 
     public static string aggregateType => "_ReplaceMe_";
     public static string currentStateContainerName => $"{aggregateType}CurrentState";
-
-    protected override void Apply(EventType eventType, IEvent eventToApply)
-    {
-    }
-
-    protected void Apply(_ReplaceMe_Command eventType, IEvent eventToApply)
-    {
-    }
 }

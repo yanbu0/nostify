@@ -240,6 +240,7 @@ When a logger is provided:
 - Error output uses `ILogger.LogError()` instead of `Console.Error.WriteLine`
 - The logger is automatically propagated to `RetryOptions` in `DefaultEventHandlers` and internal retry sites
 - If no logger is set, the framework falls back to `Console.WriteLine` for backwards compatibility
+- The `verbose` flag only controls that console fallback path; once a logger is configured it takes precedence, which avoids duplicate output when the logger itself already targets the console
 
 ### WithAsyncEventRequest
 
@@ -254,7 +255,7 @@ var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
 ```
 
 - Sets `NostifyConfig.autoCreateEventRequestTopics = true`
-- Without this call, `Build<T>()` creates only command topics (no `_EventRequest` topics)
+- Without this call, `Build<T>()` creates only `EventType`-derived topics (no `_EventRequest` topics)
 - Position in the fluent chain does not matter
 
 ## Internal Behavior
@@ -272,10 +273,12 @@ The `Build` method performs these steps:
 
 The generic `Build<T>()` method (where `T : IAggregate`) performs all steps above plus automatic topic creation:
 
-1. **Scan for NostifyCommand types** - Finds all `NostifyCommand` subclasses in the assembly of `T` and creates a Kafka topic for each static command field.
+1. **Scan for EventType definitions** - Finds all concrete `EventType` subclasses in the assembly of `T` and creates a Kafka topic for each distinct event type name, enumerating any public static `EventType` fields on the type when present and otherwise falling back to the concrete type name (which matches the template convention).
 2. **Scan for IAggregate types (opt-in)** - When `config.autoCreateEventRequestTopics` is `true` (set via `.WithAsyncEventRequest()`), finds all concrete `IAggregate` implementations in the same assembly and creates an `{aggregateType}_EventRequest` topic for each. Without `.WithAsyncEventRequest()`, this step is skipped entirely.
 3. **Filter existing topics** - Queries the Kafka AdminClient for existing topics and only creates new ones.
 4. **Create topics** - Calls `CreateTopicsAsync` for all new topics.
+
+During this startup flow, diagnostics are emitted through `ILogger` when configured. `verbose: true` is only used as a fallback console trace mode when no logger was supplied.
 
 The `_EventRequest` topics use the same partition count (`kafkaTopicAutoCreatePartitions`) and replication factor as command topics. For Event Hubs, this requires `WithEventHubsManagement()` credentials (same as command topic auto-creation).
 

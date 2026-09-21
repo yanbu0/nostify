@@ -74,18 +74,16 @@
  
 ### Updates
   
-- 5.0.0-beta4
-    - **Kafka EventType Restoration Hardening**: Kafka-triggered event deserialization now restores the concrete `EventType` by logical event name when legacy or unresolved CLR discriminators are present, preserving typed `Apply` dispatch for migrated events.
-    - **Legacy Compatibility Safeguards**: Legacy `command` alias hydration no longer overwrites an already-resolved concrete `eventType`, improving compatibility with older payloads while keeping strongly-typed event handling intact.
-    - **Regression Coverage**: Added regression tests covering legacy discriminator fallback, case-insensitive event type name resolution, and static-instance event type restoration for Kafka-triggered events.
-
 - 5.0.0 (BREAKING CHANGES!)
-    - **Attribute-Based Event Dispatch**: New `ApplyEventsAttribute` enables declarative mapping of event types to strongly-typed handler methods in aggregates and projections, removing manual switch/case dispatch. Handlers are discovered and cached via `ApplyEventsHandlerCache` the first time they are used and then invoked directly for subsequent events.
-    - **Typed Apply Pattern for Aggregates and Projections**: Generated aggregate and projection templates now use the typed `Apply(EventType, IEvent)` fallback plus aggregate-specific `Apply(_ReplaceMe_Command, IEvent)` overload style for clear, strongly-typed event handling.
-    - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` is `protected virtual` so consuming services can override the catch-all fallback when needed while still using typed overloads or attribute-based handlers.
-    - **String and Type-Based Event Matching**: `ApplyEventsAttribute` supports both CLR type-based mappings (e.g., `ApplyEvents(typeof(Create_Order))`) and string-based mappings by `EventType.name` (e.g., `ApplyEvents("Create_Order")`). Under the hood, `ApplyEventsHandlerCache` builds a name-to-`EventType` lookup for the target aggregate/projection so that string names are resolved to concrete `EventType` instances at startup, with conflict detection for duplicate names or handlers.
-    - **Handler Conflict Detection and Validation**: At startup, the handler cache validates that each `EventType` (or event type name) maps to exactly one handler method per aggregate/projection. Misconfigurations such as multiple handlers for the same event, non-`EventType` types, missing `EventType` instances, or invalid `EventType` names cause `InvalidOperationException` during handler map construction, failing fast in development/test.
-    - **HandleUpdates Performance Improvements**: Optimized the `HandleUpdates` path in default command handlers to reduce unnecessary serialization and patch operations during update commands, significantly improving throughput for high-volume update scenarios while preserving existing behavior.
+    - **EventType Replaces Command Enum Dispatch**: `EventType` is now the primary event metadata abstraction and recommended authoring model for new code. `NostifyCommand` remains supported as an obsolete compatibility layer, but new events, examples, and templates should be modeled as concrete `EventType` classes.
+    - **Attribute-Based Event Dispatch (Preferred)**: `ApplyEventsAttribute` enables declarative, strongly-typed event application with examples like `[ApplyEvents(typeof(Create_Order))]`. `ApplyEventsHandlerCache` discovers and caches handlers once, then invokes them directly for subsequent events.
+    - **String and Type-Based Event Matching**: `[ApplyEvents]` supports both CLR type mappings (preferred) and string-based mappings by `EventType.name` when only logical event names are available, including cross-service projection handlers that cannot reference another service's concrete `EventType` class.
+    - **Typed Apply Pattern Still Supported**: Aggregates and projections can still use typed `Apply(SpecificEventType, IEvent)` overloads plus an optional `Apply(EventType, IEvent)` catch-all for explicit, high-performance dispatch.
+    - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` is `protected virtual` so consuming services can override the catch-all fallback while still using attribute-based or typed handlers.
+    - **Handler Conflict Detection and Validation**: The handler cache validates one-and-only-one mapping per event type/name and fails fast for duplicate handlers, invalid `EventType` declarations, unresolved names, or missing static instances.
+    - **Kafka EventType Restoration Hardening**: Kafka-triggered event deserialization now restores concrete `EventType` instances by logical event name when legacy or unresolved CLR discriminators are present, while preserving already-resolved concrete event types during legacy `command` alias hydration.
+    - **HandleUpdates Performance Improvements**: `HandleUpdates` now avoids unnecessary serialization and patch operations during update commands, improving throughput for high-volume update paths without changing behavior.
+    - **Regression Coverage**: Added focused tests for attribute-based dispatch, string-based dispatch, handler conflict validation, typed fallback behavior, and Kafka EventType restoration edge cases.
  
 - 4.x Highlights
     - **Durable Projection Initialization**: Introduced `DurableProjectionInitializer<TProjection, TAggregate>` and related helpers for large-scale, orchestrated projection initialization using Azure Durable Functions, including retry options for both orchestration activities and Cosmos DB operations.
@@ -345,7 +343,7 @@ In `nostify` all state changes coming from the UI are associated with an `EventT
 - All state changes must be applied to an aggregate, and not directly to a projection or to an entity within an aggregate.  
 - Aggregates may only refer to other aggregates by id value.
 - An aggregate must implement the `NostifyObject` abstract class and the `IAggregate` interface.
-- All state changes must be applied using the `Apply()` method, either directly or by using the `ApplyAndPersistAsync<T>()` method.  The current state projection of an aggregate is simply the sum of all the events in the event store applied to a new instance of that aggregate object.
+- All state changes must be applied through `NostifyObject.Apply(IEvent)`, either directly or via `ApplyAndPersistAsync<T>()`. That entry point routes to attribute-based `[ApplyEvents]` handlers first (prefer the `typeof(...)` form when available), then typed `Apply(SpecificEventType, IEvent)` overloads, and finally an overridden `Apply(EventType, IEvent)` catch-all. The current state projection of an aggregate is simply the sum of all events in the event store applied to a new instance of that aggregate object.
 - In `nostify` only the changed properties should be included when creating an `Event`, best practice is to not send the entire aggregate.
 - A service generally contains one or more aggregates.  A read-only service, such as for BI purposes might not.  Domain boundaries should be respected when grouping aggregates together in a service.  IE - grouping a `WorkOrder` aggregate in the same service as a `WorkOrderStatus` aggregate (which might be an aggregate if your application allows users to add and update them) might make sense, where as putting a `PurchaseRequest` and a `WorkOrder` in the same service might not.  This is an art not a science so do what makes sense to your application.  It is theoretically possible to completely abandon the microservice concept and group an entire application into a single service, but probably not a good idea for scalability and maintainability.
 
@@ -383,7 +381,7 @@ The solution to this in `nostify` is the projection pattern.  A projection defin
 A projection must be added to an existing service.  Base aggregate must already exist. From the Projections directory:
 
 ```powershell
-dotnet new nostifyProjection -ag <Base_Aggregate_Name> --projectionName <Projection_Name>
+dotnet new nostifyProjection -ag <Base_Aggregate_Name> --projectionName <Projection_Name> --serviceName <Service_Name>
 ```
 
 ### Event
@@ -578,7 +576,7 @@ public class Test : NostifyObject, IAggregate
 }
 ```
 
-**Aggregate Example Using Attribute Dispatch (String-Based Mapping):**
+**Aggregate or Projection Example Using Attribute Dispatch (String-Based Mapping, Alternative):**
 
 ```C#
 public class TestByName : NostifyObject, IAggregate
@@ -588,6 +586,8 @@ public class TestByName : NostifyObject, IAggregate
     public static string currentStateContainerName => "Test";
 
     // Map by EventType.name values. These must match the names on the concrete EventType classes.
+    // This is especially useful for projection events coming from a different service when the
+    // other service's concrete EventType CLR types are not referenced locally.
     [ApplyEvents("Create_Test", "Update_Test")]
     private void OnTestCreatedOrUpdated(IEvent eventToApply)
     {
@@ -602,12 +602,12 @@ public class TestByName : NostifyObject, IAggregate
 }
 ```
 
-In both patterns:
+Across these patterns:
 
-- `Apply(IEvent)` is the public entry point used everywhere by the framework. It first checks for `[ApplyEvents]` decorated handler methods; if found, it invokes them directly.
-- If no attribute-based handler exists for an event, the framework falls back to `Apply((dynamic)eventToApply.eventType, eventToApply)`, so any matching `Apply(SpecificEventType, IEvent)` overload is preferred and `Apply(EventType, IEvent)` is the catch-all.
+- `NostifyObject.Apply(IEvent)` is the framework entry point. It checks attribute-based `[ApplyEvents]` handlers first, then falls back to typed overload dispatch.
+- If no attribute-based handler exists for an event, the framework calls `Apply((dynamic)eventToApply.eventType, eventToApply)`, so any matching `Apply(SpecificEventType, IEvent)` overload is preferred and `Apply(EventType, IEvent)` is the final catch-all.
 - `Apply(EventType, IEvent)` is `protected virtual` in `NostifyObject`. Override it when you want custom catch-all behavior; if all events are handled by attributes, you can omit it entirely.
-- Individual handler methods are decorated with `[ApplyEvents]` and accept `IEvent` to perform updates.
+- Individual handler methods are decorated with `[ApplyEvents]` and accept `IEvent` to perform updates. Prefer the `typeof(...)` form when the concrete `EventType` class is available.
 
 > **Dispatch rules:**
 > - `[ApplyEvents]` handlers can have any method name; the framework matches them by attribute metadata, not by method name.
@@ -696,7 +696,7 @@ public class Test : NostifyObject, IAggregate
 }
 ```
 
-> **Guidance**: Prefer the attribute-based pattern for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. The typed overload pattern is available when you have specific performance or code-style requirements.
+> **Guidance**: Prefer `[ApplyEvents(typeof(...))]` for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. Use string-based `[ApplyEvents("...")]` mappings when you cannot reference the concrete `EventType` class directly, such as projection handlers that consume events from another service, and use typed overload dispatch when you need explicit control or maximum performance.
 
 > **Interop**: Existing code that relies on `eventToApply.command` and `NostifyCommand` continues to work. New code should migrate to `eventToApply.eventType` and `EventType`-based dispatch, either via attributes or typed overloads.
 
@@ -1024,7 +1024,7 @@ public  class  GetTest
 One of the "out of the box" commands handled by `nostify` is the `Create_Aggregate` command.  The template logic flow is:
 
 - Create command is inbound via http post from user interface.  Typically this would indicate the user saved a new record.
-- Body of post must contain JSON with all the properties to set on create. The `Apply()` method in the aggregate will call `UpdateProperties<T>()` which will match any properties in the JSON to the aggregate and set them automatically.  Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored.  As such it is only necessary to send the properties that you want to set over the wire.
+- Body of post must contain JSON with all the properties to set on create. The aggregate's event application logic—typically a `[ApplyEvents(typeof(Create_<Aggregate>))]` handler or typed `Apply(Create_<Aggregate>, IEvent)` overload—can call `UpdateProperties<T>()` to match payload properties onto the aggregate automatically. Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored, so it is only necessary to send the properties that you want to set over the wire.
 - In a typical application there would be validation of the command occuring, validating say that all required properties are set.  `nostify` does not dictate a validation pattern, use the one that makes the most sense for your application.  There would probably be some kind of auth here as well for most apps.
 - The command handler creates an `Event` and persists it to the event store.  Note that the command registered must indicate a new record is being created by setting the `isNew` parameter to true:
 `public static readonly TestCommand Create = new TestCommand("Create_Test", true);`
@@ -1040,7 +1040,7 @@ Updating the aggregate and its base current state projection is also handled by 
 - Update command comes in via http patch from user interface.  Typically this would indicate a user saved an existing record.
 - Body of the request must contain a JSON object with a property `id` in the default template.
 - The default event handler for the current state container will query the container for the aggregate id, get the current state, apply the update, then save the update to the container.  This is contained in the `ApplyAndPersistAsync<T>()` method.
-- Body of patch must contain JSON with all the properties to update. The `Apply()` method in the aggregate will call `UpdateProperties<T>()` which will match any properties in the JSON to the aggregate and set them automatically.  Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored.  As such it is only necessary to send the properties that you want to set over the wire.
+- Body of patch must contain JSON with all the properties to update. The aggregate's event application logic—typically a `[ApplyEvents(typeof(Update_<Aggregate>))]` handler or typed `Apply(Update_<Aggregate>, IEvent)` overload—can call `UpdateProperties<T>()` to match payload properties onto the aggregate automatically. Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored, so it is only necessary to send the properties that you want to set over the wire.
 - There may be more than one event to subscribe to to update an aggregate if you implement a more complex object. For instance, if you have a property of `List<T>` you may have another command that is issued from the UI that does an http PUT to replace objects in the list.
 
 The function handling the update event naming convention is: `On<AggregateName>Updated`, for example: "OnTestUpdated".
@@ -1445,7 +1445,7 @@ For instance, with our `TestWithStatus` projection, we will need to subscribe to
 
 This means we will need two event handler functions, `OnTestUpdated_For_TestWithStatus` and `OnStatusUpdated_For_TestWithStatus`.  Note the naming convention.
 
-They will both take in their respective events and update the projection container.  Using the `ApplyAndPersistAsync()` method for updates to the base aggregate will automatically query the projection using the `id` value and call `Apply()` then save the updated projection back to the data store.
+They will both take in their respective events and update the projection container. Using `ApplyAndPersistAsync()` for updates to the base aggregate will automatically query the projection using the `id` value, route the event through its configured `[ApplyEvents]` or typed `Apply(...)` handlers, and then save the updated projection back to the data store.
 
 ### Delete Projection
 
@@ -1459,7 +1459,7 @@ Events are things that have already happened and need to be handled by the syste
 
 As such there should not be any validation to perform in an Event Handler, the "thing" has already happened.  An Event Handler is there to process the Event and perform any necessary state updates such as updating the data stored in a Projection container. After the Event is stored, it is published to the event bus (Kafka being used that way in this case), and then the Event Handlers pick it up by subscribing to the event.  Kafka makes sure each Event Handler receives each event it is subscribed to.
 
-The Event should be applied to the object's (Aggregate/Projection) current state by calling the `Apply()` method. This method needs to take an Event and change the state of the object based on the Event.  A "Create" Event might start with a new instance of the object and then update any properties of the object based off the Event's payload.  
+The event should be applied to the object's (Aggregate/Projection) current state through `NostifyObject.Apply(IEvent)`, which then routes to attribute-based `[ApplyEvents]` handlers, typed `Apply(SpecificEventType, IEvent)` overloads, or the `Apply(EventType, IEvent)` catch-all. A "Create" event might start with a new instance of the object and then update properties of that object based on the event payload.  
 
 #### Helper Methods
 
@@ -2553,7 +2553,7 @@ var factory = new ExternalDataEventFactory<MyProjection>(
     httpClient,
     queryExecutor: InMemoryQueryExecutor.Default);
 
-// First, get the base events (these populate the parentId via Apply())
+// First, get the base events (these populate parentId via the projection's configured event handlers)
 factory.WithSameServiceIdSelectors(p => p.siteId);
 
 // Then, get events for IDs populated by the first round of events
@@ -2576,7 +2576,7 @@ var factory = new ExternalDataEventFactory<MyProjection>(
 // Step 1: Get local events
 factory.WithSameServiceIdSelectors(p => p.siteId);
 
-// Step 2: Get external events (these may populate externalRefId via Apply())
+// Step 2: Get external events (these may populate externalRefId via the projection's configured event handlers)
 factory.WithEventRequestor("https://service1.com/events", p => p.externalId);
 
 // Step 3: Get dependent external events using IDs populated by Step 1 or Step 2
@@ -2802,7 +2802,7 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
         httpClient,
         pointInTime);
 
-    // Step 1: Get base aggregate events (these populate assignedWarehouseId via Apply())
+    // Step 1: Get base aggregate events (these populate assignedWarehouseId via the projection's configured event handlers)
     factory.WithSameServiceIdSelectors(p => p.orderId);
 
     // Step 2: Get events for IDs that were null initially but populated by Step 1 events
@@ -2840,7 +2840,7 @@ public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
     // Step 1: Local events
     factory.WithSameServiceIdSelectors(p => p.customerId);
 
-    // Step 2: External service events (may populate fulfillmentCenterId via Apply())
+    // Step 2: External service events (may populate fulfillmentCenterId via the projection's configured event handlers)
     factory.WithEventRequestor(
         "https://fulfillment-service/api/EventRequest",
         p => p.fulfillmentRequestId

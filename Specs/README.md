@@ -139,7 +139,7 @@ var order = await nostify.RehydrateAsync<Order>(orderId);
 
 ## Version History
 
-- **5.0.0-beta1** - Updated the package version and all template `.csproj` package references to `5.0.0-beta1`; updated template aggregates and projections to use the typed `Apply(EventType, IEvent)` fallback plus `_ReplaceMe_Command` overload pattern; widened `NostifyObject.Apply(EventType, IEvent)` to `protected` so external assemblies can implement it
+- **5.0.0** - Promoted the package and template references to `5.0.0`; introduced the preferred `[ApplyEvents(typeof(...))]` dispatch model alongside string-based and typed `Apply(...)` patterns; widened `NostifyObject.Apply(EventType, IEvent)` to `protected`; and hardened Kafka EventType restoration plus handler validation for legacy compatibility
 - **4.9.2** - Updated a dependency package to a patched version to address a known security vulnerability
 - **4.9.1** - Added durable projection initializer retry-options coverage tests verifying `durableTaskOptions` propagation across orchestrator activity calls and default retry-policy fallback behavior when options are omitted
 - **4.9.0** - Moved Azure Functions worker JSON configuration into reusable `WorkerConfigurationExtensions`; added `UseNostifyDefaultConfiguredNewtonsoftJson()`, shorter wrapper `UseNostifyDefaultJson()`, and experimental `UseNostifySystemTextJson()`; updated the `nostify` template to consume the library helper instead of generating its own local extension class
