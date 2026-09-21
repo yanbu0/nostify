@@ -21,18 +21,18 @@ public class EventTests
         }
     }
 
-    private sealed class TypedTestEventType : EventType
+    private sealed class TypedTestEventType : EventType<TypedTestEventType>
     {
-        public TypedTestEventType(string name, bool isNew = false, bool allowNullPayload = false)
-            : base(name, isNew, allowNullPayload)
+        public TypedTestEventType()
+            : base("Same_Name", isNew: true, allowNullPayload: true)
         {
         }
     }
 
-    private sealed class OtherTypedTestEventType : EventType
+    private sealed class OtherTypedTestEventType : EventType<OtherTypedTestEventType>
     {
-        public OtherTypedTestEventType(string name, bool isNew = false, bool allowNullPayload = false)
-            : base(name, isNew, allowNullPayload)
+        public OtherTypedTestEventType()
+            : base("Same_Name")
         {
         }
     }
@@ -181,8 +181,8 @@ public class EventTests
     [Fact]
     public void EventTypeEquality_WithDifferentTypedSubclassesAndSameName_ShouldReturnFalse()
     {
-        var eventType1 = new TypedTestEventType("Same_Name");
-        var eventType2 = new OtherTypedTestEventType("Same_Name");
+        var eventType1 = TypedTestEventType.Instance;
+        var eventType2 = OtherTypedTestEventType.Instance;
 
         Assert.False(eventType1.Equals(eventType2));
         Assert.NotEqual(eventType1.GetHashCode(), eventType2.GetHashCode());
@@ -191,7 +191,7 @@ public class EventTests
     [Fact]
     public void CommandGetter_WithTypedEventType_ShouldReturnCachedCompatibilityCommand()
     {
-        var eventType = new TypedTestEventType("Typed_Test", true, true);
+        var eventType = TypedTestEventType.Instance;
         var eventToTest = new Event(eventType, new { id = Guid.NewGuid(), name = "Test" });
 
 #pragma warning disable CS0618
@@ -204,6 +204,24 @@ public class EventTests
         Assert.Equal(eventType.isNew, command1.isNew);
         Assert.Equal(eventType.allowNullPayload, command1.allowNullPayload);
         Assert.False(eventType.Equals(command1));
+    }
+
+    [Fact]
+    public void SchemaVersion_WithTypedEventType_DefaultsToVersion2()
+    {
+        var eventToTest = new Event(TypedTestEventType.Instance, new { id = Guid.NewGuid(), name = "Test" });
+
+        Assert.Equal(2, eventToTest.schemaVersion);
+    }
+
+    [Fact]
+    public void SchemaVersion_WithLegacyCommand_DefaultsToVersion1()
+    {
+#pragma warning disable CS0618
+        var eventToTest = new Event(new NostifyCommand("Legacy_Test"), new { id = Guid.NewGuid(), name = "Test" });
+#pragma warning restore CS0618
+
+        Assert.Equal(1, eventToTest.schemaVersion);
     }
 
     [Fact]

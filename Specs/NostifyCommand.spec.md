@@ -2,7 +2,7 @@
 
 ## Overview
 
-`NostifyCommand` is an obsolete compatibility subclass of `EventType`. It remains available so existing command-based code continues to work while new code can move to typed `EventType` subclasses.
+`NostifyCommand` is an obsolete compatibility subclass of `EventType`. It remains available so existing command-based code and legacy Cosmos/Kafka documents continue to work while new code moves to typed `EventType<TSelf>` subclasses with canonical `Instance` values.
 
 ## Class Definition
 
@@ -187,7 +187,7 @@ Equality is based on both the concrete CLR type and the `name` property. Two `No
 
 ## Migration Note
 
-Prefer inheriting from `EventType` for new work. `NostifyCommand` is marked obsolete and should be treated as a temporary compatibility layer.
+Prefer inheriting from `EventType<TSelf>` for new work. `NostifyCommand` is marked obsolete and should be treated as a temporary compatibility layer and the only in-assembly exception to the canonical-instance event-type pattern.
 
 ## Related Types
 

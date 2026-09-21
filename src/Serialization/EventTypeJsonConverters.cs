@@ -14,8 +14,6 @@ internal static class EventTypeResolver
     internal const string TypeDiscriminatorPropertyName = "$eventTypeClrType";
     private static readonly Type MissingEventTypeSentinel = typeof(void);
     private static readonly ConcurrentDictionary<string, Type> _eventTypeByNameCache = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly ConcurrentDictionary<Type, object> _eventTypeInstanceCache = new();
-    private static readonly object _missingEventTypeInstance = new();
 
     internal static Type Resolve(string? typeName, string? eventTypeName = null)
     {
@@ -56,9 +54,9 @@ internal static class EventTypeResolver
 
     internal static EventType CreateInstance(Type resolvedType, string? name, bool isNew, bool allowNullPayload)
     {
-        if (TryGetStaticInstance(resolvedType, out var staticInstance))
+        if (!IsLegacyNostifyCommandType(resolvedType))
         {
-            return staticInstance;
+            return EventType.GetRequiredInstance(resolvedType);
         }
 
         var constructorArgs = new object?[] { name ?? "Unknown", isNew, allowNullPayload };
@@ -92,7 +90,8 @@ internal static class EventTypeResolver
             }
         }
 
-        throw new JsonSerializationException($"Unable to construct event type '{resolvedType.FullName}'. Ensure it exposes a supported constructor.");
+        throw new JsonSerializationException(
+            $"Unable to construct legacy command event type '{resolvedType.FullName}'. Ensure it exposes a supported constructor.");
     }
 
     private static Type? ResolveByName(string? eventTypeName)
@@ -124,7 +123,7 @@ internal static class EventTypeResolver
                 && !t.IsAbstract
                 && typeof(EventType).IsAssignableFrom(t))
             .Where(t => !IsLegacyNostifyCommandType(t))
-            .Select(t => new { Type = t, EventType = GetOrCreateEventTypeInstance(t) })
+            .Select(t => new { Type = t, EventType = TryGetRequiredInstance(t) })
             .Where(x => x.EventType != null && string.Equals(x.EventType.name, eventTypeName, StringComparison.OrdinalIgnoreCase))
             .Select(x => x.Type)
             .OrderBy(t => t.AssemblyQualifiedName, StringComparer.Ordinal)
@@ -141,70 +140,16 @@ internal static class EventTypeResolver
 #pragma warning restore CS0618
     }
 
-    private static EventType? GetOrCreateEventTypeInstance(Type eventTypeType)
+    private static EventType? TryGetRequiredInstance(Type eventTypeType)
     {
-        var cached = _eventTypeInstanceCache.GetOrAdd(eventTypeType, static type =>
+        try
         {
-            try
-            {
-                if (TryGetStaticInstance(type, out var staticInstance))
-                {
-                    return staticInstance;
-                }
-
-                var signatures = new[]
-                {
-                    new[] { typeof(string), typeof(bool), typeof(bool) },
-                    new[] { typeof(string), typeof(bool) },
-                    new[] { typeof(string) },
-                    Type.EmptyTypes
-                };
-
-                foreach (var signature in signatures)
-                {
-                    var ctor = type.GetConstructor(signature);
-                    if (ctor == null)
-                    {
-                        continue;
-                    }
-
-                    object?[] args = signature.Length switch
-                    {
-                        3 => new object?[] { "Unknown", false, false },
-                        2 => new object?[] { "Unknown", false },
-                        1 => new object?[] { "Unknown" },
-                        _ => Array.Empty<object?>()
-                    };
-
-                    if (ctor.Invoke(args) is EventType created)
-                    {
-                        return created;
-                    }
-                }
-            }
-            catch
-            {
-                // Ignore types we cannot instantiate while probing by name.
-            }
-
-            return _missingEventTypeInstance;
-        });
-
-        return ReferenceEquals(cached, _missingEventTypeInstance) ? null : (EventType)cached;
-    }
-
-    private static bool TryGetStaticInstance(Type resolvedType, out EventType? instance)
-    {
-        instance = null;
-
-        var instanceField = resolvedType.GetField("Instance", BindingFlags.Public | BindingFlags.Static);
-        if (instanceField == null || !typeof(EventType).IsAssignableFrom(instanceField.FieldType))
-        {
-            return false;
+            return EventType.GetRequiredInstance(eventTypeType);
         }
-
-        instance = instanceField.GetValue(null) as EventType;
-        return instance != null;
+        catch
+        {
+            return null;
+        }
     }
 }
 

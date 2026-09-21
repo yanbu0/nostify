@@ -120,17 +120,7 @@ namespace nostify
                                     "does not derive from EventType.");
                             }
 
-                            // Resolve a concrete EventType instance for this CLR type. For nostify command/event types
-                            // following the template pattern, prefer a public static 'Instance' field if present; otherwise
-                            // fall back to Activator.CreateInstance.
                             var eventTypeInstance = ResolveEventTypeInstance(etType, targetType, method);
-
-                            if (eventTypeInstance == null)
-                            {
-                                throw new InvalidOperationException(
-                                    $"Unable to create or resolve an EventType instance for type '{etType.FullName}' " +
-                                    $"used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}'.");
-                            }
 
                             if (typedMap.ContainsKey(eventTypeInstance))
                             {
@@ -173,35 +163,20 @@ namespace nostify
         }
 
         /// <summary>
-        /// Resolves a concrete EventType instance for the given CLR type using the same rules
-        /// as the original ApplyEventsHandlerCache implementation.
+        /// Resolves the canonical EventType instance for the given CLR type.
         /// </summary>
         private static EventType ResolveEventTypeInstance(Type etType, Type targetType, MemberInfo? member)
         {
-            // For nostify command/event types following the template pattern, prefer a public static 'Instance'
-            // field if present; otherwise fall back to Activator.CreateInstance.
-            var instanceField = etType.GetField("Instance", BindingFlags.Public | BindingFlags.Static);
-            if (instanceField != null && typeof(EventType).IsAssignableFrom(instanceField.FieldType))
+            try
             {
-                var value = instanceField.GetValue(null);
-                if (value is EventType eventType)
-                {
-                    return eventType;
-                }
-
-                throw new InvalidOperationException(
-                    $"Static field 'Instance' on type '{etType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}{(member != null ? "." + member.Name : string.Empty)}' " +
-                    "does not contain a valid EventType instance.");
+                return EventType.GetRequiredInstance(etType);
             }
-
-            var created = Activator.CreateInstance(etType) as EventType;
-            if (created == null)
+            catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    $"Unable to create an EventType instance for type '{etType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}{(member != null ? "." + member.Name : string.Empty)}'.");
+                    $"Unable to resolve the canonical EventType instance for type '{etType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}{(member != null ? "." + member.Name : string.Empty)}'. {ex.Message}",
+                    ex);
             }
-
-            return created;
         }
     }
 }

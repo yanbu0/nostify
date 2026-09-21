@@ -47,7 +47,7 @@ public class NostifyObjectTests
 
 
 
-    private sealed class CreateDispatchEventType : EventType
+    private sealed class CreateDispatchEventType : EventType<CreateDispatchEventType>
     {
         public CreateDispatchEventType() : base("Create_TestDispatch", true)
         {

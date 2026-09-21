@@ -273,7 +273,7 @@ The `Build` method performs these steps:
 
 The generic `Build<T>()` method (where `T : IAggregate`) performs all steps above plus automatic topic creation:
 
-1. **Scan for EventType definitions** - Finds all concrete `EventType` subclasses in the assembly of `T` and creates a Kafka topic for each distinct event type name, enumerating any public static `EventType` fields on the type when present and otherwise falling back to the concrete type name (which matches the template convention).
+1. **Scan for EventType definitions** - Finds all concrete non-legacy `EventType` subclasses in the assembly of `T`, resolves each one through its canonical public static `Instance` property, and creates a Kafka topic for each distinct logical `eventType.name`. Legacy `NostifyCommand` compatibility types are ignored during topic auto-discovery.
 2. **Scan for IAggregate types (opt-in)** - When `config.autoCreateEventRequestTopics` is `true` (set via `.WithAsyncEventRequest()`), finds all concrete `IAggregate` implementations in the same assembly and creates an `{aggregateType}_EventRequest` topic for each. Without `.WithAsyncEventRequest()`, this step is skipped entirely.
 3. **Filter existing topics** - Queries the Kafka AdminClient for existing topics and only creates new ones.
 4. **Create topics** - Calls `CreateTopicsAsync` for all new topics.

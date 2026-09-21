@@ -2,7 +2,7 @@
 
 ## Overview
 
-`Event` is the core immutable data structure representing state changes in the event store. Events now carry a typed `eventType` and keep the older `command` property as an obsolete compatibility alias.
+`Event` is the core immutable data structure representing state changes in the event store. Events now carry a typed `eventType`, keep the older `command` property as an obsolete compatibility alias, and expose `schemaVersion` as the envelope/schema version used for migration-aware serialization.
 
 ## Class Definition
 
@@ -30,7 +30,7 @@ public Event(
 | `aggregateRootId` | `Guid` | Required | ID of the aggregate this event affects |
 | `payload` | `object` | Required | Data containing properties to update |
 | `createdBy` | `Guid` | Required | User who triggered the event |
-| `version` | `int` | `1` | Event version for compatibility |
+| `schemaVersion` | `int` | `1` or `2` | Event envelope schema version for compatibility |
 
 ### Auto-Extract ID Constructor
 
@@ -79,7 +79,7 @@ For JSON deserialization from Cosmos DB.
 | `command` | `NostifyCommand` | Obsolete compatibility alias for `eventType`; typed events expose a cached metadata shim |
 | `aggregateRootId` | `Guid` | ID of the aggregate this event applies to |
 | `payload` | `object` | Data containing properties to update |
-| `version` | `int` | Version for compatibility/migration |
+| `schemaVersion` | `int` | Envelope/schema version for compatibility and migration |
 
 ## Methods
 
@@ -133,7 +133,16 @@ Applies the event's payload to a target object.
 
 The obsolete `command` property remains available for legacy callers. If the event was created with a typed `EventType` that is not a `NostifyCommand`, `command` returns a cached compatibility `NostifyCommand` containing the same `name`, `isNew`, and `allowNullPayload` values. This preserves older metadata-based code paths without changing the underlying typed dispatch model.
 
+`schemaVersion` now distinguishes modern typed envelopes from legacy command-only documents:
+
+- New events with a concrete non-legacy `eventType` default to `schemaVersion = 2`
+- Legacy command-only events remain `schemaVersion = 1`
+- Incoming documents with an explicit `schemaVersion` keep that persisted value
+- Incoming documents missing version metadata infer the version from the hydrated document shape
+
 During JSON deserialization, nostify first uses the `$eventTypeClrType` discriminator when present. If the discriminator is missing, unresolved, or resolves to a legacy `NostifyCommand`-derived type, the resolver now attempts to map by logical `eventType.name` to a loaded concrete `EventType` class before falling back to `NostifyCommand`.
+
+Concrete typed event types are restored strictly through their canonical `EventType<TSelf>.Instance` value; nostify no longer fabricates modern typed event-type instances by invoking arbitrary constructors during deserialization.
 
 When both `eventType` and legacy `command` are present in incoming JSON, `command` no longer overwrites an already resolved concrete `eventType`; it only hydrates `eventType` when no concrete value exists yet (or when the current value is still legacy `NostifyCommand`).
 
@@ -242,7 +251,7 @@ Events are stored in Cosmos DB with this structure:
         "total": 99.99,
         "status": "Pending"
     },
-    "version": 1
+    "schemaVersion": 1
 }
 ```
 

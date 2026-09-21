@@ -865,7 +865,7 @@ public class NostifyFactoryTests
         var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
 
         // Assert
-        var topic = Assert.Single(topics, t => t.Name == "Create_TopicDiscoveryAggregate");
+        var topic = Assert.Single(topics, t => t.Name == "Create_TopicDiscoveryAggregateLogical");
         Assert.Equal(5, topic.NumPartitions);
     }
 
@@ -883,16 +883,16 @@ public class NostifyFactoryTests
         var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
 
         // Assert
-        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAggregate");
+        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAggregateLogical");
         Assert.Contains(topics, t => t.Name == "TopicDiscoveryAggregate_EventRequest");
         Assert.Contains(topics, t => t.Name == "TopicDiscoveryAggregate_EventRequestResponse");
         Assert.All(
-            topics.Where(t => t.Name is "Create_TopicDiscoveryAggregate" or "TopicDiscoveryAggregate_EventRequest" or "TopicDiscoveryAggregate_EventRequestResponse"),
+            topics.Where(t => t.Name is "Create_TopicDiscoveryAggregateLogical" or "TopicDiscoveryAggregate_EventRequest" or "TopicDiscoveryAggregate_EventRequestResponse"),
             t => Assert.Equal(4, t.NumPartitions));
     }
 
     [Fact]
-    public void GetAutoCreateTopicSpecifications_ShouldIncludeAllStaticEventTypeFieldTopics()
+    public void GetAutoCreateTopicSpecifications_ShouldUseLogicalEventTypeNames()
     {
         // Arrange
         var config = new NostifyConfig();
@@ -901,8 +901,10 @@ public class NostifyFactoryTests
         var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
 
         // Assert
-        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAliasAggregate");
-        Assert.Contains(topics, t => t.Name == "Update_TopicDiscoveryAliasAggregate");
+        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAggregateLogical");
+        Assert.Contains(topics, t => t.Name == "Update_TopicDiscoveryAggregateLogical");
+        Assert.DoesNotContain(topics, t => t.Name == nameof(Create_TopicDiscoveryAggregate));
+        Assert.DoesNotContain(topics, t => t.Name == nameof(Update_TopicDiscoveryAggregate));
     }
 
     #endregion
@@ -924,19 +926,16 @@ public class TestFactoryAggregate : NostifyObject, IAggregate
     }
 }
 
-public sealed class Create_TopicDiscoveryAggregate : EventType
+public sealed class Create_TopicDiscoveryAggregate : EventType<Create_TopicDiscoveryAggregate>
 {
-    public Create_TopicDiscoveryAggregate() : base("Create_TopicDiscoveryAggregate", isNew: true)
+    public Create_TopicDiscoveryAggregate() : base("Create_TopicDiscoveryAggregateLogical", isNew: true)
     {
     }
 }
 
-public sealed class TopicDiscoveryAliasEventType : EventType
+public sealed class Update_TopicDiscoveryAggregate : EventType<Update_TopicDiscoveryAggregate>
 {
-    public static TopicDiscoveryAliasEventType Create = new("Create_TopicDiscoveryAliasAggregate");
-    public static TopicDiscoveryAliasEventType Update = new("Update_TopicDiscoveryAliasAggregate");
-
-    private TopicDiscoveryAliasEventType(string name) : base(name)
+    public Update_TopicDiscoveryAggregate() : base("Update_TopicDiscoveryAggregateLogical")
     {
     }
 }

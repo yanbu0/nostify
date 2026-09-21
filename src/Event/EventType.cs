@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 
 namespace nostify;
 
@@ -28,7 +29,7 @@ public abstract class EventType
     /// <param name="name">Human readable friendly name of event type. MUST BE UNIQUE - should follow convention "{Action}_{Entity Name}", ie - "Create_User". This will also become the name of the related Kafka topic.</param>
     /// <param name="isNew">Signifies if this event type results in the creation of a new aggregate.</param>
     /// <param name="allowNullPayload">Allows null payloads to be sent with this event type.</param>
-    protected EventType(string name, bool isNew = false, bool allowNullPayload = false)
+    internal EventType(string name, bool isNew = false, bool allowNullPayload = false)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Event type name cannot be null or empty", nameof(name));
@@ -90,5 +91,85 @@ public abstract class EventType
     {
         if (a is null) return b is not null;
         return !a.Equals(b);
+    }
+
+    internal static EventType GetRequiredInstance(Type eventTypeType)
+    {
+        if (eventTypeType == null)
+        {
+            throw new ArgumentNullException(nameof(eventTypeType));
+        }
+
+        if (!typeof(EventType).IsAssignableFrom(eventTypeType))
+        {
+            throw new InvalidOperationException(
+                $"Type '{eventTypeType.FullName}' must derive from {nameof(EventType)}.");
+        }
+
+        if (eventTypeType.IsAbstract || eventTypeType.IsInterface)
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeType.FullName}' must be a concrete {nameof(EventType)} type.");
+        }
+
+        var instanceProperty = eventTypeType.GetProperty(
+            "Instance",
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+
+        if (instanceProperty == null)
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeType.FullName}' must expose a public static Instance property.");
+        }
+
+        if (!typeof(EventType).IsAssignableFrom(instanceProperty.PropertyType))
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeType.FullName}' has an Instance property that does not return {nameof(EventType)}.");
+        }
+
+        if (instanceProperty.PropertyType != eventTypeType)
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeType.FullName}' must expose a public static Instance property returning exactly '{eventTypeType.FullName}'.");
+        }
+
+        if (instanceProperty.GetValue(null) is not EventType instance)
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeType.FullName}' has a null or invalid Instance property value.");
+        }
+
+        if (instance.GetType() != eventTypeType)
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeType.FullName}' Instance resolved to '{instance.GetType().FullName}', but it must resolve to '{eventTypeType.FullName}'.");
+        }
+
+        return instance;
+    }
+}
+
+/// <summary>
+/// Generic base for concrete event types that exposes a canonical singleton-style <see cref="Instance"/>.
+/// </summary>
+/// <typeparam name="TSelf">The concrete event type.</typeparam>
+public abstract class EventType<TSelf> : EventType
+    where TSelf : EventType<TSelf>, new()
+{
+    /// <summary>
+    /// Canonical runtime instance for the concrete event type.
+    /// </summary>
+    public static TSelf Instance { get; } = new();
+
+    /// <summary>
+    /// Base constructor for canonical event types.
+    /// </summary>
+    /// <param name="name">Logical event type name and Kafka topic name.</param>
+    /// <param name="isNew">Whether this event type creates a new aggregate.</param>
+    /// <param name="allowNullPayload">Whether this event type allows a null payload.</param>
+    protected EventType(string name, bool isNew = false, bool allowNullPayload = false)
+        : base(name, isNew, allowNullPayload)
+    {
     }
 }

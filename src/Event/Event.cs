@@ -18,6 +18,8 @@ public class Event : IEvent
 {
     private EventType? _eventType;
     private NostifyCommand? _legacyCommand;
+    private int? _schemaVersion;
+    private bool _eventTypeWasExplicitlySet;
 
     /// <summary>
     /// Constructor for Event, use when creating object to save to event store.
@@ -130,6 +132,7 @@ public class Event : IEvent
         set
         {
             _eventType = value;
+            _eventTypeWasExplicitlySet = value != null;
             _legacyCommand = value as NostifyCommand;
         }
     }
@@ -163,7 +166,21 @@ public class Event : IEvent
     public Guid aggregateRootId { get; set; }
 
     /// <inheritdoc />
-    public int schemaVersion { get; init; } = 1;
+    public int schemaVersion
+    {
+        get
+        {
+#pragma warning disable CS0618
+            if (_schemaVersion.HasValue)
+            {
+                return _schemaVersion.Value;
+            }
+
+            return _eventTypeWasExplicitlySet && _eventType is not NostifyCommand ? 2 : 1;
+#pragma warning restore CS0618
+        }
+        init => _schemaVersion = value;
+    }
 
     /// <inheritdoc />
     public object payload { get; set; }

@@ -10,6 +10,13 @@ namespace nostify.Tests;
 
 public class NewtonsoftJsonCosmosSerializerTests
 {
+    private sealed class SerializerTypedEventType : EventType<SerializerTypedEventType>
+    {
+        public SerializerTypedEventType() : base("Serializer_Typed_Event", isNew: true)
+        {
+        }
+    }
+
     private readonly NewtonsoftJsonCosmosSerializer _serializer;
 
     public NewtonsoftJsonCosmosSerializerTests()
@@ -73,6 +80,23 @@ public class NewtonsoftJsonCosmosSerializerTests
         Assert.Equal(payload.id, deserializedPayload.id);
         Assert.Equal(payload.Name, deserializedPayload.Name);
         Assert.Equal(payload.Value, deserializedPayload.Value);
+    }
+
+    [Fact]
+    public void SerializeDeserialize_IEvent_WithTypedEventType_ReturnsCanonicalInstance()
+    {
+        var aggregateId = Guid.NewGuid();
+        IEvent originalEvent = new Event(
+            SerializerTypedEventType.Instance,
+            aggregateId,
+            new SerializerTestAggregate { id = aggregateId, Name = "Typed Aggregate", Value = 123 });
+
+        var stream = _serializer.ToStream(originalEvent);
+        var deserializedEvent = _serializer.FromStream<IEvent>(stream);
+
+        Assert.NotNull(deserializedEvent);
+        Assert.Same(SerializerTypedEventType.Instance, deserializedEvent.eventType);
+        Assert.Equal(2, deserializedEvent.schemaVersion);
     }
 
     [Fact]

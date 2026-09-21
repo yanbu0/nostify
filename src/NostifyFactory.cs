@@ -414,13 +414,17 @@ public static class NostifyFactory
 
     /// <summary>
     /// Collects every topic that <see cref="Build{T}(NostifyConfig, bool)"/> should auto-create for an assembly.
-    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions plus optional
-    /// async request/response topics for aggregates when <see cref="NostifyConfig.autoCreateEventRequestTopics"/> is enabled.
+    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions via their canonical
+    /// public static <c>Instance</c> property plus optional async request/response topics for aggregates when
+    /// <see cref="NostifyConfig.autoCreateEventRequestTopics"/> is enabled.
     /// </summary>
     internal static List<TopicSpecification> GetAutoCreateTopicSpecifications(Assembly assembly, NostifyConfig config, bool verbose = false)
     {
         var eventTypes = assembly.GetTypes()
             .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+#pragma warning disable CS0618
+            .Where(t => !typeof(NostifyCommand).IsAssignableFrom(t))
+#pragma warning restore CS0618
             .SelectMany(t => GetTopicNames(t, config, verbose))
             .ToList();
 
@@ -478,47 +482,22 @@ public static class NostifyFactory
     }
 
     /// <summary>
-    /// Resolves one or more topic names for a concrete <see cref="EventType"/> definition.
-    /// Types that expose public static <see cref="EventType"/> fields keep contributing every named topic they publish.
-    /// Template-style concrete event types without those static fields fall back to the CLR type name instead.
+    /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition using its canonical
+    /// public static <c>Instance</c> value.
     /// </summary>
     private static IEnumerable<string> GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
-        var staticTopicNames = eventTypeClass
-            .GetFields(BindingFlags.Public | BindingFlags.Static)
-            .Where(field => typeof(EventType).IsAssignableFrom(field.FieldType))
-            .Select(field => field.GetValue(null))
-            .OfType<EventType>()
-            .Select(eventType => eventType.name)
-            .Where(topicName => !string.IsNullOrWhiteSpace(topicName))
-            .Distinct()
-            .ToList();
-
-        if (staticTopicNames.Count > 0)
-        {
-            return staticTopicNames;
-        }
-
-        // New templates emit one concrete EventType class per topic and do not need a static accessor field.
-        LogDebugOrVerboseConsole(
-            config,
-            verbose,
-            $"Using EventType class name {eventTypeClass.Name} for auto-topic discovery.",
-            "Using EventType class name {EventTypeName} for auto-topic discovery.",
-            eventTypeClass.Name);
-
-        if (!string.IsNullOrWhiteSpace(eventTypeClass.Name))
-        {
-            return new[] { eventTypeClass.Name };
-        }
+        var eventType = EventType.GetRequiredInstance(eventTypeClass);
 
         LogDebugOrVerboseConsole(
             config,
             verbose,
-            $"Skipping EventType {eventTypeClass.FullName} during auto-topic discovery because no topic name could be resolved.",
-            "Skipping EventType {EventType} during auto-topic discovery because no topic name could be resolved.",
-            eventTypeClass.FullName ?? eventTypeClass.Name);
-        return Array.Empty<string>();
+            $"Using canonical EventType instance {eventTypeClass.FullName}.Instance with logical topic name {eventType.name} for auto-topic discovery.",
+            "Using canonical EventType instance {EventType}.Instance with logical topic name {Topic} for auto-topic discovery.",
+            eventTypeClass.FullName ?? eventTypeClass.Name,
+            eventType.name);
+
+        return new[] { eventType.name };
     }
 
     /// <summary>
