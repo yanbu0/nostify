@@ -891,6 +891,20 @@ public class NostifyFactoryTests
             t => Assert.Equal(4, t.NumPartitions));
     }
 
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_ShouldIncludeAllStaticEventTypeFieldTopics()
+    {
+        // Arrange
+        var config = new NostifyConfig();
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
+
+        // Assert
+        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAliasAggregate");
+        Assert.Contains(topics, t => t.Name == "Update_TopicDiscoveryAliasAggregate");
+    }
+
     #endregion
 
 }
@@ -913,6 +927,16 @@ public class TestFactoryAggregate : NostifyObject, IAggregate
 public sealed class Create_TopicDiscoveryAggregate : EventType
 {
     public Create_TopicDiscoveryAggregate() : base("Create_TopicDiscoveryAggregate", isNew: true)
+    {
+    }
+}
+
+public sealed class TopicDiscoveryAliasEventType : EventType
+{
+    public static TopicDiscoveryAliasEventType Create = new("Create_TopicDiscoveryAliasAggregate");
+    public static TopicDiscoveryAliasEventType Update = new("Update_TopicDiscoveryAliasAggregate");
+
+    private TopicDiscoveryAliasEventType(string name) : base(name)
     {
     }
 }

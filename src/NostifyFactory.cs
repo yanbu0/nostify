@@ -399,9 +399,7 @@ public static class NostifyFactory
     {
         var eventTypes = assembly.GetTypes()
             .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
-            .Select(t => TryGetTopicName(t, config, verbose))
-            .Where(topicName => !string.IsNullOrWhiteSpace(topicName))
-            .Cast<string>()
+            .SelectMany(t => GetTopicNames(t, config, verbose))
             .ToList();
 
         if (config.logger != null) config.logger.LogDebug("Found {EventTypes} EventType definitions in assembly {Assembly}", string.Join(", ", eventTypes), assembly.FullName);
@@ -444,15 +442,21 @@ public static class NostifyFactory
             .ToList();
     }
 
-    private static string? TryGetTopicName(Type eventTypeClass, NostifyConfig config, bool verbose)
+    private static IEnumerable<string> GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
-        var staticField = eventTypeClass
+        var staticTopicNames = eventTypeClass
             .GetFields(BindingFlags.Public | BindingFlags.Static)
-            .FirstOrDefault(field => typeof(EventType).IsAssignableFrom(field.FieldType));
+            .Where(field => typeof(EventType).IsAssignableFrom(field.FieldType))
+            .Select(field => field.GetValue(null))
+            .OfType<EventType>()
+            .Select(eventType => eventType.name)
+            .Where(topicName => !string.IsNullOrWhiteSpace(topicName))
+            .Distinct()
+            .ToList();
 
-        if (staticField?.GetValue(null) is EventType eventType)
+        if (staticTopicNames.Count > 0)
         {
-            return eventType.name;
+            return staticTopicNames;
         }
 
         if (config.logger != null) config.logger.LogDebug("Using EventType class name {EventTypeName} for auto-topic discovery.", eventTypeClass.Name);
@@ -460,11 +464,11 @@ public static class NostifyFactory
 
         if (!string.IsNullOrWhiteSpace(eventTypeClass.Name))
         {
-            return eventTypeClass.Name;
+            return new[] { eventTypeClass.Name };
         }
 
         if (config.logger != null) config.logger.LogDebug("Skipping EventType {EventType} during auto-topic discovery because no topic name could be resolved.", eventTypeClass.FullName);
         else if (verbose) Console.WriteLine($"Skipping EventType {eventTypeClass.FullName} during auto-topic discovery because no topic name could be resolved.");
-        return null;
+        return Array.Empty<string>();
     }
 }
