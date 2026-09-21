@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using nostify;
  
 namespace _ServiceName__Service;
@@ -7,6 +8,10 @@ public class _ReplaceMe_ : _ReplaceMe_BaseClass, IAggregate
 {
     private readonly ILogger<_ReplaceMe_> _logger;
  
+    public _ReplaceMe_() : this(NullLogger<_ReplaceMe_>.Instance)
+    {
+    }
+
     public _ReplaceMe_(ILogger<_ReplaceMe_> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
