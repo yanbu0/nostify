@@ -381,7 +381,7 @@ The solution to this in `nostify` is the projection pattern.  A projection defin
 A projection must be added to an existing service.  Base aggregate must already exist. From the Projections directory:
 
 ```powershell
-dotnet new nostifyProjection -ag <Base_Aggregate_Name> --projectionName <Projection_Name>
+dotnet new nostifyProjection -ag <Base_Aggregate_Name> --projectionName <Projection_Name> -s <Service_Name>
 ```
 
 ### Event
