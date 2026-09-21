@@ -9,22 +9,22 @@ public abstract class _ReplaceMe_BaseClass : NostifyObject
     {
         switch (eventType)
         {
-            case _ReplaceMe_Create create:
+            case Create__ReplaceMe_ create:
                 Apply(create, eventToApply);
                 break;
-            case _ReplaceMe_Update update:
+            case Update__ReplaceMe_ update:
                 Apply(update, eventToApply);
                 break;
-            case _ReplaceMe_Delete delete:
+            case Delete__ReplaceMe_ delete:
                 Apply(delete, eventToApply);
                 break;
-            case _ReplaceMe_BulkCreate bulkCreate:
+            case BulkCreate__ReplaceMe_ bulkCreate:
                 Apply(bulkCreate, eventToApply);
                 break;
-            case _ReplaceMe_BulkUpdate bulkUpdate:
+            case BulkUpdate__ReplaceMe_ bulkUpdate:
                 Apply(bulkUpdate, eventToApply);
                 break;
-            case _ReplaceMe_BulkDelete bulkDelete:
+            case BulkDelete__ReplaceMe_ bulkDelete:
                 Apply(bulkDelete, eventToApply);
                 break;
             default:
@@ -32,10 +32,10 @@ public abstract class _ReplaceMe_BaseClass : NostifyObject
         }
     }
 
-    protected abstract void Apply(_ReplaceMe_Create eventType, IEvent eventToApply);
-    protected abstract void Apply(_ReplaceMe_Update eventType, IEvent eventToApply);
-    protected abstract void Apply(_ReplaceMe_Delete eventType, IEvent eventToApply);
-    protected abstract void Apply(_ReplaceMe_BulkCreate eventType, IEvent eventToApply);
-    protected abstract void Apply(_ReplaceMe_BulkUpdate eventType, IEvent eventToApply);
-    protected abstract void Apply(_ReplaceMe_BulkDelete eventType, IEvent eventToApply);
+    protected abstract void Apply(Create__ReplaceMe_ eventType, IEvent eventToApply);
+    protected abstract void Apply(Update__ReplaceMe_ eventType, IEvent eventToApply);
+    protected abstract void Apply(Delete__ReplaceMe_ eventType, IEvent eventToApply);
+    protected abstract void Apply(BulkCreate__ReplaceMe_ eventType, IEvent eventToApply);
+    protected abstract void Apply(BulkUpdate__ReplaceMe_ eventType, IEvent eventToApply);
+    protected abstract void Apply(BulkDelete__ReplaceMe_ eventType, IEvent eventToApply);
 }

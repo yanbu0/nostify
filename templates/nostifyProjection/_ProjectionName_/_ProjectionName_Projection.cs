@@ -3,6 +3,7 @@
 using System.Net.Http.Json;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json;
 using nostify;
 
@@ -12,6 +13,10 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
 {
     private readonly ILogger<_ProjectionName_> _logger;
  
+    public _ProjectionName_() : this(NullLogger<_ProjectionName_>.Instance)
+    {
+    }
+
     public _ProjectionName_(ILogger<_ProjectionName_> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
