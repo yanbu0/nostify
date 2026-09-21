@@ -63,7 +63,7 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
             // If baseResult is null return ValidationResult
             if (!baseResult)
             {
-                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the command '{eventType.name}'.");
+                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the event type '{eventType.name}'.");
             }
         }
 
