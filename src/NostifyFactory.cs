@@ -399,16 +399,16 @@ public static class NostifyFactory
     {
         var eventTypes = assembly.GetTypes()
             .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
-            .Select(t => TryCreateEventType(t, config, verbose))
-            .Where(eventType => eventType != null)
-            .Cast<EventType>()
+            .Select(t => TryGetTopicName(t, config, verbose))
+            .Where(topicName => !string.IsNullOrWhiteSpace(topicName))
+            .Cast<string>()
             .ToList();
 
-        if (config.logger != null) config.logger.LogDebug("Found {EventTypes} EventType definitions in assembly {Assembly}", string.Join(", ", eventTypes.Select(c => c.GetType().Name)), assembly.FullName);
-        else if (verbose) Console.WriteLine($"Found {string.Join(", ", eventTypes.Select(c => c.GetType().Name))} EventType definitions in assembly {assembly.FullName}");
+        if (config.logger != null) config.logger.LogDebug("Found {EventTypes} EventType definitions in assembly {Assembly}", string.Join(", ", eventTypes), assembly.FullName);
+        else if (verbose) Console.WriteLine($"Found {string.Join(", ", eventTypes)} EventType definitions in assembly {assembly.FullName}");
 
         List<TopicSpecification> topics = eventTypes
-            .Select(eventType => new TopicSpecification { Name = eventType.name, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 })
+            .Select(eventTypeName => new TopicSpecification { Name = eventTypeName, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 })
             .GroupBy(topic => topic.Name)
             .Select(group => group.First())
             .ToList();
@@ -444,17 +444,27 @@ public static class NostifyFactory
             .ToList();
     }
 
-    private static EventType? TryCreateEventType(Type eventTypeClass, NostifyConfig config, bool verbose)
+    private static string? TryGetTopicName(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
-        try
+        var staticField = eventTypeClass
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .FirstOrDefault(field => typeof(EventType).IsAssignableFrom(field.FieldType));
+
+        if (staticField?.GetValue(null) is EventType eventType)
         {
-            return Activator.CreateInstance(eventTypeClass) as EventType;
+            return eventType.name;
         }
-        catch (Exception ex)
+
+        if (config.logger != null) config.logger.LogDebug("Using EventType class name {EventTypeName} for auto-topic discovery.", eventTypeClass.Name);
+        else if (verbose) Console.WriteLine($"Using EventType class name {eventTypeClass.Name} for auto-topic discovery.");
+
+        if (!string.IsNullOrWhiteSpace(eventTypeClass.Name))
         {
-            if (config.logger != null) config.logger.LogDebug(ex, "Skipping EventType {EventType} during auto-topic discovery because it could not be constructed.", eventTypeClass.FullName);
-            else if (verbose) Console.WriteLine($"Skipping EventType {eventTypeClass.FullName} during auto-topic discovery because it could not be constructed.");
-            return null;
+            return eventTypeClass.Name;
         }
+
+        if (config.logger != null) config.logger.LogDebug("Skipping EventType {EventType} during auto-topic discovery because no topic name could be resolved.", eventTypeClass.FullName);
+        else if (verbose) Console.WriteLine($"Skipping EventType {eventTypeClass.FullName} during auto-topic discovery because no topic name could be resolved.");
+        return null;
     }
 }
