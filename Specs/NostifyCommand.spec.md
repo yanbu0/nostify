@@ -43,6 +43,7 @@ Equality matches `EventType` semantics: two commands are equal when they have th
 - `Event.command` is the legacy compatibility surface.
 - Setting `Event.command` hydrates `Event.eventType` with an internal legacy adapter (`LegacyNostifyCommandEventType`) when needed.
 - Reading `Event.command` from a typed event returns a compatibility shim mirroring `eventType` metadata.
+- `NostifyCommand` has an implicit conversion to `EventType`, enabling existing command-based APIs to flow into `EventType` signatures without changing call sites.
 
 ## Migration Guidance
 

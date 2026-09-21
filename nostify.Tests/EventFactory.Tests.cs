@@ -249,7 +249,7 @@ public class EventFactoryTests
     }
 
     [Fact]
-    public void CreateNullPayloadEvent_ShouldAutomaticallyDisableValidation()
+    public void CreateNullPayloadEvent_ShouldNotMutateValidationSetting()
     {
         // Arrange
         var factory = new EventFactory();
@@ -262,8 +262,8 @@ public class EventFactoryTests
         // Act
         var result = factory.CreateNullPayloadEvent(command, aggregateId);
 
-        // Assert - Validation should be disabled after calling CreateNullPayloadEvent
-        Assert.False(factory.ValidatePayload);
+        // Assert - Creating a null-payload event should not mutate factory-wide validation settings
+        Assert.True(factory.ValidatePayload);
         Assert.NotNull(result);
     }
 

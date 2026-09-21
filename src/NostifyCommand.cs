@@ -69,7 +69,17 @@ public class NostifyCommand
     /// <summary>
     /// Allows sorting by name.
     /// </summary>
-    public int CompareTo(object other) => name.CompareTo(((NostifyCommand)other).name);
+    public int CompareTo(object other)
+    {
+        var otherCommand = (NostifyCommand)other;
+        int nameComparison = string.Compare(name, otherCommand.name, StringComparison.Ordinal);
+        if (nameComparison != 0)
+        {
+            return nameComparison;
+        }
+
+        return string.Compare(GetType().FullName, otherCommand.GetType().FullName, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Converts legacy command metadata to the internal legacy <see cref="EventType"/> adapter.

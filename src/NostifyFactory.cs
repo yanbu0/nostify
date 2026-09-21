@@ -422,6 +422,7 @@ public static class NostifyFactory
     {
         var eventTypes = assembly.GetTypes()
             .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+            .Where(t => t != typeof(LegacyNostifyCommandEventType))
             .SelectMany(t => GetTopicNames(t, config, verbose))
             .ToList();
 

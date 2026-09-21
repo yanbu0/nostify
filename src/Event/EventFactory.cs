@@ -110,7 +110,7 @@ public class EventFactory
 
     /// <summary>
     /// Creates a new <see cref="Event"/> instance with a null payload and no validation.
-    /// This method automatically disables validation and is typically used for delete operations or events that don't require payload data.
+    /// This method does not run payload validation and is typically used for delete operations or events that don't require payload data.
     /// </summary>
     /// <param name="eventType">The event type to persist.</param>
     /// <param name="aggregateRootId">The ID of the root aggregate to perform the command on.</param>
@@ -119,7 +119,6 @@ public class EventFactory
     /// <returns>A <see cref="Event"/> instance with null payload and no validation.</returns>
     public IEvent CreateNullPayloadEvent(EventType eventType, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default)
     {
-        ValidatePayload = false;
         var evt = new Event(eventType, aggregateRootId, new { }, userId, partitionKey);
         return evt;
     }
@@ -130,14 +129,13 @@ public class EventFactory
     [Obsolete("Use EventType overloads instead.")]
     public IEvent CreateNullPayloadEvent(NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default)
     {
-        ValidatePayload = false;
         var evt = new Event(command, aggregateRootId, new { }, userId, partitionKey);
         return evt;
     }
 
     /// <summary>
     /// Creates a new <see cref="Event"/> instance with a null payload and no validation, parsing the aggregateRootId, userId, and partitionKey from string values.
-    /// This method automatically disables validation and is typically used for delete operations or events that don't require payload data.
+    /// This method does not run payload validation and is typically used for delete operations or events that don't require payload data.
     /// </summary>
     /// <param name="eventType">The event type to persist.</param>
     /// <param name="aggregateRootId">The ID of the root aggregate to perform the command on, as a string.</param>
@@ -146,7 +144,6 @@ public class EventFactory
     /// <returns>A <see cref="Event"/> instance with null payload and no validation.</returns>
     public IEvent CreateNullPayloadEvent(EventType eventType, string aggregateRootId, string userId, string partitionKey)
     {
-        ValidatePayload = false;
         var evt = new Event(eventType, aggregateRootId, new { }, userId, partitionKey);
         return evt;
     }
@@ -157,7 +154,6 @@ public class EventFactory
     [Obsolete("Use EventType overloads instead.")]
     public IEvent CreateNullPayloadEvent(NostifyCommand command, string aggregateRootId, string userId, string partitionKey)
     {
-        ValidatePayload = false;
         var evt = new Event(command, aggregateRootId, new { }, userId, partitionKey);
         return evt;
     }

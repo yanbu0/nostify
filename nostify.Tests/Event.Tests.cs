@@ -207,6 +207,19 @@ public class EventTests
     }
 
     [Fact]
+    public void CommandSetter_WithTypedEventType_ShouldNotOverwriteConcreteEventType()
+    {
+        var eventToTest = new Event(TypedTestEventType.Instance, new { id = Guid.NewGuid(), name = "Test" });
+
+#pragma warning disable CS0618
+        eventToTest.command = new NostifyCommand("Legacy_Test", true, true);
+#pragma warning restore CS0618
+
+        Assert.Same(TypedTestEventType.Instance, eventToTest.eventType);
+        Assert.Equal(2, eventToTest.schemaVersion);
+    }
+
+    [Fact]
     public void SchemaVersion_WithTypedEventType_DefaultsToVersion2()
     {
         var eventToTest = new Event(TypedTestEventType.Instance, new { id = Guid.NewGuid(), name = "Test" });
