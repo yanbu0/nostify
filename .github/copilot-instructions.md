@@ -36,8 +36,8 @@ Always reference these instructions first and fallback to search or bash command
   - This creates a complete Azure Functions project with CQRS/Event Sourcing pattern
   - Example: `dotnet new nostify -ag InventoryItem -p 7072`
   - Template validation: Full process takes ~14 seconds including restore and build
-- Add aggregate to existing service: `dotnet new nostifyAggregate -ag <AggregateName> -s <ServiceName>`
-- Add projection: `dotnet new nostifyProjection -ag <BaseAggregateName> --projectionName <ProjectionName> -s <ServiceName>`
+- Add aggregate to existing service: `dotnet new nostifyAggregate -ag <AggregateName> --serviceName <ServiceName>`
+- Add projection: `dotnet new nostifyProjection -ag <BaseAggregateName> --projectionName <ProjectionName> --serviceName <ServiceName>`
 - Uninstall templates: `dotnet new uninstall nostify` (if conflicts occur)
 
 ## External Dependencies (Required for Full Operation)
