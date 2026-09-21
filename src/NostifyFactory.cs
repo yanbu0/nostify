@@ -357,54 +357,8 @@ public static class NostifyFactory
             if (config.logger != null) config.logger.LogDebug("Admin Client built");
             else if (verbose) Console.WriteLine("Admin Client built");
 
-            //Find all EventType instances in this assembly of T and create a topic for each
             var assembly = typeof(T).Assembly;
-            var commandTypes = assembly.GetTypes().Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract);
-            if (config.logger != null) config.logger.LogDebug("Found {CommandTypes} command definitions in assembly {Assembly}", string.Join(", ", commandTypes.Select(c => c.Name)), assembly.FullName);
-            else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
-
-            //Get any static fields of each commandType that inherit type EventType        
-            var commandProperties = commandTypes
-                .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
-                .Where(p => typeof(EventType).IsAssignableFrom(p.FieldType)));
-
-            if (config.logger != null) config.logger.LogDebug("Found {Commands} commands", string.Join(", ", commandProperties.Select(c => c.Name)));
-            else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");
-
-            List<TopicSpecification> topics = new List<TopicSpecification>();
-            foreach (var commandType in commandProperties)
-            {
-                //Get the name property value of the commandType
-                var topic = commandType.GetValue(null).GetType().GetProperty("name").GetValue(commandType.GetValue(null)).ToString();
-                var topicSpec = new TopicSpecification { Name = topic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 };
-                topics.Add(topicSpec);
-            }
-
-            // Also create _EventRequest topics for each IAggregate in the assembly (opt-in via WithAsyncEventRequest)
-            if (config.autoCreateEventRequestTopics)
-            {
-                var aggregateTypes = assembly.GetTypes().Where(t => typeof(IAggregate).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-                foreach (var aggType in aggregateTypes)
-                {
-                    var aggTypeProp = aggType.GetProperty("aggregateType", BindingFlags.Public | BindingFlags.Static);
-                    if (aggTypeProp != null)
-                    {
-                        var aggTypeName = aggTypeProp.GetValue(null)?.ToString();
-                        if (!string.IsNullOrEmpty(aggTypeName))
-                        {
-                            var eventRequestTopic = $"{aggTypeName}_EventRequest";
-                            topics.Add(new TopicSpecification { Name = eventRequestTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
-                            if (config.logger != null) config.logger.LogDebug("Adding EventRequest topic: {Topic}", eventRequestTopic);
-                            else if (verbose) Console.WriteLine($"Adding EventRequest topic: {eventRequestTopic}");
-
-                            var eventRequestResponseTopic = $"{aggTypeName}_EventRequestResponse";
-                            topics.Add(new TopicSpecification { Name = eventRequestResponseTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
-                            if (config.logger != null) config.logger.LogDebug("Adding EventRequestResponse topic: {Topic}", eventRequestResponseTopic);
-                            else if (verbose) Console.WriteLine($"Adding EventRequestResponse topic: {eventRequestResponseTopic}");
-                        }
-                    }
-                }
-            }
+            List<TopicSpecification> topics = GetAutoCreateTopicSpecifications(assembly, config, verbose);
 
             //Filter topics to only create new topics
             var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
@@ -439,5 +393,68 @@ public static class NostifyFactory
             throw new NostifyException("Error building Nostify with autocreate topics " + ex.Message + " " + ex.InnerException?.Message);
         }
 
+    }
+
+    internal static List<TopicSpecification> GetAutoCreateTopicSpecifications(Assembly assembly, NostifyConfig config, bool verbose = false)
+    {
+        var eventTypes = assembly.GetTypes()
+            .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+            .Select(t => TryCreateEventType(t, config, verbose))
+            .Where(eventType => eventType != null)
+            .Cast<EventType>()
+            .ToList();
+
+        if (config.logger != null) config.logger.LogDebug("Found {EventTypes} EventType definitions in assembly {Assembly}", string.Join(", ", eventTypes.Select(c => c.GetType().Name)), assembly.FullName);
+        else if (verbose) Console.WriteLine($"Found {string.Join(", ", eventTypes.Select(c => c.GetType().Name))} EventType definitions in assembly {assembly.FullName}");
+
+        List<TopicSpecification> topics = eventTypes
+            .Select(eventType => new TopicSpecification { Name = eventType.name, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 })
+            .GroupBy(topic => topic.Name)
+            .Select(group => group.First())
+            .ToList();
+
+        if (config.autoCreateEventRequestTopics)
+        {
+            var aggregateTypes = assembly.GetTypes().Where(t => typeof(IAggregate).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+            foreach (var aggType in aggregateTypes)
+            {
+                var aggTypeProp = aggType.GetProperty("aggregateType", BindingFlags.Public | BindingFlags.Static);
+                if (aggTypeProp != null)
+                {
+                    var aggTypeName = aggTypeProp.GetValue(null)?.ToString();
+                    if (!string.IsNullOrEmpty(aggTypeName))
+                    {
+                        var eventRequestTopic = $"{aggTypeName}_EventRequest";
+                        topics.Add(new TopicSpecification { Name = eventRequestTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
+                        if (config.logger != null) config.logger.LogDebug("Adding EventRequest topic: {Topic}", eventRequestTopic);
+                        else if (verbose) Console.WriteLine($"Adding EventRequest topic: {eventRequestTopic}");
+
+                        var eventRequestResponseTopic = $"{aggTypeName}_EventRequestResponse";
+                        topics.Add(new TopicSpecification { Name = eventRequestResponseTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
+                        if (config.logger != null) config.logger.LogDebug("Adding EventRequestResponse topic: {Topic}", eventRequestResponseTopic);
+                        else if (verbose) Console.WriteLine($"Adding EventRequestResponse topic: {eventRequestResponseTopic}");
+                    }
+                }
+            }
+        }
+
+        return topics
+            .GroupBy(topic => topic.Name)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private static EventType? TryCreateEventType(Type eventTypeClass, NostifyConfig config, bool verbose)
+    {
+        try
+        {
+            return Activator.CreateInstance(eventTypeClass) as EventType;
+        }
+        catch (Exception ex)
+        {
+            if (config.logger != null) config.logger.LogDebug(ex, "Skipping EventType {EventType} during auto-topic discovery because it could not be constructed.", eventTypeClass.FullName);
+            else if (verbose) Console.WriteLine($"Skipping EventType {eventTypeClass.FullName} during auto-topic discovery because it could not be constructed.");
+            return null;
+        }
     }
 }
