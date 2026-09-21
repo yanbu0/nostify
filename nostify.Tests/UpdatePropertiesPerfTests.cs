@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -11,9 +10,9 @@ namespace nostify.Tests
 {
     /// <summary>
     /// Performance comparison tests for NostifyObject.UpdateProperties implementations.
-    /// This does NOT change the production implementation, it just re-implements
-    /// the current and optimized logic side-by-side and compares execution time
-    /// under synthetic load.
+    /// This does NOT change the production implementation. It compares a copied
+    /// baseline implementation with the production UpdateProperties path under
+    /// synthetic load.
     /// </summary>
     public class UpdatePropertiesPerfTests
     {
@@ -306,61 +305,10 @@ namespace nostify.Tests
 
         #endregion
 
-        #region Optimized implementation (proposed)
-
-        private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> _propertyMapCache = new();
-
-        private static readonly MethodInfo _getValueMethodInfo = typeof(NostifyExtensions)
-            .GetMethod("GetValue", BindingFlags.Public | BindingFlags.Static);
-
-        /// <summary>
-        /// Get or build a dictionary of writable properties for type T keyed by property name.
-        /// This is the core reflection cache for the optimized implementation.
-        /// </summary>
-        private static Dictionary<string, PropertyInfo> GetPropertyMap<T>() where T : NostifyObject
-        {
-            return _propertyMapCache.GetOrAdd(typeof(T), t =>
-            {
-                return t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(p => p.GetSetMethod() != null)
-                    .ToDictionary(p => p.Name, p => p);
-            });
-        }
-
-        private static void OptimizedUpdateProperties<T>(NostifyObject target, object payload) where T : NostifyObject
-        {
-            var jPayload = JObject.FromObject(payload);
-            var payloadProps = jPayload.Children<JProperty>();
-            var propertyMap = GetPropertyMap<T>();
-
-            foreach (JProperty prop in payloadProps)
-            {
-                OptimizedUpdateProperty<T>(target, prop.Name, prop.Name, jPayload, propertyMap);
-            }
-        }
-
-        private static void OptimizedUpdateProperty<T>(NostifyObject target, string propertyToSet, string propertyToGetValueFrom, JObject jPayload, Dictionary<string, PropertyInfo> propertyMap) where T : NostifyObject
-        {
-            if (!propertyMap.TryGetValue(propertyToSet, out var propToUpdate))
-            {
-                // property does not exist on T, no-op like original
-                return;
-            }
-
-            // reuse cached MethodInfo for GetValue and only make generic per property type
-            var getValueRef = _getValueMethodInfo.MakeGenericMethod(propToUpdate.PropertyType);
-            var valueToSet = getValueRef.Invoke(null, new object[] { jPayload, propertyToGetValueFrom });
-
-            // use existing PropertyInfo directly instead of re-querying typeof(T)
-            propToUpdate.SetValue(target, valueToSet);
-        }
-
-        #endregion
-
         #region Benchmark harness
 
         /// <summary>
-        /// Simple micro-benchmark: run the original and optimized implementations
+        /// Simple micro-benchmark: run the original baseline and production implementation
         /// across many aggregates and payloads and compare total elapsed time.
         ///
         /// This is not a formal benchmark; it is intended to give a rough
@@ -375,17 +323,21 @@ namespace nostify.Tests
             // Warm up JIT and caches
             Warmup();
 
-            var aggregates = Enumerable.Range(0, aggregateCount)
+            var originalAggregates = Enumerable.Range(0, aggregateCount)
+                .Select(_ => new LargeAggregate())
+                .ToArray();
+            var optimizedAggregates = Enumerable.Range(0, aggregateCount)
                 .Select(_ => new LargeAggregate())
                 .ToArray();
 
             var payloads = Enumerable.Range(0, iterationsPerAggregate)
-                .Select(i => (object)CreatePayload(i))
+                .Select(CreatePayload)
                 .ToArray();
+            var lastPayload = payloads[payloads.Length - 1];
 
             // Measure original
             var originalSw = Stopwatch.StartNew();
-            foreach (var aggregate in aggregates)
+            foreach (var aggregate in originalAggregates)
             {
                 foreach (var payload in payloads)
                 {
@@ -398,11 +350,11 @@ namespace nostify.Tests
 
             // Measure optimized
             var optimizedSw = Stopwatch.StartNew();
-            foreach (var aggregate in aggregates)
+            foreach (var aggregate in optimizedAggregates)
             {
                 foreach (var payload in payloads)
                 {
-                    OptimizedUpdateProperties<LargeAggregate>(aggregate, payload);
+                    aggregate.UpdateProperties<LargeAggregate>(payload);
                 }
             }
 
@@ -420,6 +372,10 @@ namespace nostify.Tests
             // Sanity check: ensure optimized is not dramatically slower. We do not
             // assert a specific perf gain to avoid flakiness across environments.
             Assert.True(optimizedMs <= originalMs * 1.10, "Optimized implementation should not be more than 10% slower than original.");
+            Assert.Equal(lastPayload.P01, originalAggregates[0].P01);
+            Assert.Equal(lastPayload.P100, originalAggregates[0].P100);
+            Assert.Equal(lastPayload.P01, optimizedAggregates[0].P01);
+            Assert.Equal(lastPayload.P100, optimizedAggregates[0].P100);
         }
 
         /// <summary>
@@ -431,7 +387,7 @@ namespace nostify.Tests
             var payload = (object)CreatePayload(0);
 
             OriginalUpdateProperties<LargeAggregate>(aggregate, payload);
-            OptimizedUpdateProperties<LargeAggregate>(aggregate, payload);
+            aggregate.UpdateProperties<LargeAggregate>(payload);
         }
 
         #endregion
