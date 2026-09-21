@@ -27,7 +27,7 @@ using nostify;
      /// Handles Create events for the aggregate.
      /// Populates the aggregate properties from the event payload and logs the operation.
      /// </summary>
-     protected void Apply(Create__ReplaceMe_ eventType, IEvent eventToApply)
+     protected override void Apply(Create__ReplaceMe_ eventType, IEvent eventToApply)
      {
          try
          {
@@ -48,7 +48,7 @@ using nostify;
      /// Handles Update events for the aggregate.
      /// Populates the aggregate properties from the event payload and logs the operation.
      /// </summary>
-     protected void Apply(Update__ReplaceMe_ eventType, IEvent eventToApply)
+     protected override void Apply(Update__ReplaceMe_ eventType, IEvent eventToApply)
      {
          try
          {
@@ -69,7 +69,7 @@ using nostify;
      /// Handles bulk create events for the aggregate.
      /// Populates the aggregate properties from the event payload and logs the operation.
      /// </summary>
-     protected void Apply(BulkCreate__ReplaceMe_ eventType, IEvent eventToApply)
+     protected override void Apply(BulkCreate__ReplaceMe_ eventType, IEvent eventToApply)
      {
          try
          {
@@ -90,7 +90,7 @@ using nostify;
      /// Handles bulk update events for the aggregate.
      /// Populates the aggregate properties from the event payload and logs the operation.
      /// </summary>
-     protected void Apply(BulkUpdate__ReplaceMe_ eventType, IEvent eventToApply)
+     protected override void Apply(BulkUpdate__ReplaceMe_ eventType, IEvent eventToApply)
      {
          try
          {
@@ -111,7 +111,7 @@ using nostify;
      /// Handles delete events for the aggregate.
      /// Marks the aggregate as deleted and logs the operation.
      /// </summary>
-     protected void Apply(Delete__ReplaceMe_ eventType, IEvent eventToApply)
+     protected override void Apply(Delete__ReplaceMe_ eventType, IEvent eventToApply)
      {
          try
          {
@@ -132,7 +132,7 @@ using nostify;
      /// Handles bulk delete events for the aggregate.
      /// Marks the aggregate as deleted and logs the operation.
      /// </summary>
-     protected void Apply(BulkDelete__ReplaceMe_ eventType, IEvent eventToApply)
+     protected override void Apply(BulkDelete__ReplaceMe_ eventType, IEvent eventToApply)
      {
          try
          {
