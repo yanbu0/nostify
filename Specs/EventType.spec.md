@@ -2,7 +2,7 @@
 
 ## Overview
 
-`EventType` is the abstract runtime base for event metadata in nostify. Public APIs such as `IEvent.eventType`, serializers, event factories, and dispatch infrastructure all rely on this non-generic polymorphic base, while concrete event types now typically inherit from `EventType<TSelf>` to expose a canonical singleton-style `Instance`.
+`EventType` is the abstract runtime base for event metadata in nostify. Public APIs such as `IEvent.eventType`, serializers, event factories, and dispatch infrastructure all rely on this non-generic polymorphic base, while public concrete event types must inherit from `EventType<TSelf>` so they expose a canonical singleton-style `Instance`.
 
 ## Class Definition
 
@@ -27,7 +27,7 @@ public abstract class EventType<TSelf> : EventType where TSelf : EventType<TSelf
 internal EventType(string name, bool isNew = false, bool allowNullPayload = false)
 ```
 
-Creates a new typed event metadata object. The non-generic constructor is `internal` so external callers cannot inherit directly from `EventType`.
+Creates a new typed event metadata object. The non-generic constructor is `internal` so external callers cannot inherit directly from `EventType`, which means public event metadata should no longer use `class X : EventType`.
 
 ### Generic Constructor
 
@@ -60,6 +60,8 @@ public sealed class CreateOrder : EventType<CreateOrder>
     {
     }
 }
+
+EventType eventType = CreateOrder.Instance;
 ```
 
 ## Canonical Instance Resolution
@@ -73,7 +75,7 @@ public sealed class CreateOrder : EventType<CreateOrder>
 
 ## Backward Compatibility
 
-`NostifyCommand` currently remains in the codebase as an obsolete subclass of `EventType`. Existing code that still uses `NostifyCommand` continues to work as a legacy compatibility exception, while new code should inherit from `EventType<TSelf>`.
+`NostifyCommand` currently remains in the codebase as an obsolete subclass of `EventType`. Existing code that still uses `NostifyCommand` continues to work as a legacy compatibility exception, while new code should inherit from `EventType<TSelf>` and use the inherited canonical `Instance`.
 
 ## Related Types
 

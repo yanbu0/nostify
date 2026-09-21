@@ -19,18 +19,18 @@ public Event(
     EventType eventType,
     Guid aggregateRootId,
     object payload,
-    Guid createdBy,
-    int version = 1
+    Guid userId = default,
+    Guid partitionKey = default
 )
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `command` | `NostifyCommand` | Required | The command that triggered this event |
+| `eventType` | `EventType` | Required | The typed event metadata to persist |
 | `aggregateRootId` | `Guid` | Required | ID of the aggregate this event affects |
 | `payload` | `object` | Required | Data containing properties to update |
-| `createdBy` | `Guid` | Required | User who triggered the event |
-| `schemaVersion` | `int` | `1` or `2` | Event envelope schema version for compatibility |
+| `userId` | `Guid` | `default` | User who triggered the event |
+| `partitionKey` | `Guid` | `default` | Partition key for the aggregate stream |
 
 ### Auto-Extract ID Constructor
 
@@ -38,8 +38,8 @@ public Event(
 public Event(
     EventType eventType,
     object payload,
-    Guid createdBy,
-    int version = 1
+    Guid userId = default,
+    Guid partitionKey = default
 )
 ```
 
@@ -52,8 +52,8 @@ public Event(
     EventType eventType,
     string aggregateRootId,
     object payload,
-    string createdBy,
-    int version = 1
+    string userId,
+    string partitionKey
 )
 ```
 
@@ -71,22 +71,24 @@ For JSON deserialization from Cosmos DB.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `string` | Unique event identifier (auto-generated GUID string) |
+| `id` | `Guid` | Unique event identifier (auto-generated GUID) |
 | `timestamp` | `DateTime` | When the event occurred (UTC) |
-| `partitionKey` | `string` | Partition key for routing (aggregate type name) |
-| `createdBy` | `Guid` | User who triggered the event |
+| `partitionKey` | `Guid` | Partition key for routing |
+| `userId` | `Guid` | User who triggered the event |
 | `eventType` | `EventType` | The typed event metadata being performed |
 | `command` | `NostifyCommand` | Obsolete compatibility alias for `eventType`; typed events expose a cached metadata shim |
 | `aggregateRootId` | `Guid` | ID of the aggregate this event applies to |
 | `payload` | `object` | Data containing properties to update |
 | `schemaVersion` | `int` | Envelope/schema version for compatibility and migration |
 
+`schemaVersion` is not a public constructor parameter. New events infer it from the assigned metadata (`2` for modern non-legacy typed event types, `1` for legacy `NostifyCommand`-style metadata), while deserialized documents preserve any explicitly stored value.
+
 ## Methods
 
-### HasProperty
+### PayloadHasProperty
 
 ```csharp
-public bool HasProperty(string propertyName)
+public bool PayloadHasProperty(string propertyName)
 ```
 
 Checks if the payload contains a specific property.
@@ -110,12 +112,12 @@ Returns the payload as a typed object.
 ### ValidatePayload
 
 ```csharp
-public bool ValidatePayload<A>() where A : IAggregate
+public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : class
 ```
 
 Validates that payload properties match the aggregate type.
 
-**Returns:** `bool` - True if all payload properties are valid
+**Returns:** `IEvent` - The current event for chaining; throws if validation fails
 
 ### ApplyTo
 
@@ -223,7 +225,7 @@ foreach (var @event in events.OrderBy(e => e.timestamp))
 ### Checking Payload Contents
 
 ```csharp
-if (@event.HasProperty("Status"))
+if (@event.PayloadHasProperty("Status"))
 {
     var payload = @event.GetPayload<dynamic>();
     Console.WriteLine($"Status changed to: {payload.Status}");
@@ -259,32 +261,29 @@ Events are stored in Cosmos DB with this structure:
 
 Event validation ensures:
 
-1. **Non-null command** - Events must have a command
+1. **Non-null event type** - Events must have event metadata
 2. **Valid aggregate ID** - Must be a valid GUID
 3. **Payload validation** - Properties must match aggregate type (when validated)
 
 ```csharp
-// Validate payload against aggregate
-if (!@event.ValidatePayload<Order>())
-{
-    throw new NostifyValidationException("Invalid payload properties");
-}
+// Validate payload against aggregate (throws on failure)
+@event.ValidatePayload<Order>();
 ```
 
 ## Kafka Integration
 
 Events are published to Kafka topics:
 
-- **Topic Name**: `command.name` (e.g., "CreateOrder")
+- **Topic Name**: `eventType.name` (e.g., "Create_Order")
 - **Message Key**: `aggregateRootId.ToString()`
 - **Message Value**: JSON serialized event
 
 ## Best Practices
 
 1. **Immutable Payloads** - Use anonymous objects or records
-2. **Descriptive Commands** - Use clear command names
-3. **Include Context** - Always set `createdBy`
-4. **Version Events** - Use `version` for schema evolution
+2. **Descriptive Event Types** - Use clear logical event names
+3. **Include Context** - Always set `userId` when available
+4. **Version Awareness** - Let `schemaVersion` reflect typed-vs-legacy compatibility
 5. **Validate Early** - Validate payloads before publishing
 
 ## Related Types

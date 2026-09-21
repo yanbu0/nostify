@@ -510,41 +510,43 @@ An `EventType` is functionally similar to the old `NostifyCommand` concept: it n
 
 #### Example: EventTypes for Test Aggregate
 
-The templates use a separate concrete `EventType` subclass for each logical operation:
+The templates use a separate concrete `EventType<TSelf>` subclass for each logical operation, and the canonical metadata is consumed through the inherited `Instance` property:
 
 ```C#
-public sealed class Create_Test : EventType
+public sealed class Create_Test : EventType<Create_Test>
 {
     public Create_Test() : base("Create_Test", isNew: true) { }
 }
 
-public sealed class Update_Test : EventType
+public sealed class Update_Test : EventType<Update_Test>
 {
     public Update_Test() : base("Update_Test") { }
 }
 
-public sealed class Delete_Test : EventType
+public sealed class Delete_Test : EventType<Delete_Test>
 {
     public Delete_Test() : base("Delete_Test", isNew: false, allowNullPayload: true) { }
 }
 
-public sealed class BulkCreate_Test : EventType
+public sealed class BulkCreate_Test : EventType<BulkCreate_Test>
 {
     public BulkCreate_Test() : base("BulkCreate_Test", isNew: true) { }
 }
 
-public sealed class BulkUpdate_Test : EventType
+public sealed class BulkUpdate_Test : EventType<BulkUpdate_Test>
 {
     public BulkUpdate_Test() : base("BulkUpdate_Test") { }
 }
 
-public sealed class BulkDelete_Test : EventType
+public sealed class BulkDelete_Test : EventType<BulkDelete_Test>
 {
     public BulkDelete_Test() : base("BulkDelete_Test", isNew: false, allowNullPayload: true) { }
 }
+
+EventType createEventType = Create_Test.Instance;
 ```
 
-Each event type is represented by its own class (matching the pattern used in the aggregate templates), and the `name` passed to the base `EventType` constructor is the value that will be stored in the event and used for routing.
+Each event type is represented by its own class (matching the pattern used in the aggregate templates), and the `name` passed to the base `EventType<TSelf>` constructor is the value that will be stored in the event and used for routing. Direct public concrete inheritance from the non-generic `EventType` base is no longer supported; `NostifyCommand` remains the legacy compatibility exception.
 
 You can continue to use `NostifyCommand` in the same style, but it is now conceptually a specialized `EventType` pattern.
 
@@ -3678,15 +3680,15 @@ public class OrderAggregate : NostifyObject, IAggregate
 }
 
 // OrderEventTypes.cs
-public sealed class Create_Order : EventType
+public sealed class Create_Order : EventType<Create_Order>
 {
     public Create_Order() : base("Create_Order", isNew: true) { }
 }
-public sealed class Update_Order : EventType
+public sealed class Update_Order : EventType<Update_Order>
 {
     public Update_Order() : base("Update_Order") { }
 }
-public sealed class Delete_Order : EventType
+public sealed class Delete_Order : EventType<Delete_Order>
 {
     public Delete_Order() : base("Delete_Order", allowNullPayload: true) { }
 }
