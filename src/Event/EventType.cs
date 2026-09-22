@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Reflection;
 
 namespace nostify;
 
@@ -119,7 +120,11 @@ public abstract class EventType
 
     private static EventType CreateEventTypeDefinition(Type eventTypeType)
     {
-        var parameterlessCtor = eventTypeType.GetConstructor(Type.EmptyTypes);
+        var parameterlessCtor = eventTypeType.GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
         if (parameterlessCtor != null && parameterlessCtor.Invoke(null) is EventType defaultInstance)
         {
             return defaultInstance;
