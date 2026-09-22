@@ -21,39 +21,46 @@ namespace nostify.Tests
         /// <summary>
         /// Concrete event types plus a static command facade, mirroring the current templates.
         /// </summary>
-        private sealed class Create_Order : EventType<Create_Order>
+        private sealed class Create_Order : EventType<Create_Order>, IEventType
         {
-            public Create_Order() : base("Create_Order", isNew: true) { }
+            public static string name => "Create_Order";
+            public Create_Order() : base(name, isNew: true) { }
         }
 
-        private sealed class Update_Order : EventType<Update_Order>
+        private sealed class Update_Order : EventType<Update_Order>, IEventType
         {
-            public Update_Order() : base("Update_Order") { }
+            public static string name => "Update_Order";
+            public Update_Order() : base(name) { }
         }
 
-        private sealed class Delete_Order : EventType<Delete_Order>
+        private sealed class Delete_Order : EventType<Delete_Order>, IEventType
         {
-            public Delete_Order() : base("Delete_Order", isNew: false, allowNullPayload: true) { }
+            public static string name => "Delete_Order";
+            public Delete_Order() : base(name, isNew: false, allowNullPayload: true) { }
         }
 
-        private sealed class BulkCreate_Order : EventType<BulkCreate_Order>
+        private sealed class BulkCreate_Order : EventType<BulkCreate_Order>, IEventType
         {
-            public BulkCreate_Order() : base("BulkCreate_Order", isNew: true) { }
+            public static string name => "BulkCreate_Order";
+            public BulkCreate_Order() : base(name, isNew: true) { }
         }
 
-        private sealed class BulkUpdate_Order : EventType<BulkUpdate_Order>
+        private sealed class BulkUpdate_Order : EventType<BulkUpdate_Order>, IEventType
         {
-            public BulkUpdate_Order() : base("BulkUpdate_Order") { }
+            public static string name => "BulkUpdate_Order";
+            public BulkUpdate_Order() : base(name) { }
         }
 
-        private sealed class BulkDelete_Order : EventType<BulkDelete_Order>
+        private sealed class BulkDelete_Order : EventType<BulkDelete_Order>, IEventType
         {
-            public BulkDelete_Order() : base("BulkDelete_Order", isNew: false, allowNullPayload: true) { }
+            public static string name => "BulkDelete_Order";
+            public BulkDelete_Order() : base(name, isNew: false, allowNullPayload: true) { }
         }
 
-        private sealed class Canonical_Order : EventType<Canonical_Order>
+        private sealed class Canonical_Order : EventType<Canonical_Order>, IEventType
         {
-            public Canonical_Order() : base("Canonical_Order") { }
+            public static string name => "Canonical_Order";
+            public Canonical_Order() : base(name) { }
         }
 
         private static class OrderCommand

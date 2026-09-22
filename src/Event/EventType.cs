@@ -4,6 +4,17 @@ using System.Reflection;
 namespace nostify;
 
 /// <summary>
+/// Static metadata contract for concrete event type definitions.
+/// </summary>
+public interface IEventType
+{
+    /// <summary>
+    /// Logical event type name used for topic discovery.
+    /// </summary>
+    static abstract string name { get; }
+}
+
+/// <summary>
 /// Defines the event type being delivered to the event store.
 /// </summary>
 public abstract class EventType
@@ -166,7 +177,7 @@ internal sealed class LegacyNostifyCommandEventType : EventType
 /// </summary>
 /// <typeparam name="TSelf">The concrete event type.</typeparam>
 public abstract class EventType<TSelf> : EventType
-    where TSelf : EventType<TSelf>, new()
+    where TSelf : EventType<TSelf>, IEventType, new()
 {
     /// <summary>
     /// Canonical runtime instance for the concrete event type.

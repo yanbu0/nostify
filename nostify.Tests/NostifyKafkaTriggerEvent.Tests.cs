@@ -13,9 +13,10 @@ namespace nostify.Tests;
 
 public class NostifyKafkaTriggerEventTests
 {
-    public sealed class Update_ResourceGrade : EventType<Update_ResourceGrade>
+    public sealed class Update_ResourceGrade : EventType<Update_ResourceGrade>, IEventType
     {
-        public Update_ResourceGrade() : base("Update_ResourceGrade")
+        public static string name => "Update_ResourceGrade";
+        public Update_ResourceGrade() : base(name)
         {
         }
     }

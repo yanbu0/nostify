@@ -414,14 +414,14 @@ public static class NostifyFactory
 
     /// <summary>
     /// Collects every topic that <see cref="Build{T}(NostifyConfig, bool)"/> should auto-create for an assembly.
-    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions via their canonical
-    /// public static <c>Instance</c> property plus optional async request/response topics for aggregates when
+    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions implementing
+    /// <see cref="IEventType"/> via their public static <c>name</c> metadata plus optional async request/response topics for aggregates when
     /// <see cref="NostifyConfig.autoCreateEventRequestTopics"/> is enabled.
     /// </summary>
     internal static List<TopicSpecification> GetAutoCreateTopicSpecifications(Assembly assembly, NostifyConfig config, bool verbose = false)
     {
         var eventTypes = assembly.GetTypes()
-            .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+            .Where(t => typeof(EventType).IsAssignableFrom(t) && typeof(IEventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
             .Where(t => t != typeof(LegacyNostifyCommandEventType))
             .SelectMany(t => GetTopicNames(t, config, verbose))
             .ToList();
@@ -480,22 +480,34 @@ public static class NostifyFactory
     }
 
     /// <summary>
-    /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition using its canonical
-    /// public static <c>Instance</c> value.
+    /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition using static
+    /// <see cref="IEventType.name"/> metadata.
     /// </summary>
     private static IEnumerable<string> GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
-        var eventType = EventType.GetRequiredInstance(eventTypeClass);
+        var staticNameProperty = eventTypeClass.GetProperty("name", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+        if (staticNameProperty == null || staticNameProperty.PropertyType != typeof(string))
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeClass.FullName}' must expose a public static string property named '{nameof(IEventType.name)}'.");
+        }
+
+        var topicName = staticNameProperty.GetValue(null) as string;
+        if (string.IsNullOrWhiteSpace(topicName))
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeClass.FullName}' has an empty static '{nameof(IEventType.name)}' value.");
+        }
 
         LogDebugOrVerboseConsole(
             config,
             verbose,
-            $"Using canonical EventType instance {eventTypeClass.FullName}.Instance with logical topic name {eventType.name} for auto-topic discovery.",
-            "Using canonical EventType instance {EventType}.Instance with logical topic name {Topic} for auto-topic discovery.",
+            $"Using static IEventType.name from {eventTypeClass.FullName} with logical topic name {topicName} for auto-topic discovery.",
+            "Using static IEventType.name from {EventType} with logical topic name {Topic} for auto-topic discovery.",
             eventTypeClass.FullName ?? eventTypeClass.Name,
-            eventType.name);
+            topicName);
 
-        return new[] { eventType.name };
+        return new[] { topicName };
     }
 
     /// <summary>

@@ -10,9 +10,10 @@ namespace nostify.Tests;
 
 public class NewtonsoftJsonCosmosSerializerTests
 {
-    private sealed class SerializerTypedEventType : EventType<SerializerTypedEventType>
+    private sealed class SerializerTypedEventType : EventType<SerializerTypedEventType>, IEventType
     {
-        public SerializerTypedEventType() : base("Serializer_Typed_Event", isNew: true)
+        public static string name => "Serializer_Typed_Event";
+        public SerializerTypedEventType() : base(name, isNew: true)
         {
         }
     }

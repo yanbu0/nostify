@@ -501,7 +501,7 @@ await _nostify.PersistEventAsync(deleteEvent);
 
 Historically, `nostify` used `NostifyCommand` as the dispatch primitive for events. In v5+, this has been generalized to the `EventType` base class to support both traditional command-style dispatch and attribute-based dispatch on aggregates and projections.
 
-> **Deprecation Note**: `NostifyCommand` continues to work and is fully supported for backward compatibility, but new code should prefer `EventType` + attribute-based dispatch. `NostifyCommand` will be treated as a specialized `EventType` pattern going forward.
+> **Deprecation Note**: `NostifyCommand` continues to work for backward compatibility, but new code should prefer `EventType` + attribute-based dispatch. `NostifyCommand` is now a separate legacy metadata type, not an `EventType` subclass.
 
 #### EventType Base Class
 
@@ -510,43 +510,49 @@ An `EventType` is functionally similar to the old `NostifyCommand` concept: it n
 
 #### Example: EventTypes for Test Aggregate
 
-The templates use a separate concrete `EventType<TSelf>` subclass for each logical operation, and the canonical metadata is consumed through the inherited `Instance` property:
+The templates use a separate concrete `EventType<TSelf>` subclass for each logical operation. Each type implements `IEventType` with a public static `name` (used for topic discovery), while runtime metadata is consumed through the inherited `Instance` property:
 
 ```C#
-public sealed class Create_Test : EventType<Create_Test>
+public sealed class Create_Test : EventType<Create_Test>, IEventType
 {
-    public Create_Test() : base("Create_Test", isNew: true) { }
+    public static string name => "Create_Test";
+    public Create_Test() : base(name, isNew: true) { }
 }
 
-public sealed class Update_Test : EventType<Update_Test>
+public sealed class Update_Test : EventType<Update_Test>, IEventType
 {
-    public Update_Test() : base("Update_Test") { }
+    public static string name => "Update_Test";
+    public Update_Test() : base(name) { }
 }
 
-public sealed class Delete_Test : EventType<Delete_Test>
+public sealed class Delete_Test : EventType<Delete_Test>, IEventType
 {
-    public Delete_Test() : base("Delete_Test", isNew: false, allowNullPayload: true) { }
+    public static string name => "Delete_Test";
+    public Delete_Test() : base(name, isNew: false, allowNullPayload: true) { }
 }
 
-public sealed class BulkCreate_Test : EventType<BulkCreate_Test>
+public sealed class BulkCreate_Test : EventType<BulkCreate_Test>, IEventType
 {
-    public BulkCreate_Test() : base("BulkCreate_Test", isNew: true) { }
+    public static string name => "BulkCreate_Test";
+    public BulkCreate_Test() : base(name, isNew: true) { }
 }
 
-public sealed class BulkUpdate_Test : EventType<BulkUpdate_Test>
+public sealed class BulkUpdate_Test : EventType<BulkUpdate_Test>, IEventType
 {
-    public BulkUpdate_Test() : base("BulkUpdate_Test") { }
+    public static string name => "BulkUpdate_Test";
+    public BulkUpdate_Test() : base(name) { }
 }
 
-public sealed class BulkDelete_Test : EventType<BulkDelete_Test>
+public sealed class BulkDelete_Test : EventType<BulkDelete_Test>, IEventType
 {
-    public BulkDelete_Test() : base("BulkDelete_Test", isNew: false, allowNullPayload: true) { }
+    public static string name => "BulkDelete_Test";
+    public BulkDelete_Test() : base(name, isNew: false, allowNullPayload: true) { }
 }
 
 EventType createEventType = Create_Test.Instance;
 ```
 
-Each event type is represented by its own class (matching the pattern used in the aggregate templates), and the `name` passed to the base `EventType<TSelf>` constructor is the value that will be stored in the event and used for routing. Direct public concrete inheritance from the non-generic `EventType` base is no longer supported; `NostifyCommand` remains the legacy compatibility exception.
+Each event type is represented by its own class (matching the pattern used in the aggregate templates). `IEventType.name` is used by `NostifyFactory.Build<T>()` for topic auto-discovery, while the runtime `eventType.name` instance value is stored with the event envelope and used for dispatch/routing.
 
 You can continue to use `NostifyCommand` in the same style, but it is now conceptually a specialized `EventType` pattern.
 

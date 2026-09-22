@@ -21,18 +21,20 @@ public class EventTests
         }
     }
 
-    private sealed class TypedTestEventType : EventType<TypedTestEventType>
+    private sealed class TypedTestEventType : EventType<TypedTestEventType>, IEventType
     {
+        public static string name => "Same_Name";
         public TypedTestEventType()
-            : base("Same_Name", isNew: true, allowNullPayload: true)
+            : base(name, isNew: true, allowNullPayload: true)
         {
         }
     }
 
-    private sealed class OtherTypedTestEventType : EventType<OtherTypedTestEventType>
+    private sealed class OtherTypedTestEventType : EventType<OtherTypedTestEventType>, IEventType
     {
+        public static string name => "Same_Name";
         public OtherTypedTestEventType()
-            : base("Same_Name")
+            : base(name)
         {
         }
     }

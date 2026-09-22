@@ -2,13 +2,18 @@
 
 ## Overview
 
-`EventType` is the abstract runtime base for event metadata in nostify. Public APIs such as `IEvent.eventType`, serializers, event factories, and dispatch infrastructure all rely on this non-generic polymorphic base, while public concrete event types must inherit from `EventType<TSelf>` so they expose a canonical singleton-style `Instance`.
+`EventType` is the abstract runtime base for event metadata in nostify. Public APIs such as `IEvent.eventType`, serializers, event factories, and dispatch infrastructure rely on this polymorphic base, while concrete event types now also implement `IEventType` so topic metadata can be read from a static name contract.
 
 ## Class Definition
 
 ```csharp
+public interface IEventType
+{
+    public static abstract string name { get; }
+}
+
 public abstract class EventType
-public abstract class EventType<TSelf> : EventType where TSelf : EventType<TSelf>, new()
+public abstract class EventType<TSelf> : EventType where TSelf : EventType<TSelf>, IEventType, new()
 ```
 
 ## Properties
@@ -41,11 +46,13 @@ Used by `EventType<TSelf>` so generated and external concrete event types can in
 
 `EventType` exists so events can carry a concrete CLR type instead of only a value-like `NostifyCommand` instance. This enables `NostifyObject.Apply(IEvent)` to dispatch by runtime event type using overload resolution when derived aggregates or projections provide more specific `Apply(...)` overloads.
 
-`EventType<TSelf>.Instance` is the authoritative source of metadata for a concrete event type. Nostify now resolves concrete event types through this canonical instance for:
+`EventType<TSelf>.Instance` remains the authoritative runtime instance for dispatch and serialization, while `IEventType.name` is the authoritative static topic identifier for discovery in `NostifyFactory.Build`.
 
-- Kafka topic auto-discovery
+Nostify resolves concrete event types through the canonical instance for:
+
 - Newtonsoft.Json / System.Text.Json / Cosmos event-type hydration
 - `[ApplyEvents(typeof(...))]` handler mapping
+- For Kafka topic auto-discovery, `Build<T>()` reads static `IEventType.name`
 
 ## Equality
 
@@ -66,7 +73,7 @@ EventType eventType = CreateOrder.Instance;
 
 ## Canonical Instance Resolution
 
-`EventType.GetRequiredInstance(Type)` is an internal shared resolver used by topic discovery, serializers, and attribute dispatch. It:
+`EventType.GetRequiredInstance(Type)` is an internal shared resolver used by serializers and attribute dispatch. It:
 
 1. Requires a concrete `EventType` subclass
 2. Finds a public static `Instance` property (including inherited static members from `EventType<TSelf>`)

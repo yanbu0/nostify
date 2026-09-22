@@ -255,7 +255,7 @@ var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
 ```
 
 - Sets `NostifyConfig.autoCreateEventRequestTopics = true`
-- Without this call, `Build<T>()` creates only `EventType`-derived topics (no `_EventRequest` topics)
+- Without this call, `Build<T>()` creates only event-type topics (no `_EventRequest` topics)
 - Position in the fluent chain does not matter
 
 ## Internal Behavior
@@ -273,7 +273,7 @@ The `Build` method performs these steps:
 
 The generic `Build<T>()` method (where `T : IAggregate`) performs all steps above plus automatic topic creation:
 
-1. **Scan for EventType definitions** - Finds all concrete non-legacy `EventType` subclasses in the assembly of `T`, resolves each one through its canonical public static `Instance` property, and creates a Kafka topic for each distinct logical `eventType.name`. Legacy `NostifyCommand` compatibility types are ignored during topic auto-discovery.
+1. **Scan for IEventType definitions** - Finds all concrete non-legacy `EventType` subclasses in the assembly of `T` that implement `IEventType`, reads each type's public static `name`, and creates a Kafka topic for each distinct static topic name. Legacy `NostifyCommand` compatibility adapter types are ignored during topic auto-discovery.
 2. **Scan for IAggregate types (opt-in)** - When `config.autoCreateEventRequestTopics` is `true` (set via `.WithAsyncEventRequest()`), finds all concrete `IAggregate` implementations in the same assembly and creates an `{aggregateType}_EventRequest` topic for each. Without `.WithAsyncEventRequest()`, this step is skipped entirely.
 3. **Filter existing topics** - Queries the Kafka AdminClient for existing topics and only creates new ones.
 4. **Create topics** - Calls `CreateTopicsAsync` for all new topics.
