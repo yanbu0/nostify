@@ -37,6 +37,7 @@ public static class GrpcEventMapping
             partitionKey = string.IsNullOrEmpty(msg.PartitionKey) ? Guid.Empty : Guid.Parse(msg.PartitionKey),
             userId = string.IsNullOrEmpty(msg.UserId) ? Guid.Empty : Guid.Parse(msg.UserId),
             eventType = resolvedEventType,
+            schemaVersion = msg.SchemaVersion,
             payload = string.IsNullOrEmpty(msg.PayloadJson)
                 ? null!
                 : JsonConvert.DeserializeObject<object>(msg.PayloadJson)!
