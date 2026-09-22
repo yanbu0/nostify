@@ -131,7 +131,7 @@ public abstract class EventType
         }
 
         throw new InvalidOperationException(
-            $"Event type '{eventTypeType.FullName}' must expose a public parameterless constructor so its metadata can be resolved.");
+            $"Event type '{eventTypeType.FullName}' must expose a parameterless constructor so its metadata can be resolved.");
     }
 }
 
