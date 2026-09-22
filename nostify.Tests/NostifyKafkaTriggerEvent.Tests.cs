@@ -977,7 +977,7 @@ public class NostifyKafkaTriggerEventTests
         // Assert
         var deserializedEvent = Assert.IsType<Event>(result);
         Assert.Same(Update_ResourceGrade.Instance, deserializedEvent.eventType);
-        Assert.Equal(Update_ResourceGrade.Instance.name, deserializedEvent.command.name);
+        Assert.Equal(((EventType)Update_ResourceGrade.Instance).name, deserializedEvent.command.name);
     }
 
     [Fact]

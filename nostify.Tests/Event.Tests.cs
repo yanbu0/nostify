@@ -202,7 +202,7 @@ public class EventTests
 #pragma warning restore CS0618
 
         Assert.Same(command1, command2);
-        Assert.Equal(eventType.name, command1.name);
+        Assert.Equal(((EventType)eventType).name, command1.name);
         Assert.Equal(eventType.isNew, command1.isNew);
         Assert.Equal(eventType.allowNullPayload, command1.allowNullPayload);
         Assert.False(eventType.Equals(command1));
