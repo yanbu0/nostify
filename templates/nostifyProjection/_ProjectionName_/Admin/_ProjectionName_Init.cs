@@ -20,7 +20,7 @@ public class _ProjectionName_Init
             httpClient,
             nostify,
             nameof(_ProjectionName_Init),
-            batchSize: 100,
+            batchSize: 1000,
             concurrentBatchCount: 5);
     }
 
