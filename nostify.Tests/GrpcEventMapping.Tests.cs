@@ -12,6 +12,18 @@ namespace nostify.Tests;
 
 public class GrpcEventMappingTests
 {
+    /// <summary>
+    /// Concrete event definition used to verify that gRPC command names resolve to
+    /// canonical event types rather than the legacy command compatibility adapter.
+    /// </summary>
+    private sealed class GrpcResolvableEventType : EventType
+    {
+        public GrpcResolvableEventType()
+            : base("Grpc_Resolvable_Event", isNew: true, allowNullPayload: true)
+        {
+        }
+    }
+
     #region MapToProto Tests
 
     [Fact]
@@ -158,6 +170,36 @@ public class GrpcEventMappingTests
         Assert.False(evt.command.isNew);
         Assert.True(evt.command.allowNullPayload);
         Assert.NotNull(evt.payload);
+    }
+
+    [Fact]
+    public void MapFromProto_ResolvableEventType_UsesConcreteTypeAndPreservesMetadataAndSchema()
+    {
+        // Arrange: transport metadata intentionally differs from the concrete definition
+        // so the assertions prove that canonical event-type metadata is retained.
+        var msg = new EventMessage
+        {
+            Id = Guid.NewGuid().ToString(),
+            AggregateRootId = Guid.NewGuid().ToString(),
+            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+            SchemaVersion = 7,
+            Command = new CommandMessage
+            {
+                Name = "Grpc_Resolvable_Event",
+                IsNew = false,
+                AllowNullPayload = false
+            }
+        };
+
+        // Act
+        var evt = GrpcEventMapping.MapFromProto(msg);
+
+        // Assert
+        var eventType = Assert.IsType<GrpcResolvableEventType>(evt.eventType);
+        Assert.Equal("Grpc_Resolvable_Event", eventType.name);
+        Assert.True(eventType.isNew);
+        Assert.True(eventType.allowNullPayload);
+        Assert.Equal(7, evt.schemaVersion);
     }
 
     [Fact]
