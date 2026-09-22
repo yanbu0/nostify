@@ -8,6 +8,7 @@ using Newtonsoft.Json.Linq;
 using Confluent.Kafka;
 using Newtonsoft.Json;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using NJson = Newtonsoft.Json;
 using STJ = System.Text.Json.Serialization;
 
@@ -37,9 +38,11 @@ public class Event : IEvent
     /// Constructor for Event, use when creating object to save to event store with legacy command metadata.
     /// </summary>
     [Obsolete("Use Event(EventType, ...) instead.")]
+    [OverloadResolutionPriority(-1)]
     public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
-        : this(CreateLegacyEventType(command), aggregateRootId, payload, userId, partitionKey)
     {
+        ArgumentNullException.ThrowIfNull(command);
+        SetUp(CreateLegacyEventType(command), aggregateRootId, payload, userId, partitionKey);
         _legacyCommand = command;
     }
 
@@ -73,9 +76,25 @@ public class Event : IEvent
     /// Constructor for Event, use when creating object to save to event store, will parse aggregateRootId from payload.
     /// </summary>
     [Obsolete("Use Event(EventType, ...) instead.")]
+    [OverloadResolutionPriority(-1)]
     public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
-        : this(CreateLegacyEventType(command), payload, userId, partitionKey)
     {
+        ArgumentNullException.ThrowIfNull(command);
+        Guid aggregateRootId = default;
+        if (payload is null || !payload.GetType().GetProperties().Any())
+        {
+            throw new ArgumentNullException("Event Create Error: Payload cannot be null if you do not specify an aggregate root ID");
+        }
+        var jPayload = JObject.FromObject(payload);
+        if (jPayload["id"] == null || (jPayload["id"].Type != JTokenType.Guid && !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId)))
+        {
+            throw new ArgumentException("Event Create Error: Aggregate Root ID does not exist or is not parsable to a Guid");
+        }
+        else if (aggregateRootId == default)
+        {
+            aggregateRootId = jPayload["id"].Value<Guid>();
+        }
+        SetUp(CreateLegacyEventType(command), aggregateRootId, payload, userId, partitionKey);
         _legacyCommand = command;
     }
 

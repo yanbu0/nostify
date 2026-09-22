@@ -267,7 +267,22 @@ public class EventTests
         var payload = new { name = "Test", id = Guid.NewGuid() };
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new Event((NostifyCommand)null!, payload));
+        Assert.Throws<ArgumentNullException>(() => new Event(null!, payload));
+    }
+
+    [Fact]
+    public void LegacyEventConstructors_ShouldFail_WithTypedNullCommand()
+    {
+        // Arrange
+        NostifyCommand command = null!;
+        var aggregateRootId = Guid.NewGuid();
+        var payload = new { name = "Test", id = aggregateRootId };
+
+        // Act & Assert
+#pragma warning disable CS0618
+        Assert.Throws<ArgumentNullException>(() => new Event(command, aggregateRootId, payload));
+        Assert.Throws<ArgumentNullException>(() => new Event(command, payload));
+#pragma warning restore CS0618
     }
 
     [Fact]

@@ -135,6 +135,8 @@ Applies the event's payload to a target object.
 
 The obsolete `command` property remains available for legacy callers. If the event was created with a typed `EventType`, `command` returns a cached compatibility `NostifyCommand` containing the same `name`, `isNew`, and `allowNullPayload` values. This preserves older metadata-based code paths without changing the underlying typed dispatch model.
 
+The obsolete `Event(NostifyCommand, ...)` constructors remain available for legacy callers, throw `ArgumentNullException` when passed a typed null command, and are marked with lower overload-resolution priority so `new Event(null, ...)` continues binding to the `EventType` overloads.
+
 `schemaVersion` now distinguishes modern typed envelopes from legacy command-only documents:
 
 - New events with a concrete non-legacy `eventType` default to `schemaVersion = 2`
