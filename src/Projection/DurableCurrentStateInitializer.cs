@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
@@ -55,7 +56,7 @@ public class DurableCurrentStateInitializer<TAggregate>
         _partitionKeyPath = partitionKeyPath;
         _batchSize = batchSize;
         _pageSize = checked(batchSize * concurrentBatchCount);
-        _durableTaskOptions = durableTaskOptions ?? DurableProjectionInitializer<TAggregateProjectionAdapter, TAggregate>.CreateDefaultTaskOptions();
+        _durableTaskOptions = durableTaskOptions ?? CreateDefaultTaskOptions();
         _cosmosRetryOptions = cosmosRetryOptions ?? new RetryOptions();
     }
 
@@ -232,34 +233,31 @@ public class DurableCurrentStateInitializer<TAggregate>
         return !IsInstanceActive(existing);
     }
 
+    /// <summary>Builds the default retry policy for activity invocations.</summary>
+    public static TaskOptions CreateDefaultTaskOptions()
+        => new(TaskRetryOptions.FromRetryPolicy(new RetryPolicy(
+            maxNumberOfAttempts: 3,
+            firstRetryInterval: TimeSpan.FromSeconds(5),
+            backoffCoefficient: 2.0)));
+
     private static bool IsInstanceActive(OrchestrationMetadata? metadata)
         => metadata is not null
             && metadata.RuntimeStatus is OrchestrationRuntimeStatus.Running
                 or OrchestrationRuntimeStatus.Pending
                 or OrchestrationRuntimeStatus.Suspended;
-
-    /// <summary>
-    /// Supplies the projection constraints needed only to reuse the library's established
-    /// default Durable Functions retry policy; it is never instantiated by rebuild logic.
-    /// </summary>
-    private sealed class TAggregateProjectionAdapter : NostifyObject, IProjection, IHasExternalData<TAggregateProjectionAdapter>
-    {
-        public static string containerName => string.Empty;
-        public bool initialized { get; set; }
-
-        public Task<TAggregateProjectionAdapter> InitAsync(INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
-            => Task.FromResult(this);
-    }
 }
 
 /// <summary>Serializable zero-based page request for aggregate current-state rebuilding.</summary>
 public readonly struct DurableCurrentStatePageInfo
 {
+    /// <summary>Creates a page request.</summary>
+    /// <param name="pageNumber">The zero-based page number.</param>
     public DurableCurrentStatePageInfo(int pageNumber)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(pageNumber);
         PageNumber = pageNumber;
     }
 
+    /// <summary>Gets the zero-based page number.</summary>
     public int PageNumber { get; }
 }
