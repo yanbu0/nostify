@@ -13,10 +13,9 @@ namespace nostify.Tests;
 
 public class NostifyKafkaTriggerEventTests
 {
-    public sealed class Update_ResourceGrade : EventType<Update_ResourceGrade>, IEventType
+    public sealed class Update_ResourceGrade : EventType
     {
-        public static string name => "Update_ResourceGrade";
-        public Update_ResourceGrade() : base(name)
+        public Update_ResourceGrade() : base("Update_ResourceGrade")
         {
         }
     }
@@ -838,7 +837,7 @@ public class NostifyKafkaTriggerEventTests
         var originalEvent = new Event
         {
             aggregateRootId = Guid.NewGuid(),
-            eventType = Update_ResourceGrade.Instance,
+            eventType = new Update_ResourceGrade(),
             timestamp = DateTime.UtcNow,
             userId = Guid.NewGuid(),
             partitionKey = Guid.NewGuid(),
@@ -858,7 +857,7 @@ public class NostifyKafkaTriggerEventTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Same(Update_ResourceGrade.Instance, result.eventType);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
     }
 
     [Fact]
@@ -898,7 +897,7 @@ public class NostifyKafkaTriggerEventTests
         var originalEvent = new Event
         {
             aggregateRootId = Guid.NewGuid(),
-            eventType = Update_ResourceGrade.Instance,
+            eventType = new Update_ResourceGrade(),
             timestamp = DateTime.UtcNow,
             userId = Guid.NewGuid(),
             partitionKey = Guid.NewGuid(),
@@ -909,7 +908,7 @@ public class NostifyKafkaTriggerEventTests
         var result = JsonConvert.DeserializeObject<Event>(json, SerializationSettings.NostifyDefault);
 
         Assert.NotNull(result);
-        Assert.Same(Update_ResourceGrade.Instance, result.eventType);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
         Assert.Equal(2, result.schemaVersion);
     }
 
@@ -953,7 +952,7 @@ public class NostifyKafkaTriggerEventTests
         IEvent originalEvent = new Event
         {
             aggregateRootId = Guid.NewGuid(),
-            eventType = Update_ResourceGrade.Instance,
+            eventType = new Update_ResourceGrade(),
             timestamp = DateTime.UtcNow,
             userId = Guid.NewGuid(),
             partitionKey = Guid.NewGuid(),
@@ -976,8 +975,8 @@ public class NostifyKafkaTriggerEventTests
 
         // Assert
         var deserializedEvent = Assert.IsType<Event>(result);
-        Assert.Same(Update_ResourceGrade.Instance, deserializedEvent.eventType);
-        Assert.Equal(((EventType)Update_ResourceGrade.Instance).name, deserializedEvent.command.name);
+        Assert.IsType<Update_ResourceGrade>(deserializedEvent.eventType);
+        Assert.Equal("Update_ResourceGrade", deserializedEvent.command.name);
     }
 
     [Fact]
@@ -987,7 +986,7 @@ public class NostifyKafkaTriggerEventTests
         IEvent originalEvent = new Event
         {
             aggregateRootId = Guid.NewGuid(),
-            eventType = Update_ResourceGrade.Instance,
+            eventType = new Update_ResourceGrade(),
             timestamp = DateTime.UtcNow,
             userId = Guid.NewGuid(),
             partitionKey = Guid.NewGuid(),
@@ -1000,7 +999,7 @@ public class NostifyKafkaTriggerEventTests
         var deserializedEvent = Assert.IsType<Event>(result);
         Assert.Contains("\"schemaVersion\":2", json);
         Assert.Equal(2, deserializedEvent.schemaVersion);
-        Assert.Same(Update_ResourceGrade.Instance, deserializedEvent.eventType);
+        Assert.IsType<Update_ResourceGrade>(deserializedEvent.eventType);
     }
 
     #endregion

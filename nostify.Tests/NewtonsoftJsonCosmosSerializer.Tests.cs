@@ -10,10 +10,9 @@ namespace nostify.Tests;
 
 public class NewtonsoftJsonCosmosSerializerTests
 {
-    private sealed class SerializerTypedEventType : EventType<SerializerTypedEventType>, IEventType
+    private sealed class SerializerTypedEventType : EventType
     {
-        public static string name => "Serializer_Typed_Event";
-        public SerializerTypedEventType() : base(name, isNew: true)
+        public SerializerTypedEventType() : base("Serializer_Typed_Event", isNew: true)
         {
         }
     }
@@ -88,7 +87,7 @@ public class NewtonsoftJsonCosmosSerializerTests
     {
         var aggregateId = Guid.NewGuid();
         IEvent originalEvent = new Event(
-            SerializerTypedEventType.Instance,
+            new SerializerTypedEventType(),
             aggregateId,
             new SerializerTestAggregate { id = aggregateId, Name = "Typed Aggregate", Value = 123 });
 
@@ -96,7 +95,7 @@ public class NewtonsoftJsonCosmosSerializerTests
         var deserializedEvent = _serializer.FromStream<IEvent>(stream);
 
         Assert.NotNull(deserializedEvent);
-        Assert.Same(SerializerTypedEventType.Instance, deserializedEvent.eventType);
+        Assert.IsType<SerializerTypedEventType>(deserializedEvent.eventType);
         Assert.Equal(2, deserializedEvent.schemaVersion);
     }
 

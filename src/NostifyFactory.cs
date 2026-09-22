@@ -414,14 +414,13 @@ public static class NostifyFactory
 
     /// <summary>
     /// Collects every topic that <see cref="Build{T}(NostifyConfig, bool)"/> should auto-create for an assembly.
-    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions implementing
-    /// <see cref="IEventType"/> via their public static <c>name</c> metadata plus optional async request/response topics for aggregates when
+    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions plus optional async request/response topics for aggregates when
     /// <see cref="NostifyConfig.autoCreateEventRequestTopics"/> is enabled.
     /// </summary>
     internal static List<TopicSpecification> GetAutoCreateTopicSpecifications(Assembly assembly, NostifyConfig config, bool verbose = false)
     {
         var eventTypes = assembly.GetTypes()
-            .Where(t => typeof(EventType).IsAssignableFrom(t) && typeof(IEventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+            .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
             .Where(t => t != typeof(LegacyNostifyCommandEventType))
             .SelectMany(t => GetTopicNames(t, config, verbose))
             .ToList();
@@ -480,50 +479,28 @@ public static class NostifyFactory
     }
 
     /// <summary>
-    /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition using static
-    /// <see cref="IEventType.name"/> metadata.
+    /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition.
     /// </summary>
     private static IEnumerable<string> GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
-        if (!typeof(IEventType).IsAssignableFrom(eventTypeClass))
-        {
-            throw new InvalidOperationException(
-                $"Event type '{eventTypeClass.FullName}' must implement {nameof(IEventType)}.");
-        }
-
-        var topicName = GetIEventTypeName(eventTypeClass);
+        var eventType = EventType.GetRequiredInstance(eventTypeClass);
+        var topicName = eventType.name;
         if (string.IsNullOrWhiteSpace(topicName))
         {
             throw new InvalidOperationException(
-                $"Event type '{eventTypeClass.FullName}' has an empty static '{nameof(IEventType.name)}' value.");
+                $"Event type '{eventTypeClass.FullName}' has an empty event type name.");
         }
 
         LogDebugOrVerboseConsole(
             config,
             verbose,
-            $"Using static IEventType.name from {eventTypeClass.FullName} with logical topic name {topicName} for auto-topic discovery.",
-            "Using static IEventType.name from {EventType} with logical topic name {Topic} for auto-topic discovery.",
+            $"Using EventType definition from {eventTypeClass.FullName} with logical topic name {topicName} for auto-topic discovery.",
+            "Using EventType definition from {EventType} with logical topic name {Topic} for auto-topic discovery.",
             eventTypeClass.FullName ?? eventTypeClass.Name,
             topicName);
 
         return new[] { topicName };
     }
-
-    private static string GetIEventTypeName(Type eventTypeType)
-    {
-        var method = typeof(NostifyFactory).GetMethod(nameof(GetIEventTypeNameGeneric), BindingFlags.NonPublic | BindingFlags.Static);
-        if (method == null)
-        {
-            throw new InvalidOperationException("Unable to resolve IEventType static name accessor.");
-        }
-
-        var closed = method.MakeGenericMethod(eventTypeType);
-        return (string)(closed.Invoke(null, null) ?? throw new InvalidOperationException($"Event type '{eventTypeType.FullName}' returned null static '{nameof(IEventType.name)}'."));
-    }
-
-    private static string GetIEventTypeNameGeneric<TEventType>()
-        where TEventType : IEventType
-        => TEventType.name;
 
     /// <summary>
     /// Writes startup diagnostics through <see cref="ILogger"/> when available, otherwise falls back to console output only

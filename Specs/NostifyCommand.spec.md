@@ -47,7 +47,7 @@ Equality matches `EventType` semantics: two commands are equal when they have th
 
 ## Migration Guidance
 
-For new development, define concrete event types using `EventType<TSelf>` and publish/dispatch through `eventType`. Keep `NostifyCommand` only where legacy payloads or APIs still require it.
+For new development, define concrete event types by inheriting from `EventType` and publish/dispatch through `eventType`. Keep `NostifyCommand` only where legacy payloads or APIs still require it.
 
 ## Related Types
 

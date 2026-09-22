@@ -510,49 +510,43 @@ An `EventType` is functionally similar to the old `NostifyCommand` concept: it n
 
 #### Example: EventTypes for Test Aggregate
 
-The templates use a separate concrete `EventType<TSelf>` subclass for each logical operation. Each type implements `IEventType` with a public static `name` (used for topic discovery), while runtime metadata is consumed through the inherited `Instance` property:
+The templates use a separate concrete `EventType` subclass for each logical operation:
 
 ```C#
-public sealed class Create_Test : EventType<Create_Test>, IEventType
+public sealed class Create_Test : EventType
 {
-    public static string name => "Create_Test";
-    public Create_Test() : base(name, isNew: true) { }
+    public Create_Test() : base("Create_Test", isNew: true) { }
 }
 
-public sealed class Update_Test : EventType<Update_Test>, IEventType
+public sealed class Update_Test : EventType
 {
-    public static string name => "Update_Test";
-    public Update_Test() : base(name) { }
+    public Update_Test() : base("Update_Test") { }
 }
 
-public sealed class Delete_Test : EventType<Delete_Test>, IEventType
+public sealed class Delete_Test : EventType
 {
-    public static string name => "Delete_Test";
-    public Delete_Test() : base(name, isNew: false, allowNullPayload: true) { }
+    public Delete_Test() : base("Delete_Test", isNew: false, allowNullPayload: true) { }
 }
 
-public sealed class BulkCreate_Test : EventType<BulkCreate_Test>, IEventType
+public sealed class BulkCreate_Test : EventType
 {
-    public static string name => "BulkCreate_Test";
-    public BulkCreate_Test() : base(name, isNew: true) { }
+    public BulkCreate_Test() : base("BulkCreate_Test", isNew: true) { }
 }
 
-public sealed class BulkUpdate_Test : EventType<BulkUpdate_Test>, IEventType
+public sealed class BulkUpdate_Test : EventType
 {
-    public static string name => "BulkUpdate_Test";
-    public BulkUpdate_Test() : base(name) { }
+    public BulkUpdate_Test() : base("BulkUpdate_Test") { }
 }
 
-public sealed class BulkDelete_Test : EventType<BulkDelete_Test>, IEventType
+public sealed class BulkDelete_Test : EventType
 {
-    public static string name => "BulkDelete_Test";
-    public BulkDelete_Test() : base(name, isNew: false, allowNullPayload: true) { }
+    public BulkDelete_Test() : base("BulkDelete_Test", isNew: false, allowNullPayload: true) { }
 }
 
-EventType createEventType = Create_Test.Instance;
+EventType createEventType = new Create_Test();
 ```
 
-Each event type is represented by its own class (matching the pattern used in the aggregate templates). `IEventType.name` is used by `NostifyFactory.Build<T>()` for topic auto-discovery, while the runtime `eventType.name` instance value is stored with the event envelope and used for dispatch/routing.
+Each event type is represented by its own class (matching the pattern used in the aggregate templates). `NostifyFactory.Build<T>()` discovers topics from concrete `EventType` definitions, while the runtime `eventType.name` instance value is stored with the event envelope and used for dispatch/routing.
 
 You can continue to use `NostifyCommand` in the same style, but it is now conceptually a specialized `EventType` pattern.
 
@@ -3686,15 +3680,15 @@ public class OrderAggregate : NostifyObject, IAggregate
 }
 
 // OrderEventTypes.cs
-public sealed class Create_Order : EventType<Create_Order>
+public sealed class Create_Order : EventType
 {
     public Create_Order() : base("Create_Order", isNew: true) { }
 }
-public sealed class Update_Order : EventType<Update_Order>
+public sealed class Update_Order : EventType
 {
     public Update_Order() : base("Update_Order") { }
 }
-public sealed class Delete_Order : EventType<Delete_Order>
+public sealed class Delete_Order : EventType
 {
     public Delete_Order() : base("Delete_Order", allowNullPayload: true) { }
 }

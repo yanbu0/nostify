@@ -853,7 +853,7 @@ public class NostifyFactoryTests
     }
 
     [Fact]
-    public void GetAutoCreateTopicSpecifications_ShouldDetectConcreteIEventTypesByStaticName()
+    public void GetAutoCreateTopicSpecifications_ShouldDetectConcreteEventTypesByRuntimeName()
     {
         // Arrange
         var config = new NostifyConfig
@@ -926,18 +926,16 @@ public class TestFactoryAggregate : NostifyObject, IAggregate
     }
 }
 
-public sealed class Create_TopicDiscoveryAggregate : EventType<Create_TopicDiscoveryAggregate>, IEventType
+public sealed class Create_TopicDiscoveryAggregate : EventType
 {
-    public static string name => "Create_TopicDiscoveryAggregateLogical";
-    public Create_TopicDiscoveryAggregate() : base("Create_TopicDiscoveryAggregateRuntime", isNew: true)
+    public Create_TopicDiscoveryAggregate() : base("Create_TopicDiscoveryAggregateLogical", isNew: true)
     {
     }
 }
 
-public sealed class Update_TopicDiscoveryAggregate : EventType<Update_TopicDiscoveryAggregate>, IEventType
+public sealed class Update_TopicDiscoveryAggregate : EventType
 {
-    public static string name => "Update_TopicDiscoveryAggregateLogical";
-    public Update_TopicDiscoveryAggregate() : base("Update_TopicDiscoveryAggregateRuntime")
+    public Update_TopicDiscoveryAggregate() : base("Update_TopicDiscoveryAggregateLogical")
     {
     }
 }

@@ -47,10 +47,9 @@ public class NostifyObjectTests
 
 
 
-    private sealed class CreateDispatchEventType : EventType<CreateDispatchEventType>, IEventType
+    private sealed class CreateDispatchEventType : EventType
     {
-        public static string name => "Create_TestDispatch";
-        public CreateDispatchEventType() : base(name, true)
+        public CreateDispatchEventType() : base("Create_TestDispatch", true)
         {
         }
     }

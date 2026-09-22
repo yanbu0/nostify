@@ -142,9 +142,9 @@ The obsolete `command` property remains available for legacy callers. If the eve
 - Incoming documents with an explicit `schemaVersion` keep that persisted value
 - Incoming documents missing version metadata infer the version from the hydrated document shape
 
-During JSON deserialization, nostify first uses the `$eventTypeClrType` discriminator when present. If the discriminator is missing, unresolved, or resolves to a legacy `NostifyCommand`-derived type, the resolver now attempts to map by logical `eventType.name` to a loaded concrete `EventType` class before falling back to `NostifyCommand`.
+During JSON deserialization, nostify first uses the `$eventTypeClrType` discriminator when present. If the discriminator is missing, unresolved, or resolves to the legacy compatibility adapter, the resolver attempts to map by logical `eventType.name` to a loaded concrete `EventType` class before falling back to legacy behavior.
 
-Concrete typed event types are restored strictly through their canonical `EventType<TSelf>.Instance` value; nostify no longer fabricates modern typed event-type instances by invoking arbitrary constructors during deserialization.
+Concrete typed event types are restored through resolved `EventType` definitions for the target CLR type, preserving type-specific metadata while supporting legacy compatibility envelopes.
 
 When both `eventType` and legacy `command` are present in incoming JSON, `command` no longer overwrites an already resolved concrete `eventType`; it only hydrates `eventType` when no concrete value exists yet (or when the current value is still the internal legacy adapter).
 
