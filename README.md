@@ -548,7 +548,7 @@ EventType createEventType = new Create_Test();
 
 Each event type is represented by its own class (matching the pattern used in the aggregate templates). `NostifyFactory.Build<T>()` discovers topics from concrete `EventType` definitions, while the runtime `eventType.name` instance value is stored with the event envelope and used for dispatch/routing.
 
-You can continue to use `NostifyCommand` in the same style, but it is now conceptually a specialized `EventType` pattern.
+You can continue to use `NostifyCommand` in the same style, but it is now legacy compatibility metadata that is mapped to an `EventType` at runtime.
 
 #### Attribute-Based Dispatch (Preferred Pattern)
 

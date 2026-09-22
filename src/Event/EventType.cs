@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Reflection;
 
 namespace nostify;
 
@@ -120,54 +119,14 @@ public abstract class EventType
 
     private static EventType CreateEventTypeDefinition(Type eventTypeType)
     {
-        ConstructorInfo? parameterlessCtor = eventTypeType.GetConstructor(Type.EmptyTypes);
+        var parameterlessCtor = eventTypeType.GetConstructor(Type.EmptyTypes);
         if (parameterlessCtor != null && parameterlessCtor.Invoke(null) is EventType defaultInstance)
         {
             return defaultInstance;
         }
 
-        string fallbackName = GetStaticName(eventTypeType) ?? eventTypeType.Name;
-        var signatures = new[]
-        {
-            new[] { typeof(string), typeof(bool), typeof(bool) },
-            new[] { typeof(string), typeof(bool) },
-            new[] { typeof(string) }
-        };
-
-        foreach (var signature in signatures)
-        {
-            ConstructorInfo? ctor = eventTypeType.GetConstructor(signature);
-            if (ctor == null)
-            {
-                continue;
-            }
-
-            object?[] args = signature.Length switch
-            {
-                3 => new object?[] { fallbackName, false, false },
-                2 => new object?[] { fallbackName, false },
-                _ => new object?[] { fallbackName }
-            };
-
-            if (ctor.Invoke(args) is EventType instance)
-            {
-                return instance;
-            }
-        }
-
         throw new InvalidOperationException(
-            $"Event type '{eventTypeType.FullName}' must expose a parameterless constructor or one of these constructors: (string), (string, bool), (string, bool, bool).");
-    }
-
-    private static string? GetStaticName(Type eventTypeType)
-    {
-        var nameProperty = eventTypeType.GetProperty("name", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
-        if (nameProperty?.PropertyType != typeof(string))
-        {
-            return null;
-        }
-
-        return nameProperty.GetValue(null) as string;
+            $"Event type '{eventTypeType.FullName}' must expose a public parameterless constructor so its metadata can be resolved.");
     }
 }
 

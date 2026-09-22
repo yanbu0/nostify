@@ -58,7 +58,7 @@ EventType eventType = new CreateOrder();
 
 1. Requires a concrete `EventType` subclass
 2. Creates/returns a cached definition instance
-3. Supports parameterless constructors and common `(string...)` constructor signatures
+3. Requires a public parameterless constructor so metadata is resolved from the concrete type itself
 4. Throws a clear `InvalidOperationException` for unsupported types
 
 ## Backward Compatibility
