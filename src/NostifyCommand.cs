@@ -6,7 +6,7 @@ namespace nostify;
 /// Defines command metadata being delivered to the event store.
 /// </summary>
 [Obsolete("NostifyCommand is deprecated; use EventType for new events. NostifyCommand remains for legacy compatibility.")]
-public class NostifyCommand
+public class NostifyCommand : IComparable, IComparable<NostifyCommand>
 {
     /// <summary>
     /// Name of command metadata, also used as Kafka topic name.
@@ -69,9 +69,31 @@ public class NostifyCommand
     /// <summary>
     /// Allows sorting by name.
     /// </summary>
-    public int CompareTo(object other)
+    public int CompareTo(object? other)
     {
-        var otherCommand = (NostifyCommand)other;
+        if (other == null)
+        {
+            return 1;
+        }
+
+        if (other is not NostifyCommand otherCommand)
+        {
+            throw new ArgumentException($"Object must be of type {nameof(NostifyCommand)}", nameof(other));
+        }
+
+        return CompareTo(otherCommand);
+    }
+
+    /// <summary>
+    /// Allows sorting by name.
+    /// </summary>
+    public int CompareTo(NostifyCommand? otherCommand)
+    {
+        if (otherCommand == null)
+        {
+            return 1;
+        }
+
         int nameComparison = string.Compare(name, otherCommand.name, StringComparison.Ordinal);
         if (nameComparison != 0)
         {

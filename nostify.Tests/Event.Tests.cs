@@ -7,6 +7,7 @@ using Moq;
 using nostify;
 using System.ComponentModel.DataAnnotations;
 using System.Dynamic;
+using Newtonsoft.Json;
 
 namespace nostify.Tests;
 
@@ -35,6 +36,15 @@ public class EventTests
         public static string name => "Same_Name";
         public OtherTypedTestEventType()
             : base(name)
+        {
+        }
+    }
+
+    private sealed class MismatchedStaticNameEventType : EventType<MismatchedStaticNameEventType>, IEventType
+    {
+        public static string name => "Static_Topic_Name";
+        public MismatchedStaticNameEventType()
+            : base("Runtime_Event_Name", isNew: true)
         {
         }
     }
@@ -237,6 +247,21 @@ public class EventTests
 #pragma warning restore CS0618
 
         Assert.Equal(1, eventToTest.schemaVersion);
+    }
+
+    [Fact]
+    public void EventSerialization_WithMismatchedStaticAndRuntimeNames_UsesRuntimeNameForEnvelope()
+    {
+        var eventToTest = new Event(MismatchedStaticNameEventType.Instance, new { id = Guid.NewGuid(), name = "Test" });
+        var json = JsonConvert.SerializeObject(eventToTest, SerializationSettings.NostifyDefault);
+        var deserialized = JsonConvert.DeserializeObject<Event>(json, SerializationSettings.NostifyDefault);
+
+        Assert.NotNull(deserialized);
+        Assert.Equal("Runtime_Event_Name", deserialized.eventType.name);
+#pragma warning disable CS0618
+        Assert.Equal("Runtime_Event_Name", deserialized.command.name);
+#pragma warning restore CS0618
+        Assert.Equal("Static_Topic_Name", MismatchedStaticNameEventType.name);
     }
 
     [Fact]

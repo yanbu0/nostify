@@ -485,14 +485,13 @@ public static class NostifyFactory
     /// </summary>
     private static IEnumerable<string> GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
-        var staticNameProperty = eventTypeClass.GetProperty("name", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
-        if (staticNameProperty == null || staticNameProperty.PropertyType != typeof(string))
+        if (!typeof(IEventType).IsAssignableFrom(eventTypeClass))
         {
             throw new InvalidOperationException(
-                $"Event type '{eventTypeClass.FullName}' must expose a public static string property named '{nameof(IEventType.name)}'.");
+                $"Event type '{eventTypeClass.FullName}' must implement {nameof(IEventType)}.");
         }
 
-        var topicName = staticNameProperty.GetValue(null) as string;
+        var topicName = GetIEventTypeName(eventTypeClass);
         if (string.IsNullOrWhiteSpace(topicName))
         {
             throw new InvalidOperationException(
@@ -509,6 +508,22 @@ public static class NostifyFactory
 
         return new[] { topicName };
     }
+
+    private static string GetIEventTypeName(Type eventTypeType)
+    {
+        var method = typeof(NostifyFactory).GetMethod(nameof(GetIEventTypeNameGeneric), BindingFlags.NonPublic | BindingFlags.Static);
+        if (method == null)
+        {
+            throw new InvalidOperationException("Unable to resolve IEventType static name accessor.");
+        }
+
+        var closed = method.MakeGenericMethod(eventTypeType);
+        return (string)(closed.Invoke(null, null) ?? throw new InvalidOperationException($"Event type '{eventTypeType.FullName}' returned null static '{nameof(IEventType.name)}'."));
+    }
+
+    private static string GetIEventTypeNameGeneric<TEventType>()
+        where TEventType : IEventType
+        => TEventType.name;
 
     /// <summary>
     /// Writes startup diagnostics through <see cref="ILogger"/> when available, otherwise falls back to console output only
