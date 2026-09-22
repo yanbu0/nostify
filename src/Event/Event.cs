@@ -8,7 +8,6 @@ using Newtonsoft.Json.Linq;
 using Confluent.Kafka;
 using Newtonsoft.Json;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using NJson = Newtonsoft.Json;
 using STJ = System.Text.Json.Serialization;
 
@@ -38,7 +37,6 @@ public class Event : IEvent
     /// Constructor for Event, use when creating object to save to event store with legacy command metadata.
     /// </summary>
     [Obsolete("Use Event(EventType, ...) instead.")]
-    [OverloadResolutionPriority(-1)]
     public Event(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -76,7 +74,6 @@ public class Event : IEvent
     /// Constructor for Event, use when creating object to save to event store, will parse aggregateRootId from payload.
     /// </summary>
     [Obsolete("Use Event(EventType, ...) instead.")]
-    [OverloadResolutionPriority(-1)]
     public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
     {
         ArgumentNullException.ThrowIfNull(command);
