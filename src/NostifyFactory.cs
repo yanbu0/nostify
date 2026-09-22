@@ -414,17 +414,14 @@ public static class NostifyFactory
 
     /// <summary>
     /// Collects every topic that <see cref="Build{T}(NostifyConfig, bool)"/> should auto-create for an assembly.
-    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions via their canonical
-    /// public static <c>Instance</c> property plus optional async request/response topics for aggregates when
+    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions plus optional async request/response topics for aggregates when
     /// <see cref="NostifyConfig.autoCreateEventRequestTopics"/> is enabled.
     /// </summary>
     internal static List<TopicSpecification> GetAutoCreateTopicSpecifications(Assembly assembly, NostifyConfig config, bool verbose = false)
     {
         var eventTypes = assembly.GetTypes()
             .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
-#pragma warning disable CS0618
-            .Where(t => !typeof(NostifyCommand).IsAssignableFrom(t))
-#pragma warning restore CS0618
+            .Where(t => t != typeof(LegacyNostifyCommandEventType))
             .SelectMany(t => GetTopicNames(t, config, verbose))
             .ToList();
 
@@ -482,22 +479,27 @@ public static class NostifyFactory
     }
 
     /// <summary>
-    /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition using its canonical
-    /// public static <c>Instance</c> value.
+    /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition.
     /// </summary>
     private static IEnumerable<string> GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
         var eventType = EventType.GetRequiredInstance(eventTypeClass);
+        var topicName = eventType.name;
+        if (string.IsNullOrWhiteSpace(topicName))
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeClass.FullName}' has an empty event type name.");
+        }
 
         LogDebugOrVerboseConsole(
             config,
             verbose,
-            $"Using canonical EventType instance {eventTypeClass.FullName}.Instance with logical topic name {eventType.name} for auto-topic discovery.",
-            "Using canonical EventType instance {EventType}.Instance with logical topic name {Topic} for auto-topic discovery.",
+            $"Using EventType definition from {eventTypeClass.FullName} with logical topic name {topicName} for auto-topic discovery.",
+            "Using EventType definition from {EventType} with logical topic name {Topic} for auto-topic discovery.",
             eventTypeClass.FullName ?? eventTypeClass.Name,
-            eventType.name);
+            topicName);
 
-        return new[] { eventType.name };
+        return new[] { topicName };
     }
 
     /// <summary>

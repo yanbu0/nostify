@@ -21,6 +21,14 @@ public static class GrpcEventMapping
     {
         if (msg == null) throw new ArgumentNullException(nameof(msg));
 
+        var eventTypeName = msg.Command?.Name;
+        var resolvedType = EventTypeResolver.Resolve(typeName: null, eventTypeName);
+        var resolvedEventType = EventTypeResolver.CreateInstance(
+            resolvedType,
+            eventTypeName,
+            msg.Command?.IsNew ?? false,
+            msg.Command?.AllowNullPayload ?? false);
+
         var evt = new Event
         {
             id = Guid.Parse(msg.Id),
@@ -28,11 +36,8 @@ public static class GrpcEventMapping
             timestamp = msg.Timestamp?.ToDateTime() ?? DateTime.UtcNow,
             partitionKey = string.IsNullOrEmpty(msg.PartitionKey) ? Guid.Empty : Guid.Parse(msg.PartitionKey),
             userId = string.IsNullOrEmpty(msg.UserId) ? Guid.Empty : Guid.Parse(msg.UserId),
-            eventType = new NostifyCommand(
-                msg.Command?.Name ?? "Unknown",
-                msg.Command?.IsNew ?? false,
-                msg.Command?.AllowNullPayload ?? false
-            ),
+            eventType = resolvedEventType,
+            schemaVersion = msg.SchemaVersion,
             payload = string.IsNullOrEmpty(msg.PayloadJson)
                 ? null!
                 : JsonConvert.DeserializeObject<object>(msg.PayloadJson)!

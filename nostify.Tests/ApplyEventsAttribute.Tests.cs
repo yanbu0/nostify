@@ -21,49 +21,49 @@ namespace nostify.Tests
         /// <summary>
         /// Concrete event types plus a static command facade, mirroring the current templates.
         /// </summary>
-        private sealed class Create_Order : EventType<Create_Order>
+        private sealed class Create_Order : EventType
         {
             public Create_Order() : base("Create_Order", isNew: true) { }
         }
 
-        private sealed class Update_Order : EventType<Update_Order>
+        private sealed class Update_Order : EventType
         {
             public Update_Order() : base("Update_Order") { }
         }
 
-        private sealed class Delete_Order : EventType<Delete_Order>
+        private sealed class Delete_Order : EventType
         {
             public Delete_Order() : base("Delete_Order", isNew: false, allowNullPayload: true) { }
         }
 
-        private sealed class BulkCreate_Order : EventType<BulkCreate_Order>
+        private sealed class BulkCreate_Order : EventType
         {
             public BulkCreate_Order() : base("BulkCreate_Order", isNew: true) { }
         }
 
-        private sealed class BulkUpdate_Order : EventType<BulkUpdate_Order>
+        private sealed class BulkUpdate_Order : EventType
         {
             public BulkUpdate_Order() : base("BulkUpdate_Order") { }
         }
 
-        private sealed class BulkDelete_Order : EventType<BulkDelete_Order>
+        private sealed class BulkDelete_Order : EventType
         {
             public BulkDelete_Order() : base("BulkDelete_Order", isNew: false, allowNullPayload: true) { }
         }
 
-        private sealed class Canonical_Order : EventType<Canonical_Order>
+        private sealed class Canonical_Order : EventType
         {
             public Canonical_Order() : base("Canonical_Order") { }
         }
 
         private static class OrderCommand
         {
-            public static Create_Order Create => Create_Order.Instance;
-            public static Update_Order Update => Update_Order.Instance;
-            public static Delete_Order Delete => Delete_Order.Instance;
-            public static BulkCreate_Order BulkCreate => BulkCreate_Order.Instance;
-            public static BulkUpdate_Order BulkUpdate => BulkUpdate_Order.Instance;
-            public static BulkDelete_Order BulkDelete => BulkDelete_Order.Instance;
+            public static Create_Order Create => new Create_Order();
+            public static Update_Order Update => new Update_Order();
+            public static Delete_Order Delete => new Delete_Order();
+            public static BulkCreate_Order BulkCreate => new BulkCreate_Order();
+            public static BulkUpdate_Order BulkUpdate => new BulkUpdate_Order();
+            public static BulkDelete_Order BulkDelete => new BulkDelete_Order();
         }
 
         /// <summary>
@@ -348,8 +348,8 @@ namespace nostify.Tests
         [Fact]
         public void TemplateStyleEventTypes_ExposeExpectedFlags()
         {
-            Assert.Same(Create_Order.Instance, OrderCommand.Create);
-            Assert.Same(Update_Order.Instance, OrderCommand.Update);
+            Assert.IsType<Create_Order>(OrderCommand.Create);
+            Assert.IsType<Update_Order>(OrderCommand.Update);
 
             Assert.True(OrderCommand.Create.isNew);
             Assert.False(OrderCommand.Create.allowNullPayload);
@@ -375,7 +375,7 @@ namespace nostify.Tests
         {
             var instance = EventType.GetRequiredInstance(typeof(Create_Order));
 
-            Assert.Same(Create_Order.Instance, instance);
+            Assert.IsType<Create_Order>(instance);
         }
 
         [Fact]
@@ -513,7 +513,7 @@ namespace nostify.Tests
                 tenantId = Guid.NewGuid()
             };
 
-            aggregate.Apply(new TestEvent(Canonical_Order.Instance));
+            aggregate.Apply(new TestEvent(new Canonical_Order()));
 
             Assert.Equal(1, aggregate.HandledCount);
         }
@@ -527,7 +527,7 @@ namespace nostify.Tests
                 tenantId = Guid.NewGuid()
             };
 
-            var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(new TestEvent(Canonical_Order.Instance)));
+            var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(new TestEvent(new Canonical_Order())));
             Assert.Contains("Unable to resolve the canonical EventType instance", ex.Message);
             Assert.Contains(nameof(EventType), ex.Message);
             Assert.Contains("must be a concrete EventType type", ex.Message);

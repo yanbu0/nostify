@@ -853,7 +853,7 @@ public class NostifyFactoryTests
     }
 
     [Fact]
-    public void GetAutoCreateTopicSpecifications_ShouldDetectConcreteEventTypesWithoutStaticFields()
+    public void GetAutoCreateTopicSpecifications_ShouldDetectConcreteEventTypesByRuntimeName()
     {
         // Arrange
         var config = new NostifyConfig
@@ -926,14 +926,14 @@ public class TestFactoryAggregate : NostifyObject, IAggregate
     }
 }
 
-public sealed class Create_TopicDiscoveryAggregate : EventType<Create_TopicDiscoveryAggregate>
+public sealed class Create_TopicDiscoveryAggregate : EventType
 {
     public Create_TopicDiscoveryAggregate() : base("Create_TopicDiscoveryAggregateLogical", isNew: true)
     {
     }
 }
 
-public sealed class Update_TopicDiscoveryAggregate : EventType<Update_TopicDiscoveryAggregate>
+public sealed class Update_TopicDiscoveryAggregate : EventType
 {
     public Update_TopicDiscoveryAggregate() : base("Update_TopicDiscoveryAggregateLogical")
     {

@@ -51,19 +51,31 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     /// </returns>
     protected override ValidationResult IsValid(object? value, ValidationContext validationContext)
     {
-        EventType? eventType = validationContext.Items.ContainsKey("eventType") ? validationContext.Items["eventType"] as EventType : validationContext.Items.ContainsKey("command") ? validationContext.Items["command"] as EventType : null;
-        if (eventType is null)
+        EventType? eventType = validationContext.Items.ContainsKey("eventType") ? validationContext.Items["eventType"] as EventType : null;
+        string? eventTypeName = eventType?.name;
+
+        if (string.IsNullOrWhiteSpace(eventTypeName) && validationContext.Items.ContainsKey("command"))
+        {
+            eventTypeName = validationContext.Items["command"] switch
+            {
+                NostifyCommand command => command.name,
+                EventType legacyEventType => legacyEventType.name,
+                _ => null
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(eventTypeName))
         {
             return new ValidationResult($"The property '{validationContext.MemberName}' requires an event type to be specified in the validation context.");
         }
 
-        if (Commands.Contains(eventType.name))
+        if (Commands.Contains(eventTypeName))
         {
             bool baseResult = base.IsValid(value);
             // If baseResult is null return ValidationResult
             if (!baseResult)
             {
-                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the event type '{eventType.name}'.");
+                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the event type '{eventTypeName}'.");
             }
         }
 

@@ -2,13 +2,12 @@
 
 ## Overview
 
-`EventType` is the abstract runtime base for event metadata in nostify. Public APIs such as `IEvent.eventType`, serializers, event factories, and dispatch infrastructure all rely on this non-generic polymorphic base, while public concrete event types must inherit from `EventType<TSelf>` so they expose a canonical singleton-style `Instance`.
+`EventType` is the abstract runtime base for event metadata in nostify. Events carry `EventType` instances for serialization, compatibility, dispatch, and validation.
 
 ## Class Definition
 
 ```csharp
 public abstract class EventType
-public abstract class EventType<TSelf> : EventType where TSelf : EventType<TSelf>, new()
 ```
 
 ## Properties
@@ -19,66 +18,55 @@ public abstract class EventType<TSelf> : EventType where TSelf : EventType<TSelf
 | `isNew` | `bool` | Indicates whether the event type creates a new aggregate |
 | `allowNullPayload` | `bool` | Indicates whether this event type allows an empty payload |
 
-## Constructors
-
-### Base Constructor
-
-```csharp
-internal EventType(string name, bool isNew = false, bool allowNullPayload = false)
-```
-
-Creates a new typed event metadata object. The non-generic constructor is `internal` so external callers cannot inherit directly from `EventType`, which means public event metadata should no longer use `class X : EventType`.
-
-### Generic Constructor
+## Constructor
 
 ```csharp
 protected EventType(string name, bool isNew = false, bool allowNullPayload = false)
 ```
 
-Used by `EventType<TSelf>` so generated and external concrete event types can initialize their canonical metadata.
+Concrete event types inherit directly from `EventType` and call this constructor to define metadata.
 
 ## Purpose
 
-`EventType` exists so events can carry a concrete CLR type instead of only a value-like `NostifyCommand` instance. This enables `NostifyObject.Apply(IEvent)` to dispatch by runtime event type using overload resolution when derived aggregates or projections provide more specific `Apply(...)` overloads.
+`EventType` lets events carry concrete CLR type metadata instead of only legacy command metadata. This enables:
 
-`EventType<TSelf>.Instance` is the authoritative source of metadata for a concrete event type. Nostify now resolves concrete event types through this canonical instance for:
-
-- Kafka topic auto-discovery
-- Newtonsoft.Json / System.Text.Json / Cosmos event-type hydration
-- `[ApplyEvents(typeof(...))]` handler mapping
+- Runtime dispatch via `NostifyObject.Apply(IEvent)`
+- Attribute-based dispatch via `[ApplyEvents(typeof(...))]`
+- Event-type-aware payload validation
+- Topic discovery from concrete event type definitions
 
 ## Equality
 
-Equality is based on both the concrete CLR type and `name`. Two event types with the same `name` but different subclasses do not compare as equal.
+Equality is based on both concrete CLR type and `name`. Two different subclasses with the same `name` are not equal.
 
 ## Usage Example
 
 ```csharp
-public sealed class CreateOrder : EventType<CreateOrder>
+public sealed class CreateOrder : EventType
 {
-    public CreateOrder() : base("Create_Order", true)
+    public CreateOrder() : base("Create_Order", isNew: true)
     {
     }
 }
 
-EventType eventType = CreateOrder.Instance;
+EventType eventType = new CreateOrder();
 ```
 
-## Canonical Instance Resolution
+## Definition Resolution
 
-`EventType.GetRequiredInstance(Type)` is an internal shared resolver used by topic discovery, serializers, and attribute dispatch. It:
+`EventType.GetRequiredInstance(Type)` resolves an `EventType` definition for a concrete CLR type. It:
 
 1. Requires a concrete `EventType` subclass
-2. Finds a public static `Instance` property (including inherited static members from `EventType<TSelf>`)
-3. Validates the property returns exactly the requested concrete type
-4. Throws a clear `InvalidOperationException` when a type is abstract, missing `Instance`, or exposes a mismatched canonical instance
+2. Creates/returns a cached definition instance
+3. Requires a public parameterless constructor so metadata is resolved from the concrete type itself
+4. Throws a clear `InvalidOperationException` for unsupported types
 
 ## Backward Compatibility
 
-`NostifyCommand` currently remains in the codebase as an obsolete subclass of `EventType`. Existing code that still uses `NostifyCommand` continues to work as a legacy compatibility exception, while new code should inherit from `EventType<TSelf>` and use the inherited canonical `Instance`.
+`NostifyCommand` remains an obsolete legacy metadata object and is not an `EventType` subclass. Legacy command-only envelopes map to the internal compatibility adapter `LegacyNostifyCommandEventType` so modern `Event.eventType` behavior remains consistent.
 
 ## Related Types
 
-- [NostifyCommand](NostifyCommand.spec.md) - Obsolete compatibility subclass
+- [NostifyCommand](NostifyCommand.spec.md) - Obsolete compatibility metadata type
 - [Event](Event.spec.md) - Events carry an `eventType`
 - [NostifyObject](NostifyObject.spec.md) - Dispatches `Apply(IEvent)` through `eventType`
