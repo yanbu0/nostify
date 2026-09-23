@@ -1082,6 +1082,188 @@ public class RetryableContainerTests
         Assert.Equal("Bulk operations must be enabled for this container", ex.Message);
     }
 
+    [Fact]
+    public async Task DoBulkCreateAsync_ItemFailure_MapsItemAndExceptionToCallback()
+    {
+        var mockContainer = CreateBulkEnabledContainer();
+        var failure = new InvalidOperationException("create item failed");
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var retryable = CreateRetryable(mockContainer);
+        var item = new TestAggregate();
+        TestAggregate? failedItem = null;
+        Exception? capturedFailure = null;
+
+        await retryable.DoBulkCreateAsync(
+            new List<TestAggregate> { item },
+            (candidate, exception) =>
+            {
+                failedItem = candidate;
+                capturedFailure = exception;
+                return Task.CompletedTask;
+            });
+
+        Assert.Same(item, failedItem);
+        Assert.Same(failure, capturedFailure);
+    }
+
+    [Fact]
+    public async Task DoBulkCreateAsync_ItemFailureWithoutCallback_ThrowsDescriptiveException()
+    {
+        var mockContainer = CreateBulkEnabledContainer();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("create item failed"));
+        var retryable = CreateRetryable(mockContainer);
+
+        var exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            retryable.DoBulkCreateAsync(new List<TestAggregate> { new TestAggregate() }));
+
+        Assert.Equal("Bulk Create Error create item failed", exception.Message);
+    }
+
+    [Fact]
+    public async Task DoBulkUpsertAsync_ItemFailure_MapsItemAndExceptionToCallback()
+    {
+        var mockContainer = CreateBulkEnabledContainer();
+        var failure = new InvalidOperationException("upsert item failed");
+        mockContainer
+            .Setup(c => c.UpsertItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var retryable = CreateRetryable(mockContainer);
+        var item = new TestAggregate();
+        TestAggregate? failedItem = null;
+        Exception? capturedFailure = null;
+
+        await retryable.DoBulkUpsertAsync(
+            new List<TestAggregate> { item },
+            (candidate, exception) =>
+            {
+                failedItem = candidate;
+                capturedFailure = exception;
+                return Task.CompletedTask;
+            });
+
+        Assert.Same(item, failedItem);
+        Assert.Same(failure, capturedFailure);
+    }
+
+    [Fact]
+    public async Task DoBulkUpsertAsync_ItemFailureWithoutCallback_ThrowsDescriptiveException()
+    {
+        var mockContainer = CreateBulkEnabledContainer();
+        mockContainer
+            .Setup(c => c.UpsertItemAsync(
+                It.IsAny<TestAggregate>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("upsert item failed"));
+        var retryable = CreateRetryable(mockContainer);
+
+        var exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            retryable.DoBulkUpsertAsync(new List<TestAggregate> { new TestAggregate() }));
+
+        Assert.Equal("Bulk Upsert Error upsert item failed", exception.Message);
+    }
+
+    [Fact]
+    public async Task DoBulkCreateEventAsync_EventFailure_MapsEventAndExceptionToCallback()
+    {
+        var mockContainer = CreateBulkEnabledContainer();
+        var failure = new InvalidOperationException("create event failed");
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var retryable = CreateRetryable(mockContainer);
+        IEvent eventItem = CreateTestEvent(Guid.NewGuid());
+        IEvent? failedEvent = null;
+        Exception? capturedFailure = null;
+
+        await retryable.DoBulkCreateEventAsync(
+            new List<IEvent> { eventItem },
+            (candidate, exception) =>
+            {
+                failedEvent = candidate;
+                capturedFailure = exception;
+                return Task.CompletedTask;
+            });
+
+        Assert.Same(eventItem, failedEvent);
+        Assert.Same(failure, capturedFailure);
+    }
+
+    [Fact]
+    public async Task DoBulkCreateEventAsync_EventFailureWithoutCallback_ThrowsDescriptiveException()
+    {
+        var mockContainer = CreateBulkEnabledContainer();
+        mockContainer
+            .Setup(c => c.CreateItemAsync(
+                It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("create event failed"));
+        var retryable = CreateRetryable(mockContainer);
+
+        var exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            retryable.DoBulkCreateEventAsync(
+                new List<IEvent> { CreateTestEvent(Guid.NewGuid()) }));
+
+        Assert.Equal("Bulk Create Event Error create event failed", exception.Message);
+    }
+
+    [Fact]
+    public async Task DoBulkUpsertEventAsync_EventFailure_MapsEventAndExceptionToCallback()
+    {
+        var mockContainer = CreateBulkEnabledContainer();
+        var failure = new InvalidOperationException("upsert event failed");
+        mockContainer
+            .Setup(c => c.UpsertItemAsync(
+                It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var retryable = CreateRetryable(mockContainer);
+        IEvent eventItem = CreateTestEvent(Guid.NewGuid());
+        IEvent? failedEvent = null;
+        Exception? capturedFailure = null;
+
+        await retryable.DoBulkUpsertEventAsync(
+            new List<IEvent> { eventItem },
+            (candidate, exception) =>
+            {
+                failedEvent = candidate;
+                capturedFailure = exception;
+                return Task.CompletedTask;
+            });
+
+        Assert.Same(eventItem, failedEvent);
+        Assert.Same(failure, capturedFailure);
+    }
+
+    [Fact]
+    public async Task DoBulkUpsertEventAsync_EventFailureWithoutCallback_ThrowsDescriptiveException()
+    {
+        var mockContainer = CreateBulkEnabledContainer();
+        mockContainer
+            .Setup(c => c.UpsertItemAsync(
+                It.IsAny<IEvent>(), It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("upsert event failed"));
+        var retryable = CreateRetryable(mockContainer);
+
+        var exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            retryable.DoBulkUpsertEventAsync(
+                new List<IEvent> { CreateTestEvent(Guid.NewGuid()) }));
+
+        Assert.Equal("Bulk Upsert Event Error upsert event failed", exception.Message);
+    }
+
     #endregion
 
     #region MaxRetries = 0
@@ -1117,6 +1299,7 @@ public class RetryableContainerTests
         var aggId = Guid.NewGuid();
         var mockContainer = CreateNotFoundThenSucceedContainer<TestAggregate>(1, aggId);
         var mockLogger = new Mock<ILogger>();
+        mockLogger.Setup(logger => logger.IsEnabled(LogLevel.Warning)).Returns(true);
         var options = new RetryOptions(
             maxRetries: 3,
             delay: TimeSpan.FromMilliseconds(1),
@@ -1188,6 +1371,36 @@ public class RetryableContainerTests
             partitionKey = Guid.NewGuid(),
             payload = new { name = "Updated" }
         };
+    }
+
+    /// <summary>
+    /// Creates a container mock whose owning client permits Cosmos bulk operations.
+    /// </summary>
+    private static Mock<Container> CreateBulkEnabledContainer()
+    {
+        var client = new Mock<CosmosClient>();
+        client.Setup(c => c.ClientOptions)
+            .Returns(new CosmosClientOptions { AllowBulkExecution = true });
+
+        var database = new Mock<Database>();
+        database.Setup(d => d.Client).Returns(client.Object);
+
+        var container = new Mock<Container>();
+        container.Setup(c => c.Database).Returns(database.Object);
+        return container;
+    }
+
+    /// <summary>
+    /// Creates a retry wrapper configured to avoid delays for deterministic failure tests.
+    /// </summary>
+    private static RetryableContainer CreateRetryable(Mock<Container> container)
+    {
+        return new RetryableContainer(
+            container.Object,
+            new RetryOptions(
+                maxRetries: 0,
+                delay: TimeSpan.Zero,
+                retryWhenNotFound: false));
     }
 
     private static Mock<Container> CreateSucceedingContainer<T>(Guid aggregateRootId) where T : NostifyObject, new()

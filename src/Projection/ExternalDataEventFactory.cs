@@ -14,6 +14,10 @@ using Newtonsoft.Json;
 
 namespace nostify;
 
+/// <summary>
+/// Configures and retrieves same-service and external events needed to initialize projections.
+/// </summary>
+/// <typeparam name="P">The projection type whose external data is requested.</typeparam>
 public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentifiable, IApplyable
 {
     private readonly HttpClient? _httpClient;
@@ -28,16 +32,34 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     private List<Func<P, Guid?>> _nullableDependantIdSelectors = new List<Func<P, Guid?>>();
     private List<Func<P, List<Guid>>> _dependantListIdSelectors = new List<Func<P, List<Guid>>>();
     private List<Func<P, List<Guid?>>> _nullableDependantListIdSelectors = new List<Func<P, List<Guid?>>>();
-    private EventRequester<P>[] _eventRequestors = new EventRequester<P>[0];
-    private EventRequester<P>[] _dependantEventRequestors = new EventRequester<P>[0];
-    private AsyncEventRequester<P>[] _asyncEventRequestors = new AsyncEventRequester<P>[0];
-    private AsyncEventRequester<P>[] _dependantAsyncEventRequestors = new AsyncEventRequester<P>[0];
-    private GrpcEventRequester<P>[] _grpcEventRequestors = new GrpcEventRequester<P>[0];
-    private GrpcEventRequester<P>[] _dependantGrpcEventRequestors = new GrpcEventRequester<P>[0];
+    private EventRequester<P>[] _eventRequestors = Array.Empty<EventRequester<P>>();
+    private EventRequester<P>[] _dependantEventRequestors = Array.Empty<EventRequester<P>>();
+    private AsyncEventRequester<P>[] _asyncEventRequestors = Array.Empty<AsyncEventRequester<P>>();
+    private AsyncEventRequester<P>[] _dependantAsyncEventRequestors = Array.Empty<AsyncEventRequester<P>>();
+    private GrpcEventRequester<P>[] _grpcEventRequestors = Array.Empty<GrpcEventRequester<P>>();
+    private GrpcEventRequester<P>[] _dependantGrpcEventRequestors = Array.Empty<GrpcEventRequester<P>>();
     private List<P> _projectionsToInit = new List<P>();
     private DateTime? _pointInTime;
     private string? _grpcAuthToken;
     private string? _grpcAddress;
+
+    private static readonly Action<ILogger, string, string, long, Exception?> LogCallTimingMessage =
+        LoggerMessage.Define<string, string, long>(
+            LogLevel.Information,
+            new EventId(1, nameof(LogCallTimingMessage)),
+            "ExternalDataEventFactory call={CallType} target={Target} elapsedMs={ElapsedMs}");
+
+    private static readonly Action<ILogger, long, Exception?> LogTotalTimingMessage =
+        LoggerMessage.Define<long>(
+            LogLevel.Information,
+            new EventId(2, nameof(LogTotalTimingMessage)),
+            "ExternalDataEventFactory totalElapsedMs={TotalElapsedMs}");
+
+    private static readonly Action<ILogger, Exception?> LogKafkaConsumerCloseFailure =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            new EventId(3, nameof(LogKafkaConsumerCloseFailure)),
+            "Kafka consumer close failed during external event request cleanup; disposal will continue");
 
     /// <summary>
     /// Creates a new ExternalDataEventFactory
@@ -1049,6 +1071,11 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
     #endregion
 
+    /// <summary>
+    /// Retrieves all configured same-service, HTTP, asynchronous, and gRPC events.
+    /// </summary>
+    /// <param name="enableLogging">Whether to emit timing diagnostics for each configured request.</param>
+    /// <returns>The external events grouped for the projections being initialized.</returns>
     public async Task<List<ExternalDataEvent>> GetEventsAsync(bool enableLogging = false)
     {
         var logger = _nostify.Logger;
@@ -1067,7 +1094,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 return;
             }
 
-            logger!.LogInformation("ExternalDataEventFactory call={CallType} target={Target} elapsedMs={ElapsedMs}", callType, target, elapsedMs);
+            LogCallTimingMessage(logger!, callType, target, elapsedMs, null);
         }
 
         Stopwatch? StartCallStopwatch() => shouldLog ? Stopwatch.StartNew() : null;
@@ -1097,7 +1124,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             Container eventStoreContainer = await _nostify.GetEventStoreContainerAsync();
 
             // Get events for single-ID selectors (non-nullable)
-            if (_foreignKeySelectors.Any())
+            if (_foreignKeySelectors.Count != 0)
             {
                 var singleIdStopwatch = StartCallStopwatch();
                 var singleIdEvents = await ExternalDataEvent.GetEventsAsync(
@@ -1111,7 +1138,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
 
             // Get events for single-ID selectors (nullable) - nulls filtered by HasValue in ExternalDataEvent
-            if (_nullableForeignKeySelectors.Any())
+            if (_nullableForeignKeySelectors.Count != 0)
             {
                 var nullableSingleIdStopwatch = StartCallStopwatch();
                 var nullableSingleIdEvents = await ExternalDataEvent.GetEventsAsync(
@@ -1125,7 +1152,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
 
             // Get events for list-ID selectors (non-nullable)
-            if (_foreignKeyListSelectors.Any())
+            if (_foreignKeyListSelectors.Count != 0)
             {
                 var listIdStopwatch = StartCallStopwatch();
                 var listIdEvents = await ExternalDataEvent.GetEventsAsync(
@@ -1139,7 +1166,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
 
             // Get events for list-ID selectors (nullable) - nulls within lists filtered by HasValue in ExternalDataEvent
-            if (_nullableForeignKeyListSelectors.Any())
+            if (_nullableForeignKeyListSelectors.Count != 0)
             {
                 var nullableListIdStopwatch = StartCallStopwatch();
                 var nullableListIdEvents = await ExternalDataEvent.GetEventsAsync(
@@ -1166,7 +1193,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
 
             // Handle async (Kafka) event requestors
-            if (_asyncEventRequestors.Any())
+            if (_asyncEventRequestors.Length != 0)
             {
                 var asyncEventsStopwatch = StartCallStopwatch();
                 var asyncEvents = await GetAsyncEventsAsync(_asyncEventRequestors, _projectionsToInit);
@@ -1175,7 +1202,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
 
             // Handle gRPC event requestors
-            if (_grpcEventRequestors.Any())
+            if (_grpcEventRequestors.Length != 0)
             {
                 var grpcEventsStopwatch = StartCallStopwatch();
                 var grpcEvents = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync<P>(
@@ -1188,7 +1215,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
             // Handle dependent selectors - these require applying ALL initial events first to get the IDs
             // This runs after both local and external events have been collected
-            if (_dependantIdSelectors.Any() || _dependantListIdSelectors.Any() || _nullableDependantIdSelectors.Any() || _nullableDependantListIdSelectors.Any())
+            if (_dependantIdSelectors.Count != 0 || _dependantListIdSelectors.Count != 0 || _nullableDependantIdSelectors.Count != 0 || _nullableDependantListIdSelectors.Count != 0)
             {
                 var dependantEventsStopwatch = StartCallStopwatch();
                 var dependantEvents = await GetDependantEventsAsync(eventStoreContainer, result);
@@ -1197,7 +1224,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
 
             // Handle dependent external event requestors - these also require applying initial events first
-            if (_httpClient != null && _dependantEventRequestors.Any())
+            if (_httpClient != null && _dependantEventRequestors.Length != 0)
             {
                 var dependantExternalEventsStopwatch = StartCallStopwatch();
                 var dependantExternalEvents = await GetDependantExternalEventsAsync(result);
@@ -1206,7 +1233,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
 
             // Handle dependent async (Kafka) event requestors - these also require applying initial events first
-            if (_dependantAsyncEventRequestors.Any())
+            if (_dependantAsyncEventRequestors.Length != 0)
             {
                 var dependantAsyncEventsStopwatch = StartCallStopwatch();
                 var dependantAsyncEvents = await GetDependantAsyncEventsAsync(result);
@@ -1215,7 +1242,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             }
 
             // Handle dependent gRPC event requestors - these also require applying initial events first
-            if (_dependantGrpcEventRequestors.Any())
+            if (_dependantGrpcEventRequestors.Length != 0)
             {
                 var dependantGrpcEventsStopwatch = StartCallStopwatch();
                 var dependantGrpcEvents = await GetDependantGrpcEventsAsync(result);
@@ -1230,7 +1257,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             if (totalStopwatch != null)
             {
                 totalStopwatch.Stop();
-                logger!.LogInformation("ExternalDataEventFactory totalElapsedMs={TotalElapsedMs}", totalStopwatch.ElapsedMilliseconds);
+                LogTotalTimingMessage(logger!, totalStopwatch.ElapsedMilliseconds, null);
             }
         }
     }
@@ -1275,77 +1302,46 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
         foreach (var projection in projectionsWithAppliedEvents)
         {
-            // Extract single IDs
+            // Selector failures indicate invalid projection configuration and must remain observable.
             foreach (var selector in _dependantIdSelectors)
             {
-                try
+                var id = selector(projection);
+                if (id != Guid.Empty)
                 {
-                    var id = selector(projection);
-                    if (id != Guid.Empty)
+                    dependantIds.Add(id);
+                }
+            }
+
+            foreach (var selector in _nullableDependantIdSelectors)
+            {
+                var id = selector(projection);
+                if (id.HasValue && id.Value != Guid.Empty)
+                {
+                    dependantIds.Add(id.Value);
+                }
+            }
+
+            foreach (var selector in _dependantListIdSelectors)
+            {
+                var ids = selector(projection);
+                if (ids != null)
+                {
+                    foreach (var id in ids.Where(id => id != Guid.Empty))
                     {
                         dependantIds.Add(id);
                     }
                 }
-                catch
-                {
-                    // Selector threw an exception (e.g., null reference), skip this ID
-                }
             }
 
-            // Extract nullable single IDs
-            foreach (var selector in _nullableDependantIdSelectors)
-            {
-                try
-                {
-                    var id = selector(projection);
-                    if (id.HasValue && id.Value != Guid.Empty)
-                    {
-                        dependantIds.Add(id.Value);
-                    }
-                }
-                catch
-                {
-                    // Selector threw an exception (e.g., null reference), skip this ID
-                }
-            }
-
-            // Extract list IDs
-            foreach (var selector in _dependantListIdSelectors)
-            {
-                try
-                {
-                    var ids = selector(projection);
-                    if (ids != null)
-                    {
-                        foreach (var id in ids.Where(id => id != Guid.Empty))
-                        {
-                            dependantIds.Add(id);
-                        }
-                    }
-                }
-                catch
-                {
-                    // Selector threw an exception (e.g., null reference), skip these IDs
-                }
-            }
-
-            // Extract nullable list IDs
             foreach (var selector in _nullableDependantListIdSelectors)
             {
-                try
+                var ids = selector(projection);
+                if (ids != null)
                 {
-                    var ids = selector(projection);
-                    if (ids != null)
+                    foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty))
                     {
-                        foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty))
-                        {
-                            dependantIds.Add(id!.Value);
-                        }
+                        dependantIds.Add(id!.Value);
                     }
-                }
-                catch
-                {
-                    // Selector threw an exception (e.g., null reference), skip these IDs
                 }
             }
         }
@@ -1356,7 +1352,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         var newIds = dependantIds.Except(existingEventIds).ToList();
 
         // Only query if there are new IDs to fetch
-        if (newIds.Any())
+        if (newIds.Count != 0)
         {
             // Query for events matching the dependent IDs
             var query = eventStoreContainer.GetItemLinqQueryable<Event>()
@@ -1375,65 +1371,47 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             {
                 var projectionDependantIds = new HashSet<Guid>();
 
-                // Get IDs from this projection's selectors
+                // Re-evaluate selectors to map fetched events back to each projection.
                 foreach (var selector in _dependantIdSelectors)
                 {
-                    try
+                    var id = selector(projection);
+                    if (id != Guid.Empty && newIds.Contains(id))
                     {
-                        var id = selector(projection);
-                        if (id != Guid.Empty && newIds.Contains(id))
-                        {
-                            projectionDependantIds.Add(id);
-                        }
+                        projectionDependantIds.Add(id);
                     }
-                    catch { }
                 }
 
-                // Get IDs from nullable single selectors
                 foreach (var selector in _nullableDependantIdSelectors)
                 {
-                    try
+                    var id = selector(projection);
+                    if (id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value))
                     {
-                        var id = selector(projection);
-                        if (id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value))
-                        {
-                            projectionDependantIds.Add(id.Value);
-                        }
+                        projectionDependantIds.Add(id.Value);
                     }
-                    catch { }
                 }
 
                 foreach (var selector in _dependantListIdSelectors)
                 {
-                    try
+                    var ids = selector(projection);
+                    if (ids != null)
                     {
-                        var ids = selector(projection);
-                        if (ids != null)
+                        foreach (var id in ids.Where(id => id != Guid.Empty && newIds.Contains(id)))
                         {
-                            foreach (var id in ids.Where(id => id != Guid.Empty && newIds.Contains(id)))
-                            {
-                                projectionDependantIds.Add(id);
-                            }
+                            projectionDependantIds.Add(id);
                         }
                     }
-                    catch { }
                 }
 
-                // Get IDs from nullable list selectors
                 foreach (var selector in _nullableDependantListIdSelectors)
                 {
-                    try
+                    var ids = selector(projection);
+                    if (ids != null)
                     {
-                        var ids = selector(projection);
-                        if (ids != null)
+                        foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value)))
                         {
-                            foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value)))
-                            {
-                                projectionDependantIds.Add(id!.Value);
-                            }
+                            projectionDependantIds.Add(id!.Value);
                         }
                     }
-                    catch { }
                 }
 
                 // Get events for this projection's dependent IDs
@@ -1441,7 +1419,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     .Where(e => projectionDependantIds.Contains(e.aggregateRootId))
                     .ToList();
 
-                if (projectionEvents.Any())
+                if (projectionEvents.Count != 0)
                 {
                     // Find the original projection (not the copy)
                     var originalProjection = _projectionsToInit.First(p => p.id == projection.id);
@@ -1619,8 +1597,8 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             // Process each requestor
             foreach (var requestor in requestors)
             {
-                // Collect all foreign IDs for this requestor
-                var allSelectors = requestor.ListSelectors.Any()
+                // Collect all foreign IDs for this requestor.
+                var allSelectors = requestor.ListSelectors.Length != 0
                     ? requestor.GetAllForeignIdSelectors(projections)
                     : requestor.ForeignIdSelectors;
 
@@ -1632,7 +1610,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     select foreignId!.Value
                 ).Distinct().ToList();
 
-                if (!foreignIds.Any())
+                if (foreignIds.Count == 0)
                 {
                     continue;
                 }
@@ -1678,7 +1656,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     if (consumeResult == null) continue;
 
                     // Try to deserialize as a response
-                    AsyncEventRequestResponse response;
+                    AsyncEventRequestResponse? response;
                     try
                     {
                         response = JsonConvert.DeserializeObject<AsyncEventRequestResponse>(consumeResult.Message.Value);
@@ -1708,7 +1686,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 }
 
                 // Map accumulated events back to projections
-                if (accumulatedEvents.Any())
+                if (accumulatedEvents.Count != 0)
                 {
                     var eventsByAggRoot = accumulatedEvents.ToLookup(e => e.aggregateRootId);
 
@@ -1718,7 +1696,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                         let foreignId = f(p)
                         where foreignId.HasValue
                         let eventList = eventsByAggRoot[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
-                        where eventList.Any()
+                        where eventList.Count != 0
                         select new ExternalDataEvent(p.id, eventList)
                     ).ToList();
 
@@ -1732,8 +1710,17 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             {
                 consumer.Close();
             }
-            catch { }
-            consumer.Dispose();
+            catch (Exception ex)
+            {
+                if (_nostify.Logger?.IsEnabled(LogLevel.Warning) == true)
+                {
+                    LogKafkaConsumerCloseFailure(_nostify.Logger, ex);
+                }
+            }
+            finally
+            {
+                consumer.Dispose();
+            }
         }
         return result;
     }

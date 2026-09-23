@@ -18,10 +18,10 @@ public class ExternalDataEvent
     /// <summary>
     /// Constructor for ExternalDataEvent
     /// </summary>
-    public ExternalDataEvent(Guid aggregateRootId, List<Event> events = null)
+    public ExternalDataEvent(Guid aggregateRootId, List<Event>? events = null)
     {
         this.aggregateRootId = aggregateRootId;
-        this.events = events == null ? new List<Event>() : events;
+        this.events = events ?? new List<Event>();
     }
 
     /// <summary>
@@ -159,7 +159,7 @@ public class ExternalDataEvent
             let foreignId = f(p)
             where foreignId.HasValue
             let eventList = events[foreignId!.Value].ToList()
-            where eventList.Any()
+            where eventList.Count != 0
             select new ExternalDataEvent(p.id, eventList)
         ).ToList();
 
@@ -290,7 +290,7 @@ public class ExternalDataEvent
                     let foreignId = f(p)
                     where foreignId.HasValue
                     let eventList = events[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
-                    where eventList.Any()
+                    where eventList.Count != 0
                     select new ExternalDataEvent(p.id, eventList)
                 ).ToList();
             }
@@ -383,7 +383,7 @@ public class ExternalDataEvent
         var tasks = eventRequests.Select(request =>
         {
             // Use the new method to get all foreign ID selectors if available, otherwise use the existing ones
-            var allSelectors = request.ListSelectors.Any()
+            var allSelectors = request.ListSelectors.Length != 0
                 ? request.GetAllForeignIdSelectors(projectionsToInit)
                 : request.ForeignIdSelectors;
             return GetEventsAsync(httpClient, request.Url, projectionsToInit, pointInTime, allSelectors);
@@ -484,7 +484,7 @@ public class ExternalDataEvent
                 let foreignId = f(p)
                 where foreignId.HasValue
                 let eventList = events[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
-                where eventList.Any()
+                where eventList.Count != 0
                 select new ExternalDataEvent(p.id, eventList)
             ).ToList();
         }
@@ -513,7 +513,7 @@ public class ExternalDataEvent
 
         var channelTaskPairs = grpcRequestors.Select(requestor =>
         {
-            var allSelectors = requestor.ListSelectors.Any()
+            var allSelectors = requestor.ListSelectors.Length != 0
                 ? requestor.GetAllForeignIdSelectors(projectionsToInit)
                 : requestor.ForeignIdSelectors;
 

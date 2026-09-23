@@ -769,6 +769,7 @@ public class ExternalDataEventFactoryTests
 
         var (mockNostify, mockContainer) = CreateMockNostifyWithEvents(testEvents);
         var loggerMock = new Mock<ILogger>();
+        loggerMock.Setup(logger => logger.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         mockNostify.SetupGet(n => n.Logger).Returns(loggerMock.Object);
 
         var factory = new ExternalDataEventFactory<FactoryTestProjection>(
@@ -3404,6 +3405,35 @@ public class ExternalDataEventFactoryTests
 
         // Assert
         Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_WhenDependantSelectorThrows_PropagatesConfigurationFailure()
+    {
+        var projection = new FactoryTestProjection
+        {
+            id = Guid.NewGuid(),
+            siteId = Guid.NewGuid()
+        };
+        var initialEvent = new Event
+        {
+            aggregateRootId = projection.siteId,
+            timestamp = DateTime.UtcNow,
+            payload = new { name = "Applied before dependant selection" }
+        };
+        var (mockNostify, _) = CreateMockNostifyWithEvents(new List<Event> { initialEvent });
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            mockNostify.Object,
+            new List<FactoryTestProjection> { projection },
+            queryExecutor: InMemoryQueryExecutor.Default)
+            .WithSameServiceIdSelectors(p => p.siteId)
+            .WithSameServiceDependantIdSelectors(
+                _ => throw new InvalidOperationException("selector failed"));
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => factory.GetEventsAsync());
+
+        Assert.Equal("selector failed", exception.Message);
     }
 
     [Fact]

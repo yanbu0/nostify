@@ -80,11 +80,11 @@ internal static class EventTypeResolver
                 }
                 catch (ReflectionTypeLoadException ex)
                 {
-                    return ex.Types.Where(t => t != null)!;
+                    // Keep successfully loaded types when an assembly is only partially loadable.
+                    return ex.Types.OfType<Type>();
                 }
             })
-            .Where(t => t != null
-                && !t.IsAbstract
+            .Where(t => !t.IsAbstract
                 && typeof(EventType).IsAssignableFrom(t))
             .Where(t => !IsLegacyCompatibilityType(t))
             .Select(t => new { Type = t, EventType = TryGetRequiredInstance(t) })

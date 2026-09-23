@@ -1238,6 +1238,7 @@ public class DurableProjectionInitializerTests
             "GetIds", ids, "ProcessBatch");
 
         var loggerMock = new Mock<ILogger>();
+        loggerMock.Setup(logger => logger.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
 
         var initializer = CreateInitializer("test-instance");
         await initializer.OrchestrateInitAsync(contextMock.Object,
@@ -1544,6 +1545,7 @@ public class DurableProjectionInitializerTests
             "GetIds", ids, "ProcessBatch");
 
         var loggerMock = new Mock<ILogger>();
+        loggerMock.Setup(logger => logger.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
 
         var initializer = CreateInitializer("test-instance");
         await initializer.OrchestrateInitByPartitionAsync(contextMock.Object,
@@ -1682,6 +1684,42 @@ public class DurableProjectionInitializerTests
 
         await initializer.CancelOrchestration(req, clientMock.Object);
 
+        clientMock.Verify(
+            c => c.TerminateInstanceAsync("test-instance", It.IsAny<object>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData(OrchestrationRuntimeStatus.Running)]
+    [InlineData(OrchestrationRuntimeStatus.Pending)]
+    public async Task CancelOrchestration_WhenActiveInstanceIsNotSuspended_DoesNotResume(
+        OrchestrationRuntimeStatus initialStatus)
+    {
+        var clientMock = new Mock<DurableTaskClient>("test");
+        var activeMetadata = CreateMetadataWithStatus(initialStatus);
+        var terminatedMetadata = CreateMetadataWithStatus(OrchestrationRuntimeStatus.Terminated);
+
+        clientMock
+            .SetupSequence(c => c.GetInstanceAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(activeMetadata)
+            .ReturnsAsync(terminatedMetadata);
+        clientMock
+            .Setup(c => c.TerminateInstanceAsync("test-instance", It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        clientMock
+            .Setup(c => c.WaitForInstanceCompletionAsync("test-instance", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(terminatedMetadata);
+        clientMock
+            .Setup(c => c.PurgeInstanceAsync("test-instance", It.IsAny<PurgeInstanceOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PurgeResult(1));
+
+        var initializer = CreateInitializer("test-instance");
+
+        await initializer.CancelOrchestration(MockHttpRequestData.Create(), clientMock.Object);
+
+        clientMock.Verify(
+            c => c.ResumeInstanceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
         clientMock.Verify(
             c => c.TerminateInstanceAsync("test-instance", It.IsAny<object>(), It.IsAny<CancellationToken>()),
             Times.Once);

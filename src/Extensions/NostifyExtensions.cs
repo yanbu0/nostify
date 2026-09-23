@@ -18,7 +18,7 @@ public static class NostifyExtensions
     ///<summary>
     ///Outputs value of a property from an object, if it exists
     ///</summary>
-    public static bool TryGetValue<T>(this object data, string propertyName, out T value)
+    public static bool TryGetValue<T>(this object data, string propertyName, out T? value)
     {
         JObject jObj = JObject.FromObject(data);
         return jObj.TryGetValue(propertyName, out value);
@@ -27,7 +27,7 @@ public static class NostifyExtensions
     ///<summary>
     ///Outputs value of a property from a JObject, if it exists
     ///</summary>
-    public static bool TryGetValue<T>(this JObject data, string propertyName, out T value)
+    public static bool TryGetValue<T>(this JObject data, string propertyName, out T? value)
     {
         List<JToken> jToken = data.Children<JProperty>()
                     .Where(p => p.Name == propertyName)
@@ -36,7 +36,7 @@ public static class NostifyExtensions
 
         if (jToken.Count == 0)
         {
-            value = default(T);
+            value = default;
             return false;
         }
         else
@@ -48,7 +48,7 @@ public static class NostifyExtensions
             }
             catch (Exception)
             {
-                value = default(T);
+                value = default;
                 return false;
             }
         }

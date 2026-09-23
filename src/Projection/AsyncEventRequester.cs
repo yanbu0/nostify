@@ -164,7 +164,7 @@ public class AsyncEventRequester<TProjection> where TProjection : IUniquelyIdent
         allSelectors.AddRange(SingleSelectors);
 
         // Transform list selectors using the same logic as EventRequester
-        if (ListSelectors.Any())
+        if (ListSelectors.Length != 0)
         {
             var expandedSelectors = projectionsToInit
                 .SelectMany(p => ListSelectors.SelectMany(selector => selector(p)))

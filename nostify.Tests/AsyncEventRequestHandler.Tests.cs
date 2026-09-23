@@ -20,6 +20,7 @@ namespace nostify.Tests;
 ///   3. Chunk the results into AsyncEventRequestResponse messages
 ///   4. Produce responses back to Kafka
 /// </summary>
+[Collection(AsyncEventRequestEnvironmentCollection.Name)]
 public class AsyncEventRequestHandlerTests : IDisposable
 {
     private readonly string _savedMaxBytesEnv;
@@ -274,7 +275,7 @@ public class AsyncEventRequestHandlerTests : IDisposable
         // Assert — 3 events total: 1 for aggId1, 2 for aggId2
         var allEvents = chunks.SelectMany(c => c.events).ToList();
         Assert.Equal(3, allEvents.Count);
-        Assert.Single(allEvents.Where(e => e.aggregateRootId == aggId1));
+        Assert.Single(allEvents, e => e.aggregateRootId == aggId1);
         Assert.Equal(2, allEvents.Count(e => e.aggregateRootId == aggId2));
         Assert.All(allEvents, e => Assert.True(e.timestamp <= pointInTime));
     }
@@ -404,12 +405,13 @@ public class AsyncEventRequestHandlerTests : IDisposable
         Assert.All(allEvents, e => Assert.True(e.timestamp <= pointInTime));
     }
 
-    [Fact(Skip = "Flaky in CI/local due to timing/chunking nondeterminism; run manually when investigating async chunk behavior.")]
+    [Fact]
     public async Task Handler_PointInTime_CorrelationIdPreservedInAllChunks()
     {
-        // Arrange
+        // Arrange. The environment-sensitive collection serializes this test,
+        // and a fixed timestamp keeps the chunk content deterministic.
         Environment.SetEnvironmentVariable("AsyncEventRequestMaxMessageBytes", "300");
-        var pointInTime = DateTime.UtcNow;
+        var pointInTime = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc);
         var aggId = Guid.NewGuid();
         var correlationId = Guid.NewGuid().ToString();
 

@@ -29,7 +29,7 @@ public static class QueryExtensions
     ///<summary>
     ///Nostify: Runs query through FeedIterator and returns first item that matches criteria
     ///</summary>
-    public static async Task<T> FirstOrDefaultAsync<T>(this IQueryable<T> query)
+    public static async Task<T?> FirstOrDefaultAsync<T>(this IQueryable<T> query)
     {
         FeedIterator<T> fi = query.ToFeedIterator<T>();
         List<T> list = await fi.ReadFeedIteratorAsync<T>();

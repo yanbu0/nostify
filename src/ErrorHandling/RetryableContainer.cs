@@ -17,7 +17,7 @@ namespace nostify;
 /// Supports exponential backoff via <see cref="RetryOptions.DelayMultiplier"/> and optional logging.
 /// </summary>
 /// <remarks>
-/// Create instances via <see cref="RetryableContainerExtensions.WithRetry"/>.
+/// Create instances via <see cref="RetryableContainerExtensions.WithRetry(Container, RetryOptions)"/>.
 /// Callbacks (onExhausted, onNotFound, onException) allow callers to handle failures
 /// without coupling the retry wrapper to INostify or any specific error handling strategy.
 /// </remarks>
@@ -224,7 +224,7 @@ public class RetryableContainer : IRetryableContainer
     /// 429 TooManyRequests is thrown and caught separately.
     /// </summary>
     private async Task<T?> ExecuteWithRetryAsync<T>(
-        Func<Task<T>> operation,
+        Func<Task<T?>> operation,
         Func<Task>? onExhausted,
         Func<Task>? onNotFound,
         Func<Exception, Task>? onException,

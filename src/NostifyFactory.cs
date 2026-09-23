@@ -18,24 +18,24 @@ namespace nostify;
 public class NostifyConfig
 {
     /// <summary>
-    /// The API key for accessing the Cosmos DB.
+    /// The API key for accessing the Cosmos DB, or <see langword="null"/> until Cosmos is configured.
     /// </summary>
-    public string cosmosApiKey { get; set; }
+    public string? cosmosApiKey { get; set; }
 
     /// <summary>
-    /// The name of the Cosmos DB.
+    /// The name of the Cosmos DB, or <see langword="null"/> until Cosmos is configured.
     /// </summary>
-    public string cosmosDbName { get; set; }
+    public string? cosmosDbName { get; set; }
 
     /// <summary>
-    /// The endpoint URI for the Cosmos DB.
+    /// The endpoint URI for the Cosmos DB, or <see langword="null"/> until Cosmos is configured.
     /// </summary>
-    public string cosmosEndpointUri { get; set; }
+    public string? cosmosEndpointUri { get; set; }
 
     /// <summary>
-    /// The URL for the Kafka server.
+    /// The URL for the Kafka server, or <see langword="null"/> until Kafka is configured.
     /// </summary>
-    public string kafkaUrl { get; set; }
+    public string? kafkaUrl { get; set; }
 
     /// <summary>
     /// Number of partitions to use when automatically creating Kafka topics.
@@ -43,19 +43,19 @@ public class NostifyConfig
     public int kafkaTopicAutoCreatePartitions { get; set; } = 2;
 
     /// <summary>
-    /// The username for accessing Kafka.
+    /// The optional username for accessing Kafka.
     /// </summary>
-    public string kafkaUserName { get; set; }
+    public string? kafkaUserName { get; set; }
 
     /// <summary>
-    /// The password for accessing Kafka.
+    /// The optional password for accessing Kafka.
     /// </summary>
-    public string kafkaPassword { get; set; }
+    public string? kafkaPassword { get; set; }
 
     /// <summary>
-    /// The default partition key path for Cosmos DB.
+    /// The default partition key path for Cosmos DB, or <see langword="null"/> to use <c>/tenantId</c>.
     /// </summary>
-    public string defaultPartitionKeyPath { get; set; }
+    public string? defaultPartitionKeyPath { get; set; }
 
     /// <summary>
     /// The default tenant ID.
@@ -92,13 +92,13 @@ public class NostifyConfig
     /// <summary>
     /// The IHttpClientFactory instance for creating HttpClient instances to make HTTP requests.
     /// </summary>
-    public IHttpClientFactory? httpClientFactory { get; set; } = null;
+    public IHttpClientFactory? httpClientFactory { get; set; }
 
     /// <summary>
     /// Optional logger instance for structured logging throughout the Nostify framework.
     /// When set, replaces Console.WriteLine calls with structured log output.
     /// </summary>
-    public ILogger? logger { get; set; } = null;
+    public ILogger? logger { get; set; }
 
     /// <summary>
     /// When true, <see cref="NostifyFactory.Build{T}"/> will auto-create
@@ -106,7 +106,7 @@ public class NostifyConfig
     /// found in the assembly.  Set via <see cref="NostifyFactory.WithAsyncEventRequest"/>.
     /// Default is <c>false</c>.
     /// </summary>
-    public bool autoCreateEventRequestTopics { get; set; } = false;
+    public bool autoCreateEventRequestTopics { get; set; }
 
 }
 
@@ -115,6 +115,23 @@ public class NostifyConfig
 ///</summary>
 public static class NostifyFactory
 {
+    private static readonly Action<ILogger, Exception?> LogLoggerConfigured =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(1, nameof(LogLoggerConfigured)),
+            "ILogger configured for Nostify. Structured logging enabled.");
+
+    private static readonly Action<ILogger, string, Exception?> LogStartupDiagnostic =
+        LoggerMessage.Define<string>(
+            LogLevel.Debug,
+            new EventId(2, nameof(LogStartupDiagnostic)),
+            "{StartupMessage}");
+
+    private static readonly Action<ILogger, string, Exception?> LogStartupFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Error,
+            new EventId(3, nameof(LogStartupFailure)),
+            "{StartupError}");
     /// <summary>
     /// Creates a new instance of Nostify using Cosmos.
     /// </summary>
@@ -153,14 +170,17 @@ public static class NostifyFactory
     /// </summary>
     public static NostifyConfig WithKafka(this NostifyConfig config, ProducerConfig producerConfig)
     {
+        ArgumentNullException.ThrowIfNull(producerConfig);
+
         config.producerConfig = producerConfig;
+        config.kafkaUrl = producerConfig.BootstrapServers;
         return config;
     }
 
     /// <summary>
     /// Creates a new instance of Nostify using Kafka.
     /// </summary>
-    public static NostifyConfig WithKafka(string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
+    public static NostifyConfig WithKafka(string kafkaUrl, string? kafkaUserName = null, string? kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
     {
         NostifyConfig config = new NostifyConfig();
         return config.WithKafka(kafkaUrl, kafkaUserName, kafkaPassword, kafkaTopicAutoCreatePartitions);
@@ -169,7 +189,7 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Kafka.
     /// </summary>
-    public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
+    public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string? kafkaUserName = null, string? kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
     {
         config.kafkaTopicAutoCreatePartitions = kafkaTopicAutoCreatePartitions;
 
@@ -208,10 +228,10 @@ public static class NostifyFactory
     {
         // Parse Event Hubs connection string to extract namespace
         var connectionStringParts = eventHubsConnectionString.Split(';');
-        string endpoint = connectionStringParts.FirstOrDefault(p => p.StartsWith("Endpoint="))?.Replace("Endpoint=sb://", "").Replace("/", "") ?? "";
+        string endpoint = connectionStringParts.FirstOrDefault(p => p.StartsWith("Endpoint=", StringComparison.Ordinal))?.Replace("Endpoint=sb://", "", StringComparison.Ordinal).Replace("/", "", StringComparison.Ordinal) ?? "";
 
         // Add port 9093 for Kafka protocol
-        if (!endpoint.Contains(":"))
+        if (!endpoint.Contains(':'))
         {
             endpoint = $"{endpoint}:9093";
         }
@@ -254,7 +274,7 @@ public static class NostifyFactory
     public static NostifyConfig WithLogger(this NostifyConfig config, ILogger logger)
     {
         config.logger = logger;
-        config.logger.LogInformation("ILogger configured for Nostify. Structured logging enabled.");
+        LogLoggerConfigured(config.logger, null);
 
         return config;
     }
@@ -279,23 +299,29 @@ public static class NostifyFactory
     /// </summary>
     public static INostify Build(this NostifyConfig config)
     {
-        var Repository = new NostifyCosmosClient(config.cosmosApiKey,
-            config.cosmosDbName,
-            config.cosmosEndpointUri,
+        ArgumentNullException.ThrowIfNull(config);
+
+        string cosmosApiKey = RequireConfigurationValue(config.cosmosApiKey, nameof(config.cosmosApiKey), "WithCosmos");
+        string cosmosDbName = RequireConfigurationValue(config.cosmosDbName, nameof(config.cosmosDbName), "WithCosmos");
+        string cosmosEndpointUri = RequireConfigurationValue(config.cosmosEndpointUri, nameof(config.cosmosEndpointUri), "WithCosmos");
+        string kafkaUrl = RequireConfigurationValue(config.producerConfig.BootstrapServers, nameof(config.kafkaUrl), "WithKafka or WithEventHubs");
+
+        var Repository = new NostifyCosmosClient(cosmosApiKey,
+            cosmosDbName,
+            cosmosEndpointUri,
             UseGatewayConnection: config.useGatewayConnection,
             DefaultContainerThroughput: config.containerThroughput ?? -1,
             DefaultDbThroughput: config.containerThroughput ?? -1,
             logger: config.logger
         );
-        var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
+        var DefaultPartitionKeyPath = config.defaultPartitionKeyPath ?? "/tenantId";
         var DefaultTenantId = config.defaultTenantId;
-        var KafkaUrl = config.kafkaUrl;
         var KafkaProducer = new ProducerBuilder<string, string>(config.producerConfig).Build();
         var HttpClientFactory = config.httpClientFactory;
 
         // Build base consumer config from producer settings (without GroupId — set per consumer)
         ConsumerConfig? baseConsumerConfig = null;
-        if (!string.IsNullOrEmpty(config.kafkaUrl))
+        if (!string.IsNullOrEmpty(kafkaUrl))
         {
             baseConsumerConfig = new ConsumerConfig
             {
@@ -327,13 +353,23 @@ public static class NostifyFactory
             Repository,
             DefaultPartitionKeyPath,
             DefaultTenantId,
-            KafkaUrl,
+            kafkaUrl,
             KafkaProducer,
             HttpClientFactory,
             config.logger,
             baseConsumerConfig,
             config.DefaultRetryOptions
         );
+    }
+
+    private static string RequireConfigurationValue(string? value, string propertyName, string configurationMethod)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"{propertyName} is not configured. Call {configurationMethod}() before Build().");
+        }
+
+        return value;
     }
 
 
@@ -367,7 +403,7 @@ public static class NostifyFactory
 
             // Filter topic candidates against broker metadata so repeated startup stays idempotent.
             var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-            topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
+            topics = topics.Where(t => !existingTopics.Any(et => et.Topic.Equals(t.Name, StringComparison.OrdinalIgnoreCase))).ToList();
             LogDebugOrVerboseConsole(
                 config,
                 verbose,
@@ -481,7 +517,7 @@ public static class NostifyFactory
     /// <summary>
     /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition.
     /// </summary>
-    private static IEnumerable<string> GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
+    private static string[] GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
         var eventType = EventType.GetRequiredInstance(eventTypeClass);
         var topicName = eventType.name;
@@ -510,7 +546,8 @@ public static class NostifyFactory
     {
         if (config.logger != null)
         {
-            config.logger.LogDebug(loggerMessage ?? consoleMessage, loggerArgs);
+            // consoleMessage is already rendered for the console fallback and avoids dynamic log templates.
+            LogStartupDiagnostic(config.logger, consoleMessage, null);
             return;
         }
 
@@ -527,7 +564,7 @@ public static class NostifyFactory
     {
         if (config.logger != null)
         {
-            config.logger.LogError(ex, message);
+            LogStartupFailure(config.logger, message, ex);
             return;
         }
 

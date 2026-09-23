@@ -31,7 +31,7 @@ public static class DefaultCommandHandler
         // Read the patch object from the request body
         dynamic patchObj = await req.Body.ReadFromRequestBodyAsync();
         // Try to get the aggregate root ID from the binding data or the patch object
-        context.BindingContext.BindingData.TryGetValue("id", out string idStr);
+        context.BindingContext.BindingData.TryGetValue("id", out string? idStr);
         string unparsedGuid = idStr ?? patchObj.id.ToString();
         if (!Guid.TryParse(unparsedGuid, out Guid aggRootId))
         {
@@ -121,7 +121,7 @@ public static class DefaultCommandHandler
     public async static Task<Guid> HandleDeleteAsync<T>(INostify nostify, EventType eventType, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
     {
         // Try to get the aggregate root ID from the binding data
-        if (!context.BindingContext.BindingData.TryGetValue("id", out string idStr))
+        if (!context.BindingContext.BindingData.TryGetValue("id", out string? idStr) || idStr is null)
         {
             throw new ArgumentException("No id provided in route");
         }
@@ -456,87 +456,4 @@ public static class DefaultCommandHandler
         return aggregateRootIds.Count;
     }
 
-    // ---------------------------------------------------------------------------
-    // Backward-compatible wrappers (obsolete — use the *Async equivalents)
-    // ---------------------------------------------------------------------------
-
-    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, EventType, HttpRequestData, FunctionContext, Guid, Guid)"/>
-    [Obsolete("Use HandlePatchAsync instead.")]
-    public static Task<Guid> HandlePatch<T>(INostify nostify, EventType eventType, HttpRequestData req, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
-        => HandlePatchAsync<T>(nostify, eventType, req, context, userId, partitionKey);
-
-    /// <inheritdoc cref="HandlePatchAsync{T}(INostify, EventType, object, Guid, Guid, Guid)"/>
-    [Obsolete("Use HandlePatchAsync instead.")]
-    public static Task<Guid> HandlePatch<T>(INostify nostify, EventType eventType, object patchObj, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
-        => HandlePatchAsync<T>(nostify, eventType, patchObj, aggregateRootId, userId, partitionKey);
-
-    /// <inheritdoc cref="HandlePostAsync{T}(INostify, EventType, HttpRequestData, Guid, Guid, string)"/>
-    [Obsolete("Use HandlePostAsync instead.")]
-    public static Task<Guid> HandlePost<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
-        => HandlePostAsync<T>(nostify, eventType, req, userId, partitionKey, partitionKeyName);
-
-    /// <inheritdoc cref="HandlePostAsync{T}(INostify, EventType, object, Guid, Guid, string)"/>
-    [Obsolete("Use HandlePostAsync instead.")]
-    public static Task<Guid> HandlePost<T>(INostify nostify, EventType eventType, object postObj, Guid userId = default, Guid partitionKey = default, string partitionKeyName = "tenantId") where T : class, IAggregate
-        => HandlePostAsync<T>(nostify, eventType, postObj, userId, partitionKey, partitionKeyName);
-
-    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, EventType, FunctionContext, Guid, Guid)"/>
-    [Obsolete("Use HandleDeleteAsync instead.")]
-    public static Task<Guid> HandleDelete<T>(INostify nostify, EventType eventType, FunctionContext context, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
-        => HandleDeleteAsync<T>(nostify, eventType, context, userId, partitionKey);
-
-    /// <inheritdoc cref="HandleDeleteAsync{T}(INostify, EventType, Guid, Guid, Guid)"/>
-    [Obsolete("Use HandleDeleteAsync instead.")]
-    public static Task<Guid> HandleDelete<T>(INostify nostify, EventType eventType, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default) where T : class, IAggregate
-        => HandleDeleteAsync<T>(nostify, eventType, aggregateRootId, userId, partitionKey);
-
-    /// <inheritdoc cref="HandleBulkCreateAsync{T}(INostify, EventType, HttpRequestData, Guid, Guid, int, bool, bool, string)"/>
-    [Obsolete("Use HandleBulkCreateAsync instead.")]
-    public static Task<int> HandleBulkCreate<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
-        => HandleBulkCreateAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, allowRetry, publishErrorEvents, partitionKeyName);
-
-    /// <inheritdoc cref="HandleBulkCreateAsync{T}(INostify, EventType, HttpRequestData, Guid, Guid, int, RetryOptions?, bool, string)"/>
-    [Obsolete("Use HandleBulkCreateAsync instead.")]
-    public static Task<int> HandleBulkCreate<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
-        => HandleBulkCreateAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
-
-    /// <inheritdoc cref="HandleBulkCreateAsync{T}(INostify, EventType, List{T}, Guid, Guid, int, bool, bool, string)"/>
-    [Obsolete("Use HandleBulkCreateAsync instead.")]
-    public static Task<int> HandleBulkCreate<T>(INostify nostify, EventType eventType, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, bool allowRetry = false, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
-        => HandleBulkCreateAsync<T>(nostify, eventType, newObjects, userId, partitionKey, batchSize, allowRetry, publishErrorEvents, partitionKeyName);
-
-    /// <inheritdoc cref="HandleBulkCreateAsync{T}(INostify, EventType, List{T}, Guid, Guid, int, RetryOptions?, bool, string)"/>
-    [Obsolete("Use HandleBulkCreateAsync instead.")]
-    public static Task<int> HandleBulkCreate<T>(INostify nostify, EventType eventType, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
-        => HandleBulkCreateAsync<T>(nostify, eventType, newObjects, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
-
-    /// <inheritdoc cref="HandleBulkUpdateAsync{T}(INostify, EventType, HttpRequestData, Guid, Guid, int, bool, bool)"/>
-    [Obsolete("Use HandleBulkUpdateAsync instead.")]
-    public static Task<int> HandleBulkUpdate<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false) where T : class, IAggregate
-        => HandleBulkUpdateAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, allowRetry, publishErrorEvents);
-
-    /// <inheritdoc cref="HandleBulkUpdateAsync{T}(INostify, EventType, HttpRequestData, Guid, Guid, int, RetryOptions?, bool)"/>
-    [Obsolete("Use HandleBulkUpdateAsync instead.")]
-    public static Task<int> HandleBulkUpdate<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
-        => HandleBulkUpdateAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
-
-    /// <inheritdoc cref="HandleBulkDeleteAsync{T}(INostify, EventType, HttpRequestData, Guid, Guid, int, bool, bool)"/>
-    [Obsolete("Use HandleBulkDeleteAsync instead.")]
-    public static Task<int> HandleBulkDelete<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false) where T : class, IAggregate
-        => HandleBulkDeleteAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, allowRetry, publishErrorEvents);
-
-    /// <inheritdoc cref="HandleBulkDeleteAsync{T}(INostify, EventType, HttpRequestData, Guid, Guid, int, RetryOptions?, bool)"/>
-    [Obsolete("Use HandleBulkDeleteAsync instead.")]
-    public static Task<int> HandleBulkDelete<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
-        => HandleBulkDeleteAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
-
-    /// <inheritdoc cref="HandleBulkDeleteAsync{T}(INostify, EventType, List{Guid}, Guid, Guid, int, bool, bool)"/>
-    [Obsolete("Use HandleBulkDeleteAsync instead.")]
-    public static Task<int> HandleBulkDelete<T>(INostify nostify, EventType eventType, List<Guid> aggregateRootIds, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = false, bool publishErrorEvents = false) where T : class, IAggregate
-        => HandleBulkDeleteAsync<T>(nostify, eventType, aggregateRootIds, userId, partitionKey, batchSize, allowRetry, publishErrorEvents);
-
-    /// <inheritdoc cref="HandleBulkDeleteAsync{T}(INostify, EventType, List{Guid}, Guid, Guid, int, RetryOptions?, bool)"/>
-    [Obsolete("Use HandleBulkDeleteAsync instead.")]
-    public static Task<int> HandleBulkDelete<T>(INostify nostify, EventType eventType, List<Guid> aggregateRootIds, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
-        => HandleBulkDeleteAsync<T>(nostify, eventType, aggregateRootIds, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
 }

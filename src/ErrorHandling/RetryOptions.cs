@@ -28,6 +28,12 @@ namespace nostify;
 /// </example>
 public class RetryOptions
 {
+    private static readonly Action<ILogger, string, Exception?> LogRetryMessage =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(1, nameof(LogRetryMessage)),
+            "{RetryMessage}");
+
     /// <summary>
     /// Gets or sets the maximum number of retry attempts before the operation fails.
     /// </summary>
@@ -48,7 +54,7 @@ public class RetryOptions
     /// Enable this when querying for a resource that may not yet be available due to eventual consistency,
     /// such as a projection that has not yet been materialized from its event stream.
     /// </remarks>
-    public bool RetryWhenNotFound { get; set; } = false;
+    public bool RetryWhenNotFound { get; set; }
 
     /// <summary>
     /// Gets or sets the multiplier applied to the delay after each retry attempt for exponential backoff.
@@ -68,14 +74,14 @@ public class RetryOptions
     /// otherwise falls back to <see cref="Console.Error"/>.
     /// </summary>
     /// <value><c>true</c> to log retry attempts; otherwise, <c>false</c>. Defaults to <c>false</c>.</value>
-    public bool LogRetries { get; set; } = false;
+    public bool LogRetries { get; set; }
 
     /// <summary>
     /// Gets or sets an optional <see cref="ILogger"/> instance used for logging retry attempts.
     /// If <c>null</c> and <see cref="LogRetries"/> is <c>true</c>, logging falls back to <see cref="Console.Error"/>.
     /// </summary>
     /// <value>An <see cref="ILogger"/> instance, or <c>null</c> for Console.Error fallback.</value>
-    public ILogger? Logger { get; set; } = null;
+    public ILogger? Logger { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RetryOptions"/> class with default values.
@@ -151,7 +157,7 @@ public class RetryOptions
 
         if (Logger != null)
         {
-            Logger.LogWarning(message);
+            LogRetryMessage(Logger, message, null);
         }
         else
         {

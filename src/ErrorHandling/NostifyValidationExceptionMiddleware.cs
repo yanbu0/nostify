@@ -1,4 +1,5 @@
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.Logging;
 using System;
@@ -17,15 +18,53 @@ namespace nostify;
 /// </summary>
 public class NostifyValidationExceptionMiddleware : IFunctionsWorkerMiddleware
 {
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true
+    };
+
+    private static readonly Action<ILogger, string, Exception?> LogValidationFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(1, nameof(LogValidationFailure)),
+            "Validation failed: {ValidationErrors}");
+
+    private static readonly Action<ILogger, string, Exception?> LogNonHttpValidationFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Error,
+            new EventId(2, nameof(LogNonHttpValidationFailure)),
+            "Validation error in non-HTTP function: {ValidationErrors}");
+
+    private static readonly Action<ILogger, string, Exception?> LogResponseWriteFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Error,
+            new EventId(3, nameof(LogResponseWriteFailure)),
+            "Failed to set HTTP response for validation error. Original validation errors: {ValidationErrors}");
+
     private readonly ILogger<NostifyValidationExceptionMiddleware> _logger;
+    private readonly Func<FunctionContext, HttpResponseData?> _responseResolver;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NostifyValidationExceptionMiddleware"/> class.
     /// </summary>
     /// <param name="logger">The logger instance.</param>
     public NostifyValidationExceptionMiddleware(ILogger<NostifyValidationExceptionMiddleware> logger)
+        : this(logger, static context => context.GetHttpResponseData())
+    {
+    }
+
+    /// <summary>
+    /// Initializes middleware with an injectable HTTP response resolver for deterministic testing.
+    /// </summary>
+    /// <param name="logger">The logger instance.</param>
+    /// <param name="responseResolver">Resolves the HTTP response for the current invocation.</param>
+    internal NostifyValidationExceptionMiddleware(
+        ILogger<NostifyValidationExceptionMiddleware> logger,
+        Func<FunctionContext, HttpResponseData?> responseResolver)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _responseResolver = responseResolver ?? throw new ArgumentNullException(nameof(responseResolver));
     }
 
     /// <summary>
@@ -58,7 +97,10 @@ public class NostifyValidationExceptionMiddleware : IFunctionsWorkerMiddleware
     /// <returns>A task representing the asynchronous operation.</returns>
     private async Task HandleValidationException(FunctionContext context, NostifyValidationException validationEx)
     {
-        _logger.LogWarning("Validation failed: {ValidationErrors}", validationEx.GetAllErrorMessages());
+        if (_logger.IsEnabled(LogLevel.Warning))
+        {
+            LogValidationFailure(_logger, validationEx.GetAllErrorMessages(), null);
+        }
 
         var response = new ValidationErrorResponse
         {
@@ -71,35 +113,39 @@ public class NostifyValidationExceptionMiddleware : IFunctionsWorkerMiddleware
             }).ToArray()
         };
 
-        var jsonResponse = JsonSerializer.Serialize(response, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
-        });
+        var jsonResponse = JsonSerializer.Serialize(response, IndentedJsonOptions);
 
-        // Try to set the HTTP response for the function context
+        // Try to set the HTTP response for the function context.
         try
         {
-            var httpResponseData = context.GetHttpResponseData();
+            var httpResponseData = _responseResolver(context);
             if (httpResponseData != null)
             {
                 httpResponseData.StatusCode = HttpStatusCode.BadRequest;
                 httpResponseData.Headers.Add("Content-Type", "application/json");
 
-                using var writer = new StreamWriter(httpResponseData.Body);
+                // The Functions host owns the response stream; disposing this writer must not
+                // close the body before the host serializes the completed invocation response.
+                using var writer = new StreamWriter(
+                    httpResponseData.Body,
+                    System.Text.Encoding.UTF8,
+                    bufferSize: 1024,
+                    leaveOpen: true);
                 await writer.WriteAsync(jsonResponse);
             }
-            else
+            else if (_logger.IsEnabled(LogLevel.Error))
             {
-                // For non-HTTP triggered functions, just log the validation error
-                _logger.LogError("Validation error in non-HTTP function: {ValidationErrors}", validationEx.GetAllErrorMessages());
+                // Non-HTTP functions cannot return a validation response, so retain the failure in their logs.
+                LogNonHttpValidationFailure(_logger, validationEx.GetAllErrorMessages(), null);
             }
         }
         catch (Exception ex)
         {
-            // Fallback: log the validation error if we can't set HTTP response
-            _logger.LogError(ex, "Failed to set HTTP response for validation error. Original validation errors: {ValidationErrors}",
-                validationEx.GetAllErrorMessages());
+            // Preserve both the response-writing failure and the original validation details.
+            if (_logger.IsEnabled(LogLevel.Error))
+            {
+                LogResponseWriteFailure(_logger, validationEx.GetAllErrorMessages(), ex);
+            }
         }
     }
 }

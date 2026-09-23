@@ -294,4 +294,72 @@ public class EventFactoryTests
         // Verify payload is serialized as empty object
         Assert.Contains("\"payload\":{}", json);
     }
+
+    [Fact]
+    public void Create_WithEventTypeAndPayloadId_UsesModernOverload()
+    {
+        // Statically type the metadata as EventType to exercise the modern API rather than
+        // the obsolete NostifyCommand compatibility overload.
+        EventType eventType = TestCommand.Create;
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { id = aggregateId, name = "Modern event" };
+
+        IEvent result = new EventFactory().Create<TestAggregate>(
+            eventType,
+            payload,
+            userId,
+            partitionKey);
+
+        Assert.Equal(eventType, result.command);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+    }
+
+    [Fact]
+    public void Create_WithEventTypeAndStringIds_UsesModernOverload()
+    {
+        // EventType static typing prevents overload resolution from selecting the legacy API.
+        EventType eventType = TestCommand.Create;
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { id = aggregateId, name = "Modern string event" };
+
+        IEvent result = new EventFactory().Create<TestAggregate>(
+            eventType,
+            aggregateId.ToString(),
+            payload,
+            userId.ToString(),
+            partitionKey.ToString());
+
+        Assert.Equal(eventType, result.command);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+    }
+
+    [Fact]
+    public void CreateNullPayloadEvent_WithEventTypeAndStringIds_UsesModernOverload()
+    {
+        // Verify the modern string overload parses all identifiers and supplies an empty payload.
+        EventType eventType = TestCommand.Create;
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+
+        IEvent result = new EventFactory().CreateNullPayloadEvent(
+            eventType,
+            aggregateId.ToString(),
+            userId.ToString(),
+            partitionKey.ToString());
+
+        Assert.Equal(eventType, result.command);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.NotNull(result.payload);
+    }
 }

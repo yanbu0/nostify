@@ -152,7 +152,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(objects);
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkCreate<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkCreateAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 100, allowRetry: true, publishErrorEvents: false);
 
@@ -184,7 +184,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(objects);
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkCreate<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkCreateAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 50, allowRetry: false, publishErrorEvents: false);
 
@@ -318,7 +318,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(objects);
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkUpdate<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkUpdateAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 100, allowRetry: true, publishErrorEvents: false);
 
@@ -351,7 +351,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(objects);
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkUpdate<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkUpdateAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 100, allowRetry: false, publishErrorEvents: false);
 
@@ -383,7 +383,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(idStrings);
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 100, allowRetry: true, publishErrorEvents: false);
 
@@ -415,7 +415,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(idStrings);
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 100, allowRetry: false, publishErrorEvents: false);
 
@@ -446,7 +446,7 @@ public class AllowRetryDelegationTests
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, ids,
             batchSize: 100, allowRetry: true, publishErrorEvents: false);
 
@@ -477,7 +477,7 @@ public class AllowRetryDelegationTests
         var ids = new List<Guid> { Guid.NewGuid() };
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, ids,
             batchSize: 50, allowRetry: false, publishErrorEvents: true);
 
@@ -511,7 +511,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(objects);
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkCreate<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkCreateAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 100, allowRetry: true, publishErrorEvents: true);
 
@@ -543,7 +543,7 @@ public class AllowRetryDelegationTests
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
 
         // Act
-        var count = await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, ids,
             batchSize: 75, allowRetry: true, publishErrorEvents: true);
 
@@ -579,7 +579,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(objects);
 
         // Act
-        await DefaultCommandHandler.HandleBulkUpdate<TestAggregate>(
+        await DefaultCommandHandler.HandleBulkUpdateAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 100, allowRetry: true, publishErrorEvents: false);
 
@@ -613,7 +613,7 @@ public class AllowRetryDelegationTests
         var req = MockHttpRequestData.Create(idStrings);
 
         // Act
-        await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, req,
             batchSize: 100, allowRetry: true, publishErrorEvents: false);
 

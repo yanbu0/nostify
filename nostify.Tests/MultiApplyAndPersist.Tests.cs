@@ -193,7 +193,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
 
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(4));
 
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     #endregion
@@ -261,7 +261,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(4));
 
         // No successful results (all retries exhausted)
-        Assert.Equal(0, result.Count);
+        Assert.Empty(result);
     }
 
     [Fact]
@@ -282,7 +282,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
-        Assert.Equal(0, result.Count);
+        Assert.Empty(result);
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
-        Assert.Equal(0, result.Count);
+        Assert.Empty(result);
     }
 
     #endregion
@@ -361,7 +361,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
         Assert.Equal(2, patchCallCount);
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     [Fact]
@@ -409,7 +409,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<IReadOnlyList<PatchOperation>>(),
             It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     [Fact]
@@ -460,7 +460,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
         Assert.Equal(3, patchCallCount);
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     #endregion
@@ -484,7 +484,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     #endregion
@@ -590,7 +590,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
 
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     #endregion
@@ -616,7 +616,7 @@ public class MultiApplyAndPersistTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
-        Assert.Equal(1, result.Count);
+        Assert.Single(result);
     }
 
     #endregion

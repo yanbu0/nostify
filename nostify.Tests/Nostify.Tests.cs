@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using nostify;
 using Confluent.Kafka;
 using Moq;
 using Newtonsoft.Json;
+using Microsoft.Extensions.Logging;
 
 namespace nostify.Tests;
 
@@ -122,16 +124,12 @@ public class NostifyTests
     }
 
     [Fact]
-    public async Task PublishEventAsync_WithNullEventList_ShouldNotThrow()
+    public async Task PublishEventAsync_WithNullEventList_ThrowsArgumentNullException()
     {
-        // Arrange
         var nostify = CreateTestNostify();
-        List<IEvent>? nullEvents = null;
 
-        // Act & Assert - should not throw
-        var exception = await Record.ExceptionAsync(() => nostify.PublishEventAsync(nullEvents!));
-        
-        Assert.Null(exception);
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => nostify.PublishEventAsync((List<IEvent>)null!));
     }
 
     [Fact]
@@ -243,26 +241,81 @@ public class NostifyTests
         Assert.NotEqual(nostify1.DefaultTenantId, nostify2.DefaultTenantId);
     }
 
-    // This is broken
-    // [Fact]
-    // public async Task PublishEventAsync_WithStringInput_ShouldDeserializeCorrectly()
-    // {
-    //     // Arrange
-    //     var testEvents = new List<Event>
-    //     {
-    //         new Event(new TestCommand(), Guid.NewGuid(), new { test = "data1" }),
-    //         new Event(new TestCommand(), Guid.NewGuid(), new { test = "data2" })
-    //     };
-    //     var jsonInput = JsonConvert.SerializeObject(testEvents);
-    //     var nostify = CreateTestNostify();
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    [InlineData(999, 1)]
+    [InlineData(1000, 1)]
+    [InlineData(1001, 2)]
+    [InlineData(2501, 3)]
+    public void BatchAggregateRootIds_PreservesEveryIdentifierExactlyOnce(
+        int identifierCount,
+        int expectedBatchCount)
+    {
+        var identifiers = Enumerable.Range(0, identifierCount)
+            .Select(index => CreateDeterministicGuid(index))
+            .ToList();
 
-    //     // Act - should not throw even though Kafka might not be available in test
-    //     var exception = await Record.ExceptionAsync(() => nostify.PublishEventAsync(jsonInput));
+        List<List<Guid>> batches = Nostify.BatchAggregateRootIds(identifiers).ToList();
 
-    //     // Assert - for integration testing we just ensure it doesn't crash on deserialization
-    //     // The actual Kafka publishing would require integration test setup
-    //     Assert.True(exception == null || exception is ProduceException<string, string>);
-    // }
+        Assert.Equal(expectedBatchCount, batches.Count);
+        Assert.All(batches, batch => Assert.InRange(batch.Count, 1, 1000));
+        Assert.Equal(identifiers, batches.SelectMany(batch => batch));
+    }
+
+    [Fact]
+    public void BatchAggregateRootIds_WithInvalidArguments_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => Nostify.BatchAggregateRootIds(null!).ToList());
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => Nostify.BatchAggregateRootIds(new List<Guid>(), batchSize: 0).ToList());
+    }
+
+    // Generate stable unique values without relying on randomness in boundary tests.
+    private static Guid CreateDeterministicGuid(int value)
+    {
+        byte[] bytes = new byte[16];
+        BitConverter.GetBytes(value).CopyTo(bytes, 0);
+        return new Guid(bytes);
+    }
+
+    [Fact]
+    public void Dispose_WhenProducerCleanupFails_DisposesRepositoryAndIsIdempotent()
+    {
+        var repository = new NostifyCosmosClient();
+        var producer = new Mock<IProducer<string, string>>();
+        var logger = new Mock<ILogger>();
+        logger.Setup(candidate => candidate.IsEnabled(LogLevel.Warning)).Returns(true);
+        producer.Setup(candidate => candidate.Flush(It.IsAny<TimeSpan>())).Throws<InvalidOperationException>();
+        producer.Setup(candidate => candidate.Dispose()).Throws<InvalidOperationException>();
+
+        var nostify = new Nostify(
+            repository,
+            "/tenantId",
+            Guid.Empty,
+            "localhost:9092",
+            producer.Object,
+            _mockHttpClientFactory.Object,
+            logger.Object);
+
+        nostify.Dispose();
+        nostify.Dispose();
+
+        producer.Verify(candidate => candidate.Flush(It.IsAny<TimeSpan>()), Times.Once);
+        producer.Verify(candidate => candidate.Dispose(), Times.Once);
+        Assert.Throws<ObjectDisposedException>(() => repository.GetClient());
+    }
+
+    [Fact]
+    public void CosmosRepository_AfterDisposal_RejectsClientCreation()
+    {
+        var repository = new NostifyCosmosClient();
+
+        repository.Dispose();
+        repository.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => repository.GetClient());
+    }
 
     [Fact]
     public async Task PublishEventAsync_WithMalformedJson_ShouldThrowJsonException()

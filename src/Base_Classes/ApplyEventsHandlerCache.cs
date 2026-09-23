@@ -45,10 +45,7 @@ namespace nostify
         /// </returns>
         public static HandlerLookup GetOrBuildHandlerLookup(Type targetType)
         {
-            if (targetType == null)
-            {
-                throw new ArgumentNullException(nameof(targetType));
-            }
+            ArgumentNullException.ThrowIfNull(targetType);
 
             return _handlerLookups.GetOrAdd(targetType, BuildHandlerLookup);
         }

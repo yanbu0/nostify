@@ -203,6 +203,7 @@ public class RetryOptionsTests
     public void LogRetry_LogRetriesTrue_WithLogger_LogsWarning()
     {
         var mockLogger = new Mock<ILogger>();
+        mockLogger.Setup(logger => logger.IsEnabled(LogLevel.Warning)).Returns(true);
         var options = new RetryOptions { LogRetries = true, Logger = mockLogger.Object };
 
         options.LogRetry("test retry message");

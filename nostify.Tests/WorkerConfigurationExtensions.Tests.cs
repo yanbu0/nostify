@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Azure.Core.Serialization;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
@@ -123,89 +122,44 @@ public class WorkerConfigurationExtensionsTests
         Assert.Equal(9L, nested["value"]);
     }
 
-[Fact(Skip = "Performance comparison; move to a benchmark/manual run to keep CI unit tests fast and deterministic.")]
-    public void NewtonsoftAndSystemTextJson_CommandSerialization_PerformanceComparison()
+    [Fact]
+    public void SystemTextJsonOptions_ObjectPayloadRoundTrip_InfersAllPrimitiveAndCollectionTypes()
     {
-        var command = new NostifyCommand("Create_Test", isNew: true, allowNullPayload: true);
-        var iterations = 2_000;
-
-        var newtonsoftElapsed = Measure(iterations, () =>
+        var options = WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions();
+        var json = """
         {
-            var json = JsonConvert.SerializeObject(command, SerializationSettings.NostifyDefault);
-            var result = JsonConvert.DeserializeObject<NostifyCommand>(json, SerializationSettings.NostifyDefault);
-            Assert.NotNull(result);
-            Assert.Equal(command.name, result.name);
-        });
+            "falseValue": false,
+            "decimalValue": 12.5,
+            "doubleValue": 1e100,
+            "dateValue": "2026-09-23T00:00:00Z",
+            "nullValue": null,
+            "items": [1, "two"]
+        }
+        """;
 
-        var systemTextElapsed = Measure(iterations, () =>
-        {
-            var json = SystemTextJsonSerializer.Serialize(command, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
-            var result = SystemTextJsonSerializer.Deserialize<NostifyCommand>(json, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
-            Assert.NotNull(result);
-            Assert.Equal(command.name, result.name);
-        });
+        Dictionary<string, object?>? result = SystemTextJsonSerializer.Deserialize<Dictionary<string, object?>>(json, options);
 
-        Console.WriteLine($"Command round-trip over {iterations} iterations -> Newtonsoft: {newtonsoftElapsed.TotalMilliseconds:F2} ms, System.Text.Json: {systemTextElapsed.TotalMilliseconds:F2} ms");
-        Assert.True(newtonsoftElapsed > TimeSpan.Zero);
-        Assert.True(systemTextElapsed > TimeSpan.Zero);
+        Assert.NotNull(result);
+        Assert.Equal(false, result["falseValue"]);
+        Assert.Equal(12.5m, result["decimalValue"]);
+        Assert.IsType<double>(result["doubleValue"]);
+        Assert.Equal(new DateTime(2026, 9, 23, 0, 0, 0, DateTimeKind.Utc), result["dateValue"]);
+        Assert.Null(result["nullValue"]);
+        List<object?> items = Assert.IsType<List<object?>>(result["items"]);
+        Assert.Equal(1L, items[0]);
+        Assert.Equal("two", items[1]);
     }
 
-[Fact(Skip = "Performance comparison; move to a benchmark/manual run to keep CI unit tests fast and deterministic.")]
-    public void NewtonsoftAndSystemTextJson_EventPublishing_PerformanceComparison()
+    [Fact]
+    public void SystemTextJsonOptions_SerializingJsonElement_WritesElementContent()
     {
-        var aggregateId = Guid.NewGuid();
-        IEvent evt = new EventFactory().Create<SerializerTestAggregate>(
-            new SerializerTestCommand("Create_SerializerTestAggregate", isNew: true),
-            aggregateId,
-            new SerializerTestAggregate { id = aggregateId, Name = "Publish Test", Value = 77 });
-        var iterations = 1_000;
+        var options = WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions();
+        using var document = System.Text.Json.JsonDocument.Parse("{\"value\":42}");
+        object element = document.RootElement.Clone();
 
-        var newtonsoftElapsed = Measure(iterations, () =>
-        {
-            var json = JsonConvert.SerializeObject(evt, SerializationSettings.NostifyDefault);
-            Assert.Contains("Publish Test", json);
-        });
+        string json = SystemTextJsonSerializer.Serialize(element, options);
 
-        var systemTextElapsed = Measure(iterations, () =>
-        {
-            var json = SystemTextJsonSerializer.Serialize(evt, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
-            Assert.Contains("Publish Test", json);
-        });
-
-        Console.WriteLine($"Event publish serialization over {iterations} iterations -> Newtonsoft: {newtonsoftElapsed.TotalMilliseconds:F2} ms, System.Text.Json: {systemTextElapsed.TotalMilliseconds:F2} ms");
-        Assert.True(newtonsoftElapsed > TimeSpan.Zero);
-        Assert.True(systemTextElapsed > TimeSpan.Zero);
-    }
-
-[Fact(Skip = "Performance comparison; move to a benchmark/manual run to keep CI unit tests fast and deterministic.")]
-    public void NewtonsoftAndSystemTextJson_EventConsumption_PerformanceComparison()
-    {
-        var aggregateId = Guid.NewGuid();
-        IEvent evt = new EventFactory().Create<SerializerTestAggregate>(
-            new SerializerTestCommand("Update_SerializerTestAggregate"),
-            aggregateId,
-            new SerializerTestAggregate { id = aggregateId, Name = "Consume Test", Value = 91 });
-        var newtonsoftJson = JsonConvert.SerializeObject(evt, SerializationSettings.NostifyDefault);
-        var systemTextJson = SystemTextJsonSerializer.Serialize(evt, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
-        var iterations = 1_000;
-
-        var newtonsoftElapsed = Measure(iterations, () =>
-        {
-            var result = JsonConvert.DeserializeObject<IEvent>(newtonsoftJson, SerializationSettings.NostifyDefault);
-            Assert.NotNull(result);
-            Assert.Equal("Consume Test", result.GetPayload<SerializerTestAggregate>().Name);
-        });
-
-        var systemTextElapsed = Measure(iterations, () =>
-        {
-            var result = SystemTextJsonSerializer.Deserialize<IEvent>(systemTextJson, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
-            Assert.NotNull(result);
-            Assert.Equal("Consume Test", result.GetPayload<SerializerTestAggregate>().Name);
-        });
-
-        Console.WriteLine($"Event consume deserialization over {iterations} iterations -> Newtonsoft: {newtonsoftElapsed.TotalMilliseconds:F2} ms, System.Text.Json: {systemTextElapsed.TotalMilliseconds:F2} ms");
-        Assert.True(newtonsoftElapsed > TimeSpan.Zero);
-        Assert.True(systemTextElapsed > TimeSpan.Zero);
+        Assert.Equal("{\"value\":42}", json);
     }
 
     [Fact]
@@ -230,15 +184,4 @@ public class WorkerConfigurationExtensionsTests
         return host.Services.GetRequiredService<IOptions<WorkerOptions>>().Value;
     }
 
-    private static TimeSpan Measure(int iterations, Action action)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        for (var i = 0; i < iterations; i++)
-        {
-            action();
-        }
-
-        stopwatch.Stop();
-        return stopwatch.Elapsed;
-    }
 }

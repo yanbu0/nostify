@@ -611,6 +611,9 @@ public class RetryableQueryTests
     public async Task ReadAllAsync_429Retry_LogsRetryAttempts()
     {
         var mockLogger = new Moq.Mock<Microsoft.Extensions.Logging.ILogger>();
+        mockLogger
+            .Setup(logger => logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Warning))
+            .Returns(true);
         var executor = new ThrowThenSucceedQueryExecutor(failCount: 1);
         var options = new RetryOptions
         {

@@ -10,22 +10,22 @@ namespace nostify;
 public class AsyncEventRequest
 {
     /// <summary>
-    /// The Kafka topic the request is published to.
-    /// Format: {serviceName}_EventRequest
+    /// Gets or sets the Kafka topic to which the request is published.
+    /// The expected format is <c>{serviceName}_EventRequest</c>.
     /// </summary>
-    public string topic { get; set; }
+    public string topic { get; set; } = string.Empty;
 
     /// <summary>
-    /// The Kafka topic to publish the response to.
-    /// Format: {serviceName}_EventRequestResponse
-    /// If null, falls back to <see cref="topic"/> for backward compatibility.
+    /// Gets or sets the Kafka topic to which the response is published.
+    /// The expected format is <c>{serviceName}_EventRequestResponse</c>.
+    /// An empty value falls back to <see cref="topic"/> for backward compatibility.
     /// </summary>
-    public string responseTopic { get; set; }
+    public string responseTopic { get; set; } = string.Empty;
 
     /// <summary>
-    /// Reserved for future use. Subtopic for more granular filtering.
+    /// Gets or sets the optional subtopic reserved for more granular filtering.
     /// </summary>
-    public string subtopic { get; set; }
+    public string subtopic { get; set; } = string.Empty;
 
     /// <summary>
     /// The aggregate root IDs to request events for.
@@ -38,8 +38,8 @@ public class AsyncEventRequest
     public DateTime? pointInTime { get; set; }
 
     /// <summary>
-    /// Unique correlation ID for matching responses to this request.
-    /// Generated as a new Guid string per batch request.
+    /// Gets or sets the unique correlation identifier used to match responses to this request.
+    /// A new GUID string is generated for each batch request.
     /// </summary>
-    public string correlationId { get; set; }
+    public string correlationId { get; set; } = string.Empty;
 }

@@ -67,7 +67,7 @@ public class NostifyValidationException : ValidationException
     /// <returns>A formatted string containing all validation error messages.</returns>
     public string GetAllErrorMessages()
     {
-        if (ValidationMessages == null || !ValidationMessages.Any())
+        if (ValidationMessages == null || ValidationMessages.Count == 0)
             return Message;
 
         return string.Join(" ", ValidationMessages.Select(vm => vm.ErrorMessage));
@@ -81,7 +81,7 @@ public class NostifyValidationException : ValidationException
     {
         var errorsByMember = new Dictionary<string, List<string>>();
 
-        if (ValidationMessages == null || !ValidationMessages.Any())
+        if (ValidationMessages == null || ValidationMessages.Count == 0)
             return errorsByMember;
 
         foreach (var validationResult in ValidationMessages)
@@ -108,7 +108,7 @@ public class NostifyValidationException : ValidationException
     /// <returns>A formatted error message string.</returns>
     private static string BuildErrorMessage(List<ValidationResult> validationMessages)
     {
-        if (validationMessages == null || !validationMessages.Any())
+        if (validationMessages == null || validationMessages.Count == 0)
             return "Validation failed with no specific errors.";
 
         var errorMessages = validationMessages
