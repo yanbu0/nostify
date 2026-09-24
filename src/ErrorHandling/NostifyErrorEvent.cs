@@ -7,7 +7,9 @@ namespace nostify;
 /// <summary>
 /// Represents an error command in Nostify.
 /// </summary>
+#pragma warning disable CS0618 // Preserve the published legacy command hierarchy for source and wire compatibility.
 public class ErrorCommand : NostifyCommand
+#pragma warning restore CS0618
 {
     /// <summary>
     /// Bulk Create Error
@@ -68,7 +70,7 @@ public class NostifyErrorEvent : Event
     /// <param name="userId">The user identifier.</param>
     /// <param name="partitionKey">The partition key.</param>
     public NostifyErrorEvent(ErrorCommand errorCommand, Guid aggregateRootId, ErrorPayload errorPayload, Guid userId, Guid partitionKey)
-        : base(errorCommand, aggregateRootId, errorPayload, userId, partitionKey)
+        : base((EventType)errorCommand, aggregateRootId, errorPayload, userId, partitionKey)
     {
     }
 

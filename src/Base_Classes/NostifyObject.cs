@@ -8,14 +8,21 @@ using System.Collections.Concurrent;
 
 namespace nostify;
 
+/// <summary>
+/// Defines an object that can apply a Nostify event to its state.
+/// </summary>
 public interface IApplyable
 {
+    /// <summary>
+    /// Applies an event to the implementing object's state.
+    /// </summary>
+    /// <param name="eventToApply">The event whose payload and metadata are applied.</param>
     public abstract void Apply(IEvent eventToApply);
 }
 
-///<summary>
-///Internal class inherited by Aggregate and Projection
-///</summary>
+/// <summary>
+/// Provides the shared identity, tenant, event-application, and property-update behavior for aggregates and projections.
+/// </summary>
 public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, IApplyable
 {
     /// <summary>
@@ -23,7 +30,8 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     /// lookups on the NostifyExtensions type for each property update.
     /// </summary>
     private static readonly MethodInfo _getValueMethodInfo = typeof(NostifyExtensions)
-        .GetMethod("GetValue", BindingFlags.Public | BindingFlags.Static);
+        .GetMethod("GetValue", BindingFlags.Public | BindingFlags.Static)
+        ?? throw new MissingMethodException(typeof(NostifyExtensions).FullName, "GetValue");
 
     /// <summary>
     /// Cache of writable properties for each NostifyObject-derived type T,
@@ -122,10 +130,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     /// </returns>
     protected virtual bool TryApplyWithAttributes(IEvent eventToApply)
     {
-        if (eventToApply == null)
-        {
-            throw new ArgumentNullException(nameof(eventToApply));
-        }
+        ArgumentNullException.ThrowIfNull(eventToApply);
 
         var eventType = eventToApply.eventType;
         if (eventType == null)
@@ -219,7 +224,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
             if (doUpdate)
             {
                 // If a mapping exists, use the mapped target property name, otherwise fall back to the same name
-                string propToSet = propertyPairs.ContainsKey(prop.Name) ? propertyPairs[prop.Name] : prop.Name;
+                string propToSet = propertyPairs.TryGetValue(prop.Name, out string? value) ? value : prop.Name;
                 UpdatePropertyInternal<T>(propToSet, prop.Name, jPayload, propertyMap);
             }
         }
@@ -233,7 +238,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="propertyToGetValueFrom">Name of property to get value from in the payload</param>
     ///<param name="payload">Payload from Event</param>
     ///<param name="thisNostifyObjectProps">Optional. List of properties of this object. Set this if you are looping through a list to avoid calling GetProperties() multiple times.</param>
-    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, object payload, List<PropertyInfo> thisNostifyObjectProps = null) where T : NostifyObject
+    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, object payload, List<PropertyInfo>? thisNostifyObjectProps = null) where T : NostifyObject
     {
         var jPayload = JObject.FromObject(payload);
         UpdateProperty<T>(propertyToSet, propertyToGetValueFrom, jPayload, thisNostifyObjectProps);
@@ -246,7 +251,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="propertyToGetValueFrom">Name of property to get value from in the payload</param>
     ///<param name="jPayload">JObject of payload</param>
     ///<param name="thisNostifyObjectProps">Optional. List of properties of this object. Set this if you are looping through a list to avoid calling GetProperties() multiple times.</param>
-    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, JObject jPayload, List<PropertyInfo> thisNostifyObjectProps = null) where T : NostifyObject
+    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, JObject jPayload, List<PropertyInfo>? thisNostifyObjectProps = null) where T : NostifyObject
     {
         // For callers that still pass a List<PropertyInfo> (for example legacy code paths),
         // honor that list and perform a one-off update using the optimized internal helper.
@@ -335,7 +340,12 @@ public class PropertyCheck
         this.projectionIdPropertyValue = projectionIdPropertyValue;
     }
 
+    /// <summary>Gets or sets the source property name in the event payload.</summary>
     public string eventPropertyName { get; set; }
+
+    /// <summary>Gets or sets the target property name in the aggregate or projection.</summary>
     public string projectionPropertyName { get; set; }
+
+    /// <summary>Gets or sets the projection identifier that must match the event aggregate-root identifier.</summary>
     public Guid? projectionIdPropertyValue { get; set; }
 }

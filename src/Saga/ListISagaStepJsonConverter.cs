@@ -10,6 +10,7 @@ namespace nostify
     /// </summary>
     public class ListISagaStepJsonConverter : JsonConverter<List<ISagaStep>>
     {
+        /// <inheritdoc />
         public override List<ISagaStep> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             // Deserialize as List<SagaStep>
@@ -18,6 +19,7 @@ namespace nostify
             return sagaSteps != null ? new List<ISagaStep>(sagaSteps) : new List<ISagaStep>();
         }
 
+        /// <inheritdoc />
         public override void Write(Utf8JsonWriter writer, List<ISagaStep> value, JsonSerializerOptions options)
         {
             // Serialize as List<SagaStep>

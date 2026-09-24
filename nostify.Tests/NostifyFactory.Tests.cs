@@ -551,6 +551,126 @@ public class NostifyFactoryTests
     }
 
     [Fact]
+    public void WithEventHubs_WithDiagnosticLogging_EnablesProtocolDiagnostics()
+    {
+        // Arrange
+        const string connectionString =
+            "Endpoint=sb://test-namespace.servicebus.windows.net/;" +
+            "SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+
+        // Act
+        var config = NostifyFactory.WithEventHubs(
+            connectionString,
+            diagnosticLogging: true);
+
+        // Assert
+        Assert.Equal(
+            "security,broker,protocol",
+            GetProducerConfigValue(config, "debug"));
+    }
+
+    [Theory]
+    [InlineData("cosmosApiKey", "WithCosmos")]
+    [InlineData("cosmosDbName", "WithCosmos")]
+    [InlineData("cosmosEndpointUri", "WithCosmos")]
+    [InlineData("kafkaUrl", "WithKafka or WithEventHubs")]
+    public void Build_WithMissingRequiredConfiguration_ThrowsDescriptiveError(
+        string missingProperty,
+        string expectedConfigurationMethod)
+    {
+        // Arrange: begin with complete configuration, then remove exactly one required value.
+        var config = NostifyFactory
+            .WithCosmos("test-key", "test-db", "https://test.documents.azure.com:443/")
+            .WithKafka("localhost:9092");
+
+        switch (missingProperty)
+        {
+            case "cosmosApiKey":
+                config.cosmosApiKey = " ";
+                break;
+            case "cosmosDbName":
+                config.cosmosDbName = " ";
+                break;
+            case "cosmosEndpointUri":
+                config.cosmosEndpointUri = " ";
+                break;
+            case "kafkaUrl":
+                config.producerConfig.BootstrapServers = " ";
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported test configuration property '{missingProperty}'.");
+        }
+
+        // Act
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Build());
+
+        // Assert
+        Assert.Equal(
+            $"{missingProperty} is not configured. Call {expectedConfigurationMethod}() before Build().",
+            exception.Message);
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_WithLogger_EmitsDiscoveryDiagnostics()
+    {
+        // Arrange
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+        logger.Setup(value => value.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Debug))
+            .Returns(true);
+        var config = new NostifyConfig { logger = logger.Object };
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(
+            typeof(TopicDiscoveryAggregate).Assembly,
+            config);
+
+        // Assert
+        Assert.NotEmpty(topics);
+        logger.Verify(
+            value => value.Log(
+                Microsoft.Extensions.Logging.LogLevel.Debug,
+                It.IsAny<Microsoft.Extensions.Logging.EventId>(),
+                It.Is<It.IsAnyType>((_, _) => true),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public void BuildGeneric_WhenAdminConfigurationFails_LogsAndWrapsFailure()
+    {
+        // Arrange: a null producer configuration makes admin-client setup fail before any
+        // broker operation, allowing deterministic verification of startup error handling.
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+        logger.Setup(value => value.IsEnabled(It.IsAny<Microsoft.Extensions.Logging.LogLevel>()))
+            .Returns(true);
+        var config = new NostifyConfig
+        {
+            logger = logger.Object,
+            producerConfig = null!
+        };
+
+        // Act
+        var exception = Assert.Throws<NostifyException>(
+            () => config.Build<TestFactoryAggregate>());
+
+        // Assert
+        Assert.StartsWith(
+            "Error building Nostify with autocreate topics",
+            exception.Message,
+            StringComparison.Ordinal);
+        logger.Verify(
+            value => value.Log(
+                Microsoft.Extensions.Logging.LogLevel.Error,
+                It.IsAny<Microsoft.Extensions.Logging.EventId>(),
+                It.Is<It.IsAnyType>((_, _) => true),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
     public void Build_WithEventHubs_ShouldCreateNostifyInstance()
     {
         // Arrange

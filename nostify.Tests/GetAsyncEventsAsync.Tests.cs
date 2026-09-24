@@ -16,6 +16,7 @@ namespace nostify.Tests;
 /// in ExternalDataEventFactory. Exercises the full Kafka request-response
 /// round trip using mock IProducer and IConsumer.
 /// </summary>
+[Collection(AsyncEventRequestEnvironmentCollection.Name)]
 public class GetAsyncEventsAsyncTests : IDisposable
 {
     private readonly Mock<IProducer<string, string>> _mockProducer;

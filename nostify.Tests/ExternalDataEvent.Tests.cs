@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 using Moq;
@@ -52,6 +53,50 @@ public class ExternalDataEventTests
             new TestProjectionForExternalData { id = Guid.NewGuid(), siteId = Guid.NewGuid(), ownerId = Guid.NewGuid() }
         };
     }
+    [Fact]
+    public async Task GetEventsViaGrpcAsync_NullChannel_ThrowsConfigurationError()
+    {
+        NostifyException exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            ExternalDataEvent.GetEventsViaGrpcAsync(
+                channel: null!,
+                projectionsToInit: testProjections,
+                foreignIdSelectors: p => p.siteId));
+
+        Assert.Contains("gRPC channel is required", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetEventsViaGrpcAsync_WithNoForeignIds_ReturnsWithoutNetworkCall()
+    {
+        using var channel = global::Grpc.Net.Client.GrpcChannel.ForAddress("https://localhost:65535");
+        var projections = new List<TestProjectionForExternalData>
+        {
+            new() { id = Guid.NewGuid(), siteId = null }
+        };
+
+        List<ExternalDataEvent> result = await ExternalDataEvent.GetEventsViaGrpcAsync(
+            channel,
+            projections,
+            foreignIdSelectors: p => p.siteId);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetMultiServiceEventsViaGrpcAsync_WithNoRequestors_ReturnsEmpty()
+    {
+        List<ExternalDataEvent> explicitOverload = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync(
+            testProjections,
+            pointInTime: DateTime.UtcNow,
+            grpcRequestors: []);
+        List<ExternalDataEvent> compatibilityOverload = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync(
+            testProjections,
+            grpcRequestors: []);
+
+        Assert.Empty(explicitOverload);
+        Assert.Empty(compatibilityOverload);
+    }
+
     [Fact]
     public async Task GetMultiServiceEventsAsync_ReturnsEmptyList_WhenNoEventRequests()
     {
@@ -363,47 +408,41 @@ public class ExternalDataEventTests
         Assert.All(allEvents, e => Assert.True(e.timestamp <= pointInTime));
     }
 
-    [Fact(Skip = "This test is for parallel execution validation and may not work properly in the pipeline, run manually to verify.")]
-    public async Task GetMultiServiceEventsAsync_ExecutesServicesInParallel()
+    [Fact]
+    public async Task GetMultiServiceEventsAsync_StartsAllServicesBeforeAwaitingResponses()
     {
-        // Test that multiple service calls are executed in parallel for performance
-        
-        // Arrange
+        // Arrange. Each response is held until both requests have started. A
+        // sequential implementation therefore cannot satisfy the coordination
+        // barrier, while a concurrent implementation completes immediately.
         var service1Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[0].siteId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-30), command = new NostifyCommand("Service1Command") }
         };
-        
         var service2Events = new List<IEvent>
         {
             new Event { aggregateRootId = testProjections[1].ownerId!.Value, timestamp = DateTime.UtcNow.AddMinutes(-25), command = new NostifyCommand("Service2Command") }
         };
 
-        // Use a handler that tracks timing to verify parallel execution
-        var timedHandler = new TimedMockHttpHandler();
-        timedHandler.AddService("https://service1.com/events", service1Events, TimeSpan.FromMilliseconds(100));
-        timedHandler.AddService("https://service2.com/events", service2Events, TimeSpan.FromMilliseconds(100));
-        
-        var httpClient = new HttpClient(timedHandler);
-        
+        var coordinatedHandler = new CoordinatedMockHttpHandler(expectedRequestCount: 2);
+        coordinatedHandler.AddService("https://service1.com/events", service1Events);
+        coordinatedHandler.AddService("https://service2.com/events", service2Events);
+        using var httpClient = new HttpClient(coordinatedHandler);
+
         var eventRequests = new[]
         {
             new EventRequester<TestProjectionForExternalData>("https://service1.com/events", p => p.siteId),
             new EventRequester<TestProjectionForExternalData>("https://service2.com/events", p => p.ownerId)
         };
 
-        // Act
-        var startTime = DateTime.UtcNow;
-        var result = await ExternalDataEvent.GetMultiServiceEventsAsync(httpClient, testProjections, eventRequests);
-        var endTime = DateTime.UtcNow;
-        
+        // Act. The timeout is only a deadlock guard and is not a performance
+        // threshold; correctness is established by the request barrier.
+        var result = await ExternalDataEvent
+            .GetMultiServiceEventsAsync(httpClient, testProjections, eventRequests)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+
         // Assert
-        Assert.NotNull(result);
+        Assert.Equal(2, coordinatedHandler.StartedRequestCount);
         Assert.Equal(2, result.Count);
-        
-        // If executed sequentially, it would take ~200ms. If parallel, it should be closer to ~100ms
-        var executionTime = endTime - startTime;
-        Assert.True(executionTime.TotalMilliseconds < 180, $"Execution took {executionTime.TotalMilliseconds}ms, expected less than 180ms for parallel execution");
     }
 
     [Fact]
@@ -835,83 +874,48 @@ public class MultiServiceMockHttpHandler : HttpMessageHandler
 }
 
 /// <summary>
-/// Mock HTTP handler that introduces delays to test parallel execution
+/// Coordinates mock responses so tests can prove concurrent request startup
+/// without relying on wall-clock duration comparisons.
 /// </summary>
-public class TimedMockHttpHandler : HttpMessageHandler
+public sealed class CoordinatedMockHttpHandler : HttpMessageHandler
 {
-    private readonly Dictionary<string, (List<IEvent> events, TimeSpan delay)> _serviceData = new();
-    public Dictionary<string, string> RequestContents { get; } = new();
+    private readonly int _expectedRequestCount;
+    private readonly Dictionary<string, List<IEvent>> _serviceEvents = new();
+    private readonly TaskCompletionSource _allRequestsStarted = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _startedRequestCount;
 
-    public void AddService(string url, List<IEvent> eventsToReturn, TimeSpan delay)
+    public CoordinatedMockHttpHandler(int expectedRequestCount)
     {
-        _serviceData[url] = (eventsToReturn, delay);
+        _expectedRequestCount = expectedRequestCount;
     }
 
-    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
+    public int StartedRequestCount => Volatile.Read(ref _startedRequestCount);
+
+    public void AddService(string url, List<IEvent> eventsToReturn)
+    {
+        _serviceEvents[url] = eventsToReturn;
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
     {
         var url = request.RequestUri?.ToString() ?? string.Empty;
-
-        if (request.Content != null)
+        if (Interlocked.Increment(ref _startedRequestCount) == _expectedRequestCount)
         {
-            RequestContents[url] = await request.Content.ReadAsStringAsync();
+            _allRequestsStarted.TrySetResult();
         }
 
-        // Parse pointInTime path parameter if present and get base URL
-        // Expected format: {baseUrl}/{pointInTime} where pointInTime is in ISO format
-        DateTime? pointInTime = null;
-        string baseUrl = url;
-        
-        var uri = request.RequestUri;
-        if (uri != null)
-        {
-            // Try to find if the last part of the path is a datetime
-            // We'll work backwards from the full URL to find the base URL
-            var urlDecoded = Uri.UnescapeDataString(url);
-            var segments = urlDecoded.Split('/');
-            
-            if (segments.Length >= 1)
-            {
-                var lastSegment = segments[segments.Length - 1];
-                // Try to parse the last segment as a DateTime in ISO format with UTC
-                if (DateTime.TryParseExact(lastSegment, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedDate))
-                {
-                    pointInTime = parsedDate.ToUniversalTime();
-                    // Remove the pointInTime segment to get the base URL by finding the last occurrence
-                    var lastSlashIndex = url.LastIndexOf('/');
-                    if (lastSlashIndex > 0)
-                    {
-                        baseUrl = url.Substring(0, lastSlashIndex);
-                        // Decode the base URL as well
-                        baseUrl = Uri.UnescapeDataString(baseUrl);
-                    }
-                }
-            }
-        }
+        await _allRequestsStarted.Task.WaitAsync(cancellationToken);
 
-        // Add delay and return events for this service
-        if (_serviceData.TryGetValue(baseUrl, out var serviceData))
-        {
-            await Task.Delay(serviceData.delay, cancellationToken);
-            
-            var eventsToReturn = serviceData.events;
-            
-            // Filter events based on pointInTime if provided
-            if (pointInTime.HasValue)
-            {
-                eventsToReturn = serviceData.events.Where(e => e.timestamp <= pointInTime.Value).ToList();
-            }
-            
-            var responseContent = JsonConvert.SerializeObject(eventsToReturn);
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
-            };
-        }
-
-        // Default to empty response
+        var events = _serviceEvents.TryGetValue(url, out var configuredEvents)
+            ? configuredEvents
+            : new List<IEvent>();
+        var responseContent = JsonConvert.SerializeObject(events);
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("[]", Encoding.UTF8, "application/json")
+            Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
         };
     }
 }

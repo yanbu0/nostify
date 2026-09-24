@@ -48,16 +48,6 @@ public class EventFactory
     }
 
     /// <summary>
-    /// Creates a new <see cref="Event"/> instance using legacy command metadata and optionally validates payload.
-    /// </summary>
-    [Obsolete("Use EventType overloads instead.")]
-    public IEvent Create<T>(NostifyCommand command, Guid aggregateRootId, object payload, Guid userId = default, Guid partitionKey = default) where T : class
-    {
-        var evt = new Event(command, aggregateRootId, payload, userId, partitionKey);
-        return ValidatePayload ? evt.ValidatePayload<T>() : evt;
-    }
-
-    /// <summary>
     /// Creates a new <see cref="Event"/> instance and optionally validates its payload against the specified aggregate type, parsing the aggregateRootId from the payload.
     /// </summary>
     /// <typeparam name="T">The type of the aggregate to validate against. Must inherit from <see cref="NostifyObject"/> and implement <see cref="IAggregate"/>.</typeparam>
@@ -69,16 +59,6 @@ public class EventFactory
     public IEvent Create<T>(EventType eventType, object payload, Guid userId = default, Guid partitionKey = default) where T : class
     {
         var evt = new Event(eventType, payload, userId, partitionKey);
-        return ValidatePayload ? evt.ValidatePayload<T>() : evt;
-    }
-
-    /// <summary>
-    /// Creates a new <see cref="Event"/> instance using legacy command metadata and optionally validates payload.
-    /// </summary>
-    [Obsolete("Use EventType overloads instead.")]
-    public IEvent Create<T>(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default) where T : class
-    {
-        var evt = new Event(command, payload, userId, partitionKey);
         return ValidatePayload ? evt.ValidatePayload<T>() : evt;
     }
 
@@ -99,16 +79,6 @@ public class EventFactory
     }
 
     /// <summary>
-    /// Creates a new <see cref="Event"/> instance using legacy command metadata and optionally validates payload.
-    /// </summary>
-    [Obsolete("Use EventType overloads instead.")]
-    public IEvent Create<T>(NostifyCommand command, string aggregateRootId, object payload, string userId, string partitionKey) where T : NostifyObject, IAggregate
-    {
-        var evt = new Event(command, aggregateRootId, payload, userId, partitionKey);
-        return ValidatePayload ? evt.ValidatePayload<T>() : evt;
-    }
-
-    /// <summary>
     /// Creates a new <see cref="Event"/> instance with a null payload and no validation.
     /// This method does not run payload validation and is typically used for delete operations or events that don't require payload data.
     /// </summary>
@@ -117,21 +87,14 @@ public class EventFactory
     /// <param name="userId">The ID of the user responsible for the event.</param>
     /// <param name="partitionKey">The ID of the partition that the aggregate to apply the event to is in.</param>
     /// <returns>A <see cref="Event"/> instance with null payload and no validation.</returns>
+#pragma warning disable CA1822 // Retain the published instance factory API for source compatibility.
     public IEvent CreateNullPayloadEvent(EventType eventType, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default)
     {
         var evt = new Event(eventType, aggregateRootId, new { }, userId, partitionKey);
         return evt;
     }
 
-    /// <summary>
-    /// Creates a new <see cref="Event"/> instance with a null payload using legacy command metadata.
-    /// </summary>
-    [Obsolete("Use EventType overloads instead.")]
-    public IEvent CreateNullPayloadEvent(NostifyCommand command, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default)
-    {
-        var evt = new Event(command, aggregateRootId, new { }, userId, partitionKey);
-        return evt;
-    }
+#pragma warning restore CA1822
 
     /// <summary>
     /// Creates a new <see cref="Event"/> instance with a null payload and no validation, parsing the aggregateRootId, userId, and partitionKey from string values.
@@ -142,19 +105,11 @@ public class EventFactory
     /// <param name="userId">The ID of the user responsible for the event, as a string.</param>
     /// <param name="partitionKey">The ID of the partition that the aggregate to apply the event to is in, as a string.</param>
     /// <returns>A <see cref="Event"/> instance with null payload and no validation.</returns>
+#pragma warning disable CA1822 // Retain the published instance factory API for source compatibility.
     public IEvent CreateNullPayloadEvent(EventType eventType, string aggregateRootId, string userId, string partitionKey)
     {
         var evt = new Event(eventType, aggregateRootId, new { }, userId, partitionKey);
         return evt;
     }
 
-    /// <summary>
-    /// Creates a new <see cref="Event"/> instance with a null payload using legacy command metadata.
-    /// </summary>
-    [Obsolete("Use EventType overloads instead.")]
-    public IEvent CreateNullPayloadEvent(NostifyCommand command, string aggregateRootId, string userId, string partitionKey)
-    {
-        var evt = new Event(command, aggregateRootId, new { }, userId, partitionKey);
-        return evt;
-    }
 }

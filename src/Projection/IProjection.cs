@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -17,7 +18,8 @@ public static class ProjectionExtensions
         where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         P? initProj = (await nostify.ProjectionInitializer.InitAsync(new List<P>() { self }, nostify, httpClient)).FirstOrDefault();
-        return initProj;
+        return initProj
+            ?? throw new InvalidOperationException("Projection initialization returned no result.");
     }
 }
 

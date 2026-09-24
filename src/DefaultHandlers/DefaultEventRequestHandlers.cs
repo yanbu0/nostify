@@ -17,6 +17,73 @@ namespace nostify;
 /// </summary>
 public static class DefaultEventRequestHandlers
 {
+    // Compiled message templates avoid repeated parsing and unnecessary argument evaluation on hot request paths.
+    private static readonly Action<ILogger, Exception?> LogEmptyKafkaMessage =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            new EventId(1, nameof(LogEmptyKafkaMessage)),
+            "Received empty Kafka message on EventRequest topic");
+
+    private static readonly Action<ILogger, string, Exception?> LogDeserializationFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Error,
+            new EventId(2, nameof(LogDeserializationFailure)),
+            "Failed to deserialize AsyncEventRequest: {Message}");
+
+    private static readonly Action<ILogger, Exception?> LogInvalidAsyncRequest =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            new EventId(3, nameof(LogInvalidAsyncRequest)),
+            "Received invalid AsyncEventRequest: missing aggregateRootIds");
+
+    private static readonly Action<ILogger, int, string, Exception?> LogProcessingAsyncRequest =
+        LoggerMessage.Define<int, string>(
+            LogLevel.Information,
+            new EventId(4, nameof(LogProcessingAsyncRequest)),
+            "Processing AsyncEventRequest for {Count} aggregate root IDs, correlationId: {CorrelationId}");
+
+    private static readonly Action<ILogger, int, int, string, Exception?> LogSendingResponseChunks =
+        LoggerMessage.Define<int, int, string>(
+            LogLevel.Information,
+            new EventId(5, nameof(LogSendingResponseChunks)),
+            "Sending {ChunkCount} response chunk(s) with {EventCount} total events for correlationId: {CorrelationId}");
+
+    private static readonly Action<ILogger, long, string, Exception?> LogAsyncRequestCompleted =
+        LoggerMessage.Define<long, string>(
+            LogLevel.Information,
+            new EventId(6, nameof(LogAsyncRequestCompleted)),
+            "HandleAsyncEventRequestAsync completed in {ElapsedMs}ms for correlationId: {CorrelationId}");
+
+    private static readonly Action<ILogger, string, long, Exception?> LogAsyncRequestFailure =
+        LoggerMessage.Define<string, long>(
+            LogLevel.Error,
+            new EventId(7, nameof(LogAsyncRequestFailure)),
+            "Error processing AsyncEventRequest for correlationId: {CorrelationId} after {ElapsedMs}ms");
+
+    private static readonly Action<ILogger, long, int, int, Exception?> LogEventRequestCompleted =
+        LoggerMessage.Define<long, int, int>(
+            LogLevel.Information,
+            new EventId(8, nameof(LogEventRequestCompleted)),
+            "HandleEventRequestAsync completed in {ElapsedMs}ms for {Count} aggregate root IDs, returned {EventCount} events");
+
+    private static readonly Action<ILogger, Exception?> LogInvalidGrpcRequest =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            new EventId(9, nameof(LogInvalidGrpcRequest)),
+            "Received invalid gRPC EventRequest: missing aggregateRootIds");
+
+    private static readonly Action<ILogger, int, Exception?> LogProcessingGrpcRequest =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            new EventId(10, nameof(LogProcessingGrpcRequest)),
+            "Processing gRPC EventRequest for {Count} aggregate root IDs");
+
+    private static readonly Action<ILogger, long, int, Exception?> LogGrpcRequestCompleted =
+        LoggerMessage.Define<long, int>(
+            LogLevel.Information,
+            new EventId(11, nameof(LogGrpcRequestCompleted)),
+            "HandleGrpcEventRequestAsync completed in {ElapsedMs}ms, returned {EventCount} events");
+
     /// <summary>
     /// Handles an incoming <see cref="AsyncEventRequest"/> from a Kafka trigger.
     /// Deserializes the request, queries the event store for the requested aggregate root IDs,
@@ -30,37 +97,73 @@ public static class DefaultEventRequestHandlers
     /// <param name="maxMessageBytes">Optional maximum byte size per response chunk. 
     /// Defaults to the <c>AsyncEventRequestMaxMessageBytes</c> environment variable, or 900,000 bytes.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public static async Task HandleAsyncEventRequestAsync(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, ILogger? logger = null, int? maxMessageBytes = null)
+    public static Task HandleAsyncEventRequestAsync(INostify nostify, NostifyKafkaTriggerEvent triggerEvent, ILogger? logger = null, int? maxMessageBytes = null)
     {
+        return HandleAsyncEventRequestAsync(
+            nostify,
+            triggerEvent,
+            CosmosQueryExecutor.Default,
+            logger,
+            maxMessageBytes);
+    }
+
+    /// <summary>
+    /// Handles an asynchronous event request using an injectable query executor for deterministic testing.
+    /// </summary>
+    internal static async Task HandleAsyncEventRequestAsync(
+        INostify nostify,
+        NostifyKafkaTriggerEvent triggerEvent,
+        IQueryExecutor queryExecutor,
+        ILogger? logger = null,
+        int? maxMessageBytes = null)
+    {
+        ArgumentNullException.ThrowIfNull(nostify);
+        ArgumentNullException.ThrowIfNull(triggerEvent);
+        ArgumentNullException.ThrowIfNull(queryExecutor);
+
         logger ??= nostify.Logger;
         var sw = Stopwatch.StartNew();
 
         string messageValue = triggerEvent.Value;
         if (string.IsNullOrWhiteSpace(messageValue))
         {
-            logger?.LogWarning("Received empty Kafka message on EventRequest topic");
+            if (logger != null)
+            {
+                LogEmptyKafkaMessage(logger, null);
+            }
+
             return;
         }
 
-        AsyncEventRequest request;
+        AsyncEventRequest? request;
         try
         {
             request = JsonConvert.DeserializeObject<AsyncEventRequest>(messageValue);
         }
         catch (Exception ex)
         {
-            logger?.LogError(ex, "Failed to deserialize AsyncEventRequest: {Message}", messageValue);
+            if (logger != null)
+            {
+                LogDeserializationFailure(logger, messageValue, ex);
+            }
+
             return;
         }
 
-        if (request == null || request.aggregateRootIds == null || request.aggregateRootIds.Count == 0)
+        if (request?.aggregateRootIds == null || request.aggregateRootIds.Count == 0)
         {
-            logger?.LogWarning("Received invalid AsyncEventRequest: missing aggregateRootIds");
+            if (logger != null)
+            {
+                LogInvalidAsyncRequest(logger, null);
+            }
+
             return;
         }
 
-        logger?.LogInformation("Processing AsyncEventRequest for {Count} aggregate root IDs, correlationId: {CorrelationId}",
-            request.aggregateRootIds.Count, request.correlationId);
+        if (logger != null)
+        {
+            LogProcessingAsyncRequest(logger, request.aggregateRootIds.Count, request.correlationId, null);
+        }
 
         // Determine the response topic (falls back to request topic for backward compatibility)
         string responseTopic = !string.IsNullOrEmpty(request.responseTopic) ? request.responseTopic : request.topic;
@@ -78,9 +181,8 @@ public static class DefaultEventRequestHandlers
                 eventsQuery = eventsQuery.Where(e => e.timestamp <= request.pointInTime.Value);
             }
 
-            List<Event> allEvents = await eventsQuery
-                .OrderBy(e => e.timestamp)
-                .ReadAllAsync();
+            List<Event> allEvents = await queryExecutor.ReadAllAsync(
+                eventsQuery.OrderBy(e => e.timestamp));
 
             // Chunk events into response messages
             int maxBytes = maxMessageBytes
@@ -93,8 +195,10 @@ public static class DefaultEventRequestHandlers
                 request.correlationId
             );
 
-            logger?.LogInformation("Sending {ChunkCount} response chunk(s) with {EventCount} total events for correlationId: {CorrelationId}",
-                chunks.Count, allEvents.Count, request.correlationId);
+            if (logger != null)
+            {
+                LogSendingResponseChunks(logger, chunks.Count, allEvents.Count, request.correlationId, null);
+            }
 
             foreach (var chunk in chunks)
             {
@@ -106,14 +210,18 @@ public static class DefaultEventRequestHandlers
             }
 
             sw.Stop();
-            logger?.LogInformation("HandleAsyncEventRequestAsync completed in {ElapsedMs}ms for correlationId: {CorrelationId}",
-                sw.ElapsedMilliseconds, request.correlationId);
+            if (logger != null)
+            {
+                LogAsyncRequestCompleted(logger, sw.ElapsedMilliseconds, request.correlationId, null);
+            }
         }
         catch (Exception ex)
         {
             sw.Stop();
-            logger?.LogError(ex, "Error processing AsyncEventRequest for correlationId: {CorrelationId} after {ElapsedMs}ms",
-                request.correlationId, sw.ElapsedMilliseconds);
+            if (logger != null)
+            {
+                LogAsyncRequestFailure(logger, request.correlationId, sw.ElapsedMilliseconds, ex);
+            }
 
             // Send an error response so the requester doesn't hang waiting
             var errorResponse = new AsyncEventRequestResponse
@@ -178,8 +286,10 @@ public static class DefaultEventRequestHandlers
             eventsQuery.OrderBy(e => e.timestamp));
 
         sw.Stop();
-        logger?.LogInformation("HandleEventRequestAsync completed in {ElapsedMs}ms for {Count} aggregate root IDs, returned {EventCount} events",
-            sw.ElapsedMilliseconds, aggregateRootIds.Count, allEvents.Count);
+        if (logger != null)
+        {
+            LogEventRequestCompleted(logger, sw.ElapsedMilliseconds, aggregateRootIds.Count, allEvents.Count, null);
+        }
 
         return allEvents;
     }
@@ -223,7 +333,11 @@ public static class DefaultEventRequestHandlers
 
         if (request == null || request.AggregateRootIds == null || request.AggregateRootIds.Count == 0)
         {
-            logger?.LogWarning("Received invalid gRPC EventRequest: missing aggregateRootIds");
+            if (logger != null)
+            {
+                LogInvalidGrpcRequest(logger, null);
+            }
+
             return new nostify.Grpc.EventResponseMessage();
         }
 
@@ -236,8 +350,10 @@ public static class DefaultEventRequestHandlers
             ? request.PointInTime.ToDateTime()
             : null;
 
-        logger?.LogInformation("Processing gRPC EventRequest for {Count} aggregate root IDs",
-            aggregateRootIds.Count);
+        if (logger != null)
+        {
+            LogProcessingGrpcRequest(logger, aggregateRootIds.Count, null);
+        }
 
         List<Event> allEvents = await HandleEventRequestAsync(nostify, aggregateRootIds, queryExecutor, pointInTime, logger);
 
@@ -245,8 +361,10 @@ public static class DefaultEventRequestHandlers
         response.Events.AddRange(GrpcEventMapping.MapToProto(allEvents));
 
         sw.Stop();
-        logger?.LogInformation("HandleGrpcEventRequestAsync completed in {ElapsedMs}ms, returned {EventCount} events",
-            sw.ElapsedMilliseconds, allEvents.Count);
+        if (logger != null)
+        {
+            LogGrpcRequestCompleted(logger, sw.ElapsedMilliseconds, allEvents.Count, null);
+        }
 
         return response;
     }

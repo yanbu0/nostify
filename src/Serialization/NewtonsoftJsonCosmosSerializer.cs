@@ -20,10 +20,7 @@ public class NewtonsoftJsonCosmosSerializer : CosmosSerializer
     /// <returns>The deserialized object of type <typeparamref name="T"/>.</returns>
     public override T FromStream<T>(Stream stream)
     {
-        if (stream == null)
-        {
-            throw new System.ArgumentNullException(nameof(stream));
-        }
+        ArgumentNullException.ThrowIfNull(stream);
 
         // If stream is empty return default(T) (Cosmos may pass an empty stream for null payloads)
         if (stream.CanSeek && stream.Length == 0)

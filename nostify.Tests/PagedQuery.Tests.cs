@@ -18,6 +18,12 @@ public class PagedQueryTests
     {
         public string name { get; set; } = string.Empty;
         public int age { get; set; }
+        public long lifetimeValue { get; set; }
+        public decimal balance { get; set; }
+        public double score { get; set; }
+        public int? optionalRank { get; set; }
+        public short categoryCode { get; set; }
+        public TestCategory category { get; set; }
         public string email { get; set; } = string.Empty;
         public bool isActive { get; set; }
         public DateTime createdAt { get; set; }
@@ -26,6 +32,12 @@ public class PagedQueryTests
         {
             UpdateProperties<TestTenantItem>(e.payload);
         }
+    }
+
+    public enum TestCategory
+    {
+        Standard,
+        Premium
     }
 
     // Test model without ITenantFilterable
@@ -55,6 +67,76 @@ public class PagedQueryTests
         {
             UpdateProperties<TestItem>(e.payload);
         }
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IQueryableTenantOverload_EmptyTenant_Throws()
+    {
+        IQueryable<TestTenantItem> query = Array.Empty<TestTenantItem>().AsQueryable();
+        var tableState = new TableStateChange { page = 1, pageSize = 10 };
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            query.PagedQueryAsync(
+                tableState,
+                Guid.Empty,
+                InMemoryQueryExecutor.Default));
+
+        Assert.Equal("tenantId", exception.ParamName);
+        Assert.StartsWith("Tenant ID cannot be empty.", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IQueryable_SortsAscendingByRequestedProperty()
+    {
+        Guid tenantId = Guid.NewGuid();
+        IQueryable<TestTenantItem> query = new[]
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Charlie" },
+            new TestTenantItem { tenantId = tenantId, name = "Alpha" },
+            new TestTenantItem { tenantId = tenantId, name = "Bravo" },
+            new TestTenantItem { tenantId = Guid.NewGuid(), name = "Excluded" }
+        }.AsQueryable();
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            sortColumn = "name",
+            sortDirection = "asc"
+        };
+
+        IPagedResult<TestTenantItem> result = await query.PagedQueryAsync(
+            tableState,
+            tenantId,
+            InMemoryQueryExecutor.Default);
+
+        Assert.Equal(3, result.totalCount);
+        Assert.Equal(new[] { "Alpha", "Bravo", "Charlie" }, result.items.Select(item => item.name));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_IQueryable_SortsDescendingCaseInsensitively()
+    {
+        Guid tenantId = Guid.NewGuid();
+        IQueryable<TestTenantItem> query = new[]
+        {
+            new TestTenantItem { tenantId = tenantId, name = "Charlie" },
+            new TestTenantItem { tenantId = tenantId, name = "Alpha" },
+            new TestTenantItem { tenantId = tenantId, name = "Bravo" }
+        }.AsQueryable();
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            sortColumn = "name",
+            sortDirection = "DESC"
+        };
+
+        IPagedResult<TestTenantItem> result = await query.PagedQueryAsync(
+            tableState,
+            tenantId,
+            InMemoryQueryExecutor.Default);
+
+        Assert.Equal(new[] { "Charlie", "Bravo", "Alpha" }, result.items.Select(item => item.name));
     }
 
     [Fact]
@@ -934,6 +1016,109 @@ public class PagedQueryTests
         Assert.Contains("createdAt", ex.Message);
         Assert.Contains("not-a-date", ex.Message);
         Assert.Contains("DateTime", ex.Message);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithAdditionalNumericFilters_ShouldConvertInvariantValues()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var matchingItem = new TestTenantItem
+        {
+            tenantId = tenantId,
+            name = "matching",
+            lifetimeValue = 9_000_000_000,
+            balance = 1234.56m,
+            score = 98.75,
+            optionalRank = 7,
+            categoryCode = 12
+        };
+        var nonMatchingItem = new TestTenantItem
+        {
+            tenantId = tenantId,
+            name = "non-matching",
+            lifetimeValue = 1,
+            balance = 1m,
+            score = 1,
+            optionalRank = 1,
+            categoryCode = 1
+        };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new("lifetimeValue", "9000000000"),
+                new("balance", "1234.56"),
+                new("score", "98.75"),
+                new("optionalRank", "7"),
+                new("categoryCode", "12")
+            }
+        };
+
+        // Act
+        IPagedResult<TestTenantItem> result = await new[] { matchingItem, nonMatchingItem }
+            .AsQueryable()
+            .PagedQueryAsync(tableState, tenantId, InMemoryQueryExecutor.Default);
+
+        // Assert
+        TestTenantItem item = Assert.Single(result.items);
+        Assert.Same(matchingItem, item);
+        Assert.Equal(1, result.totalCount);
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithEmptyNullableFilter_ShouldMatchNull()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var nullRank = new TestTenantItem { tenantId = tenantId, name = "null", optionalRank = null };
+        var assignedRank = new TestTenantItem { tenantId = tenantId, name = "assigned", optionalRank = 1 };
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new("optionalRank", string.Empty)
+            }
+        };
+
+        // Act
+        IPagedResult<TestTenantItem> result = await new[] { nullRank, assignedRank }
+            .AsQueryable()
+            .PagedQueryAsync(tableState, tenantId, InMemoryQueryExecutor.Default);
+
+        // Assert
+        Assert.Same(nullRank, Assert.Single(result.items));
+    }
+
+    [Fact]
+    public async Task PagedQueryAsync_WithUnsupportedConvertibleFilter_ThrowsDescriptiveArgumentException()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var tableState = new TableStateChange
+        {
+            page = 1,
+            pageSize = 10,
+            filters = new List<KeyValuePair<string, string>>
+            {
+                new("category", "Premium")
+            }
+        };
+
+        // Act
+        ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            new[] { new TestTenantItem { tenantId = tenantId } }
+                .AsQueryable()
+                .PagedQueryAsync(tableState, tenantId, InMemoryQueryExecutor.Default));
+
+        // Assert
+        Assert.Equal("category", exception.ParamName);
+        Assert.Contains("cannot be converted", exception.Message, StringComparison.Ordinal);
+        Assert.IsType<InvalidCastException>(exception.InnerException);
     }
 
     [Fact]

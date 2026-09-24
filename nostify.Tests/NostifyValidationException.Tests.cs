@@ -192,6 +192,69 @@ public class NostifyValidationExceptionTests
     }
 
     [Fact]
+    public void Constructor_WithValidationResultsAndInnerException_ShouldPreserveBoth()
+    {
+        // Arrange
+        var validationResults = new List<ValidationResult>
+        {
+            new ValidationResult("Invalid name", new[] { "Name" })
+        };
+        var innerException = new InvalidOperationException("Validation dependency failed");
+
+        // Act
+        var exception = new NostifyValidationException(validationResults, innerException);
+
+        // Assert
+        Assert.Same(innerException, exception.InnerException);
+        Assert.Same(validationResults, exception.ValidationMessages);
+        Assert.Equal("Validation failed: Invalid name", exception.Message);
+    }
+
+    [Fact]
+    public void Constructor_WithCustomMessageAndValidationResults_ShouldPreserveBoth()
+    {
+        // Arrange
+        const string message = "The request contains validation errors.";
+        var validationResults = new List<ValidationResult>
+        {
+            new ValidationResult("Invalid email", new[] { "Email" })
+        };
+
+        // Act
+        var exception = new NostifyValidationException(message, validationResults);
+
+        // Assert
+        Assert.Equal(message, exception.Message);
+        Assert.Same(validationResults, exception.ValidationMessages);
+    }
+
+    [Fact]
+    public void GetAllErrorMessages_WithNoValidationResults_ShouldReturnExceptionMessage()
+    {
+        // Arrange
+        var exception = new NostifyValidationException(new List<ValidationResult>());
+
+        // Act
+        string errorMessages = exception.GetAllErrorMessages();
+
+        // Assert
+        Assert.Equal(exception.Message, errorMessages);
+    }
+
+    [Fact]
+    public void GetErrorsByMember_WithNoValidationResults_ShouldReturnEmptyDictionary()
+    {
+        // Arrange
+        var exception = new NostifyValidationException(new List<ValidationResult>());
+
+        // Act
+        Dictionary<string, List<string>> errorsByMember = exception.GetErrorsByMember();
+
+        // Assert
+        Assert.Empty(errorsByMember);
+    }
+
+    [Fact]
     public void Constructor_WithLargeNumberOfValidationResults_ShouldHandleEfficiently()
     {
         // Arrange

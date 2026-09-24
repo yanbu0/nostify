@@ -106,40 +106,50 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 ## Quick Start
 
 ```csharp
-// 1. Create nostify instance
-var nostify = NostifyFactory.Build(
-    cosmosConnectionString: "...",
-    kafkaUrl: "localhost:9092",
-    databaseName: "MyEventStore"
-);
+// 1. Configure Nostify. Build validates required Cosmos and broker settings immediately.
+INostify nostify = NostifyFactory
+    .WithCosmos(cosmosApiKey, "MyEventStore", cosmosEndpoint)
+    .WithKafka("localhost:9092")
+    .Build<Order>();
 
-// 2. Define an aggregate
-public class Order : NostifyObject, IAggregate, IApplyable
+// 2. Define canonical event metadata. Discoverable EventType classes need a
+// parameterless constructor; isNew tells apply-and-persist to create the aggregate.
+public sealed class Create_Order : EventType
+{
+    public Create_Order() : base("Create_Order", isNew: true) { }
+}
+
+// 3. Define an aggregate and its preferred attribute-based event handler.
+public class Order : NostifyObject, IAggregate
 {
     public static string aggregateType => "Order";
     public static string currentStateContainerName => "orders";
     public bool isDeleted { get; set; }
     public decimal Total { get; set; }
-    
-    public void Apply(Event @event) => @event.ApplyTo(this);
+
+    [ApplyEvents(typeof(Create_Order))]
+    private void OnCreated(IEvent eventToApply)
+    {
+        UpdateProperties<Order>(eventToApply.payload);
+    }
 }
 
-// 3. Publish events
-var @event = new Event(
-    NostifyCommand.Create("Order"),
+// 4. Create and persist the event. EventFactory accepts EventType metadata only
+// and validates payloads by default.
+IEvent orderCreated = new EventFactory().Create<Order>(
+    new Create_Order(),
     orderId,
     new { Total = 99.99m },
-    userId
-);
-await nostify.PublishEventAsync(@event);
+    userId);
 
-// 4. Rehydrate state
-var order = await nostify.RehydrateAsync<Order>(orderId);
+await nostify.PersistEventAsync(orderCreated);
 ```
+
+The default Cosmos partition-key path is `/tenantId`. Configure `WithHttp(...)` only when HTTP-backed features are needed; otherwise `INostify.HttpClientFactory` is null. Default command and event-handler helpers are async-only in v5 and use `...Async` method names.
 
 ## Version History
 
-- **5.0.0** - Promoted the package and template references to `5.0.0`; introduced the preferred `[ApplyEvents(typeof(...))]` dispatch model alongside string-based and typed `Apply(...)` patterns; widened `NostifyObject.Apply(EventType, IEvent)` to `protected`; and hardened Kafka EventType restoration plus handler validation for legacy compatibility
+- **5.0.0 (breaking)** - Made concrete `EventType` classes and `IEvent.eventType` canonical; introduced cached `[ApplyEvents(typeof(...))]` dispatch ahead of typed and catch-all `Apply(...)` handlers; hardened Kafka restoration and handler validation; removed obsolete `NostifyCommand` overloads from `EventFactory` while retaining legacy envelope deserialization compatibility; removed obsolete non-async default-handler wrappers; made durable aggregate current-state and projection initialization the default generated template flow via `DurableCurrentStateInitializer<TAggregate>` and `DurableProjectionInitializer<TProjection, TAggregate>`; added fail-fast Cosmos/broker configuration validation and the `/tenantId` partition default; corrected nullable HTTP and apply-result contracts; added explicit payload conversion failures, structured logging, ordinal comparisons, and `NostifyCosmosClient` disposal; and enabled warnings-as-errors, recommended analyzers, nullable analysis, deterministic CI builds, code-style enforcement, public XML-documentation gates, and broad regression coverage
 - **4.9.2** - Updated a dependency package to a patched version to address a known security vulnerability
 - **4.9.1** - Added durable projection initializer retry-options coverage tests verifying `durableTaskOptions` propagation across orchestrator activity calls and default retry-policy fallback behavior when options are omitted
 - **4.9.0** - Moved Azure Functions worker JSON configuration into reusable `WorkerConfigurationExtensions`; added `UseNostifyDefaultConfiguredNewtonsoftJson()`, shorter wrapper `UseNostifyDefaultJson()`, and experimental `UseNostifySystemTextJson()`; updated the `nostify` template to consume the library helper instead of generating its own local extension class

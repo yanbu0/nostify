@@ -1,6 +1,10 @@
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Azure.Cosmos;
+using Moq;
 using nostify;
 using Xunit;
 
@@ -88,7 +92,7 @@ namespace nostify.Tests
         /// <summary>
         /// Simple aggregate that uses only attribute-based Apply handlers.
         /// </summary>
-        private sealed class AttributeOnlyAggregate : NostifyObject, IAggregate
+        public class AttributeOnlyAggregate : NostifyObject, IAggregate
         {
             // IAggregate implementation (minimal for tests)
             public bool isDeleted { get; set; }
@@ -122,7 +126,7 @@ namespace nostify.Tests
         /// <summary>
         /// Simple aggregate that uses string-based attribute Apply handlers.
         /// </summary>
-        private sealed class AttributeOnlyAggregateByName : NostifyObject, IAggregate
+        private class AttributeOnlyAggregateByName : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -154,7 +158,7 @@ namespace nostify.Tests
         /// <summary>
         /// Aggregate that supports both attribute-based handlers and dynamic overloads.
         /// </summary>
-        private sealed class HybridAggregate : NostifyObject, IAggregate
+        private class HybridAggregate : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -181,7 +185,7 @@ namespace nostify.Tests
         /// <summary>
         /// Aggregate that supports both string-based attribute handlers and dynamic overloads.
         /// </summary>
-        private sealed class HybridAggregateByName : NostifyObject, IAggregate
+        private class HybridAggregateByName : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -208,7 +212,7 @@ namespace nostify.Tests
         /// <summary>
         /// Aggregate used to verify conflict detection when multiple methods handle the same event type.
         /// </summary>
-        private sealed class ConflictingAggregate : NostifyObject, IAggregate
+        private class ConflictingAggregate : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -229,7 +233,7 @@ namespace nostify.Tests
         /// <summary>
         /// Aggregate used to verify conflict detection when multiple methods handle the same event type name.
         /// </summary>
-        private sealed class ConflictingAggregateByName : NostifyObject, IAggregate
+        private class ConflictingAggregateByName : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -250,7 +254,7 @@ namespace nostify.Tests
         /// <summary>
         /// Aggregate used to validate string-only event name handling without a local EventType class.
         /// </summary>
-        private sealed class StringOnlyAggregateByName : NostifyObject, IAggregate
+        private class StringOnlyAggregateByName : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -264,7 +268,7 @@ namespace nostify.Tests
             }
         }
 
-        private sealed class CanonicalInstanceAggregate : NostifyObject, IAggregate
+        private class CanonicalInstanceAggregate : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -278,7 +282,7 @@ namespace nostify.Tests
             }
         }
 
-        private sealed class InvalidCanonicalInstanceAggregate : NostifyObject, IAggregate
+        private class InvalidCanonicalInstanceAggregate : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -291,9 +295,37 @@ namespace nostify.Tests
         }
 
         /// <summary>
+        /// Aggregate with an attributed handler whose return type violates the handler contract.
+        /// </summary>
+        private sealed class NonVoidHandlerAggregate : NostifyObject, IAggregate
+        {
+            public bool isDeleted { get; set; }
+            public static string aggregateType => "Order";
+            public static string currentStateContainerName => "OrderCurrentState";
+
+            [ApplyEvents(typeof(Create_Order))]
+            private int Handle(IEvent e) => 1;
+        }
+
+        /// <summary>
+        /// Aggregate with an attributed CLR type that is not an EventType.
+        /// </summary>
+        private sealed class InvalidEventTypeHandlerAggregate : NostifyObject, IAggregate
+        {
+            public bool isDeleted { get; set; }
+            public static string aggregateType => "Order";
+            public static string currentStateContainerName => "OrderCurrentState";
+
+            [ApplyEvents(typeof(string))]
+            private void Handle(IEvent e)
+            {
+            }
+        }
+
+        /// <summary>
         /// Aggregate used for the performance comparison between attribute-based and dynamic dispatch.
         /// </summary>
-        private sealed class PerformanceAggregate : NostifyObject, IAggregate
+        private class PerformanceAggregate : NostifyObject, IAggregate
         {
             public bool isDeleted { get; set; }
             public static string aggregateType => "Order";
@@ -534,6 +566,78 @@ namespace nostify.Tests
         }
 
         [Fact]
+        public void NonVoidHandlerAggregate_ThrowsClearContractError()
+        {
+            // Arrange
+            var aggregate = new NonVoidHandlerAggregate();
+
+            // Act
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => aggregate.Apply(new TestEvent(OrderCommand.Create)));
+
+            // Assert
+            Assert.Contains(nameof(NonVoidHandlerAggregate), exception.Message, StringComparison.Ordinal);
+            Assert.Contains("must return void", exception.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void InvalidEventTypeHandlerAggregate_ThrowsClearContractError()
+        {
+            // Arrange
+            var aggregate = new InvalidEventTypeHandlerAggregate();
+
+            // Act
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => aggregate.Apply(new TestEvent(OrderCommand.Create)));
+
+            // Assert
+            Assert.Contains(typeof(string).FullName!, exception.Message, StringComparison.Ordinal);
+            Assert.Contains("does not derive from EventType", exception.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task ApplyAndPersistAsync_WithMixedEventsFromSameTopic_DispatchesEveryEventToItsApplyHandler()
+        {
+            // Arrange. A shared broker topic produces one ordered event stream for the entity.
+            // The container overload is the common dispatch point used by the single-event,
+            // list-event, retry, and default-handler persistence routes.
+            var aggregateId = Guid.NewGuid();
+            var partitionKey = Guid.NewGuid();
+            var events = new List<IEvent>
+            {
+                new TestEvent(OrderCommand.Create) { aggregateRootId = aggregateId, partitionKey = partitionKey },
+                new TestEvent(OrderCommand.Update) { aggregateRootId = aggregateId, partitionKey = partitionKey },
+                new TestEvent(OrderCommand.BulkCreate) { aggregateRootId = aggregateId, partitionKey = partitionKey },
+                new TestEvent(OrderCommand.BulkUpdate) { aggregateRootId = aggregateId, partitionKey = partitionKey }
+            };
+            var container = new Mock<Container>();
+            container
+                .Setup(c => c.CreateItemAsync(
+                    It.IsAny<AttributeOnlyAggregate>(),
+                    It.IsAny<PartitionKey?>(),
+                    It.IsAny<ItemRequestOptions>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Mock.Of<ItemResponse<AttributeOnlyAggregate>>());
+
+            // Act
+            AttributeOnlyAggregate? aggregate = await container.Object.ApplyAndPersistAsync<AttributeOnlyAggregate>(
+                events,
+                new PartitionKey(partitionKey.ToString()));
+
+            // Assert. Each logical EventType was preserved and dispatched independently even
+            // though all events are modeled as arriving through one shared topic stream.
+            Assert.NotNull(aggregate);
+            Assert.Equal(1, aggregate.CreateHandledCount);
+            Assert.Equal(1, aggregate.UpdateHandledCount);
+            Assert.Equal(2, aggregate.MultiHandledCount);
+            container.Verify(c => c.CreateItemAsync(
+                aggregate,
+                It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
         public void AttributeOnlyAggregate_SupportsMultipleEventsOnSingleHandler()
         {
             // Arrange
@@ -613,7 +717,7 @@ namespace nostify.Tests
         }
 
         [Fact]
-        public void PerformanceAggregate_ComparesAttributeVsDynamicDispatch_For1000Events()
+        public void PerformanceAggregate_DispatchesAttributeAndDynamicEventsCorrectly()
         {
             // Arrange
             var aggregate = new PerformanceAggregate
@@ -631,48 +735,22 @@ namespace nostify.Tests
                 .Select(_ => new TestEvent(OrderCommand.Update))
                 .ToList();
 
-            // Warm-up to ensure the handler map is built and JIT has run.
-            aggregate.Apply(attributeEvents[0]);
-            aggregate.Apply(dynamicEvents[0]);
-            aggregate.AttributeHandledCount = 0;
-            aggregate.DynamicHandledCount = 0;
-
-            // Act - attribute-based dispatch timing
-            var sw = Stopwatch.StartNew();
+            // Act. This is a deterministic dispatch stress test, not a
+            // microbenchmark; performance measurements belong in a benchmark
+            // harness where process and runtime conditions are controlled.
             foreach (var evt in attributeEvents)
             {
                 aggregate.Apply(evt);
             }
-            sw.Stop();
-            var attributeMs = sw.Elapsed.TotalMilliseconds;
 
-            // Act - dynamic dispatch timing
-            sw.Restart();
             foreach (var evt in dynamicEvents)
             {
                 aggregate.Apply(evt);
             }
-            sw.Stop();
-            var dynamicMs = sw.Elapsed.TotalMilliseconds;
 
-            // Assert correctness
+            // Assert
             Assert.Equal(eventCount, aggregate.AttributeHandledCount);
             Assert.Equal(eventCount, aggregate.DynamicHandledCount);
-
-            // Output timing comparison (no assertion on timing values to keep test stable).
-            var faster = attributeMs < dynamicMs ? "Attribute" : "Dynamic";
-            var msDiff = Math.Abs(attributeMs - dynamicMs);
-            var denom = Math.Max(attributeMs, dynamicMs);
-            var pctDiff = denom > 0 ? (msDiff / denom) * 100.0 : 0.0;
-
-            Console.WriteLine(
-                $"Apply dispatch performance over {eventCount} events: " +
-                $"Attribute={attributeMs:F3} ms, Dynamic={dynamicMs:F3} ms. " +
-                $"Faster={faster}, Δ={msDiff:F3} ms ({pctDiff:F2}%).");
-
-            Assert.True(true, $"Apply dispatch performance over {eventCount} events: " +
-                               $"Attribute={attributeMs:F3} ms, Dynamic={dynamicMs:F3} ms. " +
-                               $"Faster={faster}, Δ={msDiff:F3} ms ({pctDiff:F2}%).");
         }
 
         #endregion

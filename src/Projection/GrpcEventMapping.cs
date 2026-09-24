@@ -19,7 +19,7 @@ public static class GrpcEventMapping
     /// <returns>A nostify Event instance</returns>
     public static Event MapFromProto(EventMessage msg)
     {
-        if (msg == null) throw new ArgumentNullException(nameof(msg));
+        ArgumentNullException.ThrowIfNull(msg);
 
         var eventTypeName = msg.Command?.Name;
         var resolvedType = EventTypeResolver.Resolve(typeName: null, eventTypeName);
@@ -53,7 +53,7 @@ public static class GrpcEventMapping
     /// <returns>A protobuf EventMessage instance</returns>
     public static EventMessage MapToProto(Event evt)
     {
-        if (evt == null) throw new ArgumentNullException(nameof(evt));
+        ArgumentNullException.ThrowIfNull(evt);
 
         var msg = new EventMessage
         {

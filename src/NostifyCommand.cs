@@ -108,10 +108,7 @@ public class NostifyCommand : IComparable, IComparable<NostifyCommand>
     /// </summary>
     public static implicit operator EventType(NostifyCommand command)
     {
-        if (command == null)
-        {
-            throw new ArgumentNullException(nameof(command));
-        }
+        ArgumentNullException.ThrowIfNull(command);
 
         return new LegacyNostifyCommandEventType(command.name, command.isNew, command.allowNullPayload);
     }
@@ -132,5 +129,39 @@ public class NostifyCommand : IComparable, IComparable<NostifyCommand>
     {
         if (a is null) return b is not null;
         return !a.Equals(b);
+    }
+
+    /// <summary>
+    /// Tests whether one command sorts before another command.
+    /// </summary>
+    public static bool operator <(NostifyCommand? left, NostifyCommand? right) =>
+        Compare(left, right) < 0;
+
+    /// <summary>
+    /// Tests whether one command sorts before or at the same position as another command.
+    /// </summary>
+    public static bool operator <=(NostifyCommand? left, NostifyCommand? right) =>
+        Compare(left, right) <= 0;
+
+    /// <summary>
+    /// Tests whether one command sorts after another command.
+    /// </summary>
+    public static bool operator >(NostifyCommand? left, NostifyCommand? right) =>
+        Compare(left, right) > 0;
+
+    /// <summary>
+    /// Tests whether one command sorts after or at the same position as another command.
+    /// </summary>
+    public static bool operator >=(NostifyCommand? left, NostifyCommand? right) =>
+        Compare(left, right) >= 0;
+
+    private static int Compare(NostifyCommand? left, NostifyCommand? right)
+    {
+        if (left is null)
+        {
+            return right is null ? 0 : -1;
+        }
+
+        return left.CompareTo(right);
     }
 }

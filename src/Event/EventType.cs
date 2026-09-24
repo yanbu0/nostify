@@ -76,7 +76,8 @@ public abstract class EventType
     /// <summary>
     /// Allows sorting by name.
     /// </summary>
-    public int CompareTo(object other) => name.CompareTo(((EventType)other).name);
+    public int CompareTo(object other) =>
+        string.Compare(name, ((EventType)other).name, StringComparison.Ordinal);
 
     /// <summary>
     /// Tests if EventType equals another EventType.
@@ -98,10 +99,7 @@ public abstract class EventType
 
     internal static EventType GetRequiredInstance(Type eventTypeType)
     {
-        if (eventTypeType == null)
-        {
-            throw new ArgumentNullException(nameof(eventTypeType));
-        }
+        ArgumentNullException.ThrowIfNull(eventTypeType);
 
         if (!typeof(EventType).IsAssignableFrom(eventTypeType))
         {

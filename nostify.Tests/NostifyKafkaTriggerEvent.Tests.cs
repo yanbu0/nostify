@@ -697,12 +697,12 @@ public class NostifyKafkaTriggerEventTests
         // Act
         var kafkaEvent = new NostifyKafkaTriggerEvent();
 
-        // Assert
+        // Assert non-null defaults match the trigger binding contract and nullable annotations.
         Assert.NotNull(kafkaEvent);
-        Assert.Null(kafkaEvent.Value);
-        Assert.Null(kafkaEvent.Topic);
-        Assert.Null(kafkaEvent.Key);
-        Assert.Null(kafkaEvent.Headers);
+        Assert.Empty(kafkaEvent.Value);
+        Assert.Empty(kafkaEvent.Topic);
+        Assert.Empty(kafkaEvent.Key);
+        Assert.Empty(kafkaEvent.Headers);
     }
 
     [Fact]

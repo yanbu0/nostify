@@ -20,6 +20,24 @@ namespace nostify;
 public class DurableCurrentStateInitializer<TAggregate>
     where TAggregate : NostifyObject, IAggregate, new()
 {
+    private static readonly Action<ILogger, string, Exception?> LogCurrentStateDeleted =
+        LoggerMessage.Define<string>(
+            LogLevel.Information,
+            new EventId(1, nameof(LogCurrentStateDeleted)),
+            "{InstanceId}: deleted all current-state items");
+
+    private static readonly Action<ILogger, string, int, Exception?> LogAggregateRebuildProgress =
+        LoggerMessage.Define<string, int>(
+            LogLevel.Information,
+            new EventId(2, nameof(LogAggregateRebuildProgress)),
+            "{InstanceId}: {TotalProcessed} aggregates rebuilt");
+
+    private static readonly Action<ILogger, string, Exception?> LogCurrentStateRebuildComplete =
+        LoggerMessage.Define<string>(
+            LogLevel.Information,
+            new EventId(3, nameof(LogCurrentStateRebuildComplete)),
+            "{InstanceId}: current-state rebuild complete");
+
     private readonly INostify _nostify;
     private readonly string _instanceId;
     private readonly string _partitionKeyPath;
@@ -27,6 +45,8 @@ public class DurableCurrentStateInitializer<TAggregate>
     private readonly int _pageSize;
     private readonly TaskOptions _durableTaskOptions;
     private readonly RetryOptions _cosmosRetryOptions;
+    private readonly IQueryExecutor _queryExecutor;
+    private readonly Func<Microsoft.Azure.Cosmos.Container, RetryOptions, IRetryableContainer> _retryableContainerFactory;
 
     /// <summary>Creates a durable aggregate current-state initializer.</summary>
     /// <param name="nostify">The Nostify instance used to access Cosmos containers.</param>
@@ -44,12 +64,38 @@ public class DurableCurrentStateInitializer<TAggregate>
         int concurrentBatchCount = 5,
         TaskOptions? durableTaskOptions = null,
         RetryOptions? cosmosRetryOptions = null)
+        : this(
+            nostify,
+            instanceId,
+            partitionKeyPath,
+            batchSize,
+            concurrentBatchCount,
+            durableTaskOptions,
+            cosmosRetryOptions,
+            CosmosQueryExecutor.Default,
+            static (container, options) => container.WithRetry(options))
+    {
+    }
+
+    /// <summary>Creates an initializer with deterministic infrastructure adapters for tests.</summary>
+    internal DurableCurrentStateInitializer(
+        INostify nostify,
+        string instanceId,
+        string partitionKeyPath,
+        int batchSize,
+        int concurrentBatchCount,
+        TaskOptions? durableTaskOptions,
+        RetryOptions? cosmosRetryOptions,
+        IQueryExecutor queryExecutor,
+        Func<Microsoft.Azure.Cosmos.Container, RetryOptions, IRetryableContainer> retryableContainerFactory)
     {
         ArgumentNullException.ThrowIfNull(nostify);
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(partitionKeyPath);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(concurrentBatchCount);
+        ArgumentNullException.ThrowIfNull(queryExecutor);
+        ArgumentNullException.ThrowIfNull(retryableContainerFactory);
 
         _nostify = nostify;
         _instanceId = instanceId;
@@ -58,6 +104,8 @@ public class DurableCurrentStateInitializer<TAggregate>
         _pageSize = checked(batchSize * concurrentBatchCount);
         _durableTaskOptions = durableTaskOptions ?? CreateDefaultTaskOptions();
         _cosmosRetryOptions = cosmosRetryOptions ?? new RetryOptions();
+        _queryExecutor = queryExecutor;
+        _retryableContainerFactory = retryableContainerFactory;
     }
 
     /// <summary>Starts a rebuild, returning conflict when the fixed instance is active.</summary>
@@ -122,7 +170,7 @@ public class DurableCurrentStateInitializer<TAggregate>
         ILogger? logger = null)
     {
         await context.CallActivityAsync(deleteActivityName, null, _durableTaskOptions);
-        logger?.LogInformation("{InstanceId}: deleted all current-state items", _instanceId);
+        if (logger != null) LogCurrentStateDeleted(logger, _instanceId, null);
 
         var pageNumber = 0;
         var totalProcessed = 0;
@@ -147,7 +195,7 @@ public class DurableCurrentStateInitializer<TAggregate>
             await Task.WhenAll(tasks);
 
             totalProcessed += ids.Count;
-            logger?.LogInformation("{InstanceId}: {TotalProcessed} aggregates rebuilt", _instanceId, totalProcessed);
+            if (logger != null) LogAggregateRebuildProgress(logger, _instanceId, totalProcessed, null);
             pageNumber++;
 
             if (ids.Count < _pageSize)
@@ -156,7 +204,7 @@ public class DurableCurrentStateInitializer<TAggregate>
             }
         }
 
-        logger?.LogInformation("{InstanceId}: current-state rebuild complete", _instanceId);
+        if (logger != null) LogCurrentStateRebuildComplete(logger, _instanceId, null);
     }
 
     /// <summary>Deletes every item from the aggregate current-state container.</summary>
@@ -168,24 +216,23 @@ public class DurableCurrentStateInitializer<TAggregate>
         }
 
         var container = await _nostify.GetBulkCurrentStateContainerAsync<TAggregate>(_partitionKeyPath);
-        var aggregates = await container.WithRetry(_cosmosRetryOptions)
-            .GetItemLinqQueryable<TAggregate>()
-            .ReadAllAsync();
-        await container.BulkDeleteAsync(aggregates, _cosmosRetryOptions);
+        var aggregates = await _queryExecutor.ReadAllAsync(
+            container.GetItemLinqQueryable<TAggregate>());
+        await DeleteCurrentStateAsync(container, aggregates);
     }
 
     /// <summary>Gets a stable page of distinct aggregate IDs from the event store.</summary>
     public async Task<List<Guid>> GetAggregateIds(DurableCurrentStatePageInfo request)
     {
         var eventStore = await _nostify.GetEventStoreContainerAsync();
-        return await eventStore.WithRetry(_cosmosRetryOptions)
+        var query = eventStore
             .GetItemLinqQueryable<Event>()
             .Select(@event => @event.aggregateRootId)
             .Distinct()
             .OrderBy(id => id)
             .Skip(request.PageNumber * _pageSize)
-            .Take(_pageSize)
-            .ReadAllAsync();
+            .Take(_pageSize);
+        return await _queryExecutor.ReadAllAsync(query);
     }
 
     /// <summary>Rehydrates and bulk-upserts one batch of aggregate current states.</summary>
@@ -197,10 +244,10 @@ public class DurableCurrentStateInitializer<TAggregate>
         }
 
         var eventStore = await _nostify.GetEventStoreContainerAsync();
-        var events = await eventStore.WithRetry(_cosmosRetryOptions)
+        var eventsQuery = eventStore
             .GetItemLinqQueryable<Event>()
-            .Where(@event => ids.Contains(@event.aggregateRootId))
-            .ReadAllAsync();
+            .Where(@event => ids.Contains(@event.aggregateRootId));
+        var events = await _queryExecutor.ReadAllAsync(eventsQuery);
 
         var aggregates = ids.Select(id =>
         {
@@ -221,8 +268,15 @@ public class DurableCurrentStateInitializer<TAggregate>
         }
 
         var currentState = await _nostify.GetBulkCurrentStateContainerAsync<TAggregate>(_partitionKeyPath);
-        await currentState.WithRetry(_cosmosRetryOptions).DoBulkUpsertAsync(aggregates);
+        await _retryableContainerFactory(currentState, _cosmosRetryOptions)
+            .DoBulkUpsertAsync(aggregates);
     }
+
+    /// <summary>Deletes the selected aggregate states from the current-state container.</summary>
+    internal virtual Task<int> DeleteCurrentStateAsync(
+        Microsoft.Azure.Cosmos.Container container,
+        List<TAggregate> aggregates)
+        => container.BulkDeleteAsync(aggregates, _cosmosRetryOptions);
 
     /// <summary>Returns true when the orchestration no longer permits activity work.</summary>
     public async Task<bool> IsCancellationRequestedAsync(

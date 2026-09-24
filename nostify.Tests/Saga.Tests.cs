@@ -250,6 +250,68 @@ namespace nostify.Tests
             await Assert.ThrowsAsync<InvalidOperationException>(() => saga.HandleSuccessfulStepRollbackAsync(_nostifyMock.Object));
         }
 
+        [Theory]
+        [InlineData(SagaStatus.Pending)]
+        [InlineData(SagaStatus.CompletedSuccessfully)]
+        [InlineData(SagaStatus.RolledBack)]
+        public void GetCurrentlyExecutingStepIndex_ForNonExecutingStatus_ReturnsMinusOne(
+            SagaStatus status)
+        {
+            // Terminal and not-yet-started sagas must not expose a currently executing step,
+            // even when stale step status data remains in the serialized record.
+            var step = CreateStep(1, SagaStepStatus.Triggered);
+            ISaga saga = new Saga("TestSaga", new List<SagaStep> { step });
+            saga.status = status;
+
+            int result = saga.GetCurrentlyExecutingStepIndex();
+
+            Assert.Equal(-1, result);
+            Assert.Null(saga.GetCurrentlyExecutingStep());
+        }
+
+        [Fact]
+        public void GetLastCompletedStep_InProgress_ReturnsFirstCompletedStepByOrder()
+        {
+            // Supply steps out of list order to verify navigation uses saga order rather than
+            // simply returning the first list element.
+            var laterStep = CreateStep(2, SagaStepStatus.CompletedSuccessfully);
+            var firstStep = CreateStep(1, SagaStepStatus.CompletedSuccessfully);
+            ISaga saga = new Saga("TestSaga", new List<SagaStep> { laterStep, firstStep });
+            saga.status = SagaStatus.InProgress;
+
+            ISagaStep? result = saga.GetLastCompletedStep();
+
+            Assert.Same(firstStep, result);
+            Assert.Equal(1, saga.GetLastCompletedStepIndex());
+        }
+
+        [Fact]
+        public void GetLastCompletedStep_RollingBack_ReturnsStepBeforeFirstRolledBackStep()
+        {
+            var completedStep = CreateStep(1, SagaStepStatus.CompletedSuccessfully);
+            var rolledBackStep = CreateStep(2, SagaStepStatus.RolledBack);
+            ISaga saga = new Saga(
+                "TestSaga",
+                new List<SagaStep> { completedStep, rolledBackStep });
+            saga.status = SagaStatus.RollingBack;
+
+            ISagaStep? result = saga.GetLastCompletedStep();
+
+            Assert.Same(completedStep, result);
+            Assert.Equal(0, saga.GetLastCompletedStepIndex());
+        }
+
+        [Fact]
+        public void GetLastCompletedStep_WhenStatusHasNoCompletedNavigation_ReturnsNull()
+        {
+            var completedStep = CreateStep(1, SagaStepStatus.CompletedSuccessfully);
+            ISaga saga = new Saga("TestSaga", new List<SagaStep> { completedStep });
+            saga.status = SagaStatus.Failed;
+
+            Assert.Equal(-1, saga.GetLastCompletedStepIndex());
+            Assert.Null(saga.GetLastCompletedStep());
+        }
+
         [Fact]
         public void Saga_Serialization_Roundtrip()
         {

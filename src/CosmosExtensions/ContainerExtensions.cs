@@ -20,6 +20,73 @@ namespace nostify;
 ///</summary>
 public static class ContainerExtensions
 {
+    private static readonly Action<ILogger, string, Exception?> AggregateNotFoundMessage =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(1, nameof(LogAggregateNotFound)),
+            "{Message}");
+
+    private static readonly Action<ILogger, string, Exception?> DuplicateCreateSkippedMessage =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(2, nameof(LogDuplicateCreateSkipped)),
+            "{Message}");
+
+    private static readonly Action<ILogger, string, Exception?> PatchTargetNotFoundMessage =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(3, nameof(LogPatchTargetNotFound)),
+            "{Message}");
+
+    private static readonly Action<ILogger, string, Exception?> TooManyRequestsMessage =
+        LoggerMessage.Define<string>(
+            LogLevel.Information,
+            new EventId(4, nameof(LogTooManyRequests)),
+            "{Message}");
+
+    private static readonly Action<ILogger, string, Exception?> UpdateFailureMessage =
+        LoggerMessage.Define<string>(
+            LogLevel.Error,
+            new EventId(5, nameof(LogUpdateFailure)),
+            "{Message}");
+
+    // Build each message once, then send that exact text to either the logger or the console fallback.
+    private static void LogAggregateNotFound(ILogger? logger, string containerId, Guid idToMatch, PartitionKey partitionKey, Exception exception)
+    {
+        string message = $"Aggregate not found: {containerId} {idToMatch}, tenantId: {partitionKey}";
+        Log(logger, AggregateNotFoundMessage, message, exception);
+    }
+
+    private static void LogDuplicateCreateSkipped(ILogger? logger, string containerId, Guid idToMatch, Exception exception)
+    {
+        string message = $"Create skipped for {containerId} {idToMatch}: item already exists (409 Conflict, likely a duplicate delivery)";
+        Log(logger, DuplicateCreateSkippedMessage, message, exception);
+    }
+
+    private static void LogPatchTargetNotFound(ILogger? logger, string containerId, Guid idToMatch, PartitionKey partitionKey)
+    {
+        string message = $"Patch target not found: {containerId} {idToMatch}, tenantId: {partitionKey}";
+        Log(logger, PatchTargetNotFoundMessage, message, null);
+    }
+
+    private static void LogTooManyRequests(ILogger? logger, string containerId, Guid idToMatch, PartitionKey partitionKey, Exception exception)
+    {
+        string message = $"Received 429 TooManyRequests for {containerId} {idToMatch}, tenantId: {partitionKey}. This will be retried by the caller if retry options are configured.";
+        Log(logger, TooManyRequestsMessage, message, exception);
+    }
+
+    private static void LogUpdateFailure(ILogger? logger, string containerId, Guid idToMatch, PartitionKey partitionKey, Exception exception)
+    {
+        string message = $"Update failed for {containerId} {idToMatch}, tenantId: {partitionKey} || {exception.Message} || {exception.InnerException?.Message}";
+        Log(logger, UpdateFailureMessage, message, exception);
+    }
+
+    private static void Log(ILogger? logger, Action<ILogger, string, Exception?> logMessage, string message, Exception? exception)
+    {
+        if (logger != null) logMessage(logger, message, exception);
+        else Console.Error.WriteLine(message);
+    }
+
     ///<summary>
     ///Applies and persists an event to a list of projections in the specified container.
     ///</summary>
@@ -72,11 +139,41 @@ public static class ContainerExtensions
     ///<returns>Number of items deleted</returns>
     public static async Task<int> BulkDeleteFromEventsAsync<P>(this Container containerToDeleteFrom, string[] events, RetryOptions? retryOptions = null) where P : NostifyObject
     {
+        return await containerToDeleteFrom.BulkDeleteFromEventsAsync<P>(events, Array.Empty<string>(), retryOptions);
+    }
+
+    ///<summary>
+    ///Bulk deletes items represented by Kafka trigger events whose event types match the supplied filters.
+    ///</summary>
+    ///<param name="containerToDeleteFrom">Container to delete items from.</param>
+    ///<param name="events">Array of serialized Kafka trigger events.</param>
+    ///<param name="eventTypeFilters">Event type names to include; an empty collection includes every event.</param>
+    ///<param name="retryOptions">Optional retry options for transient patch failures. When null, no retry is applied.</param>
+    ///<typeparam name="P">Type of projection or aggregate to delete.</typeparam>
+    ///<returns>Number of items deleted.</returns>
+    public static async Task<int> BulkDeleteFromEventsAsync<P>(
+        this Container containerToDeleteFrom,
+        string[] events,
+        IEnumerable<string> eventTypeFilters,
+        RetryOptions? retryOptions = null) where P : NostifyObject
+    {
+        ArgumentNullException.ThrowIfNull(eventTypeFilters);
+
+        // Apply the filter before querying Cosmos so events sharing a topic cannot delete
+        // entities owned by another logical event type.
+        List<string> filters = eventTypeFilters.ToList();
         List<Guid> projectionIdsToDelete = events
-            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
+            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent(filters))
             .Where(e => e != null)
             .Select(e => e!.aggregateRootId)
             .ToList();
+
+        // Avoid issuing a Cosmos query when the trigger batch contains no usable events.
+        if (projectionIdsToDelete.Count == 0)
+        {
+            return 0;
+        }
+
         List<P> projectionsToDelete = await containerToDeleteFrom.GetItemLinqQueryable<P>().Where(x => projectionIdsToDelete.Contains(x.id)).ReadAllAsync();
         return await containerToDeleteFrom.BulkDeleteAsync(projectionsToDelete, retryOptions);
     }
@@ -142,7 +239,7 @@ public static class ContainerExtensions
                     {
                         throw new NostifyException($"Property '{partitionKeyPath.Trim('/')}' does not exist on type '{item.GetType().Name}'.");
                     }
-                    string pk = propertyInfo.GetValue(item)?.ToString();
+                    string? pk = propertyInfo.GetValue(item)?.ToString();
                     if (string.IsNullOrEmpty(pk))
                     {
                         throw new NostifyException($"Partition key value is null or empty for property '{partitionKeyPath.Trim('/')}' on item of type '{item.GetType().Name}'.");
@@ -250,9 +347,9 @@ public static class ContainerExtensions
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
     ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
     ///<param name="logger">Optional logger for structured logging of not-found conditions.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId, ILogger? logger = null) where T : NostifyObject, new()
+    public static async Task<T?> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents, PartitionKey partitionKey, Guid? projectionBaseAggregateId, ILogger? logger = null) where T : NostifyObject, new()
     {
-        T nosObjToUpdate = new T();
+        T? nosObjToUpdate = new T();
         JObject unchangedNosObj = new JObject();
         bool isNew = false;
         IEvent firstEvent = newEvents.First();
@@ -273,8 +370,7 @@ public static class ContainerExtensions
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
-                if (logger != null) logger.LogWarning("Aggregate not found: {ContainerId} {IdToMatch}, tenantId: {PartitionKey}", container.Id, idToMatch, partitionKey);
-                else Console.Error.WriteLine($"Aggregate not found: {container.Id} {idToMatch}, tenantId: {partitionKey}");
+                LogAggregateNotFound(logger, container.Id, idToMatch, partitionKey, ex);
                 nosObjToUpdate = null;
             }
         }
@@ -295,8 +391,7 @@ public static class ContainerExtensions
                 {
                     // Item was already created by a previous delivery of the same event (at-least-once delivery).
                     // Treat as idempotent success — the projection already reflects this create event.
-                    if (logger != null) logger.LogWarning("Create skipped for {ContainerId} {IdToMatch}: item already exists (409 Conflict, likely a duplicate delivery)", container.Id, idToMatch);
-                    else Console.Error.WriteLine($"Create skipped for {container.Id} {idToMatch}: item already exists (409 Conflict, likely a duplicate delivery)");
+                    LogDuplicateCreateSkipped(logger, container.Id, idToMatch, ex);
                 }
                 catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
                 {
@@ -342,22 +437,20 @@ public static class ContainerExtensions
                     }
                     else if (patchResult.NotFound)
                     {
-                        if (logger != null) logger.LogWarning("Patch target not found: {ContainerId} {IdToMatch}, tenantId: {PartitionKey}", container.Id, idToMatch, partitionKey);
-                        else Console.Error.WriteLine($"Patch target not found: {container.Id} {idToMatch}, tenantId: {partitionKey}");
+                        LogPatchTargetNotFound(logger, container.Id, idToMatch, partitionKey);
                         nosObjToUpdate = null;
                     }
 
                 }
                 catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
                 {
-                    logger?.LogInformation(ex, "Received 429 TooManyRequests for {ContainerId} {IdToMatch}, tenantId: {PartitionKey}. This will be retried by the caller if retry options are configured.", container.Id, idToMatch, partitionKey);
+                    LogTooManyRequests(logger, container.Id, idToMatch, partitionKey, ex);
                     // Let 429 propagate so RetryableContainer can handle retry
                     throw;
                 }
                 catch (CosmosException ex)
                 {
-                    if (logger != null) logger.LogError(ex, "Update failed for {ContainerId} {IdToMatch}, tenantId: {PartitionKey}", container.Id, idToMatch, partitionKey);
-                    else Console.Error.WriteLine($"Update failed for {container.Id} {idToMatch}, tenantId: {partitionKey} || {ex.Message} || {ex.InnerException?.Message}");
+                    LogUpdateFailure(logger, container.Id, idToMatch, partitionKey, ex);
                     throw new NostifyException($"Update failed for {idToMatch} || {ex.Message} || {ex.InnerException?.Message}");
                 }
             }
@@ -372,7 +465,7 @@ public static class ContainerExtensions
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvent">The Event to apply and persist.</param>
     ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent, Guid projectionBaseAggregateId) where T : NostifyObject, new()
+    public static async Task<T?> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent, Guid projectionBaseAggregateId) where T : NostifyObject, new()
     {
         return await container.ApplyAndPersistAsync<T>(new List<IEvent>() { newEvent }, newEvent.partitionKey.ToPartitionKey(), projectionBaseAggregateId);
     }
@@ -384,7 +477,7 @@ public static class ContainerExtensions
     ///<param name="newEvent">The Event to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
     ///<param name="projectionBaseAggregateId">Will apply to this id, use when updating a projection from events not originally from the base aggregate.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
+    public static async Task<T?> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent, PartitionKey partitionKey, Guid? projectionBaseAggregateId) where T : NostifyObject, new()
     {
         return await container.ApplyAndPersistAsync<T>(new List<IEvent>() { newEvent }, partitionKey, projectionBaseAggregateId);
     }
@@ -395,7 +488,7 @@ public static class ContainerExtensions
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvents">The Event list to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
+    public static async Task<T?> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents, PartitionKey partitionKey) where T : NostifyObject, new()
     {
         return await container.ApplyAndPersistAsync<T>(newEvents, partitionKey, null);
     }
@@ -406,7 +499,7 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvents">The Event list to apply and persist.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents) where T : NostifyObject, new()
+    public static async Task<T?> ApplyAndPersistAsync<T>(this Container container, List<IEvent> newEvents) where T : NostifyObject, new()
     {
         IEvent firstEvent = newEvents.First();
 
@@ -419,7 +512,7 @@ public static class ContainerExtensions
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvent">The Event object to apply and persist.</param>
     ///<param name="partitionKey">The partition to update, by default is tenantId</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
+    public static async Task<T?> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent, PartitionKey partitionKey) where T : NostifyObject, new()
     {
         return await container.ApplyAndPersistAsync<T>(new List<IEvent>() { newEvent }, partitionKey);
     }
@@ -429,7 +522,7 @@ public static class ContainerExtensions
     ///</summary>
     ///<param name="container">Container where the projection to update lives</param>
     ///<param name="newEvent">The Event object to apply and persist.</param>
-    public static async Task<T> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent) where T : NostifyObject, new()
+    public static async Task<T?> ApplyAndPersistAsync<T>(this Container container, IEvent newEvent) where T : NostifyObject, new()
     {
         return await container.ApplyAndPersistAsync<T>(new List<IEvent>() { newEvent }, newEvent.partitionKey.ToPartitionKey());
     }

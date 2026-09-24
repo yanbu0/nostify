@@ -21,12 +21,17 @@ namespace nostify
         }
 
 
+        /// <inheritdoc />
         public override HttpStatusCode StatusCode { get; set; } = HttpStatusCode.OK;
 
+        /// <inheritdoc />
         public override HttpHeadersCollection Headers { get; set; } = new HttpHeadersCollection();
 
+        /// <inheritdoc />
         public override Stream Body { get; set; } = new MemoryStream();
 
-        public override HttpCookies Cookies { get; }
+        /// <inheritdoc />
+        /// <remarks>Cookie mutation is not required by this lightweight response test double.</remarks>
+        public override HttpCookies Cookies { get; } = null!;
     }
 }

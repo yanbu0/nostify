@@ -330,7 +330,7 @@ public class BulkPersistEventAsyncTests
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
 
         // Act - userId, partitionKey, and batchSize are required on RetryOptions overload
-        var count = await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, ids,
             default, default, 50, retryOptions, publishErrorEvents: true);
 
@@ -356,7 +356,7 @@ public class BulkPersistEventAsyncTests
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
 
         // Act - allowRetry=true should create default RetryOptions and delegate
-        var count = await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, ids,
             batchSize: 100, allowRetry: true, publishErrorEvents: false);
 
@@ -379,7 +379,7 @@ public class BulkPersistEventAsyncTests
         var ids = new List<Guid> { Guid.NewGuid() };
 
         // Act - userId, partitionKey, and batchSize are required on RetryOptions overload
-        var count = await DefaultCommandHandler.HandleBulkDelete<TestAggregate>(
+        var count = await DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
             _mockNostify.Object, command, ids,
             default, default, 100, null, publishErrorEvents: false);
 

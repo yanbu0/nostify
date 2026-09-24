@@ -274,6 +274,70 @@ public class NostifyCommandTests
     }
 
     [Fact]
+    public void CompareTo_ObjectNull_ReturnsPositive()
+    {
+        var command = new NostifyCommand("Test_Create");
+
+        int result = ((IComparable)command).CompareTo(null);
+
+        Assert.True(result > 0);
+    }
+
+    [Fact]
+    public void CompareTo_ObjectOfWrongType_ThrowsArgumentException()
+    {
+        var command = new NostifyCommand("Test_Create");
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(
+            () => ((IComparable)command).CompareTo("Test_Create"));
+
+        Assert.Equal("other", exception.ParamName);
+        Assert.Contains(nameof(NostifyCommand), exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CompareTo_TypedNull_ReturnsPositive()
+    {
+        var command = new NostifyCommand("Test_Create");
+
+        int result = command.CompareTo((NostifyCommand?)null);
+
+        Assert.True(result > 0);
+    }
+
+    [Fact]
+    public void RelationalOperators_OrderCommandsAndTreatNullAsLowestValue()
+    {
+        NostifyCommand earlier = new("A_Command");
+        NostifyCommand later = new("B_Command");
+        NostifyCommand? missing = null;
+        NostifyCommand? alsoMissing = null;
+
+        Assert.True(earlier < later);
+        Assert.True(earlier <= later);
+        Assert.True(later > earlier);
+        Assert.True(later >= earlier);
+        Assert.True(missing < earlier);
+        Assert.True(missing <= alsoMissing);
+        Assert.True(earlier > missing);
+        Assert.True(earlier >= missing);
+    }
+
+    [Fact]
+    public void CompareTo_SameNameDifferentRuntimeTypes_UsesTypeNameAsTieBreaker()
+    {
+        var baseCommand = new NostifyCommand("Same_Command");
+        var derivedCommand = new TestInheritedCommand("Same_Command");
+
+        int result = baseCommand.CompareTo(derivedCommand);
+
+        Assert.NotEqual(0, result);
+        Assert.Equal(
+            Math.Sign(string.Compare(baseCommand.GetType().FullName, derivedCommand.GetType().FullName, StringComparison.Ordinal)),
+            Math.Sign(result));
+    }
+
+    [Fact]
     public void Properties_ShouldBeReadOnly()
     {
         // Arrange

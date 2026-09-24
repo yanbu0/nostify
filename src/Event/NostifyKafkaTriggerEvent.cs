@@ -15,7 +15,11 @@ public class NostifyKafkaTriggerEvent
     ///</summary>
     public NostifyKafkaTriggerEvent()
     {
-
+        // Azure Functions populates these properties during trigger binding.
+        Topic = string.Empty;
+        Value = string.Empty;
+        Key = string.Empty;
+        Headers = Array.Empty<string>();
     }
 
     ///<summary>
@@ -66,7 +70,7 @@ public class NostifyKafkaTriggerEvent
     public Event? GetEvent(IEnumerable<string> eventTypeFilters)
     {
         Event? evt = JsonConvert.DeserializeObject<Event>(Value, SerializationSettings.NostifyDefault);
-        if (evt != null && eventTypeFilters.Count() > 0 && !eventTypeFilters.Contains(evt.eventType.name))
+        if (evt != null && eventTypeFilters.Any() && !eventTypeFilters.Contains(evt.eventType.name))
         {
             evt = null;
         }
@@ -91,7 +95,7 @@ public class NostifyKafkaTriggerEvent
     public IEvent? GetIEvent(IEnumerable<string> eventTypeFilters)
     {
         IEvent? evt = JsonConvert.DeserializeObject<IEvent>(Value, SerializationSettings.NostifyDefault);
-        if (evt != null && eventTypeFilters.Count() > 0 && !eventTypeFilters.Contains(evt.eventType.name))
+        if (evt != null && eventTypeFilters.Any() && !eventTypeFilters.Contains(evt.eventType.name))
         {
             evt = null;
         }

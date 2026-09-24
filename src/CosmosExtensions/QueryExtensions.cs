@@ -29,7 +29,7 @@ public static class QueryExtensions
     ///<summary>
     ///Nostify: Runs query through FeedIterator and returns first item that matches criteria
     ///</summary>
-    public static async Task<T> FirstOrDefaultAsync<T>(this IQueryable<T> query)
+    public static async Task<T?> FirstOrDefaultAsync<T>(this IQueryable<T> query)
     {
         FeedIterator<T> fi = query.ToFeedIterator<T>();
         List<T> list = await fi.ReadFeedIteratorAsync<T>();
@@ -42,6 +42,14 @@ public static class QueryExtensions
     ///</summary>
     public static async Task<List<T>> ReadAllAsync<T>(this IQueryable<T> query)
     {
+        // Cosmos query providers must be drained asynchronously through a feed iterator. Keeping
+        // LINQ-to-Objects support makes the helper usable by deterministic unit-test queryables
+        // without changing the production Cosmos execution path.
+        if (query.Provider.GetType().Assembly != typeof(CosmosClient).Assembly)
+        {
+            return query.ToList();
+        }
+
         FeedIterator<T> fi = query.ToFeedIterator<T>();
         return await fi.ReadFeedIteratorAsync<T>();
     }

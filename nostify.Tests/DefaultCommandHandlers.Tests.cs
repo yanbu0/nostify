@@ -114,6 +114,32 @@ public class DefaultCommandHandlersTests
         Assert.Equal(1, count);
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"id\":\"not-a-guid\"}")]
+    public async Task HandleBulkUpdateAsync_WithMissingOrInvalidId_ThrowsArgumentException(string itemJson)
+    {
+        var req = CreateRequestWithRawBody($"[{itemJson}]");
+        var command = new NostifyCommand("BulkUpdate");
+
+        ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            DefaultCommandHandler.HandleBulkUpdateAsync<TestAggregate>(
+                _mockNostify.Object,
+                command,
+                req,
+                default,
+                default,
+                100,
+                retryOptions: null));
+
+        Assert.Contains("valid 'id'", exception.Message, StringComparison.Ordinal);
+        _mockNostify.Verify(n => n.BulkPersistEventAsync(
+            It.IsAny<List<IEvent>>(),
+            It.IsAny<int?>(),
+            It.IsAny<RetryOptions?>(),
+            It.IsAny<bool>()), Times.Never);
+    }
+
     #endregion
 
     #region HandleBulkDeleteAsync (HttpRequestData) – null body
@@ -142,6 +168,63 @@ public class DefaultCommandHandlersTests
             DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
                 _mockNostify.Object, command, req,
                 allowRetry: false));
+    }
+
+    [Fact]
+    public async Task HandleBulkDeleteAsync_HttpRequestData_EmptyBody_ThrowsNostifyException()
+    {
+        var req = CreateRequestWithRawBody("   ");
+        var command = new NostifyCommand("BulkDelete");
+
+        NostifyException exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
+                _mockNostify.Object,
+                command,
+                req,
+                default,
+                default,
+                100,
+                retryOptions: null));
+
+        Assert.Contains("null or empty", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HandleBulkDeleteAsync_HttpRequestData_MalformedJson_ThrowsDescriptiveNostifyException()
+    {
+        var req = CreateRequestWithRawBody("[not-json]");
+        var command = new NostifyCommand("BulkDelete");
+
+        NostifyException exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
+                _mockNostify.Object,
+                command,
+                req,
+                default,
+                default,
+                100,
+                retryOptions: null));
+
+        Assert.Contains("Failed to deserialize request body to list of IDs", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HandleBulkDeleteAsync_HttpRequestData_InvalidGuid_ThrowsArgumentException()
+    {
+        var req = CreateRequestWithRawBody("[\"not-a-guid\"]");
+        var command = new NostifyCommand("BulkDelete");
+
+        ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
+                _mockNostify.Object,
+                command,
+                req,
+                default,
+                default,
+                100,
+                retryOptions: null));
+
+        Assert.Contains("not-a-guid", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -219,6 +302,27 @@ public class DefaultCommandHandlersTests
         Assert.Equal(aggregateId, result);
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
         _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleBulkCreateAsync_MissingPartitionProperty_ThrowsDescriptiveNostifyException()
+    {
+        var command = new NostifyCommand("BulkCreate", isNew: true);
+        var items = new List<TestAggregate> { new() };
+
+        NostifyException exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            DefaultCommandHandler.HandleBulkCreateAsync(
+                _mockNostify.Object,
+                command,
+                items,
+                default,
+                Guid.NewGuid(),
+                100,
+                retryOptions: null,
+                partitionKeyName: "missingPartition"));
+
+        Assert.Contains("missingPartition", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("was not found", exception.Message, StringComparison.Ordinal);
     }
 
     #endregion

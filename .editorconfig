@@ -1,0 +1,15 @@
+root = true
+
+[*.cs]
+# The 5.0 public API is already published. These design rules require source or
+# binary breaking changes and are deferred to the next major-version API review.
+# All compiler, nullable, reliability, security, globalization, performance,
+# logging, and documentation diagnostics remain enabled and fatal.
+dotnet_diagnostic.CA1000.severity = none # Published static members on generic types.
+dotnet_diagnostic.CA1050.severity = none # Published global-namespace compatibility types.
+dotnet_diagnostic.CA1051.severity = none # Published public fields cannot become properties compatibly.
+dotnet_diagnostic.CA1715.severity = none # Renaming published generic parameters breaks source/docs.
+dotnet_diagnostic.CA1716.severity = none # The published Event type name is retained for compatibility.
+dotnet_diagnostic.CA1720.severity = none # Published parameter/member names are retained for compatibility.
+dotnet_diagnostic.CA1725.severity = none # Named-argument compatibility requires existing parameter names.
+dotnet_diagnostic.CA2211.severity = none # Published mutable static fields require a major-version migration.

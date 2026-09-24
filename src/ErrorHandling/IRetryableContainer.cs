@@ -14,7 +14,7 @@ namespace nostify;
 /// and always retry on 429 TooManyRequests using the server-provided RetryAfter header.
 /// </summary>
 /// <remarks>
-/// Use <see cref="RetryableContainerExtensions.WithRetry"/> to create an instance from a <see cref="Container"/>.
+/// Use <see cref="RetryableContainerExtensions.WithRetry(Container, RetryOptions)"/> to create an instance from a <see cref="Container"/>.
 /// Callbacks are used to handle exhausted retries, not-found results, and exceptions without coupling
 /// the retry logic to the <see cref="INostify"/> interface.
 /// </remarks>

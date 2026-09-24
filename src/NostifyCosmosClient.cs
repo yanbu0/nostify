@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Net;
 using Microsoft.Azure.Cosmos;
 using System.Linq;
-using System.Net.Http;
 using Microsoft.Extensions.Logging;
 
 namespace nostify
@@ -59,7 +58,7 @@ namespace nostify
     ///<summary>
     ///Class to use Cosmos as the repository for persisted events
     ///</summary>
-    public class NostifyCosmosClient : INostifyCosmosClient
+    public class NostifyCosmosClient : INostifyCosmosClient, IDisposable
     {
         ///<summary>
         ///Optional. Endpoint url for cosmos db, will have format "https://{DbName}.documents.azure.us:443"
@@ -119,38 +118,73 @@ namespace nostify
         ///<summary>
         ///Optional. If true, will use gateway connection mode
         ///</summary>
-        public readonly bool UseGatewayConnection = false;
+        public readonly bool UseGatewayConnection;
 
         ///<summary>
         ///Optional logger instance for structured logging. When set, replaces Console.WriteLine with structured log output.
         ///</summary>
-        public readonly ILogger? _logger = null;
+        public readonly ILogger? _logger;
+
+        private static readonly Action<ILogger, string, Exception?> LogKnownContainer =
+            LoggerMessage.Define<string>(
+                LogLevel.Debug,
+                new EventId(1, nameof(LogKnownContainer)),
+                "Container {ContainerName} already exists in known containers list");
+
+        private static readonly Action<ILogger, string, Exception?> LogCreatingContainer =
+            LoggerMessage.Define<string>(
+                LogLevel.Debug,
+                new EventId(2, nameof(LogCreatingContainer)),
+                "Creating container {ContainerName}");
+
+        private static readonly Action<ILogger, string, Exception?> LogCreatedContainer =
+            LoggerMessage.Define<string>(
+                LogLevel.Debug,
+                new EventId(3, nameof(LogCreatedContainer)),
+                "Created container {ContainerName}");
 
         ///<summary>
         ///Non-bulk database reference for lower latency
         ///</summary>
-        private DatabaseRef? _database { get; set; } = null;
+        private DatabaseRef? _database { get; set; }
 
         ///<summary>
         ///Bulk database reference for higher throughput
         ///</summary>
-        private DatabaseRef? _bulkDatabase { get; set; } = null;
+        private DatabaseRef? _bulkDatabase { get; set; }
 
         ///<summary>
         ///Cached CosmosClient instance
         ///</summary>
-        private CosmosClient? _cosmosClient { get; set; } = null;
+        private CosmosClient? _cosmosClient { get; set; }
 
         ///<summary>
         ///Cached bulk enabled CosmosClient instance
         ///</summary>
-        private CosmosClient? _bulkCosmosClient { get; set; } = null;
+        private CosmosClient? _bulkCosmosClient { get; set; }
+
+        // Cosmos clients are expensive, thread-safe singletons for this repository instance.
+        private readonly object _clientLock = new();
+        private bool _disposed;
 
         ///<summary>
-        ///Parameterless constructor for mock testing
+        ///Creates an unconfigured instance for test doubles.
         ///</summary>
+        ///<remarks>
+        ///Database operations require a configured instance. This constructor remains public for
+        ///compatibility with existing test subclasses and mocking frameworks.
+        ///</remarks>
         public NostifyCosmosClient()
         {
+            EndpointUri = string.Empty;
+            Primarykey = string.Empty;
+            DbName = string.Empty;
+            ConnectionString = string.Empty;
+            EventStorePartitionKey = "/aggregateRootId";
+            EventStoreContainer = "eventStore";
+            UndeliverableEvents = "undeliverableEvents";
+            SagaContainer = "sagaContainer";
+            SequenceContainer = "sequenceContainer";
         }
 
         ///<summary>
@@ -183,41 +217,68 @@ namespace nostify
             this.SagaContainer = SagaContainer;
             this.SequenceContainer = SequenceContainer;
             this._logger = logger;
-            _ = InitAsync();
         }
 
         /// <inheritdoc />
-        public bool IsLocalEmulator => ConnectionString != null && ConnectionString.Contains("localhost");
-
-        private async Task InitAsync()
-        {
-            //Init bulk and normal database clients for use throughout lifetime of application
-            GetDatabaseAsync();
-            GetDatabaseAsync(true);
-        }
+        public bool IsLocalEmulator =>
+            ConnectionString.Contains("localhost", StringComparison.OrdinalIgnoreCase);
 
         /// <inheritdoc />
         public CosmosClient GetClient(bool allowBulk = false, bool useGatewayConnection = false)
         {
-            SocketsHttpHandler handler = new SocketsHttpHandler();
-            handler.PooledConnectionLifetime = TimeSpan.FromMinutes(5);
-            var options = new CosmosClientOptions()
+            lock (_clientLock)
             {
-                AllowBulkExecution = allowBulk,
-                ConnectionMode = useGatewayConnection ? ConnectionMode.Gateway : ConnectionMode.Direct,
-                HttpClientFactory = () => new HttpClient(handler, disposeHandler: false),
-                Serializer = new NewtonsoftJsonCosmosSerializer(), // Use custom serializer
-            };
+                ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if (_cosmosClient == null && !allowBulk)
-            {
-                _cosmosClient = new CosmosClient(EndpointUri, Primarykey, options);
+                CosmosClient? cachedClient = allowBulk ? _bulkCosmosClient : _cosmosClient;
+                if (cachedClient != null)
+                {
+                    return cachedClient;
+                }
+
+                var options = new CosmosClientOptions
+                {
+                    AllowBulkExecution = allowBulk,
+                    ConnectionMode = useGatewayConnection ? ConnectionMode.Gateway : ConnectionMode.Direct,
+                    Serializer = new NewtonsoftJsonCosmosSerializer(),
+                };
+                var client = new CosmosClient(EndpointUri, Primarykey, options);
+
+                if (allowBulk)
+                {
+                    _bulkCosmosClient = client;
+                }
+                else
+                {
+                    _cosmosClient = client;
+                }
+
+                return client;
             }
-            else if (_bulkCosmosClient == null && allowBulk)
+        }
+
+        /// <summary>
+        /// Disposes the cached regular and bulk Cosmos clients owned by this repository.
+        /// </summary>
+        public void Dispose()
+        {
+            lock (_clientLock)
             {
-                _bulkCosmosClient = new CosmosClient(EndpointUri, Primarykey, options);
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                _cosmosClient?.Dispose();
+                _bulkCosmosClient?.Dispose();
+                _cosmosClient = null;
+                _bulkCosmosClient = null;
+                _database = null;
+                _bulkDatabase = null;
             }
-            return allowBulk ? _bulkCosmosClient : _cosmosClient;
+
+            GC.SuppressFinalize(this);
         }
 
         /// <inheritdoc />
@@ -244,25 +305,29 @@ namespace nostify
                     : (await client.CreateDatabaseIfNotExistsAsync(DbName)).Database;
                 _bulkDatabase = new() { database = bulkDb, knownContainers = new() };
             }
-            return allowBulk ? _bulkDatabase : _database;
+            return allowBulk
+                ? _bulkDatabase ?? throw new InvalidOperationException("Bulk database initialization did not complete.")
+                : _database ?? throw new InvalidOperationException("Database initialization did not complete.");
         }
 
         /// <inheritdoc />
         public async Task<Container> GetContainerAsync(string containerName, string partitionKeyPath, bool allowBulk = false, int? throughput = null, bool verbose = false)
         {
             var db = await GetDatabaseAsync(allowBulk);
+            Database database = db.database
+                ?? throw new InvalidOperationException("The database reference is not initialized.");
             //Check to see if container already exists in known containers list and skip check if it does but if not create it if needed and add to list
             Container container;
             if (db.knownContainers.Any(c => c == containerName))
             {
-                if (_logger != null) _logger.LogDebug("Container {ContainerName} already exists in known containers list", containerName);
+                if (_logger != null) LogKnownContainer(_logger, containerName, null);
                 else if (verbose) Console.WriteLine($"Container {containerName} already exists in known containers list");
-                container = db.database.GetContainer(containerName);
+                container = database.GetContainer(containerName);
                 db.AddContainer(containerName);
             }
             else
             {
-                if (_logger != null) _logger.LogDebug("Creating container {ContainerName}", containerName);
+                if (_logger != null) LogCreatingContainer(_logger, containerName, null);
                 else if (verbose) Console.WriteLine($"Creating container {containerName}");
 
                 ContainerProperties containerProperties = new()
@@ -275,17 +340,17 @@ namespace nostify
                 var tp = throughput.HasValue ? throughput.Value : DefaultContainerThroughput;
                 if (tp <= 0)
                 {
-                    container = await db.database.CreateContainerIfNotExistsAsync(containerProperties);
+                    container = await database.CreateContainerIfNotExistsAsync(containerProperties);
                 }
                 else
                 {
                     var throughputValue = ThroughputProperties.CreateAutoscaleThroughput(tp);
-                    container = await db.database.CreateContainerIfNotExistsAsync(containerProperties, tp);
+                    container = await database.CreateContainerIfNotExistsAsync(containerProperties, tp);
                 }
 
                 db.AddContainer(containerName);
 
-                if (_logger != null) _logger.LogDebug("Created container {ContainerName}", containerName);
+                if (_logger != null) LogCreatedContainer(_logger, containerName, null);
                 else if (verbose) Console.WriteLine($"Created container {containerName}");
             }
             return container;
@@ -302,7 +367,7 @@ public class DatabaseRef
     /// <summary>
     /// Gets or sets the database instance.
     /// </summary>
-    public Database database { get; set; }
+    public Database? database { get; set; }
 
     /// <summary>
     /// Gets or sets the list of known container names.

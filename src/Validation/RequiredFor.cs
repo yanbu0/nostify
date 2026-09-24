@@ -56,12 +56,14 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
 
         if (string.IsNullOrWhiteSpace(eventTypeName) && validationContext.Items.ContainsKey("command"))
         {
+#pragma warning disable CS0618 // Continue accepting legacy validation contexts created with NostifyCommand.
             eventTypeName = validationContext.Items["command"] switch
             {
                 NostifyCommand command => command.name,
                 EventType legacyEventType => legacyEventType.name,
                 _ => null
             };
+#pragma warning restore CS0618
         }
 
         if (string.IsNullOrWhiteSpace(eventTypeName))
@@ -72,10 +74,12 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
         if (Commands.Contains(eventTypeName))
         {
             bool baseResult = base.IsValid(value);
-            // If baseResult is null return ValidationResult
             if (!baseResult)
             {
-                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the event type '{eventTypeName}'.");
+                // Preserve the member name so structured validation responses do not discard this error.
+                return new ValidationResult(
+                    ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the event type '{eventTypeName}'.",
+                    [validationContext.MemberName ?? "Unknown"]);
             }
         }
 

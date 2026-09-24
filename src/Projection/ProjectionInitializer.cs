@@ -14,12 +14,36 @@ namespace nostify;
 /// </summary>
 public class ProjectionInitializer : IProjectionInitializer
 {
+    private readonly IQueryExecutor _queryExecutor;
+    private readonly Func<Container, RetryOptions, IRetryableContainer> _retryableContainerFactory;
+    private readonly Func<TimeSpan, Task> _delayAsync;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectionInitializer"/> class.
     /// </summary>
     public ProjectionInitializer()
+        : this(
+            CosmosQueryExecutor.Default,
+            static (container, options) => container.WithRetry(options),
+            static delay => Task.Delay(delay))
     {
-        // Constructor logic can be added here if needed
+    }
+
+    /// <summary>
+    /// Initializes an instance with deterministic infrastructure adapters for testing.
+    /// </summary>
+    /// <param name="queryExecutor">Executes Cosmos LINQ queries.</param>
+    /// <param name="retryableContainerFactory">Creates retry-enabled persistence wrappers.</param>
+    /// <param name="delayAsync">Schedules the stabilization delay between container checks.</param>
+    internal ProjectionInitializer(
+        IQueryExecutor queryExecutor,
+        Func<Container, RetryOptions, IRetryableContainer> retryableContainerFactory,
+        Func<TimeSpan, Task> delayAsync)
+    {
+        _queryExecutor = queryExecutor ?? throw new ArgumentNullException(nameof(queryExecutor));
+        _retryableContainerFactory = retryableContainerFactory
+            ?? throw new ArgumentNullException(nameof(retryableContainerFactory));
+        _delayAsync = delayAsync ?? throw new ArgumentNullException(nameof(delayAsync));
     }
 
     ///<summary>
@@ -37,9 +61,15 @@ public class ProjectionInitializer : IProjectionInitializer
     {
         //Get all base aggregates in id list
         Container baseAggregateContainer = await nostify.GetCurrentStateContainerAsync<A>();
-        List<A> baseAggregates = await baseAggregateContainer.GetItemLinqQueryable<A>().Where(x => idsToInit.Contains(x.id)).ReadAllAsync();
-        //Create list of all projections to init
-        List<P> projectionList = baseAggregates.Select(a => JsonConvert.DeserializeObject<P>(JsonConvert.SerializeObject(a))).ToList();
+        IQueryable<A> baseAggregateQuery = baseAggregateContainer
+            .GetItemLinqQueryable<A>()
+            .Where(x => idsToInit.Contains(x.id));
+        List<A> baseAggregates = await _queryExecutor.ReadAllAsync(baseAggregateQuery);
+        // Create projections only for aggregates that deserialize successfully.
+        List<P> projectionList = baseAggregates
+            .Select(a => JsonConvert.DeserializeObject<P>(JsonConvert.SerializeObject(a)))
+            .OfType<P>()
+            .ToList();
         //Call Init
         return await InitAsync<P>(projectionList, nostify, httpClient, pointInTime);
     }
@@ -73,7 +103,10 @@ public class ProjectionInitializer : IProjectionInitializer
         });
 
         //Bulk upsert all projections
-        await projectionContainer.WithRetry(retryOptions ?? new RetryOptions()).DoBulkUpsertAsync<P>(initializedProjections);
+        IRetryableContainer retryableContainer = _retryableContainerFactory(
+            projectionContainer,
+            retryOptions ?? new RetryOptions());
+        await retryableContainer.DoBulkUpsertAsync<P>(initializedProjections);
         return initializedProjections;
     }
 
@@ -93,13 +126,17 @@ public class ProjectionInitializer : IProjectionInitializer
     {
         //Delete all items from container
         Container deleteAllFromThis = await nostify.GetBulkProjectionContainerAsync<P>(partitionKeyPath);
-        int deleteResult = await deleteAllFromThis.DeleteAllBulkAsync<P>();
+        await DeleteAllProjectionsAsync<P>(deleteAllFromThis);
 
         //Get all Events from eventStore for base Aggregates
         Container eventStoreContainer = await nostify.GetEventStoreContainerAsync();
         //Get ids of all non deleted base Aggregates
         Container baseAggregateContainer = await nostify.GetCurrentStateContainerAsync<A>(partitionKeyPath);
-        List<Guid> baseAggregateIds = await baseAggregateContainer.GetItemLinqQueryable<A>().Where(x => !x.isDeleted).Select(x => x.id).ReadAllAsync();
+        IQueryable<Guid> baseAggregateIdsQuery = baseAggregateContainer
+            .GetItemLinqQueryable<A>()
+            .Where(x => !x.isDeleted)
+            .Select(x => x.id);
+        List<Guid> baseAggregateIds = await _queryExecutor.ReadAllAsync(baseAggregateIdsQuery);
 
         //Loop through specified number at a time and get all events for each base Aggregate and apply them to a new projection instance
         //Doing this to avoid getting too much data
@@ -116,7 +153,7 @@ public class ProjectionInitializer : IProjectionInitializer
                 eventsQuery = eventsQuery.Where(x => x.timestamp <= pointInTime.Value);
             }
 
-            List<Event> events = await eventsQuery.ReadAllAsync();
+            List<Event> events = await _queryExecutor.ReadAllAsync(eventsQuery);
 
             ids.ForEach(id =>
             {
@@ -130,8 +167,20 @@ public class ProjectionInitializer : IProjectionInitializer
 
     }
 
+    /// <summary>
+    /// Deletes all existing projections before a container rebuild.
+    /// </summary>
+    /// <typeparam name="P">The projection type to delete.</typeparam>
+    /// <param name="container">The projection container to clear.</param>
+    /// <returns>The number of projections marked for deletion.</returns>
+    internal virtual Task<int> DeleteAllProjectionsAsync<P>(Container container)
+        where P : NostifyObject
+    {
+        return container.DeleteAllBulkAsync<P>();
+    }
+
     ///<summary>
-    ///Init all non-initialized projections in the container.  Will requery all needed data from all external services by calling InitAsync  
+    ///Init all non-initialized projections in the container.  Will requery all needed data from all external services by calling InitAsync
     ///</summary>
     ///<param name="nostify">Reference to the Nostify singleton.</param>
     ///<param name="httpClient">Reference to an HttpClient instance.</param>
@@ -141,7 +190,10 @@ public class ProjectionInitializer : IProjectionInitializer
     {
         //Query for all projections in container where initialized == false
         Container projectionContainer = await nostify.GetProjectionContainerAsync<P>();
-        List<P> projections = await projectionContainer.GetItemLinqQueryable<P>().Where(x => x.initialized == false).ReadAllAsync();
+        IQueryable<P> uninitializedQuery = projectionContainer
+            .GetItemLinqQueryable<P>()
+            .Where(x => x.initialized == false);
+        List<P> projections = await _queryExecutor.ReadAllAsync(uninitializedQuery);
 
         //Call InitAsync until all projections are initialized, must call in a loop due to async creation of projections
         while (projections.Count > 0)
@@ -151,33 +203,41 @@ public class ProjectionInitializer : IProjectionInitializer
             //If projections == 0 wait a second then check again to see if any new projections were created
             if (projections.Count == 0)
             {
-                await Task.Delay(1000);
-                projections = await projectionContainer.GetItemLinqQueryable<P>().Where(x => x.initialized == false).ReadAllAsync();
+                await _delayAsync(TimeSpan.FromSeconds(1));
+                uninitializedQuery = projectionContainer
+                    .GetItemLinqQueryable<P>()
+                    .Where(x => x.initialized == false);
+                projections = await _queryExecutor.ReadAllAsync(uninitializedQuery);
             }
         }
     }
 
     // Backward compatibility overloads
+    /// <inheritdoc cref="InitAsync{P, A}(Guid, INostify, HttpClient, DateTime?)" />
     public async Task<List<P>> InitAsync<P, A>(Guid id, INostify nostify, HttpClient? httpClient = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         return await InitAsync<P, A>(id, nostify, httpClient, null);
     }
 
+    /// <inheritdoc cref="InitAsync{P, A}(List{Guid}, INostify, HttpClient, DateTime?)" />
     public async Task<List<P>> InitAsync<P, A>(List<Guid> idsToInit, INostify nostify, HttpClient? httpClient = null) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         return await InitAsync<P, A>(idsToInit, nostify, httpClient, null);
     }
 
+    /// <inheritdoc cref="InitAsync{P}(List{P}, INostify, HttpClient, DateTime?, RetryOptions?)" />
     public async Task<List<P>> InitAsync<P>(List<P> projectionsToInit, INostify nostify, HttpClient? httpClient = null) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         return await InitAsync<P>(projectionsToInit, nostify, httpClient, null);
     }
 
+    /// <inheritdoc cref="InitContainerAsync{P, A}(INostify, HttpClient, string, int, DateTime?)" />
     public async Task InitContainerAsync<P, A>(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 100) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         await InitContainerAsync<P, A>(nostify, httpClient, partitionKeyPath, loopSize, null);
     }
 
+    /// <inheritdoc cref="InitAllUninitialized{P}(INostify, HttpClient, int, DateTime?)" />
     public async Task InitAllUninitialized<P>(INostify nostify, HttpClient? httpClient = null, int maxloopSize = 10) where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         await InitAllUninitialized<P>(nostify, httpClient, maxloopSize, null);

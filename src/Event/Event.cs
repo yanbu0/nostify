@@ -17,7 +17,9 @@ namespace nostify;
 public class Event : IEvent
 {
     private EventType? _eventType;
+#pragma warning disable CS0618 // Stored solely to preserve the published legacy command JSON/API contract.
     private NostifyCommand? _legacyCommand;
+#pragma warning restore CS0618
     private int? _schemaVersion;
 
     /// <summary>
@@ -53,20 +55,7 @@ public class Event : IEvent
     /// <param name="partitionKey">ID of partition that the Aggregate to apply Event to is in.</param>
     public Event(EventType eventType, object payload, Guid userId = default, Guid partitionKey = default)
     {
-        Guid aggregateRootId = default;
-        if (payload is null || !payload.GetType().GetProperties().Any())
-        {
-            throw new ArgumentNullException("Event Create Error: Payload cannot be null if you do not specify an aggregate root ID");
-        }
-        var jPayload = JObject.FromObject(payload);
-        if (jPayload["id"] == null || (jPayload["id"].Type != JTokenType.Guid && !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId)))
-        {
-            throw new ArgumentException("Event Create Error: Aggregate Root ID does not exist or is not parsable to a Guid");
-        }
-        else if (aggregateRootId == default)
-        {
-            aggregateRootId = jPayload["id"].Value<Guid>();
-        }
+        Guid aggregateRootId = GetRequiredAggregateRootId(payload);
         SetUp(eventType, aggregateRootId, payload, userId, partitionKey);
     }
 
@@ -77,20 +66,7 @@ public class Event : IEvent
     public Event(NostifyCommand command, object payload, Guid userId = default, Guid partitionKey = default)
     {
         ArgumentNullException.ThrowIfNull(command);
-        Guid aggregateRootId = default;
-        if (payload is null || !payload.GetType().GetProperties().Any())
-        {
-            throw new ArgumentNullException("Event Create Error: Payload cannot be null if you do not specify an aggregate root ID");
-        }
-        var jPayload = JObject.FromObject(payload);
-        if (jPayload["id"] == null || (jPayload["id"].Type != JTokenType.Guid && !Guid.TryParse(jPayload["id"].Value<string>(), out aggregateRootId)))
-        {
-            throw new ArgumentException("Event Create Error: Aggregate Root ID does not exist or is not parsable to a Guid");
-        }
-        else if (aggregateRootId == default)
-        {
-            aggregateRootId = jPayload["id"].Value<Guid>();
-        }
+        Guid aggregateRootId = GetRequiredAggregateRootId(payload);
         SetUp(CreateLegacyEventType(command), aggregateRootId, payload, userId, partitionKey);
         _legacyCommand = command;
     }
@@ -136,22 +112,39 @@ public class Event : IEvent
         _legacyCommand = command;
     }
 
-    private static EventType CreateLegacyEventType(NostifyCommand command)
+#pragma warning disable CS0618 // This helper is the compatibility boundary for the obsolete command API.
+    private static LegacyNostifyCommandEventType CreateLegacyEventType(NostifyCommand command)
     {
-        if (command == null)
-        {
-            throw new ArgumentNullException(nameof(command));
-        }
+        ArgumentNullException.ThrowIfNull(command);
 
         return new LegacyNostifyCommandEventType(command.name, command.isNew, command.allowNullPayload);
+    }
+#pragma warning restore CS0618
+
+    private static Guid GetRequiredAggregateRootId(object payload)
+    {
+        if (payload is null)
+        {
+            throw new ArgumentNullException(nameof(payload), "Event Create Error: Payload cannot be null if you do not specify an aggregate root ID");
+        }
+
+        if (payload.GetType().GetProperties().Length == 0)
+        {
+            throw new ArgumentNullException(nameof(payload), "Event Create Error: Payload cannot be empty if you do not specify an aggregate root ID");
+        }
+
+        JToken? idToken = JObject.FromObject(payload)[nameof(IEvent.id)];
+        if (idToken is null || !Guid.TryParse(idToken.ToString(), out Guid aggregateRootId))
+        {
+            throw new ArgumentException("Event Create Error: Aggregate Root ID does not exist or is not parsable to a Guid", nameof(payload));
+        }
+
+        return aggregateRootId;
     }
 
     private void SetUp(EventType eventType, Guid aggregateRootId, object payload, Guid userId, Guid partitionKey)
     {
-        if (eventType is null)
-        {
-            throw new ArgumentNullException("Event type cannot be null");
-        }
+        ArgumentNullException.ThrowIfNull(eventType);
         this.aggregateRootId = aggregateRootId;
         this.id = Guid.NewGuid();
         this.eventType = eventType;
@@ -187,9 +180,11 @@ public class Event : IEvent
         set
         {
             _eventType = value;
+#pragma warning disable CS0618 // Hydrates the legacy command view for schema-version-1 documents.
             _legacyCommand = value is LegacyNostifyCommandEventType
                 ? new NostifyCommand(value.name, value.isNew, value.allowNullPayload)
                 : null;
+#pragma warning restore CS0618
         }
     }
 
@@ -251,25 +246,26 @@ public class Event : IEvent
     }
 
     /// <inheritdoc />
-    public object payload { get; set; }
+    public object? payload { get; set; }
 
     /// <inheritdoc />
     public bool PayloadHasProperty(string propertyName)
     {
-        return payload.GetType().GetProperty(propertyName) != null;
+        return payload?.GetType().GetProperty(propertyName) != null;
     }
 
     /// <inheritdoc />
     public T GetPayload<T>()
     {
-        return JObject.FromObject(payload).ToObject<T>() ?? throw new NullReferenceException($"Payload is null for type {typeof(T).Name}");
+        object requiredPayload = payload ?? throw new InvalidOperationException($"Payload is null for type {typeof(T).Name}");
+        return JObject.FromObject(requiredPayload).ToObject<T>() ?? throw new InvalidOperationException($"Payload cannot be converted to type {typeof(T).Name}");
     }
 
     /// <inheritdoc />
     public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : class
     {
-        JObject cleanedPayload = RemoveNonExistentPayloadProperties<T>(throwErrorIfExtraProps, out List<ValidationResult> validationMessages) as JObject ?? throw new NullReferenceException("Payload cannot be null after removing non-existent properties.");
-        var deserializedPayload = cleanedPayload.ToObject<T>() ?? throw new NullReferenceException("Payload cannot be null after deserialization.");
+        JObject cleanedPayload = RemoveNonExistentPayloadProperties<T>(throwErrorIfExtraProps, out List<ValidationResult> validationMessages) as JObject ?? throw new InvalidOperationException("Payload cannot be null after removing non-existent properties.");
+        var deserializedPayload = cleanedPayload.ToObject<T>() ?? throw new InvalidOperationException("Payload cannot be null after deserialization.");
 
         ValidationContext validationContext = new ValidationContext(deserializedPayload);
         validationContext.Items["eventType"] = eventType;
@@ -303,7 +299,7 @@ public class Event : IEvent
             return false;
         });
 
-        if (validationMessages.Any())
+        if (validationMessages.Count != 0)
         {
             throw new NostifyValidationException(validationMessages);
         }
@@ -321,7 +317,8 @@ public class Event : IEvent
         validationMessages = new List<ValidationResult>();
 
         var validProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => p.Name).ToHashSet();
-        var payloadObject = JObject.FromObject(payload) ?? throw new NullReferenceException("Payload cannot be null when removing non-existent properties.");
+        object requiredPayload = payload ?? throw new InvalidOperationException("Payload cannot be null when removing non-existent properties.");
+        var payloadObject = JObject.FromObject(requiredPayload);
         foreach (var prop in payloadObject.Properties().Select(p => p.Name).ToList())
         {
             if (!validProperties.Contains(prop))
@@ -334,7 +331,7 @@ public class Event : IEvent
             }
         }
 
-        return payloadObject.ToObject<object>() ?? throw new NullReferenceException("Payload cannot be null after removing non-existent properties.");
+        return payloadObject.ToObject<object>() ?? throw new InvalidOperationException("Payload cannot be null after removing non-existent properties.");
 
     }
 }

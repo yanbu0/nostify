@@ -157,7 +157,7 @@ public class EventRequester<TProjection> where TProjection : IUniquelyIdentifiab
         allSelectors.AddRange(SingleSelectors);
 
         // Transform list selectors using the same logic as TransformForeignIdSelectors
-        if (ListSelectors.Any())
+        if (ListSelectors.Length != 0)
         {
             var expandedSelectors = projectionsToInit
                 .SelectMany(p => ListSelectors.SelectMany(selector => selector(p)))
