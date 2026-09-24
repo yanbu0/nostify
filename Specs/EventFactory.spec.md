@@ -61,21 +61,6 @@ Creates a new `Event` instance with explicit aggregate root ID.
 | `userId` | `Guid` | No | The ID of the user responsible for the event |
 | `partitionKey` | `Guid` | No | The partition key for the aggregate |
 
-#### Legacy compatibility overload
-
-```csharp
-[Obsolete]
-public IEvent Create<T>(
-    NostifyCommand command,
-    Guid aggregateRootId,
-    object payload,
-    Guid userId = default,
-    Guid partitionKey = default)
-    where T : class
-```
-
-Preserves legacy command-based callers while routing through the same event pipeline.
-
 #### Create with payload-derived aggregateRootId
 
 ```csharp
@@ -108,7 +93,6 @@ Creates a new `Event` instance, parsing `aggregateRootId`, `userId`, and `partit
 ```csharp
 public IEvent CreateNullPayloadEvent(EventType eventType, Guid aggregateRootId, Guid userId = default, Guid partitionKey = default)
 public IEvent CreateNullPayloadEvent(EventType eventType, string aggregateRootId, string userId, string partitionKey)
-[Obsolete] public IEvent CreateNullPayloadEvent(NostifyCommand command, ...)
 ```
 
 Creates null-payload events without invoking payload validation. These methods do **not** mutate `ValidatePayload` on the factory instance.
