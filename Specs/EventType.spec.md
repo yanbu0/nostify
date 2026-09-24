@@ -28,16 +28,18 @@ Concrete event types inherit directly from `EventType` and call this constructor
 
 ## Purpose
 
-`EventType` lets events carry concrete CLR type metadata instead of only legacy command metadata. This enables:
+`EventType` gives runtime code concrete event definitions while `name` remains the stable wire and dispatch identity. This enables:
 
 - Runtime dispatch via `NostifyObject.Apply(IEvent)`
 - Attribute-based dispatch via `[ApplyEvents(typeof(...))]`
 - Event-type-aware payload validation
 - Topic discovery from concrete event type definitions
 
-## Equality
+## Identity and Equality
 
-Equality is based on both concrete CLR type and `name`. Two different subclasses with the same `name` are not equal.
+Persisted identity and attribute dispatch use `name` with ordinal, case-sensitive comparison. Names that differ only by case are distinct, and multiple loaded concrete definitions with the same exact name are rejected during name resolution.
+
+In-memory object equality remains based on both concrete CLR type and `name`; dispatch does not depend on that CLR-sensitive equality.
 
 ## Usage Example
 
@@ -61,9 +63,11 @@ EventType eventType = new CreateOrder();
 3. Requires a public parameterless constructor so metadata is resolved from the concrete type itself
 4. Throws a clear `InvalidOperationException` for unsupported types
 
-## Backward Compatibility
+## Serialization and Backward Compatibility
 
-`NostifyCommand` remains an obsolete legacy metadata object and is not an `EventType` subclass. Legacy command-only envelopes map to the internal compatibility adapter `LegacyNostifyCommandEventType` so modern `Event.eventType` behavior remains consistent.
+JSON stores stable logical metadata (`name`, `isNew`, and `allowNullPayload`) and restores a unique concrete definition by exact name when available. Canonical concrete metadata takes precedence over serialized flags; unknown names preserve their serialized flags in the internal `LegacyNostifyCommandEventType` adapter.
+
+`NostifyCommand` remains an obsolete legacy metadata object and is not an `EventType` subclass. Legacy command-only envelopes map to the adapter so modern `Event.eventType` behavior remains consistent.
 
 ## Related Types
 

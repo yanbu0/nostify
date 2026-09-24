@@ -144,9 +144,9 @@ The obsolete `Event(NostifyCommand, ...)` constructors remain available for lega
 - Incoming documents with an explicit `schemaVersion` keep that persisted value
 - Incoming documents missing version metadata infer the version from the hydrated document shape
 
-During JSON deserialization, nostify first uses the `$eventTypeClrType` discriminator when present. If the discriminator is missing, unresolved, or resolves to the legacy compatibility adapter, the resolver attempts to map by logical `eventType.name` to a loaded concrete `EventType` class before falling back to legacy behavior.
+The logical `eventType.name` is the sole persisted event-type identity. JSON writes `name`, `isNew`, and `allowNullPayload` as event-type metadata.
 
-Concrete typed event types are restored through resolved `EventType` definitions for the target CLR type, preserving type-specific metadata while supporting legacy compatibility envelopes.
+Deserialization resolves names with ordinal, case-sensitive comparison. A unique loaded concrete `EventType` definition supplies canonical metadata and preserves typed dynamic dispatch. Unknown names hydrate as `LegacyNostifyCommandEventType` and retain serialized metadata. Multiple loaded concrete definitions with the same exact name are invalid configuration and produce a deterministic exception listing every conflicting CLR type.
 
 When both `eventType` and legacy `command` are present in incoming JSON, `command` no longer overwrites an already resolved concrete `eventType`; it only hydrates `eventType` when no concrete value exists yet (or when the current value is still the internal legacy adapter).
 

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 using Moq;
+using Newtonsoft.Json;
 using nostify;
 using Xunit;
 
@@ -252,6 +253,41 @@ namespace nostify.Tests
         }
 
         /// <summary>
+        /// Aggregate used to verify collisions are detected after type and string declarations
+        /// are normalized to the same logical event name.
+        /// </summary>
+        private class CrossFormConflictingAggregate : NostifyObject, IAggregate
+        {
+            public bool isDeleted { get; set; }
+            public static string aggregateType => "Order";
+            public static string currentStateContainerName => "OrderCurrentState";
+
+            [ApplyEvents(typeof(Create_Order))]
+            protected void TypeHandler(IEvent e) { }
+
+            [ApplyEvents("Create_Order")]
+            protected void NameHandler(IEvent e) { }
+        }
+
+        /// <summary>
+        /// Aggregate used to prove names that differ only by case remain distinct mappings.
+        /// </summary>
+        private class CaseDistinctAggregate : NostifyObject, IAggregate
+        {
+            public bool isDeleted { get; set; }
+            public static string aggregateType => "Order";
+            public static string currentStateContainerName => "OrderCurrentState";
+            public int CanonicalCount { get; private set; }
+            public int LowerCaseCount { get; private set; }
+
+            [ApplyEvents(typeof(Create_Order))]
+            protected void CanonicalHandler(IEvent e) => CanonicalCount++;
+
+            [ApplyEvents("create_order")]
+            protected void LowerCaseHandler(IEvent e) => LowerCaseCount++;
+        }
+
+        /// <summary>
         /// Aggregate used to validate string-only event name handling without a local EventType class.
         /// </summary>
         private class StringOnlyAggregateByName : NostifyObject, IAggregate
@@ -459,6 +495,62 @@ namespace nostify.Tests
         }
 
         [Fact]
+        public void TypeDeclaredHandler_MatchesLegacyAdapterByLogicalName()
+        {
+            // Arrange: this is how a command-only legacy envelope represents its event type.
+            var aggregate = new AttributeOnlyAggregate();
+            var legacyEvent = new TestEvent(
+                new LegacyNostifyCommandEventType("Create_Order", isNew: true));
+
+            // Act
+            aggregate.Apply(legacyEvent);
+
+            // Assert
+            Assert.Equal(1, aggregate.CreateHandledCount);
+        }
+
+        [Fact]
+        public void TypeDeclaredHandler_DoesNotMatchDifferentlyCasedLogicalName()
+        {
+            var aggregate = new HybridAggregate();
+            var differentlyCasedEvent = new TestEvent(
+                new LegacyNostifyCommandEventType("create_order", isNew: true));
+
+            aggregate.Apply(differentlyCasedEvent);
+
+            Assert.Equal(0, aggregate.AttributeHandledCount);
+            Assert.Equal(1, aggregate.DynamicHandledCount);
+        }
+
+        [Fact]
+        public void CommandOnlyJson_AppliesThroughTypeDeclaredHandler()
+        {
+            // Arrange: model a pre-5.0 Cosmos document that has command metadata but no eventType.
+            const string json = """
+                {
+                  "aggregateRootId": "22222222-2222-2222-2222-222222222222",
+                  "command": {
+                    "name": "Create_Order",
+                    "isNew": true,
+                    "allowNullPayload": false
+                  },
+                  "payload": { "value": 1 }
+                }
+                """;
+            var legacyEvent = JsonConvert.DeserializeObject<Event>(
+                json,
+                SerializationSettings.NostifyDefault);
+            var aggregate = new AttributeOnlyAggregate();
+
+            // Act
+            aggregate.Apply(Assert.IsType<Event>(legacyEvent));
+
+            // Assert: no data reload or CLR identity is required for dispatch.
+            Assert.IsType<LegacyNostifyCommandEventType>(legacyEvent!.eventType);
+            Assert.Equal(1, aggregate.CreateHandledCount);
+        }
+
+        [Fact]
         public void HybridAggregate_PrefersAttributesAndFallsBackToDynamic()
         {
             // Arrange
@@ -534,6 +626,31 @@ namespace nostify.Tests
             // Act & Assert
             var ex = Assert.Throws<InvalidOperationException>(() => aggregate.Apply(createEvent));
             Assert.Contains("Multiple ApplyEventsAttribute handlers", ex.Message);
+        }
+
+        [Fact]
+        public void CrossFormConflictingAggregate_ThrowsWithBothHandlerNames()
+        {
+            var aggregate = new CrossFormConflictingAggregate();
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => aggregate.Apply(new TestEvent(OrderCommand.Create)));
+
+            Assert.Contains("Create_Order", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("TypeHandler", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("NameHandler", exception.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void CaseDistinctAggregate_TreatsCaseOnlyNamesAsSeparateMappings()
+        {
+            var aggregate = new CaseDistinctAggregate();
+
+            aggregate.Apply(new TestEvent(OrderCommand.Create));
+            aggregate.Apply(new TestEvent(new LegacyNostifyCommandEventType("create_order")));
+
+            Assert.Equal(1, aggregate.CanonicalCount);
+            Assert.Equal(1, aggregate.LowerCaseCount);
         }
 
         [Fact]

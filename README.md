@@ -76,8 +76,8 @@
   
 - 5.0.0 (BREAKING CHANGES!)
     - **EventType Is the Canonical Event Metadata**: New events use concrete `EventType` classes. `EventFactory` exposes only `EventType`-based `Create<T>(...)` and `CreateNullPayloadEvent(...)` signatures; the obsolete `NostifyCommand` factory overloads were removed. Legacy event envelopes and the obsolete `IEvent.command` alias remain readable for migration compatibility, but new code should use `IEvent.eventType`.
-    - **Attribute-Based Event Dispatch (Preferred)**: `ApplyEventsAttribute` enables declarative, strongly typed handlers such as `[ApplyEvents(typeof(Create_Order))]`. Dispatch checks attribute handlers first, typed `Apply(SpecificEventType, IEvent)` overloads second, and the `protected virtual Apply(EventType, IEvent)` catch-all last. Handler mappings are cached and validated for duplicate or invalid declarations.
-    - **Kafka EventType Restoration Hardening**: Kafka-triggered deserialization restores concrete `EventType` instances by logical event name when legacy or unresolved CLR discriminators are encountered, while preserving already resolved concrete types.
+    - **Logical Name Is the Wire Identity**: `eventType.name` is the sole persisted event-type identity and uses ordinal, case-sensitive matching. Serialized event-type metadata contains `name`, `isNew`, and `allowNullPayload`. A unique loaded concrete `EventType` is restored by exact name, unknown names use the legacy adapter, and duplicate exact names fail with a descriptive configuration error.
+    - **Attribute-Based Event Dispatch (Preferred)**: `ApplyEventsAttribute` enables declarative handlers such as `[ApplyEvents(typeof(Create_Order))]`. Type and string declarations are normalized to the same logical-name cache, so legacy command-only events dispatch without reloading Cosmos DB. Dispatch checks attribute handlers first, typed `Apply(SpecificEventType, IEvent)` overloads second, and the `protected virtual Apply(EventType, IEvent)` catch-all last.
     - **Bulk Delete EventType Filter Fix**: Aggregate and projection bulk-delete handlers now apply their `eventTypeFilter` before selecting IDs for deletion. This prevents unrelated logical event types that share the same Kafka topic from causing entities to be deleted.
     - **Async-Only Default Handlers**: Obsolete non-async wrappers were removed from `DefaultCommandHandler` and `DefaultEventHandlers`. Use the corresponding `...Async` methods for single and bulk command/event handling.
     - **Fail-Fast Startup Configuration**: `NostifyFactory.Build()` validates required Cosmos and Kafka/Event Hubs settings immediately. The default Cosmos partition-key path is now `/tenantId`.
@@ -549,7 +549,9 @@ public sealed class BulkDelete_Test : EventType
 EventType createEventType = new Create_Test();
 ```
 
-Each event type is represented by its own class (matching the pattern used in the aggregate templates). Concrete discoverable event types must expose a parameterless constructor. `NostifyFactory.Build<T>()` discovers topics from these definitions, while the runtime `eventType.name` value is stored with the event envelope and used for dispatch and routing.
+Each event type is represented by its own class (matching the pattern used in the aggregate templates). Concrete discoverable event types must expose a parameterless constructor. `NostifyFactory.Build<T>()` discovers topics from these definitions, while `eventType.name` is the sole persisted event-type identity used for dispatch and routing. Names use ordinal, case-sensitive identity, so `Create_Test` and `create_test` are distinct. Every exact name must identify at most one loaded concrete `EventType`; duplicate definitions are rejected.
+
+JSON stores stable logical metadata (`name`, `isNew`, and `allowNullPayload`). Deserialization restores a unique concrete definition by exact name and uses its canonical metadata; unknown names retain serialized metadata through the legacy compatibility adapter.
 
 `NostifyCommand` is retained only for legacy envelope and serialization compatibility. It is not accepted by `EventFactory`; migrate authoring code to concrete `EventType` instances.
 
@@ -566,7 +568,7 @@ public class Test : NostifyObject, IAggregate
     public static string aggregateType => "Test";
     public static string currentStateContainerName => "Test";
 
-    // Map by CLR EventType types (Create_Test, Update_Test, Delete_Test)
+    // Resolve these definitions once, then cache handlers by their logical names.
     [ApplyEvents(typeof(Create_Test), typeof(Update_Test))]
     private void OnTestCreatedOrUpdated(IEvent eventToApply)
     {
@@ -590,7 +592,7 @@ public class TestByName : NostifyObject, IAggregate
     public static string aggregateType => "Test";
     public static string currentStateContainerName => "Test";
 
-    // Map by EventType.name values. These must match the names on the concrete EventType classes.
+    // Map by exact EventType.name values using ordinal, case-sensitive identity.
     // This is especially useful for projection events coming from a different service when the
     // other service's concrete EventType CLR types are not referenced locally.
     [ApplyEvents("Create_Test", "Update_Test")]
@@ -612,13 +614,15 @@ Across these patterns:
 - `NostifyObject.Apply(IEvent)` is the framework entry point. It checks attribute-based `[ApplyEvents]` handlers first, then falls back to typed overload dispatch.
 - If no attribute-based handler exists for an event, the framework calls `Apply((dynamic)eventToApply.eventType, eventToApply)`, so any matching `Apply(SpecificEventType, IEvent)` overload is preferred and `Apply(EventType, IEvent)` is the final catch-all.
 - `Apply(EventType, IEvent)` is `protected virtual` in `NostifyObject`. Override it when you want custom catch-all behavior; if all events are handled by attributes, you can omit it entirely.
-- Individual handler methods are decorated with `[ApplyEvents]` and accept `IEvent` to perform updates. Prefer the `typeof(...)` form when the concrete `EventType` class is available.
+- Individual handler methods are decorated with `[ApplyEvents]` and accept `IEvent` to perform updates. Prefer the `typeof(...)` form when the concrete `EventType` class is available; both forms produce the same name-keyed cache.
+- Because attribute dispatch uses only the logical name, a type-declared handler also processes a legacy command-only event carrying the exact same name.
 
 > **Dispatch rules:**
 > - `[ApplyEvents]` handlers can have any method name; the framework matches them by attribute metadata, not by method name.
 > - Each handler must return `void` and accept exactly one `IEvent` parameter.
 > - If both an attribute handler and a typed `Apply(SpecificEventType, IEvent)` overload could handle the same event, the attribute handler wins because attribute dispatch runs first.
-> - A single `EventType` can map to only one `[ApplyEvents]` handler on a concrete class. Duplicate mappings throw `InvalidOperationException` when the handler cache is built.
+> - A single exact logical name can map to only one `[ApplyEvents]` handler on a concrete class, regardless of whether declarations use types or strings. Duplicate mappings throw `InvalidOperationException` when the handler cache is built.
+> - Name matching is ordinal and case-sensitive. Names that differ only by case are separate mappings.
 
 #### Projection Example Using Attribute Dispatch
 
@@ -668,7 +672,7 @@ public class TestWithStatus : NostifyObject, IProjection, IHasExternalData<TestW
 
 #### EventType Dynamic Dispatch Pattern (Advanced)
 
-In some scenarios you may want full control over dispatch using typed `EventType` overloads without attribute decoration — for example when micro-optimizing hot paths or when you prefer explicit per-type methods. The framework calls `Apply((dynamic)eventToApply.eventType, eventToApply)` as a fallback, which C# resolves at runtime to the most specific matching overload.
+In some scenarios you may want full control over dispatch using typed `EventType` overloads without attribute decoration — for example when micro-optimizing hot paths or when you prefer explicit per-type methods. The framework calls `Apply((dynamic)eventToApply.eventType, eventToApply)` as a fallback, which C# resolves at runtime to the most specific matching overload. Name-only deserialization preserves this behavior when an exact name uniquely resolves to a loaded concrete definition; unknown names use the compatibility adapter and reach the `Apply(EventType, IEvent)` catch-all.
 
 ```C#
 public class Test : NostifyObject, IAggregate
@@ -703,7 +707,7 @@ public class Test : NostifyObject, IAggregate
 
 > **Guidance**: Prefer `[ApplyEvents(typeof(...))]` for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. Use string-based `[ApplyEvents("...")]` mappings when you cannot reference the concrete `EventType` class directly, such as projection handlers that consume events from another service, and use typed overload dispatch when you need explicit control or maximum performance.
 
-> **Interop**: Legacy event envelopes that contain `command` metadata remain readable. `eventToApply.command` and `NostifyCommand` are obsolete compatibility surfaces, while `eventToApply.eventType` is canonical. This compatibility does not include `EventFactory` overloads; new event creation must use `EventType`.
+> **Interop**: Legacy event envelopes that contain `command` metadata remain readable and dispatch by their exact logical name, so stored Cosmos DB events do not need to be reloaded. `eventToApply.command` and `NostifyCommand` are obsolete compatibility surfaces, while `eventToApply.eventType` is canonical. This compatibility does not include `EventFactory` overloads; new event creation must use `EventType`.
 
 ### Saga
 

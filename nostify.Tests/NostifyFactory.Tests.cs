@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
+using System.Reflection.Emit;
 using Xunit;
 using nostify;
 using Confluent.Kafka;
@@ -26,6 +28,45 @@ public class NostifyFactoryTests
         }
 
         return bool.TryParse(value, out var result) ? result : null;
+    }
+
+    private static (Assembly Assembly, Type FirstType, Type SecondType) CreateEventTypeAssembly(
+        string firstName,
+        string secondName)
+    {
+        var assemblyName = new AssemblyName($"FactoryEventTypes_{Guid.NewGuid():N}");
+        var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+        var moduleBuilder = assemblyBuilder.DefineDynamicModule(assemblyName.Name!);
+        Type firstType = CreateEventType(moduleBuilder, "FactoryEventTypeA", firstName);
+        Type secondType = CreateEventType(moduleBuilder, "FactoryEventTypeB", secondName);
+        return (assemblyBuilder, firstType, secondType);
+    }
+
+    private static Type CreateEventType(ModuleBuilder moduleBuilder, string typeName, string eventTypeName)
+    {
+        var typeBuilder = moduleBuilder.DefineType(
+            typeName,
+            TypeAttributes.Public | TypeAttributes.Sealed,
+            typeof(EventType));
+        var constructor = typeBuilder.DefineConstructor(
+            MethodAttributes.Public,
+            CallingConventions.Standard,
+            Type.EmptyTypes);
+        var generator = constructor.GetILGenerator();
+        var baseConstructor = typeof(EventType).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            new[] { typeof(string), typeof(bool), typeof(bool) },
+            modifiers: null)!;
+
+        generator.Emit(OpCodes.Ldarg_0);
+        generator.Emit(OpCodes.Ldstr, eventTypeName);
+        generator.Emit(OpCodes.Ldc_I4_0);
+        generator.Emit(OpCodes.Ldc_I4_0);
+        generator.Emit(OpCodes.Call, baseConstructor);
+        generator.Emit(OpCodes.Ret);
+
+        return typeBuilder.CreateType()!;
     }
 
     [Fact]
@@ -1025,6 +1066,45 @@ public class NostifyFactoryTests
         Assert.Contains(topics, t => t.Name == "Update_TopicDiscoveryAggregateLogical");
         Assert.DoesNotContain(topics, t => t.Name == nameof(Create_TopicDiscoveryAggregate));
         Assert.DoesNotContain(topics, t => t.Name == nameof(Update_TopicDiscoveryAggregate));
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_WithDuplicateEventTypeNames_ThrowsDescriptiveException()
+    {
+        // Arrange: startup validates the exact logical names before creating topic specifications.
+        const string duplicateName = "Duplicate_Startup_Event";
+        var definitions = CreateEventTypeAssembly(duplicateName, duplicateName);
+
+        // Act
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            NostifyFactory.GetAutoCreateTopicSpecifications(definitions.Assembly, new NostifyConfig()));
+
+        // Assert
+        string firstType = definitions.FirstType.AssemblyQualifiedName!;
+        string secondType = definitions.SecondType.AssemblyQualifiedName!;
+        Assert.Contains(duplicateName, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(firstType, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(secondType, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("ordinal, case-sensitive", exception.Message, StringComparison.Ordinal);
+        Assert.True(
+            exception.Message.IndexOf(firstType, StringComparison.Ordinal) <
+            exception.Message.IndexOf(secondType, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_WithCaseDistinctEventTypeNames_CreatesBothTopics()
+    {
+        // Arrange: names that differ only by case are distinct under the event identity contract.
+        var definitions = CreateEventTypeAssembly("Case_Event", "case_event");
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(
+            definitions.Assembly,
+            new NostifyConfig());
+
+        // Assert
+        Assert.Contains(topics, topic => topic.Name == "Case_Event");
+        Assert.Contains(topics, topic => topic.Name == "case_event");
     }
 
     #endregion

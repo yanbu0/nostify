@@ -455,24 +455,55 @@ public static class NostifyFactory
     /// </summary>
     internal static List<TopicSpecification> GetAutoCreateTopicSpecifications(Assembly assembly, NostifyConfig config, bool verbose = false)
     {
-        var eventTypes = assembly.GetTypes()
+        var eventTypeDefinitions = assembly.GetTypes()
             .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
             .Where(t => t != typeof(LegacyNostifyCommandEventType))
-            .SelectMany(t => GetTopicNames(t, config, verbose))
+            .Select(t => new
+            {
+                Type = t,
+                Name = GetTopicName(t, config, verbose)
+            })
+            .ToList();
+
+        var duplicateNames = eventTypeDefinitions
+            .GroupBy(definition => definition.Name, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => new
+            {
+                Name = group.Key,
+                Types = group
+                    .Select(definition => definition.Type)
+                    .OrderBy(type => type.AssemblyQualifiedName, StringComparer.Ordinal)
+                    .ToArray()
+            })
+            .ToArray();
+
+        if (duplicateNames.Length > 0)
+        {
+            var conflicts = string.Join(
+                "; ",
+                duplicateNames.Select(duplicate =>
+                    $"'{duplicate.Name}': {string.Join(", ", duplicate.Types.Select(type => $"'{type.AssemblyQualifiedName}'"))}"));
+            throw new InvalidOperationException(
+                $"Multiple concrete EventType definitions declare duplicate logical names in assembly '{assembly.FullName}': {conflicts}. " +
+                "EventType names must be unique using ordinal, case-sensitive comparison.");
+        }
+
+        var eventTypeNames = eventTypeDefinitions
+            .Select(definition => definition.Name)
             .ToList();
 
         LogDebugOrVerboseConsole(
             config,
             verbose,
-            $"Found {string.Join(", ", eventTypes)} EventType definitions in assembly {assembly.FullName}",
+            $"Found {string.Join(", ", eventTypeNames)} EventType definitions in assembly {assembly.FullName}",
             "Found {EventTypes} EventType definitions in assembly {Assembly}",
-            string.Join(", ", eventTypes),
+            string.Join(", ", eventTypeNames),
             assembly.FullName ?? assembly.GetName().Name ?? nameof(assembly));
 
-        List<TopicSpecification> topics = eventTypes
+        List<TopicSpecification> topics = eventTypeNames
             .Select(eventTypeName => new TopicSpecification { Name = eventTypeName, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 })
-            .GroupBy(topic => topic.Name)
-            .Select(group => group.First())
             .ToList();
 
         if (config.autoCreateEventRequestTopics)
@@ -517,7 +548,7 @@ public static class NostifyFactory
     /// <summary>
     /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition.
     /// </summary>
-    private static string[] GetTopicNames(Type eventTypeClass, NostifyConfig config, bool verbose)
+    private static string GetTopicName(Type eventTypeClass, NostifyConfig config, bool verbose)
     {
         var eventType = EventType.GetRequiredInstance(eventTypeClass);
         var topicName = eventType.name;
@@ -535,7 +566,7 @@ public static class NostifyFactory
             eventTypeClass.FullName ?? eventTypeClass.Name,
             topicName);
 
-        return new[] { topicName };
+        return topicName;
     }
 
     /// <summary>

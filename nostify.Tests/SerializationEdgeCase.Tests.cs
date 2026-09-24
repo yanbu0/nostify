@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Text;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
@@ -16,6 +18,54 @@ namespace nostify.Tests;
 /// </summary>
 public class SerializationEdgeCaseTests
 {
+    private sealed class ResolverCanonicalEventType : EventType
+    {
+        public ResolverCanonicalEventType()
+            : base("Resolver_Canonical_Event", isNew: true, allowNullPayload: true)
+        {
+        }
+    }
+
+    private static Type[] CreateDuplicateEventTypes(string eventTypeName)
+    {
+        var assemblyName = new AssemblyName($"ResolverDuplicateEventTypes_{Guid.NewGuid():N}");
+        var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+        var moduleBuilder = assemblyBuilder.DefineDynamicModule(assemblyName.Name!);
+
+        return new[]
+        {
+            CreateEventType(moduleBuilder, "DuplicateResolverEventTypeA", eventTypeName),
+            CreateEventType(moduleBuilder, "DuplicateResolverEventTypeB", eventTypeName)
+        };
+    }
+
+    private static Type CreateEventType(ModuleBuilder moduleBuilder, string typeName, string eventTypeName)
+    {
+        var typeBuilder = moduleBuilder.DefineType(
+            typeName,
+            TypeAttributes.Public | TypeAttributes.Sealed,
+            typeof(EventType));
+        var constructor = typeBuilder.DefineConstructor(
+            MethodAttributes.Public,
+            CallingConventions.Standard,
+            Type.EmptyTypes);
+        var generator = constructor.GetILGenerator();
+        var baseConstructor = typeof(EventType).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            new[] { typeof(string), typeof(bool), typeof(bool) },
+            modifiers: null)!;
+
+        generator.Emit(OpCodes.Ldarg_0);
+        generator.Emit(OpCodes.Ldstr, eventTypeName);
+        generator.Emit(OpCodes.Ldc_I4_0);
+        generator.Emit(OpCodes.Ldc_I4_0);
+        generator.Emit(OpCodes.Call, baseConstructor);
+        generator.Emit(OpCodes.Ret);
+
+        return typeBuilder.CreateType()!;
+    }
+
     [Fact]
     public void WithRetry_LoggerOverload_EnablesLogging()
     {
@@ -181,6 +231,25 @@ public class SerializationEdgeCaseTests
     }
 
     [Fact]
+    public void NewtonsoftEventTypeConverter_Write_UsesNameOnlyWireMetadata()
+    {
+        var converter = new NewtonsoftEventTypeJsonConverter();
+        var output = new StringWriter();
+        using var writer = new JsonTextWriter(output);
+
+        converter.WriteJson(
+            writer,
+            new ResolverCanonicalEventType(),
+            JsonSerializer.CreateDefault());
+        writer.Flush();
+
+        string json = output.ToString();
+        var metadata = Newtonsoft.Json.Linq.JObject.Parse(json);
+        Assert.Equal("Resolver_Canonical_Event", metadata.Value<string>("name"));
+        Assert.Equal(3, metadata.Properties().Count());
+    }
+
+    [Fact]
     public void NewtonsoftEventTypeConverter_ReadNull_ReturnsNull()
     {
         var converter = new NewtonsoftEventTypeJsonConverter();
@@ -198,11 +267,10 @@ public class SerializationEdgeCaseTests
     }
 
     [Fact]
-    public void NewtonsoftEventTypeConverter_UnknownType_PreservesLegacyFlags()
+    public void NewtonsoftEventTypeConverter_UnknownName_PreservesLogicalMetadata()
     {
         const string json = """
             {
-              "$eventTypeClrType": "Missing.EventType, Missing.Assembly",
               "name": "Unknown_Command",
               "isNew": true,
               "allowNullPayload": true
@@ -223,6 +291,59 @@ public class SerializationEdgeCaseTests
         Assert.Equal("Unknown_Command", result.name);
         Assert.True(result.isNew);
         Assert.True(result.allowNullPayload);
+    }
+
+    [Fact]
+    public void NewtonsoftEventTypeConverter_KnownName_UsesCanonicalMetadata()
+    {
+        const string json = """
+            {
+              "name": "Resolver_Canonical_Event",
+              "isNew": false,
+              "allowNullPayload": false
+            }
+            """;
+
+        EventType? result = JsonConvert.DeserializeObject<EventType>(
+            json,
+            new NewtonsoftEventTypeJsonConverter());
+
+        var canonical = Assert.IsType<ResolverCanonicalEventType>(result);
+        Assert.True(canonical.isNew);
+        Assert.True(canonical.allowNullPayload);
+    }
+
+    [Fact]
+    public void EventTypeResolver_DifferentlyCasedName_UsesLegacyAdapter()
+    {
+        Type resolvedType = EventTypeResolver.Resolve("resolver_canonical_event");
+        EventType result = EventTypeResolver.CreateInstance(
+            resolvedType,
+            "resolver_canonical_event",
+            isNew: false,
+            allowNullPayload: true);
+
+        var legacy = Assert.IsType<LegacyNostifyCommandEventType>(result);
+        Assert.Equal("resolver_canonical_event", legacy.name);
+        Assert.True(legacy.allowNullPayload);
+    }
+
+    [Fact]
+    public void EventTypeResolver_DuplicateName_ListsConflictingTypesDeterministically()
+    {
+        string eventTypeName = $"Resolver_Duplicate_Event_{Guid.NewGuid():N}";
+        Type[] duplicateTypes = CreateDuplicateEventTypes(eventTypeName);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => EventTypeResolver.Resolve(eventTypeName));
+
+        string firstType = duplicateTypes[0].AssemblyQualifiedName!;
+        string secondType = duplicateTypes[1].AssemblyQualifiedName!;
+        Assert.Contains(firstType, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(secondType, exception.Message, StringComparison.Ordinal);
+        Assert.True(
+            exception.Message.IndexOf(firstType, StringComparison.Ordinal) <
+            exception.Message.IndexOf(secondType, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -258,11 +379,29 @@ public class SerializationEdgeCaseTests
     }
 
     [Fact]
-    public void SystemTextEventTypeConverter_UnknownType_PreservesLegacyFlags()
+    public void SystemTextEventTypeConverter_Write_UsesNameOnlyWireMetadata()
+    {
+        var converter = new SystemTextEventTypeJsonConverter();
+        using var output = new MemoryStream();
+        using (var writer = new STJ.Utf8JsonWriter(output))
+        {
+            converter.Write(
+                writer,
+                new ResolverCanonicalEventType(),
+                new STJ.JsonSerializerOptions());
+        }
+
+        string json = Encoding.UTF8.GetString(output.ToArray());
+        using var metadata = STJ.JsonDocument.Parse(json);
+        Assert.Equal("Resolver_Canonical_Event", metadata.RootElement.GetProperty("name").GetString());
+        Assert.Equal(3, metadata.RootElement.EnumerateObject().Count());
+    }
+
+    [Fact]
+    public void SystemTextEventTypeConverter_UnknownName_PreservesLogicalMetadata()
     {
         const string json = """
             {
-              "$eventTypeClrType": "Missing.EventType, Missing.Assembly",
               "name": "Unknown_Command",
               "isNew": true,
               "allowNullPayload": true

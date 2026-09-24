@@ -142,16 +142,14 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
         // Resolve the concrete type of this NostifyObject (aggregate or projection).
         var targetType = GetType();
 
-        // Build or retrieve the handler lookup for this type.
+        // Logical event names are the stable identity across current and legacy envelopes.
+        // Use one case-sensitive lookup regardless of how the handler attribute was declared.
         var handlerLookup = ApplyEventsHandlerCache.GetOrBuildHandlerLookup(targetType);
-        if (!handlerLookup.TypedHandlers.TryGetValue(eventType, out var handler))
+        if (string.IsNullOrWhiteSpace(eventType.name) ||
+            !handlerLookup.Handlers.TryGetValue(eventType.name, out var handler))
         {
-            if (string.IsNullOrWhiteSpace(eventType.name) ||
-                !handlerLookup.NameHandlers.TryGetValue(eventType.name, out handler))
-            {
-                // No attribute-based handler for this event type on this object.
-                return false;
-            }
+            // No attribute-based handler for this event type on this object.
+            return false;
         }
 
         // Invoke the handler. We expect methods to accept a single IEvent parameter.
@@ -175,9 +173,15 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<summary>
     ///Updates properties of Aggregate or Projection
     ///</summary>
-    ///<param name="payload">Must be payload from Event, name of property in payload must match property name in T</param>
-    public void UpdateProperties<T>(object payload) where T : NostifyObject
+    ///<param name="payload">Payload from an event, or <see langword="null"/> to perform no updates. Property names in a non-null payload must match property names in T.</param>
+    public void UpdateProperties<T>(object? payload) where T : NostifyObject
     {
+        // A payload-less event has no properties to apply.
+        if (payload is null)
+        {
+            return;
+        }
+
         // Convert the payload to a JObject once and reuse for all property updates
         var jPayload = JObject.FromObject(payload);
         var payloadProps = jPayload.Children<JProperty>();
@@ -205,11 +209,19 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///</code>
     ///</example>
     ///</summary>
-    ///<param name="payload">Must be payload from Event, name of property in payload must be set to match a property in the propertyPairs dictionary, or must match property name in T if strict is turned off</param>
+    ///<param name="payload">Payload from an event, or <see langword="null"/> to perform no updates. Property names in a non-null payload must occur in <paramref name="propertyPairs"/>, or match property names in T when <paramref name="strict"/> is false.</param>
     ///<param name="propertyPairs">Dictionary of property pairs. Key is property name in payload to get value from, Value is property name in T to set value to. Example: {"name", "inventoryGroupName"}</param>
     ///<param name="strict">If true, only properties in the propertyPairs dictionary will be updated, if false, will also automatically match up properties by their name. The propertyPair dictionary will take precedence.</param>
-    public void UpdateProperties<T>(object payload, Dictionary<string, string> propertyPairs, bool strict = false) where T : NostifyObject
+    public void UpdateProperties<T>(object? payload, Dictionary<string, string> propertyPairs, bool strict = false) where T : NostifyObject
     {
+        // A payload-less event has no properties to apply.
+        if (payload is null)
+        {
+            return;
+        }
+
+        ArgumentNullException.ThrowIfNull(propertyPairs);
+
         // Convert the payload to a JObject once and reuse for all property updates
         var jPayload = JObject.FromObject(payload);
         var payloadProps = jPayload.Children<JProperty>();
@@ -294,10 +306,18 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///</example>
     ///</summary>
     /// <param name="eventAggregateRootId">The aggregate root ID from the event to match against PropertyCheck ID values</param>
-    ///<param name="payload">The event payload containing the property values to update with</param>
+    ///<param name="payload">The event payload containing the property values to update with, or <see langword="null"/> to perform no updates.</param>
     ///<param name="propertyCheckValues">List of PropertyCheck objects defining the conditional mapping rules</param>
-    public void UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
+    public void UpdateProperties<T>(Guid eventAggregateRootId, object? payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
     {
+        // A payload-less event has no properties to apply.
+        if (payload is null)
+        {
+            return;
+        }
+
+        ArgumentNullException.ThrowIfNull(propertyCheckValues);
+
         // Convert the payload to a JObject once and reuse for all property updates
         JObject jObject = JObject.FromObject(payload);
 

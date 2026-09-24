@@ -351,14 +351,44 @@ public class NostifyObjectTests
     }
 
     [Fact]
-    public void UpdateProperties_WithNullPayload_ShouldThrowException()
+    public void UpdateProperties_WithNullPayload_ShouldNotUpdateProperties()
     {
         // Arrange
-        var obj = new TestNostifyObject();
+        var obj = new TestNostifyObject
+        {
+            name = "Original Name",
+            age = 25
+        };
 
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => 
-            obj.UpdateProperties<TestNostifyObject>(null!));
+        // Act
+        obj.UpdateProperties<TestNostifyObject>(null);
+
+        // Assert - A payload-less event has no properties to apply.
+        Assert.Equal("Original Name", obj.name);
+        Assert.Equal(25, obj.age);
+    }
+
+    [Fact]
+    public void UpdateProperties_WithPropertyPairsAndNullPayload_ShouldNotUpdateProperties()
+    {
+        // Arrange
+        var obj = new TestProjection
+        {
+            fullName = "Original Name",
+            userAge = 25
+        };
+        var propertyPairs = new Dictionary<string, string>
+        {
+            { "name", "fullName" },
+            { "age", "userAge" }
+        };
+
+        // Act
+        obj.UpdateProperties<TestProjection>(null, propertyPairs, strict: true);
+
+        // Assert - Mappings do not apply when the event has no payload.
+        Assert.Equal("Original Name", obj.fullName);
+        Assert.Equal(25, obj.userAge);
     }
 
     [Fact]
@@ -486,8 +516,8 @@ public class NostifyObjectPropertyCheckTests
             throw new NotImplementedException("Apply method not implemented for test");
         }
 
-        // Helper method to call the protected UpdateProperties method
-        public void CallUpdateProperties(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues)
+        // Helper method to exercise the conditional UpdateProperties overload.
+        public void CallUpdateProperties(Guid eventAggregateRootId, object? payload, List<PropertyCheck> propertyCheckValues)
         {
             UpdateProperties<ComplexProjection>(eventAggregateRootId, payload, propertyCheckValues);
         }
@@ -1041,5 +1071,29 @@ public class NostifyObjectPropertyCheckTests
         // Assert - Properties should be set to null
         Assert.Null(projection.primaryUserName);
         Assert.Null(projection.primaryUserEmail);
+    }
+
+    [Fact]
+    public void UpdateProperties_WithPropertyCheckAndNullPayload_ShouldNotUpdateProperties()
+    {
+        // Arrange
+        var projection = new ComplexProjection
+        {
+            primaryUserId = Guid.NewGuid(),
+            primaryUserName = "Existing Name",
+            primaryUserEmail = "existing@example.com"
+        };
+        var propertyChecks = new List<PropertyCheck>
+        {
+            new PropertyCheck(projection.primaryUserId, "name", "primaryUserName"),
+            new PropertyCheck(projection.primaryUserId, "email", "primaryUserEmail")
+        };
+
+        // Act
+        projection.CallUpdateProperties(projection.primaryUserId.Value, null, propertyChecks);
+
+        // Assert - Conditional mappings do not apply without a payload.
+        Assert.Equal("Existing Name", projection.primaryUserName);
+        Assert.Equal("existing@example.com", projection.primaryUserEmail);
     }
 }

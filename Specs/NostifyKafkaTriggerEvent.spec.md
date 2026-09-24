@@ -171,7 +171,7 @@ The constructor:
 3. Deserializes the event JSON to an `Event` object
 4. Stores both the raw Kafka data and the parsed event
 
-`GetEvent(...)` and `GetIEvent(...)` deserialize with `SerializationSettings.NostifyDefault`, including the typed `EventType` converter. Event type restoration first uses `$eventTypeClrType` when it identifies a concrete `EventType`. If the discriminator is missing, unresolvable, or identifies the internal `LegacyNostifyCommandEventType` compatibility adapter, the resolver searches loaded assemblies for a concrete `EventType` whose `name` matches the serialized logical event type name, using case-insensitive comparison. If no matching concrete type is found, hydration falls back to `LegacyNostifyCommandEventType`, preserving the serialized `name`, `isNew`, and `allowNullPayload` metadata for legacy command-only envelopes.
+`GetEvent(...)` and `GetIEvent(...)` deserialize with `SerializationSettings.NostifyDefault`, including the `EventType` converter. The logical `eventType.name` is the sole wire identity and is matched with ordinal, case-sensitive comparison. A unique loaded concrete definition is restored by exact name and supplies canonical metadata. Unknown names hydrate as `LegacyNostifyCommandEventType`, preserving serialized `name`, `isNew`, and `allowNullPayload` values. Duplicate exact concrete names are rejected as invalid configuration.
 
 ## Error Handling
 

@@ -33,7 +33,7 @@ public class EventTests
     private sealed class OtherTypedTestEventType : EventType
     {
         public OtherTypedTestEventType()
-            : base("Same_Name")
+            : base("Other_Name")
         {
         }
     }
@@ -188,7 +188,7 @@ public class EventTests
     }
 
     [Fact]
-    public void EventTypeEquality_WithDifferentTypedSubclassesAndSameName_ShouldReturnFalse()
+    public void EventTypeEquality_WithDifferentTypedSubclasses_ShouldReturnFalse()
     {
         var eventType1 = new TypedTestEventType();
         var eventType2 = new OtherTypedTestEventType();

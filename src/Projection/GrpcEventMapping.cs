@@ -22,7 +22,7 @@ public static class GrpcEventMapping
         ArgumentNullException.ThrowIfNull(msg);
 
         var eventTypeName = msg.Command?.Name;
-        var resolvedType = EventTypeResolver.Resolve(typeName: null, eventTypeName);
+        var resolvedType = EventTypeResolver.Resolve(eventTypeName);
         var resolvedEventType = EventTypeResolver.CreateInstance(
             resolvedType,
             eventTypeName,

@@ -9,24 +9,22 @@ namespace nostify
 {
     /// <summary>
     /// Caches attribute-based ApplyEvents handlers for NostifyObject-derived types.
-    /// The cache is keyed by concrete type and maps <see cref="EventType"/> to a compiled
-    /// delegate that accepts (NostifyObject target, IEvent eventToApply).
+    /// The cache is keyed by concrete target type and maps each logical event name to a
+    /// compiled delegate that accepts (NostifyObject target, IEvent eventToApply).
     /// </summary>
     internal static class ApplyEventsHandlerCache
     {
         internal sealed class HandlerLookup
         {
-            public HandlerLookup(
-                Dictionary<EventType, Action<NostifyObject, IEvent>> typedHandlers,
-                Dictionary<string, Action<NostifyObject, IEvent>> nameHandlers)
+            public HandlerLookup(Dictionary<string, Action<NostifyObject, IEvent>> handlers)
             {
-                TypedHandlers = typedHandlers;
-                NameHandlers = nameHandlers;
+                Handlers = handlers;
             }
 
-            public Dictionary<EventType, Action<NostifyObject, IEvent>> TypedHandlers { get; }
-
-            public Dictionary<string, Action<NostifyObject, IEvent>> NameHandlers { get; }
+            /// <summary>
+            /// Gets handlers keyed by the case-sensitive logical <see cref="EventType.name"/>.
+            /// </summary>
+            public Dictionary<string, Action<NostifyObject, IEvent>> Handlers { get; }
         }
 
         /// <summary>
@@ -40,8 +38,8 @@ namespace nostify
         /// </summary>
         /// <param name="targetType">Concrete aggregate or projection type deriving from <see cref="NostifyObject"/>.</param>
         /// <returns>
-        /// A lookup containing both typed and name-based handler maps for attribute-based dispatch.
-        /// Both maps may be empty if the type defines no <see cref="ApplyEventsAttribute"/> handlers.
+        /// A logical-name lookup for attribute-based dispatch. The map may be empty if the type
+        /// defines no <see cref="ApplyEventsAttribute"/> handlers.
         /// </returns>
         public static HandlerLookup GetOrBuildHandlerLookup(Type targetType)
         {
@@ -51,15 +49,15 @@ namespace nostify
         }
 
         /// <summary>
-        /// Builds typed and name-based handler maps for the given type by scanning for methods decorated
+        /// Builds a logical-name handler map for the given type by scanning for methods decorated
         /// with <see cref="ApplyEventsAttribute"/>.
         /// </summary>
         /// <param name="targetType">Concrete aggregate or projection type.</param>
         /// <returns>A new handler lookup for the type.</returns>
         private static HandlerLookup BuildHandlerLookup(Type targetType)
         {
-            var typedMap = new Dictionary<EventType, Action<NostifyObject, IEvent>>();
-            var nameMap = new Dictionary<string, Action<NostifyObject, IEvent>>(StringComparer.Ordinal);
+            var handlerMap = new Dictionary<string, Action<NostifyObject, IEvent>>(StringComparer.Ordinal);
+            var declaringMethods = new Dictionary<string, MethodInfo>(StringComparer.Ordinal);
 
             // Scan instance methods (public and non-public) to allow protected Apply methods.
             var methods = targetType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -100,63 +98,64 @@ namespace nostify
 
                 foreach (var attr in attributes)
                 {
-                    // Type-based mappings (existing behaviour).
-                    if (attr.EventTypeTypes != null)
+                    // Type declarations are validation and authoring conveniences. Resolve their
+                    // canonical metadata once, then retain only the stable logical name.
+                    foreach (var eventTypeType in attr.EventTypeTypes)
                     {
-                        foreach (var etType in attr.EventTypeTypes)
+                        if (eventTypeType == null)
                         {
-                            if (etType == null)
-                            {
-                                continue;
-                            }
-
-                            if (!typeof(EventType).IsAssignableFrom(etType))
-                            {
-                                throw new InvalidOperationException(
-                                    $"Type '{etType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}' " +
-                                    "does not derive from EventType.");
-                            }
-
-                            var eventTypeInstance = ResolveEventTypeInstance(etType, targetType, method);
-
-                            if (typedMap.ContainsKey(eventTypeInstance))
-                            {
-                                // Conflict: same EventType mapped to more than one method on this type.
-                                throw new InvalidOperationException(
-                                    $"Multiple ApplyEventsAttribute handlers found for event type '{eventTypeInstance}' on type '{targetType.FullName}'. " +
-                                    "Each event type must map to exactly one method.");
-                            }
-
-                            typedMap[eventTypeInstance] = handler;
+                            continue;
                         }
+
+                        if (!typeof(EventType).IsAssignableFrom(eventTypeType))
+                        {
+                            throw new InvalidOperationException(
+                                $"Type '{eventTypeType.FullName}' used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}' " +
+                                "does not derive from EventType.");
+                        }
+
+                        var eventTypeInstance = ResolveEventTypeInstance(eventTypeType, targetType, method);
+                        AddHandler(eventTypeInstance.name, handler, method, targetType, handlerMap, declaringMethods);
                     }
 
-                    // Name-based mappings (new behaviour).
-                    if (attr.EventTypeNames != null)
+                    // String declarations already provide the stable logical identity directly.
+                    foreach (var eventName in attr.EventTypeNames)
                     {
-                        foreach (var eventName in attr.EventTypeNames)
+                        if (string.IsNullOrWhiteSpace(eventName))
                         {
-                            if (string.IsNullOrWhiteSpace(eventName))
-                            {
-                                throw new InvalidOperationException(
-                                    $"EventType name used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}' " +
-                                    "cannot be null, empty, or whitespace.");
-                            }
-
-                            if (nameMap.ContainsKey(eventName))
-                            {
-                                throw new InvalidOperationException(
-                                    $"Multiple ApplyEventsAttribute handlers found for event name '{eventName}' on type '{targetType.FullName}'. " +
-                                    "Each event name must map to exactly one method.");
-                            }
-
-                            nameMap[eventName] = handler;
+                            throw new InvalidOperationException(
+                                $"EventType name used in ApplyEventsAttribute on '{targetType.FullName}.{method.Name}' " +
+                                "cannot be null, empty, or whitespace.");
                         }
+
+                        AddHandler(eventName, handler, method, targetType, handlerMap, declaringMethods);
                     }
                 }
             }
 
-            return new HandlerLookup(typedMap, nameMap);
+            return new HandlerLookup(handlerMap);
+        }
+
+        /// <summary>
+        /// Adds one logical handler mapping and rejects collisions across all attribute forms.
+        /// </summary>
+        private static void AddHandler(
+            string eventName,
+            Action<NostifyObject, IEvent> handler,
+            MethodInfo method,
+            Type targetType,
+            Dictionary<string, Action<NostifyObject, IEvent>> handlerMap,
+            Dictionary<string, MethodInfo> declaringMethods)
+        {
+            if (declaringMethods.TryGetValue(eventName, out var existingMethod))
+            {
+                throw new InvalidOperationException(
+                    $"Multiple ApplyEventsAttribute handlers found for event name '{eventName}' on type '{targetType.FullName}': " +
+                    $"'{existingMethod.Name}' and '{method.Name}'. Each event name must map to exactly one method.");
+            }
+
+            declaringMethods[eventName] = method;
+            handlerMap[eventName] = handler;
         }
 
         /// <summary>

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Text.Json.Nodes;
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using nostify;
@@ -738,7 +737,7 @@ public class NostifyKafkaTriggerEventTests
     }
 
     [Fact]
-    public void GetEvent_WithLegacyNostifyCommand_Discriminator_ResolvesToConcreteEventTypeByName()
+    public void GetEvent_WithLegacyNostifyCommand_ResolvesToConcreteEventTypeByName()
     {
         // Arrange
         var originalEvent = new Event
@@ -769,9 +768,9 @@ public class NostifyKafkaTriggerEventTests
     }
 
     [Fact]
-    public void GetEvent_WithLegacyNostifyCommand_Discriminator_ResolvesByName_IgnoringCase()
+    public void GetEvent_WithDifferentlyCasedName_DoesNotResolveConcreteEventType()
     {
-        // Arrange
+        // Arrange: logical event names use ordinal, case-sensitive identity.
         var originalEvent = new Event
         {
             aggregateRootId = Guid.NewGuid(),
@@ -793,14 +792,14 @@ public class NostifyKafkaTriggerEventTests
         // Act
         var result = kafkaEvent.GetEvent();
 
-        // Assert
+        // Assert: preserve the unknown name and metadata through the compatibility adapter.
         Assert.NotNull(result);
-        Assert.IsType<Update_ResourceGrade>(result.eventType);
-        Assert.Equal("Update_ResourceGrade", result.eventType.name);
+        Assert.IsType<LegacyNostifyCommandEventType>(result.eventType);
+        Assert.Equal("update_resourcegrade", result.eventType.name);
     }
 
     [Fact]
-    public void GetEvent_WithDerivedLegacyCommand_Discriminator_ResolvesToConcreteEventTypeByName()
+    public void GetEvent_WithDerivedLegacyCommand_ResolvesToConcreteEventTypeByName()
     {
         // Arrange
         var originalEvent = new Event
@@ -942,10 +941,8 @@ public class NostifyKafkaTriggerEventTests
         Assert.Equal("Update_ResourceGrade", result.eventType.name);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void SystemTextJson_RoundTrip_WithMissingOrLegacyDiscriminator_ResolvesStaticInstanceByName(bool removeClrTypeDiscriminator)
+    [Fact]
+    public void SystemTextJson_RoundTrip_ResolvesStaticInstanceByName()
     {
         // Arrange
         var options = WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions();
@@ -958,20 +955,10 @@ public class NostifyKafkaTriggerEventTests
             partitionKey = Guid.NewGuid(),
             payload = new { id = Guid.NewGuid(), value = "updated" }
         };
-
-        var root = JsonNode.Parse(SystemTextJsonSerializer.Serialize(originalEvent, options))!.AsObject();
-        var eventType = root["eventType"]!.AsObject();
-        if (removeClrTypeDiscriminator)
-        {
-            eventType.Remove(EventTypeResolver.TypeDiscriminatorPropertyName);
-        }
-        else
-        {
-            eventType[EventTypeResolver.TypeDiscriminatorPropertyName] = "nostify.Tests.DoesNotExist, nostify.Tests";
-        }
+        string json = SystemTextJsonSerializer.Serialize(originalEvent, options);
 
         // Act
-        var result = SystemTextJsonSerializer.Deserialize<IEvent>(root.ToJsonString(), options);
+        var result = SystemTextJsonSerializer.Deserialize<IEvent>(json, options);
 
         // Assert
         var deserializedEvent = Assert.IsType<Event>(result);

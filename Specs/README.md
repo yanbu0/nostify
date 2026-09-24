@@ -4,6 +4,10 @@
 
 Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosmos DB and Apache Kafka integration.
 
+### 5.0 Event Identity Contract
+
+`EventType.name` is the sole persisted event-type identity. Matching is ordinal and case-sensitive. Serialized event-type metadata contains `name`, `isNew`, and `allowNullPayload`. Unique loaded concrete definitions are restored by exact name; unknown names use the legacy compatibility adapter, and duplicate exact names are rejected with a descriptive configuration error.
+
 ## Core Components
 
 ### Main Entry Points

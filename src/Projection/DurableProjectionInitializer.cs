@@ -29,6 +29,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     private readonly HttpClient _httpClient;
     private readonly INostify _nostify;
     private readonly string _instanceId;
+    private readonly IQueryExecutor _queryExecutor;
 
     private readonly int _batchSize;
     private readonly int _pageSize;
@@ -84,13 +85,45 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         int concurrentBatchCount = 5,
         TaskOptions? durableTaskOptions = null,
         RetryOptions? cosmosRetryOptions = null)
+        : this(
+            httpClient,
+            nostify,
+            instanceId,
+            batchSize,
+            concurrentBatchCount,
+            durableTaskOptions,
+            cosmosRetryOptions,
+            CosmosQueryExecutor.Default)
     {
+    }
+
+    /// <summary>
+    /// Creates an initializer with an explicit query executor, allowing the event replay path to be
+    /// tested against already-deserialized Cosmos documents without requiring a live Cosmos account.
+    /// </summary>
+    internal DurableProjectionInitializer(
+        HttpClient httpClient,
+        INostify nostify,
+        string instanceId,
+        int batchSize,
+        int concurrentBatchCount,
+        TaskOptions? durableTaskOptions,
+        RetryOptions? cosmosRetryOptions,
+        IQueryExecutor queryExecutor)
+    {
+        ArgumentNullException.ThrowIfNull(httpClient);
+        ArgumentNullException.ThrowIfNull(nostify);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(concurrentBatchCount);
+        ArgumentNullException.ThrowIfNull(queryExecutor);
+
         _httpClient = httpClient;
         _nostify = nostify;
         _instanceId = instanceId ?? $"{typeof(TProjection).FullName ?? typeof(TProjection).Name}_Init";
+        _queryExecutor = queryExecutor;
 
         _batchSize = batchSize;
-        _pageSize = batchSize * concurrentBatchCount;
+        _pageSize = checked(batchSize * concurrentBatchCount);
 
         _durableTaskOptions = durableTaskOptions ?? CreateDefaultTaskOptions();
         _cosmosRetryOptions = cosmosRetryOptions ?? new RetryOptions();
@@ -450,19 +483,30 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
             return;
         }
 
-        // get events from event store
+        // Query persisted event documents through the configured executor. Production uses the
+        // Cosmos executor; tests can use the same replay path with in-memory, deserialized documents.
         var eventStore = await _nostify.GetEventStoreContainerAsync();
-        var events = await eventStore.WithRetry(_cosmosRetryOptions)
+        var eventsQuery = eventStore
             .GetItemLinqQueryable<Event>()
-            .Where(x => ids.Contains(x.aggregateRootId))
+            .Where(x => ids.Contains(x.aggregateRootId));
+        var events = await new RetryableQuery<Event>(
+                eventsQuery,
+                _cosmosRetryOptions,
+                _queryExecutor)
             .ReadAllAsync();
 
-        // get projections from events
+        // Replay each stream in timestamp order, matching aggregate rehydration semantics.
         var projections = ids.Select(id =>
         {
-            var p = new TProjection();
-            events.Where(e => e.aggregateRootId == id).ToList().ForEach(e => p.Apply(e));
-            return p;
+            var projection = new TProjection();
+            foreach (var @event in events
+                .Where(item => item.aggregateRootId == id)
+                .OrderBy(item => item.timestamp))
+            {
+                projection.Apply(@event);
+            }
+
+            return projection;
         }).ToList();
 
         // check for cancellation again right before InitAsync - last chance to cancel before processing this batch
