@@ -139,8 +139,31 @@ public static class ContainerExtensions
     ///<returns>Number of items deleted</returns>
     public static async Task<int> BulkDeleteFromEventsAsync<P>(this Container containerToDeleteFrom, string[] events, RetryOptions? retryOptions = null) where P : NostifyObject
     {
+        return await containerToDeleteFrom.BulkDeleteFromEventsAsync<P>(events, Array.Empty<string>(), retryOptions);
+    }
+
+    ///<summary>
+    ///Bulk deletes items represented by Kafka trigger events whose event types match the supplied filters.
+    ///</summary>
+    ///<param name="containerToDeleteFrom">Container to delete items from.</param>
+    ///<param name="events">Array of serialized Kafka trigger events.</param>
+    ///<param name="eventTypeFilters">Event type names to include; an empty collection includes every event.</param>
+    ///<param name="retryOptions">Optional retry options for transient patch failures. When null, no retry is applied.</param>
+    ///<typeparam name="P">Type of projection or aggregate to delete.</typeparam>
+    ///<returns>Number of items deleted.</returns>
+    public static async Task<int> BulkDeleteFromEventsAsync<P>(
+        this Container containerToDeleteFrom,
+        string[] events,
+        IEnumerable<string> eventTypeFilters,
+        RetryOptions? retryOptions = null) where P : NostifyObject
+    {
+        ArgumentNullException.ThrowIfNull(eventTypeFilters);
+
+        // Apply the filter before querying Cosmos so events sharing a topic cannot delete
+        // entities owned by another logical event type.
+        List<string> filters = eventTypeFilters.ToList();
         List<Guid> projectionIdsToDelete = events
-            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent())
+            .Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e)?.GetEvent(filters))
             .Where(e => e != null)
             .Select(e => e!.aggregateRootId)
             .ToList();

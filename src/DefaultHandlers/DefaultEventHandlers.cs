@@ -868,7 +868,7 @@ public static class DefaultEventHandlers
         try
         {
             Container currentStateContainer = await nostify.GetBulkCurrentStateContainerAsync<T>();
-            int deletedCount = await currentStateContainer.BulkDeleteFromEventsAsync<T>(events, retryOptions);
+            int deletedCount = await currentStateContainer.BulkDeleteFromEventsAsync<T>(events, eventTypeFilter, retryOptions);
             return deletedCount;
         }
         catch (Exception e)
@@ -945,7 +945,7 @@ public static class DefaultEventHandlers
         try
         {
             Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
-            int deletedCount = await projectionContainer.BulkDeleteFromEventsAsync<P>(events, retryOptions);
+            int deletedCount = await projectionContainer.BulkDeleteFromEventsAsync<P>(events, eventTypeFilter, retryOptions);
             return deletedCount;
         }
         catch (Exception e)

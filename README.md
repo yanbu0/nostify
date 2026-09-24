@@ -75,15 +75,16 @@
 ### Updates
   
 - 5.0.0 (BREAKING CHANGES!)
-    - **EventType Replaces Command Enum Dispatch**: `EventType` is now the primary event metadata abstraction and recommended authoring model for new code. `NostifyCommand` remains supported as an obsolete compatibility layer, but new events, examples, and templates should be modeled as concrete `EventType` classes.
-    - **Attribute-Based Event Dispatch (Preferred)**: `ApplyEventsAttribute` enables declarative, strongly-typed event application with examples like `[ApplyEvents(typeof(Create_Order))]`. `ApplyEventsHandlerCache` discovers and caches handlers once, then invokes them directly for subsequent events.
-    - **String and Type-Based Event Matching**: `[ApplyEvents]` supports both CLR type mappings (preferred) and string-based mappings by `EventType.name` when only logical event names are available, including cross-service projection handlers that cannot reference another service's concrete `EventType` class.
-    - **Typed Apply Pattern Still Supported**: Aggregates and projections can still use typed `Apply(SpecificEventType, IEvent)` overloads plus an optional `Apply(EventType, IEvent)` catch-all for explicit, high-performance dispatch.
-    - **External Apply Override Support**: `NostifyObject.Apply(EventType, IEvent)` is `protected virtual` so consuming services can override the catch-all fallback while still using attribute-based or typed handlers.
-    - **Handler Conflict Detection and Validation**: The handler cache validates one-and-only-one mapping per event type/name and fails fast for duplicate handlers, invalid `EventType` declarations, unresolved names, or missing static instances.
-    - **Kafka EventType Restoration Hardening**: Kafka-triggered event deserialization now restores concrete `EventType` instances by logical event name when legacy or unresolved CLR discriminators are present, while preserving already-resolved concrete event types during legacy `command` alias hydration.
-    - **HandleUpdates Performance Improvements**: `HandleUpdates` now avoids unnecessary serialization and patch operations during update commands, improving throughput for high-volume update paths without changing behavior.
-    - **Regression Coverage**: Added focused tests for attribute-based dispatch, string-based dispatch, handler conflict validation, typed fallback behavior, and Kafka EventType restoration edge cases.
+    - **EventType Is the Canonical Event Metadata**: New events use concrete `EventType` classes. `EventFactory` exposes only `EventType`-based `Create<T>(...)` and `CreateNullPayloadEvent(...)` signatures; the obsolete `NostifyCommand` factory overloads were removed. Legacy event envelopes and the obsolete `IEvent.command` alias remain readable for migration compatibility, but new code should use `IEvent.eventType`.
+    - **Attribute-Based Event Dispatch (Preferred)**: `ApplyEventsAttribute` enables declarative, strongly typed handlers such as `[ApplyEvents(typeof(Create_Order))]`. Dispatch checks attribute handlers first, typed `Apply(SpecificEventType, IEvent)` overloads second, and the `protected virtual Apply(EventType, IEvent)` catch-all last. Handler mappings are cached and validated for duplicate or invalid declarations.
+    - **Kafka EventType Restoration Hardening**: Kafka-triggered deserialization restores concrete `EventType` instances by logical event name when legacy or unresolved CLR discriminators are encountered, while preserving already resolved concrete types.
+    - **Async-Only Default Handlers**: Obsolete non-async wrappers were removed from `DefaultCommandHandler` and `DefaultEventHandlers`. Use the corresponding `...Async` methods for single and bulk command/event handling.
+    - **Fail-Fast Startup Configuration**: `NostifyFactory.Build()` validates required Cosmos and Kafka/Event Hubs settings immediately. The default Cosmos partition-key path is now `/tenantId`.
+    - **Durable Initialization Is Now the Template Default**: New service and aggregate templates generate `DurableCurrentStateInitializer<TAggregate>` orchestration for aggregate current-state rebuilds, and the projection template generates `DurableProjectionInitializer<TProjection, TAggregate>` orchestration by default. Generated initializers include start, cancel/purge, orchestration, tenant paging, and batch-processing functions instead of the former non-durable initialization flow.
+    - **Nullable and Failure Contracts**: `IHttpClientFactory` is nullable unless `WithHttp(...)` is configured; HTTP-dependent operations fail with clear configuration errors. Apply-and-persist and default-handler results that may be absent are annotated as nullable, and malformed or missing event payloads now produce explicit `InvalidOperationException` failures.
+    - **Runtime Reliability**: Event/topic comparisons use ordinal semantics, structured logging was hardened, update handling avoids unnecessary serialization and patch work, and `NostifyCosmosClient` now implements `IDisposable`.
+    - **Strict Release Build Policy**: Repository builds enable nullable reference types, recommended analyzers, build-time code-style enforcement, deterministic/CI builds, warnings as errors, and XML documentation warnings as errors for public APIs.
+    - **Expanded Regression Coverage**: Release hardening added broad coverage for dispatch, serialization, retry and paging behavior, validation, durable initialization, default handlers, configuration failures, disposal, and nullable edge cases.
  
 - 4.x Highlights
     - **Durable Projection Initialization**: Introduced `DurableProjectionInitializer<TProjection, TAggregate>` and related helpers for large-scale, orchestrated projection initialization using Azure Durable Functions, including retry options for both orchestration activities and Cosmos DB operations.
@@ -390,15 +391,15 @@ An `Event` captures a state change to the application. Generally, this is caused
 
 Events implement the `IEvent` interface, which provides better abstraction and testability. The EventFactory returns `IEvent` instances for consistent usage throughout the framework.
 
-In a typical scenario, the `Event` is created in the command handler using the EventFactory factory class, the `payload` is validated, and then saved to the event store:
+In a typical scenario, the `Event` is created in the command handler using `EventFactory`, the `payload` is validated, and then saved to the event store. `EventFactory` accepts canonical `EventType` metadata only:
 
 ```C#
 // Default behavior - validation enabled
-IEvent pe = new EventFactory().Create<TestAggregate>(TestCommand.Create, newId, newTest);
+IEvent created = new EventFactory().Create<TestAggregate>(new Create_Test(), newId, newTest);
 
 // Or disable validation using method chaining
-IEvent pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
-await _nostify.PersistEventAsync(pe);
+IEvent imported = new EventFactory().NoValidate().Create<TestAggregate>(new Create_Test(), newId, newTest);
+await _nostify.PersistEventAsync(imported);
 ```
 
 `PersistEventAsync` is the single-item Cosmos write path. It does not accept retry options; configurable retry remains available on the bulk persistence APIs.
@@ -450,20 +451,20 @@ public async Task OnTestCreated(
 
 #### Payload Validation
 
-Event payloads are validated by default when using EventFactory. This is done by placing `ValidationAttribute` attributes on the properties of the Aggregate the Command is being performed on. This ensures that required properties are present and valid according to the specified command. Only properties present on the current payload will be validated, except for `[Required]` and `[RequiredFor()]`. 
+Event payloads are validated by default when using `EventFactory`. This is done by placing `ValidationAttribute` attributes on aggregate properties. It ensures required properties are present and valid for the specified event type. Only properties present on the current payload are validated, except for `[Required]` and `[RequiredFor()]`.
 
 ```C#
 // EventFactory validates by default - no need for manual validation
-IEvent pe = new EventFactory().Create<TestAggregate>(TestCommand.Create, newId, newTest);
-await _nostify.PersistEventAsync(pe);
+IEvent created = new EventFactory().Create<TestAggregate>(new Create_Test(), newId, newTest);
+await _nostify.PersistEventAsync(created);
 
 // Or skip validation if needed
-IEvent pe = new EventFactory().NoValidate().Create<TestAggregate>(TestCommand.Create, newId, newTest);
-await _nostify.PersistEventAsync(pe);
+IEvent imported = new EventFactory().NoValidate().Create<TestAggregate>(new Create_Test(), newId, newTest);
+await _nostify.PersistEventAsync(imported);
 
 // For events with no payload data (like delete operations)
-IEvent pe = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
-await _nostify.PersistEventAsync(pe);
+IEvent deleted = new EventFactory().CreateNullPayloadEvent(new Delete_Test(), aggregateId);
+await _nostify.PersistEventAsync(deleted);
 ```
 
 Most of the time, you will want to use `RequiredFor` instead of `Required` to mark a property as required for that specific command or list of commands. `Required` is still a valid validation attribute, but it will require that property to be present and not null for EVERY command:
@@ -489,19 +490,20 @@ The `CreateNullPayloadEvent` method is specifically designed for operations that
 
 ```C#
 // Typical delete operation - no payload data needed
-IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId);
+IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(new Delete_Test(), aggregateId);
 await _nostify.PersistEventAsync(deleteEvent);
 
 // With user and partition information
-IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(TestCommand.Delete, aggregateId, userId, partitionKey);
-await _nostify.PersistEventAsync(deleteEvent);
+IEvent auditedDeleteEvent = new EventFactory().CreateNullPayloadEvent(
+    new Delete_Test(), aggregateId, userId, partitionKey);
+await _nostify.PersistEventAsync(auditedDeleteEvent);
 ```
 
 ### Command and EventType (Dispatch Options)
 
-Historically, `nostify` used `NostifyCommand` as the dispatch primitive for events. In v5+, this has been generalized to the `EventType` base class to support both traditional command-style dispatch and attribute-based dispatch on aggregates and projections.
+Historically, `nostify` used `NostifyCommand` as the dispatch primitive for events. In v5, `EventType` is the canonical metadata abstraction for event creation and dispatch.
 
-> **Deprecation Note**: `NostifyCommand` continues to work for backward compatibility, but new code should prefer `EventType` + attribute-based dispatch. `NostifyCommand` is now a separate legacy metadata type, not an `EventType` subclass.
+> **Migration Note**: Existing serialized events and direct legacy event-construction paths can still hydrate obsolete `NostifyCommand` metadata, and `IEvent.command` remains an obsolete compatibility alias. `EventFactory` no longer has `NostifyCommand` overloads. New code must pass concrete `EventType` instances and read `IEvent.eventType`.
 
 #### EventType Base Class
 
@@ -546,9 +548,9 @@ public sealed class BulkDelete_Test : EventType
 EventType createEventType = new Create_Test();
 ```
 
-Each event type is represented by its own class (matching the pattern used in the aggregate templates). `NostifyFactory.Build<T>()` discovers topics from concrete `EventType` definitions, while the runtime `eventType.name` instance value is stored with the event envelope and used for dispatch/routing.
+Each event type is represented by its own class (matching the pattern used in the aggregate templates). Concrete discoverable event types must expose a parameterless constructor. `NostifyFactory.Build<T>()` discovers topics from these definitions, while the runtime `eventType.name` value is stored with the event envelope and used for dispatch and routing.
 
-You can continue to use `NostifyCommand` in the same style, but it is now legacy compatibility metadata that is mapped to an `EventType` at runtime.
+`NostifyCommand` is retained only for legacy envelope and serialization compatibility. It is not accepted by `EventFactory`; migrate authoring code to concrete `EventType` instances.
 
 #### Attribute-Based Dispatch (Preferred Pattern)
 
@@ -700,7 +702,7 @@ public class Test : NostifyObject, IAggregate
 
 > **Guidance**: Prefer `[ApplyEvents(typeof(...))]` for most aggregates and projections — it is clearer, easier to maintain, and backed by the handler cache for performance. Use string-based `[ApplyEvents("...")]` mappings when you cannot reference the concrete `EventType` class directly, such as projection handlers that consume events from another service, and use typed overload dispatch when you need explicit control or maximum performance.
 
-> **Interop**: Existing code that relies on `eventToApply.command` and `NostifyCommand` continues to work. `NostifyCommand` is now a legacy compatibility metadata type (separate from `EventType`), while `eventToApply.eventType` remains the canonical dispatch metadata. New code should migrate to `eventToApply.eventType` and `EventType`-based dispatch, either via attributes or typed overloads.
+> **Interop**: Legacy event envelopes that contain `command` metadata remain readable. `eventToApply.command` and `NostifyCommand` are obsolete compatibility surfaces, while `eventToApply.eventType` is canonical. This compatibility does not include `EventFactory` overloads; new event creation must use `EventType`.
 
 ### Saga
 
@@ -1543,7 +1545,7 @@ In `nostify`, each command is published to a message broker topic (Kafka or Azur
     ConsumerGroup = "Test")]
 public async Task Run(NostifyKafkaTriggerEvent triggerEvent, ILogger log)
 {
-    await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent);
+    await DefaultEventHandlers.HandleAggregateEventAsync<Test>(_nostify, triggerEvent);
 }
 ```
 
@@ -1565,7 +1567,7 @@ For cost efficiency and when message broker limits are a concern, you can combin
 public async Task Run(NostifyKafkaTriggerEvent triggerEvent, ILogger log)
 {
     // Filter for Create events only
-    await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent, eventTypeFilter: "Create_Test");
+    await DefaultEventHandlers.HandleAggregateEventAsync<Test>(_nostify, triggerEvent, eventTypeFilter: "Create_Test");
 }
 
 [KafkaTrigger("BrokerList",
@@ -1574,7 +1576,7 @@ public async Task Run(NostifyKafkaTriggerEvent triggerEvent, ILogger log)
 public async Task RunUpdate(NostifyKafkaTriggerEvent triggerEvent, ILogger log)
 {
     // Filter for Update events only
-    await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent, eventTypeFilter: "Update_Test");
+    await DefaultEventHandlers.HandleAggregateEventAsync<Test>(_nostify, triggerEvent, eventTypeFilter: "Update_Test");
 }
 ```
 
@@ -1607,21 +1609,21 @@ Use separate topics when:
 
 The `DefaultEventHandlers` class provides three primary methods for handling individual events:
 
-**HandleAggregateEvent** - Applies events to aggregate current state projections:
+**HandleAggregateEventAsync** - Applies events to aggregate current state projections:
 
 ```C#
 [Function(nameof(OnTestCreated))]
 public async Task Run([KafkaTrigger("BrokerList", "Create_Test", ...)] NostifyKafkaTriggerEvent triggerEvent, ILogger log)
 {
     // Basic usage - applies event to aggregate identified by event.aggregateRootId
-    await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent);
+    await DefaultEventHandlers.HandleAggregateEventAsync<Test>(_nostify, triggerEvent);
 }
 
 // With event type filtering
-await DefaultEventHandlers.HandleAggregateEvent<Test>(_nostify, triggerEvent, eventTypeFilter: "Create_Test");
+await DefaultEventHandlers.HandleAggregateEventAsync<Test>(_nostify, triggerEvent, eventTypeFilter: "Create_Test");
 
 // With custom ID targeting - applies event to a different aggregate than event.aggregateRootId
-await DefaultEventHandlers.HandleAggregateEvent<Test>(
+await DefaultEventHandlers.HandleAggregateEventAsync<Test>(
     _nostify, 
     triggerEvent, 
     idToApplyToPropertyName: "targetAggregateId",  // Property name in event payload containing target ID
@@ -1636,14 +1638,14 @@ await DefaultEventHandlers.HandleAggregateEventAsync<Test>(
 );
 ```
 
-**HandleProjectionEvent** - Applies events to projections with external data initialization:
+**HandleProjectionEventAsync** - Applies events to projections with external data initialization:
 
 ```C#
 [Function(nameof(OnTestCreated_For_TestProjection))]
 public async Task Run([KafkaTrigger("BrokerList", "Create_Test", ...)] NostifyKafkaTriggerEvent triggerEvent, ILogger log)
 {
     // With HttpClient for external data fetching
-    await DefaultEventHandlers.HandleProjectionEvent<TestProjection>(
+    await DefaultEventHandlers.HandleProjectionEventAsync<TestProjection>(
         _nostify, 
         triggerEvent, 
         _httpClient
@@ -1651,7 +1653,7 @@ public async Task Run([KafkaTrigger("BrokerList", "Create_Test", ...)] NostifyKa
 }
 
 // Without external data (better performance when not needed)
-await DefaultEventHandlers.HandleProjectionEvent<TestProjection>(
+await DefaultEventHandlers.HandleProjectionEventAsync<TestProjection>(
     _nostify, 
     triggerEvent, 
     httpClient: null,
@@ -1659,7 +1661,7 @@ await DefaultEventHandlers.HandleProjectionEvent<TestProjection>(
 );
 
 // With custom ID targeting
-await DefaultEventHandlers.HandleProjectionEvent<TestProjection>(
+await DefaultEventHandlers.HandleProjectionEventAsync<TestProjection>(
     _nostify, 
     triggerEvent, 
     _httpClient,
@@ -1668,14 +1670,14 @@ await DefaultEventHandlers.HandleProjectionEvent<TestProjection>(
 );
 ```
 
-**HandleMultiApplyEvent** - Applies a single event to multiple projection instances in batches:
+**HandleMultiApplyEventAsync** - Applies a single event to multiple projection instances in batches:
 
 ```C#
 [Function(nameof(OnAggregateUpdated_For_RelatedProjections))]
 public async Task Run([KafkaTrigger("BrokerList", "Update_Aggregate", ...)] NostifyKafkaTriggerEvent triggerEvent, ILogger log)
 {
     // Applies event to all projections where foreignAggregateId matches event.aggregateRootId
-    await DefaultEventHandlers.HandleMultiApplyEvent<RelatedProjection>(
+    await DefaultEventHandlers.HandleMultiApplyEventAsync<RelatedProjection>(
         _nostify,
         triggerEvent,
         foreignIdSelector: projection => projection.foreignAggregateId,
@@ -1695,9 +1697,9 @@ await DefaultEventHandlers.HandleMultiApplyEventAsync<RelatedProjection>(
 
 **When to Use Each Handler:**
 
-- **HandleAggregateEvent**: Standard aggregate current state updates (Create, Update, Delete)
-- **HandleProjectionEvent**: Single projection updates that may need external data from other services
-- **HandleMultiApplyEvent**: When a single aggregate event affects multiple related projections (e.g., updating all orders when a customer is updated)
+- **HandleAggregateEventAsync**: Standard aggregate current state updates (Create, Update, Delete)
+- **HandleProjectionEventAsync**: Single projection updates that may need external data from other services
+- **HandleMultiApplyEventAsync**: When a single aggregate event affects multiple related projections (e.g., updating all orders when a customer is updated)
 
 **idToApplyToPropertyName Feature:**
 
@@ -1720,14 +1722,14 @@ The `DefaultEventHandlers` class provides built-in methods for handling bulk ope
 [Function(nameof(OnTestBulkCreated))]
 public async Task Run([KafkaTrigger("BrokerList", "BulkCreate_Test", ...)] string[] events, ILogger log)
 {
-    await DefaultEventHandlers.HandleAggregateBulkCreateEvent<Test>(_nostify, events);
+    await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<Test>(_nostify, events);
 }
 
 // Projection bulk create - single event type filter
 [Function(nameof(OnTestBulkCreated_For_TestProjection))]
 public async Task Run([KafkaTrigger("BrokerList", "Test_Commands", ...)] string[] events, ILogger log)
 {
-    await DefaultEventHandlers.HandleProjectionBulkCreateEvent<TestProjection>(
+    await DefaultEventHandlers.HandleProjectionBulkCreateEventAsync<TestProjection>(
         _nostify, 
         events, 
         eventTypeFilter: "BulkCreate_Test"
@@ -1735,7 +1737,7 @@ public async Task Run([KafkaTrigger("BrokerList", "Test_Commands", ...)] string[
 }
 
 // Multiple event type filters
-await DefaultEventHandlers.HandleAggregateBulkCreateEvent<Test>(
+await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<Test>(
     _nostify, 
     events, 
     new List<string> { "BulkCreate_Test", "BulkImport_Test" }
@@ -1756,14 +1758,14 @@ await DefaultEventHandlers.HandleAggregateBulkCreateEventAsync<Test>(
 [Function(nameof(OnTestBulkUpdated))]
 public async Task Run([KafkaTrigger("BrokerList", "BulkUpdate_Test", ...)] string[] events, ILogger log)
 {
-    await DefaultEventHandlers.HandleAggregateBulkUpdateEvent<Test>(_nostify, events);
+    await DefaultEventHandlers.HandleAggregateBulkUpdateEventAsync<Test>(_nostify, events);
 }
 
 // Projection bulk update with event type filter
 [Function(nameof(OnTestBulkUpdated_For_TestProjection))]
 public async Task Run([KafkaTrigger("BrokerList", "Test_Commands", ...)] string[] events, ILogger log)
 {
-    await DefaultEventHandlers.HandleProjectionBulkUpdateEvent<TestProjection>(
+    await DefaultEventHandlers.HandleProjectionBulkUpdateEventAsync<TestProjection>(
         _nostify, 
         events, 
         eventTypeFilter: "BulkUpdate_Test"
@@ -1777,11 +1779,11 @@ public async Task Run([KafkaTrigger("BrokerList", "Test_Commands", ...)] string[
 [Function(nameof(OnTestBulkDeleted))]
 public async Task Run([KafkaTrigger("BrokerList", "BulkDelete_Test", ...)] string[] events, ILogger log)
 {
-    await DefaultEventHandlers.HandleAggregateBulkDeleteEvent<Test>(_nostify, events);
+    await DefaultEventHandlers.HandleAggregateBulkDeleteEventAsync<Test>(_nostify, events);
 }
 
 // Projection bulk delete with multiple filters
-await DefaultEventHandlers.HandleProjectionBulkDeleteEvent<TestProjection>(
+await DefaultEventHandlers.HandleProjectionBulkDeleteEventAsync<TestProjection>(
     _nostify, 
     events, 
     new List<string> { "BulkDelete_Test", "BulkArchive_Test" }
@@ -1799,9 +1801,9 @@ public async Task<int> Run(
     [HttpTrigger("post", Route = "Test/BulkCreate")] HttpRequestData req,
     ILogger log)
 {
-    return await DefaultCommandHandler.HandleBulkCreate<Test>(
+    return await DefaultCommandHandler.HandleBulkCreateAsync<Test>(
         _nostify,
-        TestCommand.BulkCreate,
+        new BulkCreate_Test(),
         req,
         userId: currentUserId,
         partitionKey: tenantId,
@@ -1820,9 +1822,9 @@ public async Task<int> Run(
     ILogger log)
 {
     // Request body must contain array of objects with 'id' property
-    return await DefaultCommandHandler.HandleBulkUpdate<Test>(
+    return await DefaultCommandHandler.HandleBulkUpdateAsync<Test>(
         _nostify,
-        TestCommand.BulkUpdate,
+        new BulkUpdate_Test(),
         req,
         userId: currentUserId,
         partitionKey: tenantId,
@@ -1841,9 +1843,9 @@ public async Task<int> Run(
     ILogger log)
 {
     // Request body must contain array of ID strings
-    return await DefaultCommandHandler.HandleBulkDelete<Test>(
+    return await DefaultCommandHandler.HandleBulkDeleteAsync<Test>(
         _nostify,
-        TestCommand.BulkDelete,
+        new BulkDelete_Test(),
         req,
         userId: currentUserId,
         partitionKey: tenantId,
@@ -1855,9 +1857,9 @@ public async Task<int> Run(
 
 // Alternative: Delete by list of GUIDs (no HTTP request)
 List<Guid> idsToDelete = GetIdsToDelete();
-int count = await DefaultCommandHandler.HandleBulkDelete<Test>(
+int count = await DefaultCommandHandler.HandleBulkDeleteAsync<Test>(
     _nostify,
-    TestCommand.BulkDelete,
+    new BulkDelete_Test(),
     idsToDelete,
     userId: currentUserId,
     partitionKey: tenantId,
@@ -2484,7 +2486,7 @@ public async Task GetEventsAsync_ReturnsMatchingEvents()
         {
             aggregateRootId = projection.foreignId,
             timestamp = DateTime.UtcNow,
-            command = new NostifyCommand("TestCommand")
+            eventType = new Create_Test()
         }
     };
 
@@ -2631,9 +2633,9 @@ public async Task ComplexQuery_FiltersAndOrdersCorrectly()
     var now = DateTime.UtcNow;
     var testEvents = new List<Event>
     {
-        new Event { aggregateRootId = targetId, timestamp = now.AddDays(-1), command = new NostifyCommand("Create") },
-        new Event { aggregateRootId = targetId, timestamp = now.AddDays(-2), command = new NostifyCommand("Update") },
-        new Event { aggregateRootId = otherId, timestamp = now, command = new NostifyCommand("Create") }
+        new Event { aggregateRootId = targetId, timestamp = now.AddDays(-1), eventType = new Create_Test() },
+        new Event { aggregateRootId = targetId, timestamp = now.AddDays(-2), eventType = new Update_Test() },
+        new Event { aggregateRootId = otherId, timestamp = now, eventType = new Create_Test() }
     };
 
     var mockContainer = CosmosTestHelpers.CreateMockContainerWithEvents(testEvents);
@@ -3338,16 +3340,16 @@ var saga = new Saga("OrderProcessingSaga");
 
 // Add steps with events and optional rollback events
 var reserveInventoryEvent = new EventFactory().Create<InventoryItem>(
-    InventoryCommand.Reserve, inventoryId, new { quantity = 5 });
+    new Reserve_Inventory(), inventoryId, new { quantity = 5 });
 var releaseInventoryEvent = new EventFactory().Create<InventoryItem>(
-    InventoryCommand.Release, inventoryId, new { quantity = 5 });
+    new Release_Inventory(), inventoryId, new { quantity = 5 });
 
 saga.AddStep(reserveInventoryEvent, releaseInventoryEvent);
 
 var processPaymentEvent = new EventFactory().Create<Payment>(
-    PaymentCommand.Process, paymentId, new { amount = 99.99 });
+    new Process_Payment(), paymentId, new { amount = 99.99 });
 var refundPaymentEvent = new EventFactory().Create<Payment>(
-    PaymentCommand.Refund, paymentId, new { amount = 99.99 });
+    new Refund_Payment(), paymentId, new { amount = 99.99 });
 
 saga.AddStep(processPaymentEvent, refundPaymentEvent);
 
@@ -3693,8 +3695,8 @@ public sealed class Delete_Order : EventType
     public Delete_Order() : base("Delete_Order", allowNullPayload: true) { }
 }
 
-// Legacy NostifyCommand style (still supported for backward compatibility)
-// public class OrderCommand : NostifyCommand { ... }
+// Legacy NostifyCommand metadata can still be read from old event envelopes,
+// but new events and EventFactory calls must use concrete EventType classes.
 ```
 
 // CreateOrder.cs - HTTP Trigger
@@ -3780,13 +3782,13 @@ Validation is performed automatically when using `EventFactory.Create<T>()`:
 
 ```C#
 // Validation enabled by default - throws NostifyValidationException on failure
-IEvent pe = new EventFactory().Create<OrderAggregate>(OrderCommand.Create, newId, orderPayload);
+IEvent created = new EventFactory().Create<OrderAggregate>(new Create_Order(), newId, orderPayload);
 
 // Skip validation when needed
-IEvent pe = new EventFactory().NoValidate().Create<OrderAggregate>(OrderCommand.Update, id, partialPayload);
+IEvent updated = new EventFactory().NoValidate().Create<OrderAggregate>(new Update_Order(), id, partialPayload);
 
 // Events with no payload skip validation automatically
-IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(OrderCommand.Delete, aggregateId);
+IEvent deleted = new EventFactory().CreateNullPayloadEvent(new Delete_Order(), aggregateId);
 ```
 
 ## Performance Considerations
@@ -3807,7 +3809,7 @@ IEvent deleteEvent = new EventFactory().CreateNullPayloadEvent(OrderCommand.Dele
 
 ### Memory Management
 
-- Dispose of containers and clients properly
+- `NostifyCosmosClient` implements `IDisposable`; dispose instances your application owns, while allowing the dependency-injection container to dispose container-owned instances
 - Use appropriate batch sizes for bulk operations
 - Consider using pagination for large data sets
 - Monitor memory usage in long-running processes
