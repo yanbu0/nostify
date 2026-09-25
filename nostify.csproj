@@ -47,6 +47,8 @@
   <ItemGroup>
     <Content Include="templates\**\*" Exclude="templates\**\bin\**;template\**\obj\**" />
     <Compile Remove="templates\**\*" />
-    <Compile Remove="*.Tests\**\*" />
+    <Compile Remove="nostify.Tests\**\*" />
+    <Compile Remove="nostify.IntegrationTests\**\*" />
+    <Compile Remove="nostify.IntegrationTestModels\**\*" />
   </ItemGroup>
 </Project>

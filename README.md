@@ -29,9 +29,16 @@
    - 3.1 [Updates](#updates)
    - 3.2 [Coming Soon](#coming-soon)
 4. [Getting Started](#getting-started)
-5. [Architecture](#architecture)
-6. [Why????](#why)
-7. [Concepts](#concepts)
+5. [Using The Templates](#using-the-templates)
+   - 5.1 [Install and Inspect the Templates](#install-and-inspect-the-templates)
+   - 5.2 [Create a Service](#create-a-service)
+   - 5.3 [Add an Aggregate](#add-an-aggregate)
+   - 5.4 [Add a Projection](#add-a-projection)
+   - 5.5 [Create a gRPC Gateway](#create-a-grpc-gateway)
+   - 5.6 [Update or Remove the Templates](#update-or-remove-the-templates)
+6. [Architecture](#architecture)
+7. [Why????](#why)
+8. [Concepts](#concepts)
    - 7.1 [Service](#service)
    - 7.2 [gRPC Event Request Server](#grpc-event-request-server)
    - 7.3 [Aggregate](#aggregate)
@@ -39,36 +46,36 @@
    - 7.5 [Event](#event)
    - 7.6 [Command](#command)
    - 7.7 [Saga](#saga)
-8. [Setup](#setup)
-9. [Basic Tasks](#basic-tasks)
-   - 9.1 [Initializing Current State Container](#initializing-current-state-container)
-   - 9.2 [Querying](#querying)
-   - 9.3 [Create New Aggregate](#create-new-aggregate)
-   - 9.4 [Update Aggregate](#update-aggregate)
-   - 9.5 [Delete Aggregate](#delete-aggregate)
-   - 9.6 [Create New Projection Container](#create-new-projection-container)
-   - 9.7 [Create New Projection](#create-new-projection)
-   - 9.8 [Update Projection](#update-projection)
-   - 9.9 [Delete Projection](#delete-projection)
-   - 9.10 [Event Handlers](#event-handlers)
-   - 9.11 [Topics](#topics)
-10. [Advanced Features](#advanced-features)
-    - 10.1 [Error Handling and Undeliverable Events](#error-handling-and-undeliverable-events)
-    - 10.2 [Retry Logic with RetryableContainer](#retry-logic-with-retryablecontainer)
-    - 10.3 [Bulk Operations and Performance](#bulk-operations-and-performance)
-    - 10.4 [Advanced Querying and Cosmos Extensions](#advanced-querying-and-cosmos-extensions)
-    - 10.5 [Testing Utilities](#testing-utilities)
-    - 10.6 [Projection Initialization and External Data](#projection-initialization-and-external-data)
-    - 10.7 [Rehydration and Point-in-Time Queries](#rehydration-and-point-in-time-queries)
-    - 10.8 [Saga Pattern Implementation](#saga-pattern-implementation)
-    - 10.9 [Container Management](#container-management)
-    - 10.10 [Sequential Number Generation](#sequential-number-generation)
-    - 10.11 [Validation System](#validation-system)
-11. [Performance Considerations](#performance-considerations)
-    - 11.1 [Bulk Operations](#bulk-operations)
-    - 11.2 [Query Optimization](#query-optimization)
-    - 11.3 [Memory Management](#memory-management)
-    - 11.4 [Event Store Optimization](#event-store-optimization)
+9. [Setup](#setup)
+10. [Basic Tasks](#basic-tasks)
+   - 10.1 [Initializing Current State Container](#initializing-current-state-container)
+   - 10.2 [Querying](#querying)
+   - 10.3 [Create New Aggregate](#create-new-aggregate)
+   - 10.4 [Update Aggregate](#update-aggregate)
+   - 10.5 [Delete Aggregate](#delete-aggregate)
+   - 10.6 [Create New Projection Container](#create-new-projection-container)
+   - 10.7 [Create New Projection](#create-new-projection)
+   - 10.8 [Update Projection](#update-projection)
+   - 10.9 [Delete Projection](#delete-projection)
+   - 10.10 [Event Handlers](#event-handlers)
+   - 10.11 [Topics](#topics)
+11. [Advanced Features](#advanced-features)
+    - 11.1 [Error Handling and Undeliverable Events](#error-handling-and-undeliverable-events)
+    - 11.2 [Retry Logic with RetryableContainer](#retry-logic-with-retryablecontainer)
+    - 11.3 [Bulk Operations and Performance](#bulk-operations-and-performance)
+    - 11.4 [Advanced Querying and Cosmos Extensions](#advanced-querying-and-cosmos-extensions)
+    - 11.5 [Testing Utilities](#testing-utilities)
+    - 11.6 [Projection Initialization and External Data](#projection-initialization-and-external-data)
+    - 11.7 [Rehydration and Point-in-Time Queries](#rehydration-and-point-in-time-queries)
+    - 11.8 [Saga Pattern Implementation](#saga-pattern-implementation)
+    - 11.9 [Container Management](#container-management)
+    - 11.10 [Sequential Number Generation](#sequential-number-generation)
+    - 11.11 [Validation System](#validation-system)
+12. [Performance Considerations](#performance-considerations)
+    - 12.1 [Bulk Operations](#bulk-operations)
+    - 12.2 [Query Optimization](#query-optimization)
+    - 12.3 [Memory Management](#memory-management)
+    - 12.4 [Event Store Optimization](#event-store-optimization)
 
 ## Current Status
  
@@ -123,28 +130,153 @@ To run locally you will need to install some dependencies:
 
 - .NET 10 SDK: <https://dotnet.microsoft.com/download/dotnet/10.0>
 
-To install `nostify` and templates:
+### Running tests
+
+The ordinary unit suite does not require external infrastructure:
+
+```powershell
+dotnet test ./nostify.Tests/nostify.Tests.csproj
+```
+
+Kafka integration tests live in a separate project and run only when that project is explicitly selected. The tracked default broker is `localhost:9092`. To override it locally, create an ignored `nostify.IntegrationTests/local.appsettings.json` file:
+
+```json
+{
+  "KAFKA_UNIT_TESTING_BOOTSTRAP_SERVERS": "localhost:54165"
+}
+```
+
+Configuration precedence is environment variables, then `local.appsettings.json`, then tracked `appsettings.json`. Run all Kafka integration tests with:
+
+```powershell
+dotnet test ./nostify.IntegrationTests/nostify.IntegrationTests.csproj --filter "Dependency=Kafka"
+```
+
+The integration fixture does not silently skip an unavailable dependency. Explicitly selected Kafka tests fail with the configured broker, timeout, and override setting in the error message. Temporary topics and consumer groups use run-unique names, and topic cleanup is best effort.
+
+## Using The Templates
+
+The `nostify` NuGet package includes four .NET templates. Use the service template to start a new Azure Functions microservice, then use the aggregate and projection item templates to extend that service. The gRPC template is optional and creates a standalone event-request gateway.
+
+| Template | Short name | Purpose |
+|----------|------------|---------|
+| Nostify Template | `nostify` | Creates an Azure Functions service with an initial aggregate, command and event handlers, queries, tests, and local configuration. |
+| Nostify Aggregate | `nostifyAggregate` | Adds another aggregate and its handlers, queries, tests, and durable current-state initializer to an existing service. |
+| Nostify Projection | `nostifyProjection` | Adds a projection, query handlers, event handlers, and durable projection initializer to an existing service. |
+| Nostify gRPC Server | `nostifyGrpc` | Creates a standalone ASP.NET Core gRPC gateway for cross-service event requests. |
+
+### Install and Inspect the Templates
+
+Install the templates from NuGet:
 
 ```powershell
 dotnet new install nostify
 ```
 
-To spin up a nostify service:
+Confirm that they are available and inspect the current options for any template:
 
 ```powershell
-dotnet new nostify -ag <Your_Aggregate_Name> -p <Port Number To Run on Locally>
-dotnet restore
+dotnet new list nostify
+dotnet new nostify --help
+dotnet new nostifyAggregate --help
+dotnet new nostifyProjection --help
+dotnet new nostifyGrpc --help
 ```
 
-This will install the templates, create the default project based off your Aggregate, and install all the necessary libraries.
-
-To spin up a centralized gRPC event-request gateway (optional — see [gRPC Event Request Server](#grpc-event-request-server)):
+To test unreleased template changes from a local clone of this repository, install the package project instead:
 
 ```powershell
-dotnet new nostifyGrpc -n <Project_Name> -s <First_Service_Name> -p <Port_Number>
-cd <Project_Name>
-dotnet restore
+dotnet new install .\templates
 ```
+
+### Create a Service
+
+Create a directory for the service, enter it, and run the service template. `--aggregateName` is required. `--port` defaults to `7071`; `--eventHubs` switches the generated messaging configuration from Kafka to Azure Event Hubs.
+
+```powershell
+mkdir OrderService
+cd OrderService
+dotnet new nostify --aggregateName Order --port 7071
+
+dotnet restore
+dotnet build
+```
+
+To generate the Event Hubs variant:
+
+```powershell
+dotnet new nostify --aggregateName Order --port 7071 --eventHubs true
+```
+
+The generated service includes:
+
+- An Azure Functions isolated-worker project and startup configuration.
+- A base aggregate with create, update, delete, and bulk command/event handlers.
+- Get-one, get-all, and event-stream rehydration queries.
+- A durable current-state rebuild initializer under the aggregate's `Admin` directory.
+- Unit-test stubs, Kafka event-request handlers, and the event-request gRPC contract.
+- `local.settings.json` values for local Cosmos DB, Azurite, messaging, throughput, logging, and retry behavior.
+
+Before running the service, review `local.settings.json`. The generated values assume local emulators and must not be treated as production secrets. In particular, set the Cosmos endpoint/key and either `BrokerList` for Kafka or the Event Hubs connection settings. With the prerequisites in [Getting Started](#getting-started) running, start the Functions host with:
+
+```powershell
+func start --port 7071
+```
+
+### Add an Aggregate
+
+Run the aggregate item template from the service's `Aggregates` directory. The service name must match the generated root namespace (for example, `OrderService`), because it is used in generated namespaces. The aggregate template intentionally does not emit another project file.
+
+```powershell
+cd .\Aggregates
+dotnet new nostifyAggregate --aggregateName Shipment --serviceName OrderService
+cd ..
+dotnet build
+```
+
+The new aggregate contains its domain/base classes, event types, single and bulk command handlers, event handlers, queries, test stubs, and a durable current-state initializer. Add the generated test files to a dedicated test project if your solution keeps tests separate from the Functions project.
+
+### Add a Projection
+
+Run the projection item template from the service's `Projections` directory. Its base aggregate must already exist in the service. The generated projection inherits from that aggregate's base class, so spelling and casing must match the aggregate type.
+
+```powershell
+cd .\Projections
+dotnet new nostifyProjection --aggregateName Order --projectionName OrderSummary --serviceName OrderService
+cd ..
+dotnet build
+```
+
+The template creates the projection model, get-one/get-all queries, handlers for the base aggregate's single and bulk events, an example external-event handler, and a durable projection initializer. Customize the model and event-application logic, then remove or replace the example handler. Projections that combine other aggregates must also implement their external-data retrieval logic as described in [Projection Initialization and External Data](#projection-initialization-and-external-data).
+
+### Create a gRPC Gateway
+
+The optional gRPC template creates a separate ASP.NET Core project. `--name` controls the output project and namespace, `--service` registers the first backend service, and `--port` defaults to `5090`.
+
+```powershell
+dotnet new nostifyGrpc --name MyApp.Grpc --service OrderService --port 5090
+cd MyApp.Grpc
+dotnet restore
+dotnet run
+```
+
+After generation, replace the placeholder Cosmos configuration in `appsettings.json`, add any additional backend services, and configure API-key security if needed. See [gRPC Event Request Server](#grpc-event-request-server) for the generated structure, service routing, security, and client configuration.
+
+### Update or Remove the Templates
+
+Re-running installation updates the installed template package to the latest available version:
+
+```powershell
+dotnet new install nostify --force
+```
+
+Remove all templates installed by the package with:
+
+```powershell
+dotnet new uninstall nostify
+```
+
+Template generation is not a merge operation. Updating the package does not rewrite existing services, aggregates, projections, or gateways; it only affects future `dotnet new` commands. Commit or otherwise back up the working tree before generating into a directory that already contains files, and review all generated code and configuration before deployment.
 
 ## Architecture
 

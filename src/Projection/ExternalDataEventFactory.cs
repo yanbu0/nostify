@@ -1120,15 +1120,27 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
         try
         {
-            // Handle same service IDs using ExternalDataEvent.GetEventsAsync
-            Container eventStoreContainer = await _nostify.GetEventStoreContainerAsync();
+            // Resolve Cosmos only when a same-service selector needs it. Kafka, HTTP, and gRPC-only
+            // requestors must remain independently usable when their own dependencies are available.
+            bool requiresEventStore =
+                _foreignKeySelectors.Count != 0 ||
+                _nullableForeignKeySelectors.Count != 0 ||
+                _foreignKeyListSelectors.Count != 0 ||
+                _nullableForeignKeyListSelectors.Count != 0 ||
+                _dependantIdSelectors.Count != 0 ||
+                _dependantListIdSelectors.Count != 0 ||
+                _nullableDependantIdSelectors.Count != 0 ||
+                _nullableDependantListIdSelectors.Count != 0;
+            Container? eventStoreContainer = requiresEventStore
+                ? await _nostify.GetEventStoreContainerAsync()
+                : null;
 
             // Get events for single-ID selectors (non-nullable)
             if (_foreignKeySelectors.Count != 0)
             {
                 var singleIdStopwatch = StartCallStopwatch();
                 var singleIdEvents = await ExternalDataEvent.GetEventsAsync(
-                    eventStoreContainer,
+                    eventStoreContainer!,
                     _projectionsToInit,
                     _queryExecutor,
                     _pointInTime,
@@ -1142,7 +1154,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             {
                 var nullableSingleIdStopwatch = StartCallStopwatch();
                 var nullableSingleIdEvents = await ExternalDataEvent.GetEventsAsync(
-                    eventStoreContainer,
+                    eventStoreContainer!,
                     _projectionsToInit,
                     _queryExecutor,
                     _pointInTime,
@@ -1156,7 +1168,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             {
                 var listIdStopwatch = StartCallStopwatch();
                 var listIdEvents = await ExternalDataEvent.GetEventsAsync(
-                    eventStoreContainer,
+                    eventStoreContainer!,
                     _projectionsToInit,
                     _queryExecutor,
                     _pointInTime,
@@ -1170,7 +1182,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             {
                 var nullableListIdStopwatch = StartCallStopwatch();
                 var nullableListIdEvents = await ExternalDataEvent.GetEventsAsync(
-                    eventStoreContainer,
+                    eventStoreContainer!,
                     _projectionsToInit,
                     _queryExecutor,
                     _pointInTime,
@@ -1218,7 +1230,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             if (_dependantIdSelectors.Count != 0 || _dependantListIdSelectors.Count != 0 || _nullableDependantIdSelectors.Count != 0 || _nullableDependantListIdSelectors.Count != 0)
             {
                 var dependantEventsStopwatch = StartCallStopwatch();
-                var dependantEvents = await GetDependantEventsAsync(eventStoreContainer, result);
+                var dependantEvents = await GetDependantEventsAsync(eventStoreContainer!, result);
                 StopAndLogCall(dependantEventsStopwatch, "WithSameServiceDependantSelectors", "eventStore");
                 result.AddRange(dependantEvents);
             }
@@ -1586,10 +1598,10 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             timeoutSeconds = parsedTimeout;
         }
 
-        // Create a dedicated consumer per request to avoid thread-safety issues with shared IConsumer instances.
-        // Confluent's IConsumer is not thread-safe; concurrent projection initializations for the same
-        // projection type would otherwise share and race on the same cached consumer instance.
-        var consumerGroup = P.containerName;
+        // Create a dedicated consumer and consumer group per factory invocation. A unique group prevents
+        // concurrent projection initializations from partition-sharing response records and avoids stale
+        // committed offsets influencing AutoOffsetReset.Latest assignment.
+        var consumerGroup = $"{P.containerName}-{Guid.NewGuid():N}";
         var consumer = _nostify.CreateKafkaConsumer(consumerGroup);
 
         try
@@ -1622,8 +1634,56 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 {
                     var newSubscription = currentSubscription.Concat(new[] { responseTopic }).Distinct().ToList();
                     consumer.Subscribe(newSubscription);
-                    // Poll briefly to trigger partition assignment
-                    consumer.Consume(TimeSpan.FromMilliseconds(100));
+
+                    // Wait for the rebalance, then explicitly establish a high-watermark
+                    // boundary before publishing. Assignment alone can be visible before
+                    // librdkafka has resolved AutoOffsetReset.Latest; an immediate response
+                    // in that window could otherwise become the eventual "latest" offset
+                    // and be skipped.
+                    var assignmentDeadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+                    while (!consumer.Assignment.Any(partition => partition.Topic == responseTopic) &&
+                           DateTime.UtcNow < assignmentDeadline)
+                    {
+                        consumer.Consume(TimeSpan.FromMilliseconds(100));
+                    }
+
+                    List<TopicPartition> responseAssignments = consumer.Assignment
+                        .Where(partition => partition.Topic == responseTopic)
+                        .ToList();
+                    if (responseAssignments.Count == 0)
+                    {
+                        throw new TimeoutException(
+                            $"Kafka consumer group '{consumerGroup}' was not assigned response topic " +
+                            $"'{responseTopic}' within {timeoutSeconds} seconds. Subscription: " +
+                            $"'{string.Join(",", consumer.Subscription ?? new List<string>())}'; " +
+                            $"broker: '{_nostify.KafkaUrl}'.");
+                    }
+
+                    var startingOffsets = new List<TopicPartitionOffset>();
+                    foreach (TopicPartition partition in responseAssignments)
+                    {
+                        TimeSpan remaining = assignmentDeadline - DateTime.UtcNow;
+                        if (remaining <= TimeSpan.Zero)
+                        {
+                            throw new TimeoutException(
+                                $"Kafka consumer group '{consumerGroup}' could not establish the " +
+                                $"starting offset for response topic '{responseTopic}' within " +
+                                $"{timeoutSeconds} seconds; broker: '{_nostify.KafkaUrl}'.");
+                        }
+
+                        WatermarkOffsets watermarks = consumer.QueryWatermarkOffsets(
+                            partition,
+                            remaining);
+                        startingOffsets.Add(new TopicPartitionOffset(
+                            partition,
+                            watermarks.High));
+                    }
+
+                    // Replace the subscription-derived assignment with explicit
+                    // offsets. A Seek can still be superseded by deferred group
+                    // offset initialization; Assign makes the pre-publish boundary
+                    // authoritative for every response partition.
+                    consumer.Assign(startingOffsets);
                 }
 
                 // Generate correlation ID for this request
