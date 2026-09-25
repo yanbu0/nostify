@@ -2,7 +2,7 @@
 
 ## Overview
 
-`Event` is the core immutable data structure representing state changes in the event store. Events capture what happened in the system as a series of commands with payloads.
+`Event` is the core immutable data structure representing state changes in the event store. Events now carry a typed `eventType`, keep the older `command` property as an obsolete compatibility alias, and expose `schemaVersion` as the envelope/schema version used for migration-aware serialization.
 
 ## Class Definition
 
@@ -16,30 +16,30 @@ public class Event : IEvent
 
 ```csharp
 public Event(
-    NostifyCommand command,
+    EventType eventType,
     Guid aggregateRootId,
     object payload,
-    Guid createdBy,
-    int version = 1
+    Guid userId = default,
+    Guid partitionKey = default
 )
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `command` | `NostifyCommand` | Required | The command that triggered this event |
+| `eventType` | `EventType` | Required | The typed event metadata to persist |
 | `aggregateRootId` | `Guid` | Required | ID of the aggregate this event affects |
 | `payload` | `object` | Required | Data containing properties to update |
-| `createdBy` | `Guid` | Required | User who triggered the event |
-| `version` | `int` | `1` | Event version for compatibility |
+| `userId` | `Guid` | `default` | User who triggered the event |
+| `partitionKey` | `Guid` | `default` | Partition key for the aggregate stream |
 
 ### Auto-Extract ID Constructor
 
 ```csharp
 public Event(
-    NostifyCommand command,
+    EventType eventType,
     object payload,
-    Guid createdBy,
-    int version = 1
+    Guid userId = default,
+    Guid partitionKey = default
 )
 ```
 
@@ -49,11 +49,11 @@ Automatically extracts `aggregateRootId` from the payload's `id` property.
 
 ```csharp
 public Event(
-    NostifyCommand command,
+    EventType eventType,
     string aggregateRootId,
     object payload,
-    string createdBy,
-    int version = 1
+    string userId,
+    string partitionKey
 )
 ```
 
@@ -71,21 +71,24 @@ For JSON deserialization from Cosmos DB.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `string` | Unique event identifier (auto-generated GUID string) |
+| `id` | `Guid` | Unique event identifier (auto-generated GUID) |
 | `timestamp` | `DateTime` | When the event occurred (UTC) |
-| `partitionKey` | `string` | Partition key for routing (aggregate type name) |
-| `createdBy` | `Guid` | User who triggered the event |
-| `command` | `NostifyCommand` | The command being performed |
+| `partitionKey` | `Guid` | Partition key for routing |
+| `userId` | `Guid` | User who triggered the event |
+| `eventType` | `EventType` | The typed event metadata being performed |
+| `command` | `NostifyCommand` | Obsolete compatibility alias for `eventType`; typed events expose a cached metadata shim |
 | `aggregateRootId` | `Guid` | ID of the aggregate this event applies to |
 | `payload` | `object` | Data containing properties to update |
-| `version` | `int` | Version for compatibility/migration |
+| `schemaVersion` | `int` | Envelope/schema version for compatibility and migration |
+
+`schemaVersion` is not a public constructor parameter. New events infer it from the assigned metadata (`2` for modern non-legacy typed event types, `1` for legacy command-backed metadata), while deserialized documents preserve any explicitly stored value.
 
 ## Methods
 
-### HasProperty
+### PayloadHasProperty
 
 ```csharp
-public bool HasProperty(string propertyName)
+public bool PayloadHasProperty(string propertyName)
 ```
 
 Checks if the payload contains a specific property.
@@ -109,12 +112,12 @@ Returns the payload as a typed object.
 ### ValidatePayload
 
 ```csharp
-public bool ValidatePayload<A>() where A : IAggregate
+public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : class
 ```
 
 Validates that payload properties match the aggregate type.
 
-**Returns:** `bool` - True if all payload properties are valid
+**Returns:** `IEvent` - The current event for chaining; throws if validation fails
 
 ### ApplyTo
 
@@ -127,6 +130,25 @@ Applies the event's payload to a target object.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `target` | `T` | Object to apply payload properties to |
+
+## Backward Compatibility
+
+The obsolete `command` property remains available for legacy callers. If the event was created with a typed `EventType`, `command` returns a cached compatibility `NostifyCommand` containing the same `name`, `isNew`, and `allowNullPayload` values. This preserves older metadata-based code paths without changing the underlying typed dispatch model.
+
+The obsolete `Event(NostifyCommand, ...)` constructors remain available for legacy callers and throw `ArgumentNullException` when passed a null command.
+
+`schemaVersion` now distinguishes modern typed envelopes from legacy command-only documents:
+
+- New events with a concrete non-legacy `eventType` default to `schemaVersion = 2`
+- Legacy command-only events remain `schemaVersion = 1`
+- Incoming documents with an explicit `schemaVersion` keep that persisted value
+- Incoming documents missing version metadata infer the version from the hydrated document shape
+
+The logical `eventType.name` is the sole persisted event-type identity. JSON writes `name`, `isNew`, and `allowNullPayload` as event-type metadata.
+
+Deserialization resolves names with ordinal, case-sensitive comparison. A unique loaded concrete `EventType` definition supplies canonical metadata and preserves typed dynamic dispatch. Unknown names hydrate as `LegacyNostifyCommandEventType` and retain serialized metadata. Multiple loaded concrete definitions with the same exact name are invalid configuration and produce a deterministic exception listing every conflicting CLR type.
+
+When both `eventType` and legacy `command` are present in incoming JSON, `command` no longer overwrites an already resolved concrete `eventType`; it only hydrates `eventType` when no concrete value exists yet (or when the current value is still the internal legacy adapter).
 
 ## Usage Examples
 
@@ -205,7 +227,7 @@ foreach (var @event in events.OrderBy(e => e.timestamp))
 ### Checking Payload Contents
 
 ```csharp
-if (@event.HasProperty("Status"))
+if (@event.PayloadHasProperty("Status"))
 {
     var payload = @event.GetPayload<dynamic>();
     Console.WriteLine($"Status changed to: {payload.Status}");
@@ -224,16 +246,16 @@ Events are stored in Cosmos DB with this structure:
     "createdBy": "user-guid-here",
     "aggregateRootId": "order-guid-here",
     "command": {
-        "name": "CreateOrder",
-        "aggregateType": "Order",
-        "isExternalDataEvent": false
+        "name": "Create_Order",
+        "isNew": true,
+        "allowNullPayload": false
     },
     "payload": {
         "customerId": "customer-guid",
         "total": 99.99,
         "status": "Pending"
     },
-    "version": 1
+    "schemaVersion": 1
 }
 ```
 
@@ -241,37 +263,35 @@ Events are stored in Cosmos DB with this structure:
 
 Event validation ensures:
 
-1. **Non-null command** - Events must have a command
+1. **Non-null event type** - Events must have event metadata
 2. **Valid aggregate ID** - Must be a valid GUID
 3. **Payload validation** - Properties must match aggregate type (when validated)
 
 ```csharp
-// Validate payload against aggregate
-if (!@event.ValidatePayload<Order>())
-{
-    throw new NostifyValidationException("Invalid payload properties");
-}
+// Validate payload against aggregate (throws on failure)
+@event.ValidatePayload<Order>();
 ```
 
 ## Kafka Integration
 
 Events are published to Kafka topics:
 
-- **Topic Name**: `command.name` (e.g., "CreateOrder")
+- **Topic Name**: `eventType.name` (e.g., "Create_Order")
 - **Message Key**: `aggregateRootId.ToString()`
 - **Message Value**: JSON serialized event
 
 ## Best Practices
 
 1. **Immutable Payloads** - Use anonymous objects or records
-2. **Descriptive Commands** - Use clear command names
-3. **Include Context** - Always set `createdBy`
-4. **Version Events** - Use `version` for schema evolution
+2. **Descriptive Event Types** - Use clear logical event names
+3. **Include Context** - Always set `userId` when available
+4. **Version Awareness** - Let `schemaVersion` reflect typed-vs-legacy compatibility
 5. **Validate Early** - Validate payloads before publishing
 
 ## Related Types
 
 - [IEvent](IEvent.spec.md) - Event interface
-- [NostifyCommand](NostifyCommand.spec.md) - Command class
+- [EventType](EventType.spec.md) - Typed event metadata
+- [NostifyCommand](NostifyCommand.spec.md) - Obsolete compatibility command class
 - [IApplyable](IApplyable.spec.md) - Event application interface
 - [NostifyKafkaTriggerEvent](NostifyKafkaTriggerEvent.spec.md) - Kafka trigger wrapper

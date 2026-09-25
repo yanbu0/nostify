@@ -2,7 +2,7 @@
 
 ## Overview
 
-`NostifyObject` is the abstract base class for all domain objects in the nostify framework, including aggregates and projections. It provides the common `id` property and implements `IUniquelyIdentifiable`.
+`NostifyObject` is the abstract base class for all domain objects in the nostify framework, including aggregates and projections. It provides common identity/tenant fields and centralizes `Apply(IEvent)` dispatch by first trying `[ApplyEvents]`-decorated handlers and then falling back to typed `EventType` dispatch. For type-based `[ApplyEvents(typeof(...))]` mappings, nostify resolves the target `EventType` through `EventType.GetRequiredInstance(Type)`. For string-based `[ApplyEvents("...")]` mappings, dispatch matches by `eventType.name` (ordinal) so handlers work across different `EventType` CLR subclasses that share the same name and do not require a locally resolvable `EventType` CLR class. The catch-all `Apply(EventType, IEvent)` hook is `protected virtual`, so attribute-only types can omit it while typed-dispatch implementations can still override it.
 
 ## Class Definition
 
@@ -69,10 +69,10 @@ public class Order : NostifyObject, IAggregate, IApplyable
     public Order() : base() { }
     public Order(Guid id) : base(id) { }
     
-    public void Apply(Event @event)
+    [ApplyEvents(typeof(CreateOrder), typeof(UpdateOrder))]
+    protected void OnOrderChanged(IEvent eventToApply)
     {
-        // Apply event properties to this aggregate
-        @event.ApplyTo(this);
+        UpdateProperties<Order>(eventToApply.payload);
     }
 }
 ```
@@ -92,9 +92,10 @@ public class OrderSummary : NostifyObject, IProjection, IApplyable
     public OrderSummary() : base() { }
     public OrderSummary(Guid id) : base(id) { }
     
-    public void Apply(Event @event)
+    [ApplyEvents(typeof(CreateOrder), typeof(UpdateOrder))]
+    protected void OnOrderChanged(IEvent eventToApply)
     {
-        @event.ApplyTo(this);
+        UpdateProperties<OrderSummary>(eventToApply.payload);
     }
 }
 ```
@@ -162,8 +163,12 @@ public class MyAggregate : NostifyObject, IAggregate, IApplyable
     public static string aggregateType => "MyAggregate";
     public static string currentStateContainerName => "my-aggregates-current";
     public bool isDeleted { get; set; }
-    
-    public void Apply(Event @event) { /* ... */ }
+
+    [ApplyEvents(typeof(CreateMyAggregate))]
+    protected void OnCreated(IEvent eventToApply) { /* ... */ }
+
+    // Optional catch-all when you want custom fallback behavior.
+    protected override void Apply(EventType eventType, IEvent eventToApply) { /* ... */ }
 }
 ```
 
@@ -174,8 +179,12 @@ public class MyProjection : NostifyObject, IProjection, IApplyable
 {
     public static string containerName => "my-projections";
     public bool initialized { get; set; }
-    
-    public void Apply(Event @event) { /* ... */ }
+
+    [ApplyEvents(typeof(UpdateMyProjection))]
+    protected void OnUpdated(IEvent eventToApply) { /* ... */ }
+
+    // Optional catch-all when you want custom fallback behavior.
+    protected override void Apply(EventType eventType, IEvent eventToApply) { /* ... */ }
 }
 ```
 
@@ -193,7 +202,7 @@ public class TenantOrder : NostifyObject, IAggregate, IApplyable, ITenantFiltera
 
 1. **Always Call Base Constructor** - Use `: base()` or `: base(id)` in derived classes
 2. **Implement Required Interfaces** - Combine with `IAggregate` or `IProjection`
-3. **Add IApplyable** - Required for event sourcing
+3. **Choose a dispatch style intentionally** - Use `[ApplyEvents]` for attribute-based handlers, or typed `Apply(SpecificEventType, IEvent)` overloads plus an optional catch-all override
 4. **Use Lowercase id** - Matches Cosmos DB conventions
 
 ## Related Types

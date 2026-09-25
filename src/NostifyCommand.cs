@@ -1,23 +1,20 @@
-
 using System;
-using System.Threading.Tasks;
-using System.Collections.Generic;
 
 namespace nostify;
 
-///<summary>
-///Defines command being delivered to the event store
-///</summary>
-public class NostifyCommand
+/// <summary>
+/// Defines command metadata being delivered to the event store.
+/// </summary>
+[Obsolete("NostifyCommand is deprecated; use EventType for new events. NostifyCommand remains for legacy compatibility.")]
+public class NostifyCommand : IComparable, IComparable<NostifyCommand>
 {
-
-    ///<summary>
-    ///Name of command, MUST BE UNIQUE - should follow convention "{Action}_{Entity Name}", ie - "Create_User".  This will also become the name of the related Kafka topic.
-    ///</summary>
+    /// <summary>
+    /// Name of command metadata, also used as Kafka topic name.
+    /// </summary>
     public string name { get; }
 
     /// <summary>
-    /// Signifies if this command results in the creation of a new aggregate.  Used to key multiple downstream processes with Projections.
+    /// Signifies if this command metadata results in the creation of a new aggregate.
     /// </summary>
     public bool isNew { get; }
 
@@ -26,84 +23,145 @@ public class NostifyCommand
     /// </summary>
     public bool allowNullPayload { get; }
 
-    ///<summary>
-    ///Base Constructor
-    ///</summary>
-    ///<param name="name">Human readable friendly name of command. MUST BE UNIQUE - should follow convention "{Action}_{Entity Name}", ie - "Create_User".  This will also become the name of the related Kafka topic.</param>
-    ///<param name="isNew">Signifies if this command results in the creation of a new aggregate</param>
-    /// <param name="allowNullPayload">Allows null payloads to be sent with this command</param>
+    /// <summary>
+    /// Base constructor.
+    /// </summary>
+    /// <param name="name">Human readable friendly name of command. MUST BE UNIQUE - should follow convention "{Action}_{Entity Name}", ie - "Create_User". This will also become the name of the related Kafka topic.</param>
+    /// <param name="isNew">Signifies if this command results in the creation of a new aggregate.</param>
+    /// <param name="allowNullPayload">Allows null payloads to be sent with this command.</param>
     public NostifyCommand(string name, bool isNew = false, bool allowNullPayload = false)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Command name cannot be null or empty", nameof(name));
+            throw new ArgumentException("Event type name cannot be null or empty", nameof(name));
 
         this.name = name;
         this.isNew = isNew;
         this.allowNullPayload = allowNullPayload;
     }
 
-    ///<summary>
-    ///Overrides default ToString to return Name property
-    ///</summary>
-    public override string ToString() => name;
-
-    ///<summary>
-    ///Defines equality
-    ///</summary>
-    public override bool Equals(object obj)
+    /// <inheritdoc />
+    public override bool Equals(object? obj)
     {
-        if (obj == null || !typeof(NostifyCommand).IsAssignableFrom(obj.GetType()))
+        if (obj == null || obj.GetType() != GetType())
             return false;
-            
+
         var otherValue = obj as NostifyCommand;
-
-        // if (otherValue == null)
-        //     return false;
-
-        var t = obj.GetType();
-        var t2 = GetType();
-        var typeMatches = typeof(NostifyCommand).IsAssignableFrom(obj.GetType());
-        var valueMatches = name.Equals(otherValue.name);
-
-        return typeMatches && valueMatches;
+        return otherValue != null && name.Equals(otherValue.name, StringComparison.Ordinal);
     }
 
-    // Josh Bloch hashing implementation
-    ///<summary>
-    ///Overrides default hash code
-    ///</summary>
+    /// <inheritdoc />
     public override int GetHashCode()
     {
-        unchecked // Overflow is fine, just wrap
+        unchecked
         {
-            //Prime numbers make better hash
             int hash = 17;
-            // Suitable nullity checks etc, of course :)
+            hash = hash * 23 + GetType().GetHashCode();
             hash = hash * 23 + name.GetHashCode();
             return hash;
         }
     }
 
-    ///<summary>
-    ///Allows sorting by name
-    ///</summary>
-    public int CompareTo(object other) => name.CompareTo(((NostifyCommand)other).name);
+    /// <summary>
+    /// Overrides default ToString to return Name property.
+    /// </summary>
+    public override string ToString() => name;
 
-    ///<summary>
-    ///Tests if NostifyCommand equals another NostifyCommand
-    ///</summary>
-    public static bool operator ==(NostifyCommand a, NostifyCommand b)
+    /// <summary>
+    /// Allows sorting by name.
+    /// </summary>
+    public int CompareTo(object? other)
+    {
+        if (other == null)
+        {
+            return 1;
+        }
+
+        if (other is not NostifyCommand otherCommand)
+        {
+            throw new ArgumentException($"Object must be of type {nameof(NostifyCommand)}", nameof(other));
+        }
+
+        return CompareTo(otherCommand);
+    }
+
+    /// <summary>
+    /// Allows sorting by name.
+    /// </summary>
+    public int CompareTo(NostifyCommand? otherCommand)
+    {
+        if (otherCommand == null)
+        {
+            return 1;
+        }
+
+        int nameComparison = string.Compare(name, otherCommand.name, StringComparison.Ordinal);
+        if (nameComparison != 0)
+        {
+            return nameComparison;
+        }
+
+        return string.Compare(GetType().FullName, otherCommand.GetType().FullName, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Converts legacy command metadata to the internal legacy <see cref="EventType"/> adapter.
+    /// </summary>
+    public static implicit operator EventType(NostifyCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        return new LegacyNostifyCommandEventType(command.name, command.isNew, command.allowNullPayload);
+    }
+
+    /// <summary>
+    /// Tests if NostifyCommand equals another NostifyCommand.
+    /// </summary>
+    public static bool operator ==(NostifyCommand? a, NostifyCommand? b)
     {
         if (a is null) return b is null;
         return a.Equals(b);
     }
 
-    ///<summary>
-    ///Tests if NostifyCommand does not equal another NostifyCommand
-    ///</summary>
-    public static bool operator !=(NostifyCommand a, NostifyCommand b)
+    /// <summary>
+    /// Tests if NostifyCommand does not equal another NostifyCommand.
+    /// </summary>
+    public static bool operator !=(NostifyCommand? a, NostifyCommand? b)
     {
         if (a is null) return b is not null;
         return !a.Equals(b);
+    }
+
+    /// <summary>
+    /// Tests whether one command sorts before another command.
+    /// </summary>
+    public static bool operator <(NostifyCommand? left, NostifyCommand? right) =>
+        Compare(left, right) < 0;
+
+    /// <summary>
+    /// Tests whether one command sorts before or at the same position as another command.
+    /// </summary>
+    public static bool operator <=(NostifyCommand? left, NostifyCommand? right) =>
+        Compare(left, right) <= 0;
+
+    /// <summary>
+    /// Tests whether one command sorts after another command.
+    /// </summary>
+    public static bool operator >(NostifyCommand? left, NostifyCommand? right) =>
+        Compare(left, right) > 0;
+
+    /// <summary>
+    /// Tests whether one command sorts after or at the same position as another command.
+    /// </summary>
+    public static bool operator >=(NostifyCommand? left, NostifyCommand? right) =>
+        Compare(left, right) >= 0;
+
+    private static int Compare(NostifyCommand? left, NostifyCommand? right)
+    {
+        if (left is null)
+        {
+            return right is null ? 0 : -1;
+        }
+
+        return left.CompareTo(right);
     }
 }

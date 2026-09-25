@@ -35,7 +35,7 @@ public interface IProjectionInitializer
     /// <summary>
     /// Recreates the container for this Projection. Deletes the container, recreates it, and queries the specified base Aggregate where isDeleted == false.
     /// </summary>
-    Task InitContainerAsync<P, A>(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 1000, DateTime? pointInTime = null)
+    Task InitContainerAsync<P, A>(INostify nostify, HttpClient? httpClient = null, string partitionKeyPath = "/tenantId", int loopSize = 100, DateTime? pointInTime = null)
         where A : IAggregate
         where P : NostifyObject, IProjection, IHasExternalData<P>, new();
 

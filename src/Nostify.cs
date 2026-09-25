@@ -5,6 +5,7 @@ using System.Reflection;
 using Confluent.Kafka.Admin;
 using System;
 using System.Net.Http;
+using System.Threading;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
@@ -33,7 +34,7 @@ public class Nostify : INostify, IDisposable
     /// <inheritdoc />
     public IProjectionInitializer ProjectionInitializer { get; } = new ProjectionInitializer();
     /// <inheritdoc />
-    public IHttpClientFactory HttpClientFactory { get; }
+    public IHttpClientFactory? HttpClientFactory { get; }
     /// <inheritdoc />
     public ILogger? Logger { get; }
     /// <inheritdoc />
@@ -41,6 +42,59 @@ public class Nostify : INostify, IDisposable
 
     private readonly ConsumerConfig? _baseConsumerConfig;
     private readonly ConcurrentDictionary<string, IConsumer<string, string>> _kafkaConsumers = new();
+    private int _disposeState;
+
+    // Compiled logging templates avoid repeated message-template parsing on hot paths.
+    private static readonly Action<ILogger, string, Exception?> LogKafkaConsumerCreated =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, nameof(LogKafkaConsumerCreated)), "Created Kafka consumer for group {ConsumerGroup}");
+
+    private static readonly Action<ILogger, string, Exception?> LogDedicatedKafkaConsumerCreated =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(2, nameof(LogDedicatedKafkaConsumerCreated)), "Created dedicated Kafka consumer for group {ConsumerGroup}");
+
+    private static readonly Action<ILogger, string, Exception?> LogKafkaConsumerDisposalFailure =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(3, nameof(LogKafkaConsumerDisposalFailure)), "Error disposing Kafka consumer for group {ConsumerGroup}");
+
+    private static readonly Action<ILogger, string, Exception?> LogResourceDisposalFailure =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(4, nameof(LogResourceDisposalFailure)), "Error disposing {ResourceName}");
+
+    private static readonly Action<ILogger, string, Exception?> LogEventPersistenceFailure =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(5, nameof(LogEventPersistenceFailure)), "Failed to persist event in PersistEventAsync. Event: {Event}");
+
+    private static readonly Action<ILogger, string, Exception?> LogUndeliverableWriteFailure =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(6, nameof(LogUndeliverableWriteFailure)), "Failed to write undeliverable event in PersistEventAsync. Original event: {Event}");
+
+    private static readonly Action<ILogger, string, Exception?> LogEventsPublished =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(7, nameof(LogEventsPublished)), "Event published to topic(s) {Topics}");
+
+    private static readonly Action<ILogger, string, Exception?> LogEventPublishFailure =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(8, nameof(LogEventPublishFailure)), "Failed to publish event to topic(s) {Topics}");
+
+    private static readonly Action<ILogger, string, Exception?> LogBulkEventPersistenceFailure =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(9, nameof(LogBulkEventPersistenceFailure)), "Failed to persist event in BulkPersistEventAsync. Event: {Event}");
+
+    private static readonly Action<ILogger, string, string, string, Exception?> LogUndeliverableEvent =
+        LoggerMessage.Define<string, string, string>(LogLevel.Error, new EventId(10, nameof(LogUndeliverableEvent)), "Undeliverable event in function {FunctionName}. Error: {ErrorMessage}. Event: {Event}");
+
+    private static readonly Action<ILogger, Exception?> LogDefaultEmulatorThroughput =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(11, nameof(LogDefaultEmulatorThroughput)), "Using default throughput of 400 for local emulator since none was set. This will probably be really slow.");
+
+    private static readonly Action<ILogger, Exception?> LogContainerCreationSkippedOutsideLocalhost =
+        LoggerMessage.Define(LogLevel.Information, new EventId(12, nameof(LogContainerCreationSkippedOutsideLocalhost)), "Not running on localhost. Containers will not be created.");
+
+    private static readonly Action<ILogger, Exception?> LogContainerCreationSkippedWithoutConnectionString =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(13, nameof(LogContainerCreationSkippedWithoutConnectionString)), "Connection string is null or empty. Containers will not be created.");
+
+    private static readonly Action<ILogger, Exception?> LogContainerCreationSkippedWithoutDatabaseName =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(14, nameof(LogContainerCreationSkippedWithoutDatabaseName)), "Database name is null or empty. Containers will not be created.");
+
+    private static readonly Action<ILogger, string, string, int?, Exception?> LogCreatingContainer =
+        LoggerMessage.Define<string, string, int?>(LogLevel.Debug, new EventId(15, nameof(LogCreatingContainer)), "Creating container {ContainerName} with partition key path {PartitionKeyPath} and throughput {Throughput}, if it does not already exist");
+
+    private static readonly Action<ILogger, string?, Exception?> LogDatabaseNotFound =
+        LoggerMessage.Define<string?>(LogLevel.Error, new EventId(16, nameof(LogDatabaseNotFound)), "Database not found: {DbName}");
+
+    private static readonly Action<ILogger, string, Exception?> LogContainerCreationFailure =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(17, nameof(LogContainerCreationFailure)), "An error occurred while creating or retrieving the container {ContainerName}");
 
     ///<summary>
     /// Nostify constructor for development with no username and password for Kafka.
@@ -50,7 +104,7 @@ public class Nostify : INostify, IDisposable
     {
     }
 
-    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null, RetryOptions? defaultRetryOptions = null)
+    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory? httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null, RetryOptions? defaultRetryOptions = null)
     {
         Repository = repository;
         DefaultPartitionKeyPath = defaultPartitionKeyPath;
@@ -66,18 +120,13 @@ public class Nostify : INostify, IDisposable
     ///<summary>
     /// Nostify constructor for production with username and password for Kafka.
     ///</summary>
-    private Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string kafkaUserName, string kafkaPassword, IHttpClientFactory httpClientFactory, string defaultPartitionKeyPath, Guid defaultTenantId)
+    private Nostify(string primaryKey, string dbName, string cosmosEndpointUri, string kafkaUrl, string? kafkaUserName, string? kafkaPassword, IHttpClientFactory httpClientFactory, string defaultPartitionKeyPath, Guid defaultTenantId)
     {
         Repository = new NostifyCosmosClient(primaryKey, dbName, cosmosEndpointUri);
-        if (defaultPartitionKeyPath != null)
-        {
-            DefaultPartitionKeyPath = defaultPartitionKeyPath;
-        }
+        DefaultPartitionKeyPath = defaultPartitionKeyPath;
         DefaultTenantId = defaultTenantId;
         KafkaUrl = kafkaUrl;
         HttpClientFactory = httpClientFactory;
-
-        bool isDeployed = !string.IsNullOrWhiteSpace(kafkaUserName) && !string.IsNullOrWhiteSpace(kafkaPassword);
 
         // Build producer instance
         var producerConfig = new List<KeyValuePair<string, string>>
@@ -85,7 +134,7 @@ public class Nostify : INostify, IDisposable
             new KeyValuePair<string, string>("bootstrap.servers", KafkaUrl),
             new KeyValuePair<string, string>("client.id", $"Nostify-{dbName}-{Guid.NewGuid()}")
         };
-        if (isDeployed)
+        if (!string.IsNullOrWhiteSpace(kafkaUserName) && !string.IsNullOrWhiteSpace(kafkaPassword))
         {
             producerConfig.Add(new KeyValuePair<string, string>("sasl.username", kafkaUserName));
             producerConfig.Add(new KeyValuePair<string, string>("sasl.password", kafkaPassword));
@@ -111,7 +160,10 @@ public class Nostify : INostify, IDisposable
                 GroupId = group
             };
             var consumer = new ConsumerBuilder<string, string>(config).Build();
-            Logger?.LogDebug("Created Kafka consumer for group {ConsumerGroup}", group);
+            if (Logger != null)
+            {
+                LogKafkaConsumerCreated(Logger, group, null);
+            }
             return consumer;
         });
     }
@@ -129,37 +181,93 @@ public class Nostify : INostify, IDisposable
             GroupId = consumerGroup
         };
         var consumer = new ConsumerBuilder<string, string>(config).Build();
-        Logger?.LogDebug("Created dedicated Kafka consumer for group {ConsumerGroup}", consumerGroup);
+        if (Logger != null)
+        {
+            LogDedicatedKafkaConsumerCreated(Logger, consumerGroup, null);
+        }
         return consumer;
     }
 
     /// <summary>
-    /// Disposes all cached Kafka consumers and the producer.
+    /// Disposes all cached Kafka consumers, the producer, and the owned Cosmos repository.
     /// </summary>
     public void Dispose()
     {
+        // Make disposal idempotent and prevent concurrent callers from releasing the same native handles.
+        if (Interlocked.Exchange(ref _disposeState, 1) != 0)
+        {
+            return;
+        }
+
         foreach (var kvp in _kafkaConsumers)
         {
             try
             {
-                kvp.Value?.Close();
-                kvp.Value?.Dispose();
+                kvp.Value.Close();
             }
             catch (Exception ex)
             {
-                Logger?.LogWarning(ex, "Error disposing Kafka consumer for group {ConsumerGroup}", kvp.Key);
+                LogConsumerDisposalFailure(kvp.Key, ex);
+            }
+
+            try
+            {
+                // Close can fail when the broker is unavailable; native resources must still be released.
+                kvp.Value.Dispose();
+            }
+            catch (Exception ex)
+            {
+                // A single faulty consumer must not prevent the remaining resources from being released.
+                LogConsumerDisposalFailure(kvp.Key, ex);
             }
         }
         _kafkaConsumers.Clear();
 
         try
         {
-            KafkaProducer?.Flush(TimeSpan.FromSeconds(5));
-            KafkaProducer?.Dispose();
+            KafkaProducer.Flush(TimeSpan.FromSeconds(5));
         }
         catch (Exception ex)
         {
-            Logger?.LogWarning(ex, "Error disposing Kafka producer");
+            LogResourceDisposalFailureIfEnabled("Cosmos repository", ex);
+        }
+
+        try
+        {
+            // Flush failures must not prevent the producer's native resources from being released.
+            KafkaProducer.Dispose();
+        }
+        catch (Exception ex)
+        {
+            LogResourceDisposalFailureIfEnabled("Kafka producer", ex);
+        }
+
+        try
+        {
+            // Repository cleanup must run even when Kafka cleanup fails.
+            Repository.Dispose();
+        }
+        catch (Exception ex)
+        {
+            LogResourceDisposalFailureIfEnabled("Kafka producer", ex);
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
+    private void LogConsumerDisposalFailure(string consumerGroup, Exception exception)
+    {
+        if (Logger?.IsEnabled(LogLevel.Warning) == true)
+        {
+            LogKafkaConsumerDisposalFailure(Logger, consumerGroup, exception);
+        }
+    }
+
+    private void LogResourceDisposalFailureIfEnabled(string resourceName, Exception exception)
+    {
+        if (Logger?.IsEnabled(LogLevel.Warning) == true)
+        {
+            LogResourceDisposalFailure(Logger, resourceName, exception);
         }
     }
 
@@ -173,7 +281,11 @@ public class Nostify : INostify, IDisposable
         }
         catch (Exception ex)
         {
-            Logger?.LogError(ex, "Failed to persist event in PersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(eventToPersist));
+            if (Logger?.IsEnabled(LogLevel.Error) == true)
+            {
+                LogEventPersistenceFailure(Logger, JsonConvert.SerializeObject(eventToPersist), ex);
+            }
+
             try
             {
                 await HandleUndeliverableAsync(nameof(PersistEventAsync), ex.Message, eventToPersist);
@@ -182,7 +294,10 @@ public class Nostify : INostify, IDisposable
             {
                 // Log but do not rethrow: the original persistence exception is re-thrown below,
                 // ensuring the HTTP caller receives the actual failure, not a secondary write error.
-                Logger?.LogError(undeliverableEx, $"Failed to write undeliverable event in {nameof(PersistEventAsync)}. Original event: {JsonConvert.SerializeObject(eventToPersist)}");
+                if (Logger?.IsEnabled(LogLevel.Error) == true)
+                {
+                    LogUndeliverableWriteFailure(Logger, JsonConvert.SerializeObject(eventToPersist), undeliverableEx);
+                }
             }
             throw;
         }
@@ -199,28 +314,31 @@ public class Nostify : INostify, IDisposable
     ///<inheritdoc />
     public async Task PublishEventAsync(List<IEvent> peList, bool showOutput = false)
     {
-        if (peList != null)
+        ArgumentNullException.ThrowIfNull(peList);
+
+        List<Task> publishTasks = new List<Task>();
+        foreach (IEvent pe in peList)
         {
-            List<Task> publishTasks = new List<Task>();
-            foreach (IEvent pe in peList)
+            string topic = pe.eventType.name;
+            publishTasks.Add(KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) }));
+        }
+
+        try
+        {
+            await Task.WhenAll(publishTasks);
+            if (showOutput && Logger?.IsEnabled(LogLevel.Information) == true)
             {
-                string topic = pe.command.name;
-                publishTasks.Add(KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) }));
+                LogEventsPublished(Logger, string.Join(", ", peList.Select(p => p.eventType.name).Distinct()), null);
             }
-            await Task.WhenAll(publishTasks).ContinueWith(result =>
-                {
-                    if (showOutput && Logger != null)
-                    {                        
-                        if (result.IsCompletedSuccessfully)
-                        {
-                            Logger.LogInformation("Event published to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
-                        }
-                        else
-                        {
-                            Logger.LogError(result.Exception, "Failed to publish event to topic(s) {Topics}", peList.Select(p => p.command.name).Distinct().Aggregate((a, b) => $"{a}, {b}"));
-                        }
-                    }
-                });
+        }
+        catch (Exception ex)
+        {
+            if (showOutput && Logger?.IsEnabled(LogLevel.Error) == true)
+            {
+                LogEventPublishFailure(Logger, string.Join(", ", peList.Select(p => p.eventType.name).Distinct()), ex);
+            }
+
+            throw;
         }
     }
 
@@ -251,7 +369,10 @@ public class Nostify : INostify, IDisposable
                     CreateApplyAndPersistTask<P>(bulkContainer, eventToApply.partitionKey, eventToApply, projId, retryOptions)
                     .ContinueWith(itemResponse =>
                     {
-                        if (itemResponse.IsCompletedSuccessfully) successfulTasks.Add(itemResponse.Result);
+                        if (itemResponse.IsCompletedSuccessfully && itemResponse.Result is not null)
+                        {
+                            successfulTasks.Add(itemResponse.Result);
+                        }
                     })
                 );
             });
@@ -287,7 +408,7 @@ public class Nostify : INostify, IDisposable
         //Throw if not bulk container
         bulkContainer.ValidateBulkEnabled(true);
 
-        List<IEvent> eventList = events.Select(e => JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(e).GetIEvent()).ToList();
+        List<IEvent> eventList = events.Select(DeserializeRequiredEvent).ToList();
         List<Guid> partitionKeys = eventList.Select(e => e.partitionKey).Distinct().ToList();
 
         List<Task> tasks = new List<Task>();
@@ -300,17 +421,26 @@ public class Nostify : INostify, IDisposable
             partitionEvents.ForEach(pe =>
             {
                 //Set up vars for both list and single id properties
-                List<Guid> ids = new List<Guid>();
+                List<Guid>? ids;
                 Guid idToApplyTo = Guid.Empty;
 
+                // Applying by a payload property is invalid for null-payload events.
+                if (pe.payload == null)
+                {
+                    throw new NostifyException($"Event payload is null; cannot read ID property '{idPropertyName}'.");
+                }
+
                 //Try list first
-                if (pe.payload.TryGetValue<List<Guid>>(idPropertyName, out ids))
+                if (pe.payload.TryGetValue<List<Guid>>(idPropertyName, out ids) && ids is not null)
                 {
                     ids.ForEach(id => tasks.Add(
                         CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, id, retryOptions, publishErrorEvents)
                             .ContinueWith(itemResponse =>
                             {
-                                if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
+                                if (itemResponse.IsCompletedSuccessfully && itemResponse.Result is not null)
+                                {
+                                    succesfulTasks.Add(itemResponse.Result);
+                                }
                             })
                     ));
                 }
@@ -322,7 +452,10 @@ public class Nostify : INostify, IDisposable
                             CreateApplyAndPersistTask<P>(bulkContainer, pk, pe, idToApplyTo, retryOptions, publishErrorEvents)
                                 .ContinueWith(itemResponse =>
                                 {
-                                    if (itemResponse.IsCompletedSuccessfully) succesfulTasks.Add(itemResponse.Result);
+                                    if (itemResponse.IsCompletedSuccessfully && itemResponse.Result is not null)
+                                    {
+                                        succesfulTasks.Add(itemResponse.Result);
+                                    }
                                 })
                         );
                     }
@@ -340,7 +473,7 @@ public class Nostify : INostify, IDisposable
     /// Creates and executes an apply-and-persist task for a single projection item.
     /// When retryOptions is provided, uses RetryableContainer for per-item retry with exponential backoff.
     /// </summary>
-    private async Task<P> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new()
+    private async Task<P?> CreateApplyAndPersistTask<P>(Container bulkContainer, Guid pk, IEvent pe, Guid id, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new()
     {
         if (retryOptions != null)
         {
@@ -352,7 +485,7 @@ public class Nostify : INostify, IDisposable
                 onNotFound: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
                 onException: (ex) => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
             );
-            return result ?? new P();
+            return result;
         }
         else
         {
@@ -398,31 +531,36 @@ public class Nostify : INostify, IDisposable
                 var retryable = eventContainer.WithRetry(retryOptions);
                 await retryable.DoBulkCreateEventAsync(
                     eventBatch,
-                    onException: async (pe, ex) => {
-                        Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
+                    onException: async (pe, ex) =>
+                    {
+                        if (Logger?.IsEnabled(LogLevel.Error) == true)
+                        {
+                            LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(pe), ex);
+                        }
+
                         await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
                     }
                 );
             }
             else
             {
-                List<Task> taskList = new List<Task>();
-                eventBatch.ForEach(pe =>
+                IEnumerable<Task> persistenceTasks = eventBatch.Select(async pe =>
                 {
-                    taskList.Add(Task.Run(async () =>
+                    try
                     {
-                        try
+                        await eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey());
+                    }
+                    catch (Exception ex)
+                    {
+                        if (Logger?.IsEnabled(LogLevel.Error) == true)
                         {
-                            await eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey());
+                            LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(pe), ex);
                         }
-                        catch (Exception ex)
-                        {
-                            Logger?.LogError(ex, "Failed to persist event in BulkPersistEventAsync. Event: {Event}", JsonConvert.SerializeObject(pe));
-                            await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message ?? "Unknown error during bulk event persistence", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
-                        }
-                    }));
+
+                        await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                    }
                 });
-                await Task.WhenAll(taskList);
+                await Task.WhenAll(persistenceTasks);
             }
         }
     }
@@ -430,7 +568,10 @@ public class Nostify : INostify, IDisposable
     ///<inheritdoc />
     public virtual async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
     {
-        Logger?.LogError("Undeliverable event in function {FunctionName}. Error: {ErrorMessage}. Event: {Event}", functionName, errorMessage, JsonConvert.SerializeObject(eventToHandle));
+        if (Logger?.IsEnabled(LogLevel.Error) == true)
+        {
+            LogUndeliverableEvent(Logger, functionName, errorMessage, JsonConvert.SerializeObject(eventToHandle), null);
+        }
 
         var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
 
@@ -538,25 +679,17 @@ public class Nostify : INostify, IDisposable
             .Distinct()
             .ReadAllAsync();
 
-        //TODO: probably can just use the feed iterator here?
-        //Loop through a query the events for 1,000 at a time, then rehydrate 
-        const int GET_THIS_MANY = 1000;
-        int endOfRange = uniqueAggregateRootIds.Count();
-        int i = 0;
-        while (i < endOfRange)
+        // Query events for at most 1,000 aggregate roots at a time, then rehydrate them.
+        foreach (List<Guid> aggregateRootIdBatch in BatchAggregateRootIds(uniqueAggregateRootIds))
         {
-            int rangeNum = (i + GET_THIS_MANY >= endOfRange) ? endOfRange - 1 : i + GET_THIS_MANY;
-            var aggRange = uniqueAggregateRootIds.GetRange(i, rangeNum);
-
             var peList = await eventStore.GetItemLinqQueryable<IEvent>()
-                .Where(pe => aggRange.Contains(pe.aggregateRootId))
+                .Where(pe => aggregateRootIdBatch.Contains(pe.aggregateRootId))
                 .ReadAllAsync();
 
-            aggRange.ForEach(id =>
+            aggregateRootIdBatch.ForEach(id =>
             {
                 rehydratedAggregates.Add(Rehydrate<T>(peList.Where(e => e.aggregateRootId == id).OrderBy(e => e.timestamp).ToList()));
             });
-            i = i + GET_THIS_MANY;
         }
 
         //Save using bulk operations
@@ -568,6 +701,21 @@ public class Nostify : INostify, IDisposable
         await Task.WhenAll(saveTasks);
     }
 
+    /// <summary>
+    /// Splits aggregate root identifiers into bounded query batches without omissions or duplicates.
+    /// </summary>
+    internal static IEnumerable<List<Guid>> BatchAggregateRootIds(List<Guid> aggregateRootIds, int batchSize = 1000)
+    {
+        ArgumentNullException.ThrowIfNull(aggregateRootIds);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
+
+        for (int index = 0; index < aggregateRootIds.Count; index += batchSize)
+        {
+            int count = Math.Min(batchSize, aggregateRootIds.Count - index);
+            yield return aggregateRootIds.GetRange(index, count);
+        }
+    }
+
     ///<summary>
     ///Rehydrates data directly from stream of events passed from calling method.
     ///</summary>
@@ -575,7 +723,7 @@ public class Nostify : INostify, IDisposable
     ///The projection state rehydrated to the extent of the events fed into it.
     ///</returns>
     ///<param name="peList">The event stream for the aggregate to be rehydrated</param>
-    private T Rehydrate<T>(List<IEvent> peList) where T : NostifyObject, new()
+    private static T Rehydrate<T>(List<IEvent> peList) where T : NostifyObject, new()
     {
         T rehyd = new T();
         foreach (var pe in peList)
@@ -617,23 +765,23 @@ public class Nostify : INostify, IDisposable
         var container = await GetSequenceContainerAsync();
         var documentId = Sequence.GenerateId(partitionKeyValue, sequenceName);
         var partitionKey = new PartitionKey(partitionKeyValue);
-        
+
         const int maxRetries = 3;
         int retryCount = 0;
-        
+
         while (true)
         {
             try
             {
                 // Try to read the existing sequence
                 var response = await container.ReadItemAsync<Sequence>(documentId, partitionKey);
-                
+
                 // Sequence exists, increment atomically using patch
                 var patchOperations = new List<PatchOperation>
                 {
                     PatchOperation.Increment("/currentValue", 1)
                 };
-                
+
                 var patchResponse = await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
                 return patchResponse.Resource.currentValue;
             }
@@ -644,13 +792,13 @@ public class Nostify : INostify, IDisposable
                 {
                     var newSequence = new Sequence(sequenceName, partitionKeyValue, startingValue);
                     await container.CreateItemAsync(newSequence, partitionKey);
-                    
+
                     // Now increment and return
                     var patchOperations = new List<PatchOperation>
                     {
                         PatchOperation.Increment("/currentValue", 1)
                     };
-                    
+
                     var patchResponse = await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
                     return patchResponse.Resource.currentValue;
                 }
@@ -662,7 +810,7 @@ public class Nostify : INostify, IDisposable
                     {
                         throw new NostifyException($"Failed to get next sequence value after {maxRetries} retries due to concurrent creation conflicts.");
                     }
-                    
+
                     // Exponential backoff
                     await Task.Delay(TimeSpan.FromMilliseconds(Math.Pow(2, retryCount) * 50));
                     continue;
@@ -700,10 +848,10 @@ public class Nostify : INostify, IDisposable
         var container = await GetSequenceContainerAsync();
         var documentId = Sequence.GenerateId(partitionKeyValue, sequenceName);
         var partitionKey = new PartitionKey(partitionKeyValue);
-        
+
         const int maxRetries = 3;
         int retryCount = 0;
-        
+
         while (true)
         {
             try
@@ -711,15 +859,15 @@ public class Nostify : INostify, IDisposable
                 // Try to read the existing sequence to get the current value before incrementing
                 var response = await container.ReadItemAsync<Sequence>(documentId, partitionKey);
                 long currentValue = response.Resource.currentValue;
-                
+
                 // Sequence exists, increment atomically by count using patch
                 var patchOperations = new List<PatchOperation>
                 {
                     PatchOperation.Increment("/currentValue", count)
                 };
-                
+
                 await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
-                
+
                 // Return the range: from (currentValue + 1) to (currentValue + count)
                 return new SequenceRange(currentValue + 1, currentValue + count);
             }
@@ -730,15 +878,15 @@ public class Nostify : INostify, IDisposable
                 {
                     var newSequence = new Sequence(sequenceName, partitionKeyValue, startingValue);
                     await container.CreateItemAsync(newSequence, partitionKey);
-                    
+
                     // Now increment by count and return
                     var patchOperations = new List<PatchOperation>
                     {
                         PatchOperation.Increment("/currentValue", count)
                     };
-                    
+
                     await container.PatchItemAsync<Sequence>(documentId, partitionKey, patchOperations);
-                    
+
                     // Return the range: from (startingValue + 1) to (startingValue + count)
                     return new SequenceRange(startingValue + 1, startingValue + count);
                 }
@@ -750,7 +898,7 @@ public class Nostify : INostify, IDisposable
                     {
                         throw new NostifyException($"Failed to get next sequence values after {maxRetries} retries due to concurrent creation conflicts.");
                     }
-                    
+
                     // Exponential backoff
                     await Task.Delay(TimeSpan.FromMilliseconds(Math.Pow(2, retryCount) * 50));
                     continue;
@@ -791,27 +939,27 @@ public class Nostify : INostify, IDisposable
         if (Repository.IsLocalEmulator && !throughput.HasValue)
         {
             throughput = 400; // Set a default throughput for local emulator
-            if (Logger != null) Logger.LogWarning("Using default throughput of 400 for local emulator since none was set. This will probably be really slow.");
+            if (Logger != null) LogDefaultEmulatorThroughput(Logger, null);
             else Console.WriteLine("Using default throughput of 400 for local emulator since none was set. This will probably be really slow.");
         }
 
         if (localhostOnly && !Repository.IsLocalEmulator)
         {
-            if (Logger != null) Logger.LogInformation("Not running on localhost. Containers will not be created.");
+            if (Logger != null) LogContainerCreationSkippedOutsideLocalhost(Logger, null);
             else Console.WriteLine("Not running on localhost. Containers will not be created.");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(Repository.ConnectionString))
         {
-            if (Logger != null) Logger.LogWarning("Connection string is null or empty. Containers will not be created.");
+            if (Logger != null) LogContainerCreationSkippedWithoutConnectionString(Logger, null);
             else Console.WriteLine("Connection string is null or empty. Containers will not be created.");
             return;
         }
 
         if (Repository.DbName == null)
         {
-            if (Logger != null) Logger.LogWarning("Database name is null or empty. Containers will not be created.");
+            if (Logger != null) LogContainerCreationSkippedWithoutDatabaseName(Logger, null);
             else Console.WriteLine("Database name is null or empty. Containers will not be created.");
             return;
         }
@@ -835,7 +983,7 @@ public class Nostify : INostify, IDisposable
         }
     }
 
-    private string _noHttpClientErrorMessage = "HttpClientFactory is not set. Call .WithHttp() in the NostifyFactory config during startup to use this method.";
+    private const string NoHttpClientErrorMessage = "HttpClientFactory is not set. Call .WithHttp() in the NostifyFactory config during startup to use this method.";
 
     ///<inheritdoc />
     public async Task<List<P>> InitAsync<P, A>(Guid id) where P : NostifyObject, IProjection, IHasExternalData<P>, new() where A : IAggregate
@@ -843,7 +991,7 @@ public class Nostify : INostify, IDisposable
         //throw error if no HttpClientFactory
         if (HttpClientFactory == null)
         {
-            throw new InvalidOperationException(_noHttpClientErrorMessage);
+            throw new InvalidOperationException(NoHttpClientErrorMessage);
         }
         // Use the HttpClientFactory to create a new HttpClient instance
         var httpClient = HttpClientFactory.CreateClient();
@@ -856,7 +1004,7 @@ public class Nostify : INostify, IDisposable
         //throw error if no HttpClientFactory
         if (HttpClientFactory == null)
         {
-            throw new InvalidOperationException(_noHttpClientErrorMessage);
+            throw new InvalidOperationException(NoHttpClientErrorMessage);
         }
         // Use the HttpClientFactory to create a new HttpClient instance
         var httpClient = HttpClientFactory.CreateClient();
@@ -869,7 +1017,7 @@ public class Nostify : INostify, IDisposable
         //throw error if no HttpClientFactory
         if (HttpClientFactory == null)
         {
-            throw new InvalidOperationException(_noHttpClientErrorMessage);
+            throw new InvalidOperationException(NoHttpClientErrorMessage);
         }
         // Use the HttpClientFactory to create a new HttpClient instance
         var httpClient = HttpClientFactory.CreateClient();
@@ -877,12 +1025,12 @@ public class Nostify : INostify, IDisposable
     }
 
     ///<inheritdoc />
-    public async Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 1000) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
+    public async Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 100) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new()
     {
         //throw error if no HttpClientFactory
         if (HttpClientFactory == null)
         {
-            throw new InvalidOperationException(_noHttpClientErrorMessage);
+            throw new InvalidOperationException(NoHttpClientErrorMessage);
         }
         // Use the HttpClientFactory to create a new HttpClient instance
         var httpClient = HttpClientFactory.CreateClient();
@@ -895,7 +1043,7 @@ public class Nostify : INostify, IDisposable
         //throw error if no HttpClientFactory
         if (HttpClientFactory == null)
         {
-            throw new InvalidOperationException(_noHttpClientErrorMessage);
+            throw new InvalidOperationException(NoHttpClientErrorMessage);
         }
         // Use the HttpClientFactory to create a new HttpClient instance
         var httpClient = HttpClientFactory.CreateClient();
@@ -909,23 +1057,31 @@ public class Nostify : INostify, IDisposable
             // Create the container if it does not exist
             if (verbose || Logger != null)
             {
-                if (Logger != null) Logger.LogDebug("Creating container {ContainerName} with partition key path {PartitionKeyPath} and throughput {Throughput}, if it does not already exist", containerName, partitionKeyPath, throughput);
+                if (Logger != null) LogCreatingContainer(Logger, containerName, partitionKeyPath, throughput, null);
                 else Console.WriteLine($"Creating container {containerName} with partition key path {partitionKeyPath} and throughput {throughput}, if it does not already exist");
             }
             await Repository.GetContainerAsync(containerName, partitionKeyPath, throughput: throughput, verbose: verbose);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            if (Logger != null) Logger.LogError(ex, "Database not found: {DbName}", Repository.DbName);
+            if (Logger != null) LogDatabaseNotFound(Logger, Repository.DbName, ex);
             else Console.WriteLine($"Database not found: {Repository.DbName}");
             throw;
         }
         catch (Exception ex)
         {
-            if (Logger != null) Logger.LogError(ex, "An error occurred while creating or retrieving the container {ContainerName}", containerName);
+            if (Logger != null) LogContainerCreationFailure(Logger, containerName, ex);
             else Console.WriteLine($"An error occurred while creating or retrieving the container {containerName}: {ex.Message}");
             throw;
         }
+    }
+
+    private static IEvent DeserializeRequiredEvent(string serializedTriggerEvent)
+    {
+        NostifyKafkaTriggerEvent triggerEvent = JsonConvert.DeserializeObject<NostifyKafkaTriggerEvent>(serializedTriggerEvent)
+            ?? throw new NostifyException("Event is null");
+
+        return triggerEvent.GetIEvent() ?? throw new NostifyException("Event is null");
     }
 
     private static IEnumerable<string> EnumerateContainerNames(Assembly assembly)
@@ -958,7 +1114,7 @@ public class Nostify : INostify, IDisposable
         }
     }
 
-    private static string GetPropertyValue(Type type, string propertyName)
+    private static string? GetPropertyValue(Type type, string propertyName)
     {
         var property = type.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Static);
         if (property != null)

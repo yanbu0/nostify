@@ -7,6 +7,7 @@ using Moq;
 using nostify;
 using System.ComponentModel.DataAnnotations;
 using System.Dynamic;
+using Newtonsoft.Json;
 
 namespace nostify.Tests;
 
@@ -21,6 +22,30 @@ public class EventTests
         }
     }
 
+    private sealed class TypedTestEventType : EventType
+    {
+        public TypedTestEventType()
+            : base("Same_Name", isNew: true, allowNullPayload: true)
+        {
+        }
+    }
+
+    private sealed class OtherTypedTestEventType : EventType
+    {
+        public OtherTypedTestEventType()
+            : base("Other_Name")
+        {
+        }
+    }
+
+    private sealed class MismatchedStaticNameEventType : EventType
+    {
+        public MismatchedStaticNameEventType()
+            : base("Runtime_Event_Name", isNew: true)
+        {
+        }
+    }
+
     public class TestAggregate : NostifyObject, IAggregate, ITenantFilterable
     {
         public static string aggregateType => "Test";
@@ -31,7 +56,7 @@ public class EventTests
 
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -62,7 +87,7 @@ public class EventTests
 
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -163,6 +188,79 @@ public class EventTests
     }
 
     [Fact]
+    public void EventTypeEquality_WithDifferentTypedSubclasses_ShouldReturnFalse()
+    {
+        var eventType1 = new TypedTestEventType();
+        var eventType2 = new OtherTypedTestEventType();
+
+        Assert.False(eventType1.Equals(eventType2));
+        Assert.NotEqual(eventType1.GetHashCode(), eventType2.GetHashCode());
+    }
+
+    [Fact]
+    public void CommandGetter_WithTypedEventType_ShouldReturnCachedCompatibilityCommand()
+    {
+        var eventType = new TypedTestEventType();
+        var eventToTest = new Event(eventType, new { id = Guid.NewGuid(), name = "Test" });
+
+#pragma warning disable CS0618
+        var command1 = eventToTest.command;
+        var command2 = eventToTest.command;
+#pragma warning restore CS0618
+
+        Assert.Same(command1, command2);
+        Assert.Equal(((EventType)eventType).name, command1.name);
+        Assert.Equal(eventType.isNew, command1.isNew);
+        Assert.Equal(eventType.allowNullPayload, command1.allowNullPayload);
+        Assert.False(eventType.Equals(command1));
+    }
+
+    [Fact]
+    public void CommandSetter_WithTypedEventType_ShouldNotOverwriteConcreteEventType()
+    {
+        var eventToTest = new Event(new TypedTestEventType(), new { id = Guid.NewGuid(), name = "Test" });
+
+#pragma warning disable CS0618
+        eventToTest.command = new NostifyCommand("Legacy_Test", true, true);
+#pragma warning restore CS0618
+
+        Assert.IsType<TypedTestEventType>(eventToTest.eventType);
+        Assert.Equal(2, eventToTest.schemaVersion);
+    }
+
+    [Fact]
+    public void SchemaVersion_WithTypedEventType_DefaultsToVersion2()
+    {
+        var eventToTest = new Event(new TypedTestEventType(), new { id = Guid.NewGuid(), name = "Test" });
+
+        Assert.Equal(2, eventToTest.schemaVersion);
+    }
+
+    [Fact]
+    public void SchemaVersion_WithLegacyCommand_DefaultsToVersion1()
+    {
+#pragma warning disable CS0618
+        var eventToTest = new Event(new NostifyCommand("Legacy_Test"), new { id = Guid.NewGuid(), name = "Test" });
+#pragma warning restore CS0618
+
+        Assert.Equal(1, eventToTest.schemaVersion);
+    }
+
+    [Fact]
+    public void EventSerialization_WithConcreteEventType_UsesRuntimeNameForEnvelope()
+    {
+        var eventToTest = new Event(new MismatchedStaticNameEventType(), new { id = Guid.NewGuid(), name = "Test" });
+        var json = JsonConvert.SerializeObject(eventToTest, SerializationSettings.NostifyDefault);
+        var deserialized = JsonConvert.DeserializeObject<Event>(json, SerializationSettings.NostifyDefault);
+
+        Assert.NotNull(deserialized);
+        Assert.Equal("Runtime_Event_Name", deserialized.eventType.name);
+#pragma warning disable CS0618
+        Assert.Equal("Runtime_Event_Name", deserialized.command.name);
+#pragma warning restore CS0618
+    }
+
+    [Fact]
     public void EventConstructor_ShouldFail_WithNullCommand()
     {
         // Arrange
@@ -170,6 +268,21 @@ public class EventTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new Event(null!, payload));
+    }
+
+    [Fact]
+    public void LegacyEventConstructors_ShouldFail_WithTypedNullCommand()
+    {
+        // Arrange
+        NostifyCommand command = null!;
+        var aggregateRootId = Guid.NewGuid();
+        var payload = new { name = "Test", id = aggregateRootId };
+
+        // Act & Assert
+#pragma warning disable CS0618
+        Assert.Throws<ArgumentNullException>(() => new Event(command, aggregateRootId, payload));
+        Assert.Throws<ArgumentNullException>(() => new Event(command, payload));
+#pragma warning restore CS0618
     }
 
     [Fact]
@@ -1632,7 +1745,7 @@ public class EventTests
         public string? description { get; set; }
         public int? quantity { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -1655,7 +1768,7 @@ public class EventTests
         public string? name { get; set; }
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
@@ -1683,7 +1796,7 @@ public class EventTests
         public string? name { get; set; }
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }

@@ -16,6 +16,7 @@ namespace nostify.Tests;
 /// in ExternalDataEventFactory. Exercises the full Kafka request-response
 /// round trip using mock IProducer and IConsumer.
 /// </summary>
+[Collection(AsyncEventRequestEnvironmentCollection.Name)]
 public class GetAsyncEventsAsyncTests : IDisposable
 {
     private readonly Mock<IProducer<string, string>> _mockProducer;
@@ -42,13 +43,38 @@ public class GetAsyncEventsAsyncTests : IDisposable
         _mockNostify.Setup(n => n.KafkaProducer).Returns(_mockProducer.Object);
         _mockNostify.Setup(n => n.CreateKafkaConsumer(It.IsAny<string>())).Returns(_mockConsumer.Object);
 
-        // Consumer subscription setup
-        _mockConsumer.Setup(c => c.Subscription).Returns(new List<string>());
-        _mockConsumer.Setup(c => c.Subscribe(It.IsAny<IEnumerable<string>>()));
+        // Model the subscription and assignment state established by a real
+        // consumer's rebalance poll. This keeps unit tests deterministic while
+        // exercising the production assignment-before-publish synchronization.
+        var subscribedTopics = new List<string>();
+        var assignedPartitions = new List<TopicPartition>();
+        _mockConsumer.Setup(c => c.Subscription)
+            .Returns(() => subscribedTopics);
+        _mockConsumer.Setup(c => c.Assignment)
+            .Returns(() => assignedPartitions);
+        _mockConsumer.Setup(c => c.QueryWatermarkOffsets(
+                It.IsAny<TopicPartition>(),
+                It.IsAny<TimeSpan>()))
+            .Returns(new WatermarkOffsets(0, 0));
+        _mockConsumer.Setup(c => c.Assign(
+                It.IsAny<IEnumerable<TopicPartitionOffset>>()))
+            .Callback<IEnumerable<TopicPartitionOffset>>(offsets =>
+                assignedPartitions = offsets
+                    .Select(offset => offset.TopicPartition)
+                    .ToList());
+        _mockConsumer.Setup(c => c.Subscribe(It.IsAny<IEnumerable<string>>()))
+            .Callback<IEnumerable<string>>(topics =>
+            {
+                subscribedTopics = topics.Distinct().ToList();
+                assignedPartitions = subscribedTopics
+                    .Select(topic => new TopicPartition(topic, 0))
+                    .ToList();
+            });
         _mockConsumer.Setup(c => c.Close());
         _mockConsumer.Setup(c => c.Dispose());
 
-        // Setup event store container (needed by GetEventsAsync even when only using async requestors)
+        // Provide an event-store container for tests that configure same-service selectors.
+        // Transport-only requestors must not resolve this dependency.
         var mockContainer = CosmosTestHelpers.CreateMockContainerWithEvents(new List<Event>());
         _mockNostify.Setup(n => n.GetEventStoreContainerAsync(It.IsAny<bool>()))
             .ReturnsAsync(mockContainer.Object);
@@ -96,6 +122,17 @@ public class GetAsyncEventsAsyncTests : IDisposable
     }
 
     #region Helpers
+
+    /// <summary>
+    /// Determines whether a Kafka consumer group uses the expected projection
+    /// scope and a valid unique suffix.
+    /// </summary>
+    private static bool IsUniqueProjectionConsumerGroup(string group)
+    {
+        const string Prefix = "FactoryTestProjections-";
+        return group.StartsWith(Prefix, StringComparison.Ordinal) &&
+            Guid.TryParseExact(group.Substring(Prefix.Length), "N", out _);
+    }
 
     /// <summary>
     /// Creates a ConsumeResult containing a serialized AsyncEventRequestResponse.
@@ -226,6 +263,32 @@ public class GetAsyncEventsAsyncTests : IDisposable
         var eventsForP0 = result.Where(r => r.aggregateRootId == _testProjections[0].id).ToList();
         Assert.Single(eventsForP0);
         Assert.Equal(3, eventsForP0[0].events.Count);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_AsyncOnlyRequestor_DoesNotResolveCosmosEventStore()
+    {
+        // Arrange: a complete Kafka response is sufficient for an async-only requestor.
+        Guid foreignId = _testProjections[0].externalId!.Value;
+        SetupSingleCompleteResponse(
+            "ExternalService_EventRequest",
+            CreateTestEvents(foreignId, 1));
+
+        var factory = new ExternalDataEventFactory<FactoryTestProjection>(
+            _mockNostify.Object,
+            _testProjections,
+            queryExecutor: InMemoryQueryExecutor.Default);
+        factory.WithAsyncEventRequestor("ExternalService", p => p.externalId);
+
+        // Act
+        List<ExternalDataEvent> result = await factory.GetEventsAsync();
+
+        // Assert: Kafka-only projections remain independent of Cosmos availability.
+        Assert.Single(result);
+        Assert.Single(result[0].events);
+        _mockNostify.Verify(
+            nostify => nostify.GetEventStoreContainerAsync(It.IsAny<bool>()),
+            Times.Never);
     }
 
     [Fact]
@@ -1377,10 +1440,6 @@ public class GetAsyncEventsAsyncTests : IDisposable
         // Arrange
         var foreignId = _testProjections[0].externalId!.Value;
         var testEvents = CreateTestEvents(foreignId, 1);
-        List<string> subscribedTopics = null;
-
-        _mockConsumer.Setup(c => c.Subscribe(It.IsAny<IEnumerable<string>>()))
-            .Callback<IEnumerable<string>>(topics => subscribedTopics = topics.ToList());
 
         SetupSingleCompleteResponse("SvcA_EventRequest", testEvents);
 
@@ -1394,13 +1453,16 @@ public class GetAsyncEventsAsyncTests : IDisposable
         // Act
         await factory.GetEventsAsync();
 
-        // Assert - consumer should have been subscribed to the response topic
-        Assert.NotNull(subscribedTopics);
-        Assert.Contains("SvcA_EventRequestResponse", subscribedTopics);
+        // Assert - consumer should have been subscribed to the response topic.
+        _mockConsumer.Verify(
+            consumer => consumer.Subscribe(
+                It.Is<IEnumerable<string>>(topics =>
+                    topics.Contains("SvcA_EventRequestResponse"))),
+            Times.Once);
     }
 
     [Fact]
-    public async Task GetEventsAsync_GetsConsumerWithProjectionContainerName()
+    public async Task GetEventsAsync_GetsConsumerWithUniqueProjectionScopedGroupName()
     {
         // Arrange
         var foreignId = _testProjections[0].externalId!.Value;
@@ -1416,8 +1478,13 @@ public class GetAsyncEventsAsyncTests : IDisposable
         // Act
         await factory.GetEventsAsync();
 
-        // Assert - consumer group should be the projection's containerName
-        _mockNostify.Verify(n => n.CreateKafkaConsumer("FactoryTestProjections"), Times.Once);
+        // Assert - each request uses a projection-scoped but unique consumer
+        // group, preventing concurrent requestors from sharing partitions.
+        _mockNostify.Verify(
+            nostify => nostify.CreateKafkaConsumer(
+                It.Is<string>(group =>
+                    IsUniqueProjectionConsumerGroup(group))),
+            Times.Once);
     }
 
     #endregion
@@ -1748,8 +1815,6 @@ public class GetAsyncEventsAsyncTests : IDisposable
             })
             .ReturnsAsync(new DeliveryResult<string, string>());
 
-        _mockConsumer.Setup(c => c.Subscription).Returns(new List<string>());
-        _mockConsumer.Setup(c => c.Subscribe(It.IsAny<IEnumerable<string>>()));
         _mockConsumer.Setup(c => c.Consume(It.IsAny<TimeSpan>()))
             .Returns<TimeSpan>(timeout =>
             {
@@ -1926,8 +1991,6 @@ public class GetAsyncEventsAsyncTests : IDisposable
             .ReturnsAsync(mockContainer.Object);
         localMockNostify.Setup(n => n.KafkaProducer).Returns(_mockProducer.Object);
         localMockNostify.Setup(n => n.CreateKafkaConsumer(It.IsAny<string>())).Returns(_mockConsumer.Object);
-
-        _mockConsumer.Setup(c => c.Subscription).Returns(new List<string>());
 
         // Setup Kafka for the dependent requestor
         string capturedCorrelationId = null;

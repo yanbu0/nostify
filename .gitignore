@@ -434,3 +434,7 @@ $RECYCLE.BIN/
 
 
 publish/*
+
+# Developer-specific test configuration
+nostify.Tests/local.appsettings.json
+nostify.IntegrationTests/local.appsettings.json

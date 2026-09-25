@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
+using System.Reflection.Emit;
 using Xunit;
 using nostify;
 using Confluent.Kafka;
@@ -26,6 +28,45 @@ public class NostifyFactoryTests
         }
 
         return bool.TryParse(value, out var result) ? result : null;
+    }
+
+    private static (Assembly Assembly, Type FirstType, Type SecondType) CreateEventTypeAssembly(
+        string firstName,
+        string secondName)
+    {
+        var assemblyName = new AssemblyName($"FactoryEventTypes_{Guid.NewGuid():N}");
+        var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+        var moduleBuilder = assemblyBuilder.DefineDynamicModule(assemblyName.Name!);
+        Type firstType = CreateEventType(moduleBuilder, "FactoryEventTypeA", firstName);
+        Type secondType = CreateEventType(moduleBuilder, "FactoryEventTypeB", secondName);
+        return (assemblyBuilder, firstType, secondType);
+    }
+
+    private static Type CreateEventType(ModuleBuilder moduleBuilder, string typeName, string eventTypeName)
+    {
+        var typeBuilder = moduleBuilder.DefineType(
+            typeName,
+            TypeAttributes.Public | TypeAttributes.Sealed,
+            typeof(EventType));
+        var constructor = typeBuilder.DefineConstructor(
+            MethodAttributes.Public,
+            CallingConventions.Standard,
+            Type.EmptyTypes);
+        var generator = constructor.GetILGenerator();
+        var baseConstructor = typeof(EventType).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            new[] { typeof(string), typeof(bool), typeof(bool) },
+            modifiers: null)!;
+
+        generator.Emit(OpCodes.Ldarg_0);
+        generator.Emit(OpCodes.Ldstr, eventTypeName);
+        generator.Emit(OpCodes.Ldc_I4_0);
+        generator.Emit(OpCodes.Ldc_I4_0);
+        generator.Emit(OpCodes.Call, baseConstructor);
+        generator.Emit(OpCodes.Ret);
+
+        return typeBuilder.CreateType()!;
     }
 
     [Fact]
@@ -551,6 +592,126 @@ public class NostifyFactoryTests
     }
 
     [Fact]
+    public void WithEventHubs_WithDiagnosticLogging_EnablesProtocolDiagnostics()
+    {
+        // Arrange
+        const string connectionString =
+            "Endpoint=sb://test-namespace.servicebus.windows.net/;" +
+            "SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=testkey123";
+
+        // Act
+        var config = NostifyFactory.WithEventHubs(
+            connectionString,
+            diagnosticLogging: true);
+
+        // Assert
+        Assert.Equal(
+            "security,broker,protocol",
+            GetProducerConfigValue(config, "debug"));
+    }
+
+    [Theory]
+    [InlineData("cosmosApiKey", "WithCosmos")]
+    [InlineData("cosmosDbName", "WithCosmos")]
+    [InlineData("cosmosEndpointUri", "WithCosmos")]
+    [InlineData("kafkaUrl", "WithKafka or WithEventHubs")]
+    public void Build_WithMissingRequiredConfiguration_ThrowsDescriptiveError(
+        string missingProperty,
+        string expectedConfigurationMethod)
+    {
+        // Arrange: begin with complete configuration, then remove exactly one required value.
+        var config = NostifyFactory
+            .WithCosmos("test-key", "test-db", "https://test.documents.azure.com:443/")
+            .WithKafka("localhost:9092");
+
+        switch (missingProperty)
+        {
+            case "cosmosApiKey":
+                config.cosmosApiKey = " ";
+                break;
+            case "cosmosDbName":
+                config.cosmosDbName = " ";
+                break;
+            case "cosmosEndpointUri":
+                config.cosmosEndpointUri = " ";
+                break;
+            case "kafkaUrl":
+                config.producerConfig.BootstrapServers = " ";
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported test configuration property '{missingProperty}'.");
+        }
+
+        // Act
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Build());
+
+        // Assert
+        Assert.Equal(
+            $"{missingProperty} is not configured. Call {expectedConfigurationMethod}() before Build().",
+            exception.Message);
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_WithLogger_EmitsDiscoveryDiagnostics()
+    {
+        // Arrange
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+        logger.Setup(value => value.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Debug))
+            .Returns(true);
+        var config = new NostifyConfig { logger = logger.Object };
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(
+            typeof(TopicDiscoveryAggregate).Assembly,
+            config);
+
+        // Assert
+        Assert.NotEmpty(topics);
+        logger.Verify(
+            value => value.Log(
+                Microsoft.Extensions.Logging.LogLevel.Debug,
+                It.IsAny<Microsoft.Extensions.Logging.EventId>(),
+                It.Is<It.IsAnyType>((_, _) => true),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public void BuildGeneric_WhenAdminConfigurationFails_LogsAndWrapsFailure()
+    {
+        // Arrange: a null producer configuration makes admin-client setup fail before any
+        // broker operation, allowing deterministic verification of startup error handling.
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger>();
+        logger.Setup(value => value.IsEnabled(It.IsAny<Microsoft.Extensions.Logging.LogLevel>()))
+            .Returns(true);
+        var config = new NostifyConfig
+        {
+            logger = logger.Object,
+            producerConfig = null!
+        };
+
+        // Act
+        var exception = Assert.Throws<NostifyException>(
+            () => config.Build<TestFactoryAggregate>());
+
+        // Assert
+        Assert.StartsWith(
+            "Error building Nostify with autocreate topics",
+            exception.Message,
+            StringComparison.Ordinal);
+        logger.Verify(
+            value => value.Log(
+                Microsoft.Extensions.Logging.LogLevel.Error,
+                It.IsAny<Microsoft.Extensions.Logging.EventId>(),
+                It.Is<It.IsAnyType>((_, _) => true),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
     public void Build_WithEventHubs_ShouldCreateNostifyInstance()
     {
         // Arrange
@@ -852,6 +1013,100 @@ public class NostifyFactoryTests
         Assert.Equal(mockHttpClientFactory.Object, config.httpClientFactory);
     }
 
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_ShouldDetectConcreteEventTypesByRuntimeName()
+    {
+        // Arrange
+        var config = new NostifyConfig
+        {
+            kafkaTopicAutoCreatePartitions = 5
+        };
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
+
+        // Assert
+        var topic = Assert.Single(topics, t => t.Name == "Create_TopicDiscoveryAggregateLogical");
+        Assert.Equal(5, topic.NumPartitions);
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_WithAsyncEventRequest_ShouldAlsoAddEventRequestTopics()
+    {
+        // Arrange
+        var config = new NostifyConfig
+        {
+            kafkaTopicAutoCreatePartitions = 4,
+            autoCreateEventRequestTopics = true
+        };
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
+
+        // Assert
+        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAggregateLogical");
+        Assert.Contains(topics, t => t.Name == "TopicDiscoveryAggregate_EventRequest");
+        Assert.Contains(topics, t => t.Name == "TopicDiscoveryAggregate_EventRequestResponse");
+        Assert.All(
+            topics.Where(t => t.Name is "Create_TopicDiscoveryAggregateLogical" or "TopicDiscoveryAggregate_EventRequest" or "TopicDiscoveryAggregate_EventRequestResponse"),
+            t => Assert.Equal(4, t.NumPartitions));
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_ShouldUseLogicalEventTypeNames()
+    {
+        // Arrange
+        var config = new NostifyConfig();
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(typeof(TopicDiscoveryAggregate).Assembly, config);
+
+        // Assert
+        Assert.Contains(topics, t => t.Name == "Create_TopicDiscoveryAggregateLogical");
+        Assert.Contains(topics, t => t.Name == "Update_TopicDiscoveryAggregateLogical");
+        Assert.DoesNotContain(topics, t => t.Name == nameof(Create_TopicDiscoveryAggregate));
+        Assert.DoesNotContain(topics, t => t.Name == nameof(Update_TopicDiscoveryAggregate));
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_WithDuplicateEventTypeNames_ThrowsDescriptiveException()
+    {
+        // Arrange: startup validates the exact logical names before creating topic specifications.
+        const string duplicateName = "Duplicate_Startup_Event";
+        var definitions = CreateEventTypeAssembly(duplicateName, duplicateName);
+
+        // Act
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            NostifyFactory.GetAutoCreateTopicSpecifications(definitions.Assembly, new NostifyConfig()));
+
+        // Assert
+        string firstType = definitions.FirstType.AssemblyQualifiedName!;
+        string secondType = definitions.SecondType.AssemblyQualifiedName!;
+        Assert.Contains(duplicateName, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(firstType, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(secondType, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("ordinal, case-sensitive", exception.Message, StringComparison.Ordinal);
+        Assert.True(
+            exception.Message.IndexOf(firstType, StringComparison.Ordinal) <
+            exception.Message.IndexOf(secondType, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GetAutoCreateTopicSpecifications_WithCaseDistinctEventTypeNames_CreatesBothTopics()
+    {
+        // Arrange: names that differ only by case are distinct under the event identity contract.
+        var definitions = CreateEventTypeAssembly("Case_Event", "case_event");
+
+        // Act
+        var topics = NostifyFactory.GetAutoCreateTopicSpecifications(
+            definitions.Assembly,
+            new NostifyConfig());
+
+        // Assert
+        Assert.Contains(topics, topic => topic.Name == "Case_Event");
+        Assert.Contains(topics, topic => topic.Name == "case_event");
+    }
+
     #endregion
 
 }
@@ -865,8 +1120,35 @@ public class TestFactoryAggregate : NostifyObject, IAggregate
     public static string aggregateType => "TestFactoryAggregate";
     public static string currentStateContainerName => "TestFactoryAggregates";
     
-    public override void Apply(IEvent eventToApply)
+    protected override void Apply(EventType eventType, IEvent eventToApply)
     {
         UpdateProperties<TestFactoryAggregate>(eventToApply.payload);
+    }
+}
+
+public sealed class Create_TopicDiscoveryAggregate : EventType
+{
+    public Create_TopicDiscoveryAggregate() : base("Create_TopicDiscoveryAggregateLogical", isNew: true)
+    {
+    }
+}
+
+public sealed class Update_TopicDiscoveryAggregate : EventType
+{
+    public Update_TopicDiscoveryAggregate() : base("Update_TopicDiscoveryAggregateLogical")
+    {
+    }
+}
+
+public class TopicDiscoveryAggregate : NostifyObject, IAggregate
+{
+    public string Name { get; set; } = "";
+    public bool isDeleted { get; set; }
+    public static string aggregateType => "TopicDiscoveryAggregate";
+    public static string currentStateContainerName => "TopicDiscoveryAggregates";
+
+    protected override void Apply(EventType eventType, IEvent eventToApply)
+    {
+        UpdateProperties<TopicDiscoveryAggregate>(eventToApply.payload);
     }
 }

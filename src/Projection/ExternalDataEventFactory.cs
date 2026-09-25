@@ -14,6 +14,10 @@ using Newtonsoft.Json;
 
 namespace nostify;
 
+/// <summary>
+/// Configures and retrieves same-service and external events needed to initialize projections.
+/// </summary>
+/// <typeparam name="P">The projection type whose external data is requested.</typeparam>
 public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentifiable, IApplyable
 {
     private readonly HttpClient? _httpClient;
@@ -28,16 +32,49 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     private List<Func<P, Guid?>> _nullableDependantIdSelectors = new List<Func<P, Guid?>>();
     private List<Func<P, List<Guid>>> _dependantListIdSelectors = new List<Func<P, List<Guid>>>();
     private List<Func<P, List<Guid?>>> _nullableDependantListIdSelectors = new List<Func<P, List<Guid?>>>();
-    private EventRequester<P>[] _eventRequestors = new EventRequester<P>[0];
-    private EventRequester<P>[] _dependantEventRequestors = new EventRequester<P>[0];
-    private AsyncEventRequester<P>[] _asyncEventRequestors = new AsyncEventRequester<P>[0];
-    private AsyncEventRequester<P>[] _dependantAsyncEventRequestors = new AsyncEventRequester<P>[0];
-    private GrpcEventRequester<P>[] _grpcEventRequestors = new GrpcEventRequester<P>[0];
-    private GrpcEventRequester<P>[] _dependantGrpcEventRequestors = new GrpcEventRequester<P>[0];
+    private EventRequester<P>[] _eventRequestors = Array.Empty<EventRequester<P>>();
+    private EventRequester<P>[] _dependantEventRequestors = Array.Empty<EventRequester<P>>();
+    private AsyncEventRequester<P>[] _asyncEventRequestors = Array.Empty<AsyncEventRequester<P>>();
+    private AsyncEventRequester<P>[] _dependantAsyncEventRequestors = Array.Empty<AsyncEventRequester<P>>();
+    private GrpcEventRequester<P>[] _grpcEventRequestors = Array.Empty<GrpcEventRequester<P>>();
+    private GrpcEventRequester<P>[] _dependantGrpcEventRequestors = Array.Empty<GrpcEventRequester<P>>();
     private List<P> _projectionsToInit = new List<P>();
     private DateTime? _pointInTime;
     private string? _grpcAuthToken;
     private string? _grpcAddress;
+
+    private static readonly Action<ILogger, string, string, long, Exception?> LogCallTimingMessage =
+        LoggerMessage.Define<string, string, long>(
+            LogLevel.Information,
+            new EventId(1, nameof(LogCallTimingMessage)),
+            "ExternalDataEventFactory call={CallType} target={Target} elapsedMs={ElapsedMs}");
+
+    private static readonly Action<ILogger, long, Exception?> LogTotalTimingMessage =
+        LoggerMessage.Define<long>(
+            LogLevel.Information,
+            new EventId(2, nameof(LogTotalTimingMessage)),
+            "ExternalDataEventFactory totalElapsedMs={TotalElapsedMs}");
+
+    private static readonly Action<ILogger, Exception?> LogKafkaConsumerCloseFailure =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            new EventId(3, nameof(LogKafkaConsumerCloseFailure)),
+            "Kafka consumer close failed during external event request cleanup; disposal will continue");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogIndeterminateEventFilter =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Warning,
+            new EventId(4, nameof(LogIndeterminateEventFilter)),
+            "ExternalDataEventFactory could not determine all handled event types for projection={ProjectionType}; returned events will not be filtered. Reason={Reason}");
+
+    /// <summary>
+    /// Gets whether events that the projection cannot apply are removed from event retrieval results.
+    /// The default is <see langword="true"/>. When set to <see langword="false"/>, all returned
+    /// events are retained and the developer may need to override the catch-all
+    /// <see cref="NostifyObject.Apply(EventType, IEvent)"/> dispatch to avoid exceptions for
+    /// unsupported event types.
+    /// </summary>
+    public bool RemoveNonAppliedEvents { get; }
 
     /// <summary>
     /// Creates a new ExternalDataEventFactory
@@ -49,7 +86,13 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     /// <param name="queryExecutor">Optional query executor for unit testing. Defaults to CosmosQueryExecutor.</param>
     /// <param name="authToken">Optional default authentication token used by gRPC requestors when no per-call token is specified</param>
     /// <param name="grpcAddress">Optional default gRPC endpoint address used by <c>WithGrpcEventRequestor</c> and <c>WithDependantGrpcEventRequestor</c> overloads that omit the <c>address</c> parameter. When provided, the single-string overloads treat their first parameter as a service name rather than an endpoint address.</param>
-    public ExternalDataEventFactory(INostify nostify, List<P> projectionsToInit, HttpClient? httpClient = null, DateTime? pointInTime = null, IQueryExecutor? queryExecutor = null, string? authToken = null, string? grpcAddress = null)
+    /// <param name="removeNonAppliedEvents">
+    /// Whether to remove returned events that have no event-specific handler on <typeparamref name="P"/>.
+    /// Defaults to <see langword="true"/>. If set to <see langword="false"/>, the developer may
+    /// need to override the catch-all <see cref="NostifyObject.Apply(EventType, IEvent)"/> dispatch
+    /// to avoid exceptions for unsupported event types.
+    /// </param>
+    public ExternalDataEventFactory(INostify nostify, List<P> projectionsToInit, HttpClient? httpClient = null, DateTime? pointInTime = null, IQueryExecutor? queryExecutor = null, string? authToken = null, string? grpcAddress = null, bool removeNonAppliedEvents = true)
     {
         this._nostify = nostify;
         this._httpClient = httpClient;
@@ -58,6 +101,45 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         this._queryExecutor = queryExecutor ?? CosmosQueryExecutor.Default;
         this._grpcAuthToken = authToken;
         this._grpcAddress = grpcAddress;
+        RemoveNonAppliedEvents = removeNonAppliedEvents;
+    }
+
+    /// <summary>
+    /// Removes events that are not handled by the projection when a complete finite handler set
+    /// can be discovered. If discovery is indeterminate, all events are retained for compatibility.
+    /// </summary>
+    private List<ExternalDataEvent> FilterNonAppliedEvents(List<ExternalDataEvent> externalEvents)
+    {
+        if (!RemoveNonAppliedEvents || externalEvents.Count == 0)
+        {
+            return externalEvents;
+        }
+
+        HandledEventTypeResolver.Resolution resolution = HandledEventTypeResolver.GetOrBuild(typeof(P));
+        if (!resolution.IsDeterminate)
+        {
+            ILogger? logger = _nostify.Logger;
+            if (logger?.IsEnabled(LogLevel.Warning) == true)
+            {
+                LogIndeterminateEventFilter(
+                    logger,
+                    typeof(P).FullName ?? typeof(P).Name,
+                    resolution.IndeterminateReason ?? "Unknown reason.",
+                    null);
+            }
+
+            return externalEvents;
+        }
+
+        // Preserve each projection mapping and event order while dropping empty mappings.
+        return externalEvents
+            .Select(externalEvent => new ExternalDataEvent(
+                externalEvent.aggregateRootId,
+                externalEvent.events
+                    .Where(evt => evt.eventType != null && resolution.EventTypeNames.Contains(evt.eventType.name))
+                    .ToList()))
+            .Where(externalEvent => externalEvent.events.Count != 0)
+            .ToList();
     }
 
     /// <summary>
@@ -1049,6 +1131,11 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
     #endregion
 
+    /// <summary>
+    /// Retrieves all configured same-service, HTTP, asynchronous, and gRPC events.
+    /// </summary>
+    /// <param name="enableLogging">Whether to emit timing diagnostics for each configured request.</param>
+    /// <returns>The external events grouped for the projections being initialized.</returns>
     public async Task<List<ExternalDataEvent>> GetEventsAsync(bool enableLogging = false)
     {
         var logger = _nostify.Logger;
@@ -1067,7 +1154,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 return;
             }
 
-            logger!.LogInformation("ExternalDataEventFactory call={CallType} target={Target} elapsedMs={ElapsedMs}", callType, target, elapsedMs);
+            LogCallTimingMessage(logger!, callType, target, elapsedMs, null);
         }
 
         Stopwatch? StartCallStopwatch() => shouldLog ? Stopwatch.StartNew() : null;
@@ -1093,63 +1180,75 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
 
         try
         {
-            // Handle same service IDs using ExternalDataEvent.GetEventsAsync
-            Container eventStoreContainer = await _nostify.GetEventStoreContainerAsync();
+            // Resolve Cosmos only when a same-service selector needs it. Kafka, HTTP, and gRPC-only
+            // requestors must remain independently usable when their own dependencies are available.
+            bool requiresEventStore =
+                _foreignKeySelectors.Count != 0 ||
+                _nullableForeignKeySelectors.Count != 0 ||
+                _foreignKeyListSelectors.Count != 0 ||
+                _nullableForeignKeyListSelectors.Count != 0 ||
+                _dependantIdSelectors.Count != 0 ||
+                _dependantListIdSelectors.Count != 0 ||
+                _nullableDependantIdSelectors.Count != 0 ||
+                _nullableDependantListIdSelectors.Count != 0;
+            Container? eventStoreContainer = requiresEventStore
+                ? await _nostify.GetEventStoreContainerAsync()
+                : null;
 
             // Get events for single-ID selectors (non-nullable)
-            if (_foreignKeySelectors.Any())
+            if (_foreignKeySelectors.Count != 0)
             {
                 var singleIdStopwatch = StartCallStopwatch();
                 var singleIdEvents = await ExternalDataEvent.GetEventsAsync(
-                    eventStoreContainer,
+                    eventStoreContainer!,
                     _projectionsToInit,
                     _queryExecutor,
                     _pointInTime,
                     _foreignKeySelectors.ToArray());
                 StopAndLogCall(singleIdStopwatch, "WithSameServiceIdSelectors", "eventStore");
-                result.AddRange(singleIdEvents);
+                result.AddRange(FilterNonAppliedEvents(singleIdEvents));
             }
 
             // Get events for single-ID selectors (nullable) - nulls filtered by HasValue in ExternalDataEvent
-            if (_nullableForeignKeySelectors.Any())
+            if (_nullableForeignKeySelectors.Count != 0)
             {
                 var nullableSingleIdStopwatch = StartCallStopwatch();
                 var nullableSingleIdEvents = await ExternalDataEvent.GetEventsAsync(
-                    eventStoreContainer,
+                    eventStoreContainer!,
                     _projectionsToInit,
                     _queryExecutor,
                     _pointInTime,
                     _nullableForeignKeySelectors.ToArray());
                 StopAndLogCall(nullableSingleIdStopwatch, "WithSameServiceIdSelectorsNullable", "eventStore");
-                result.AddRange(nullableSingleIdEvents);
+                result.AddRange(FilterNonAppliedEvents(nullableSingleIdEvents));
             }
 
             // Get events for list-ID selectors (non-nullable)
-            if (_foreignKeyListSelectors.Any())
+            if (_foreignKeyListSelectors.Count != 0)
             {
                 var listIdStopwatch = StartCallStopwatch();
                 var listIdEvents = await ExternalDataEvent.GetEventsAsync(
-                    eventStoreContainer,
+                    eventStoreContainer!,
                     _projectionsToInit,
                     _queryExecutor,
                     _pointInTime,
                     _foreignKeyListSelectors.ToArray());
                 StopAndLogCall(listIdStopwatch, "WithSameServiceListIdSelectors", "eventStore");
-                result.AddRange(listIdEvents);
+                result.AddRange(FilterNonAppliedEvents(listIdEvents));
             }
 
             // Get events for list-ID selectors (nullable) - nulls within lists filtered by HasValue in ExternalDataEvent
-            if (_nullableForeignKeyListSelectors.Any())
+            if (_nullableForeignKeyListSelectors.Count != 0)
             {
                 var nullableListIdStopwatch = StartCallStopwatch();
                 var nullableListIdEvents = await ExternalDataEvent.GetEventsAsync(
-                    eventStoreContainer,
+                    eventStoreContainer!,
                     _projectionsToInit,
                     _queryExecutor,
                     _pointInTime,
                     _nullableForeignKeyListSelectors.ToArray());
                 StopAndLogCall(nullableListIdStopwatch, "WithSameServiceListIdSelectorsNullable", "eventStore");
-                result.AddRange(nullableListIdEvents);
+                result.AddRange(FilterNonAppliedEvents(nullableListIdEvents));
             }
 
             // Handle external service IDs before dependent selectors
@@ -1162,20 +1261,20 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     this._pointInTime,
                     this._eventRequestors);
                 StopAndLogCall(externalEventsStopwatch, "WithEventRequestor", BuildTargetsString(this._eventRequestors.Select(r => r.Url)));
-                result.AddRange(externalEvents);
+                result.AddRange(FilterNonAppliedEvents(externalEvents));
             }
 
             // Handle async (Kafka) event requestors
-            if (_asyncEventRequestors.Any())
+            if (_asyncEventRequestors.Length != 0)
             {
                 var asyncEventsStopwatch = StartCallStopwatch();
                 var asyncEvents = await GetAsyncEventsAsync(_asyncEventRequestors, _projectionsToInit);
                 StopAndLogCall(asyncEventsStopwatch, "WithAsyncEventRequestor", BuildTargetsString(_asyncEventRequestors.Select(r => r.ServiceName)));
-                result.AddRange(asyncEvents);
+                result.AddRange(FilterNonAppliedEvents(asyncEvents));
             }
 
             // Handle gRPC event requestors
-            if (_grpcEventRequestors.Any())
+            if (_grpcEventRequestors.Length != 0)
             {
                 var grpcEventsStopwatch = StartCallStopwatch();
                 var grpcEvents = await ExternalDataEvent.GetMultiServiceEventsViaGrpcAsync<P>(
@@ -1183,44 +1282,44 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     this._pointInTime,
                     this._grpcEventRequestors);
                 StopAndLogCall(grpcEventsStopwatch, "WithGrpcEventRequestor", BuildTargetsString(this._grpcEventRequestors.Select(r => $"{r.ServiceName}@{r.Address}")));
-                result.AddRange(grpcEvents);
+                result.AddRange(FilterNonAppliedEvents(grpcEvents));
             }
 
             // Handle dependent selectors - these require applying ALL initial events first to get the IDs
             // This runs after both local and external events have been collected
-            if (_dependantIdSelectors.Any() || _dependantListIdSelectors.Any() || _nullableDependantIdSelectors.Any() || _nullableDependantListIdSelectors.Any())
+            if (_dependantIdSelectors.Count != 0 || _dependantListIdSelectors.Count != 0 || _nullableDependantIdSelectors.Count != 0 || _nullableDependantListIdSelectors.Count != 0)
             {
                 var dependantEventsStopwatch = StartCallStopwatch();
-                var dependantEvents = await GetDependantEventsAsync(eventStoreContainer, result);
+                var dependantEvents = await GetDependantEventsAsync(eventStoreContainer!, result);
                 StopAndLogCall(dependantEventsStopwatch, "WithSameServiceDependantSelectors", "eventStore");
-                result.AddRange(dependantEvents);
+                result.AddRange(FilterNonAppliedEvents(dependantEvents));
             }
 
             // Handle dependent external event requestors - these also require applying initial events first
-            if (_httpClient != null && _dependantEventRequestors.Any())
+            if (_httpClient != null && _dependantEventRequestors.Length != 0)
             {
                 var dependantExternalEventsStopwatch = StartCallStopwatch();
                 var dependantExternalEvents = await GetDependantExternalEventsAsync(result);
                 StopAndLogCall(dependantExternalEventsStopwatch, "WithDependantEventRequestor", BuildTargetsString(_dependantEventRequestors.Select(r => r.Url)));
-                result.AddRange(dependantExternalEvents);
+                result.AddRange(FilterNonAppliedEvents(dependantExternalEvents));
             }
 
             // Handle dependent async (Kafka) event requestors - these also require applying initial events first
-            if (_dependantAsyncEventRequestors.Any())
+            if (_dependantAsyncEventRequestors.Length != 0)
             {
                 var dependantAsyncEventsStopwatch = StartCallStopwatch();
                 var dependantAsyncEvents = await GetDependantAsyncEventsAsync(result);
                 StopAndLogCall(dependantAsyncEventsStopwatch, "WithDependantAsyncEventRequestor", BuildTargetsString(_dependantAsyncEventRequestors.Select(r => r.ServiceName)));
-                result.AddRange(dependantAsyncEvents);
+                result.AddRange(FilterNonAppliedEvents(dependantAsyncEvents));
             }
 
             // Handle dependent gRPC event requestors - these also require applying initial events first
-            if (_dependantGrpcEventRequestors.Any())
+            if (_dependantGrpcEventRequestors.Length != 0)
             {
                 var dependantGrpcEventsStopwatch = StartCallStopwatch();
                 var dependantGrpcEvents = await GetDependantGrpcEventsAsync(result);
                 StopAndLogCall(dependantGrpcEventsStopwatch, "WithDependantGrpcEventRequestor", BuildTargetsString(_dependantGrpcEventRequestors.Select(r => $"{r.ServiceName}@{r.Address}")));
-                result.AddRange(dependantGrpcEvents);
+                result.AddRange(FilterNonAppliedEvents(dependantGrpcEvents));
             }
 
             return result;
@@ -1230,7 +1329,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             if (totalStopwatch != null)
             {
                 totalStopwatch.Stop();
-                logger!.LogInformation("ExternalDataEventFactory totalElapsedMs={TotalElapsedMs}", totalStopwatch.ElapsedMilliseconds);
+                LogTotalTimingMessage(logger!, totalStopwatch.ElapsedMilliseconds, null);
             }
         }
     }
@@ -1250,102 +1349,71 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             // Create a deep copy of the projection using JSON serialization
             var json = JsonConvert.SerializeObject(projection);
             var projectionCopy = JsonConvert.DeserializeObject<P>(json);
-            
+
             if (projectionCopy == null)
             {
                 continue;
             }
-            
+
             // Find events for this projection and apply them
             var eventsForProjection = initialEvents
                 .Where(e => e.aggregateRootId == projection.id)
                 .SelectMany(e => e.events)
                 .OrderBy(e => e.timestamp);
-            
+
             foreach (var evt in eventsForProjection)
             {
                 projectionCopy.Apply(evt);
             }
-            
+
             projectionsWithAppliedEvents.Add(projectionCopy);
         }
 
         // Collect all dependent IDs from the updated projections
         var dependantIds = new HashSet<Guid>();
-        
+
         foreach (var projection in projectionsWithAppliedEvents)
         {
-            // Extract single IDs
+            // Selector failures indicate invalid projection configuration and must remain observable.
             foreach (var selector in _dependantIdSelectors)
             {
-                try
+                var id = selector(projection);
+                if (id != Guid.Empty)
                 {
-                    var id = selector(projection);
-                    if (id != Guid.Empty)
+                    dependantIds.Add(id);
+                }
+            }
+
+            foreach (var selector in _nullableDependantIdSelectors)
+            {
+                var id = selector(projection);
+                if (id.HasValue && id.Value != Guid.Empty)
+                {
+                    dependantIds.Add(id.Value);
+                }
+            }
+
+            foreach (var selector in _dependantListIdSelectors)
+            {
+                var ids = selector(projection);
+                if (ids != null)
+                {
+                    foreach (var id in ids.Where(id => id != Guid.Empty))
                     {
                         dependantIds.Add(id);
                     }
                 }
-                catch
-                {
-                    // Selector threw an exception (e.g., null reference), skip this ID
-                }
             }
 
-            // Extract nullable single IDs
-            foreach (var selector in _nullableDependantIdSelectors)
-            {
-                try
-                {
-                    var id = selector(projection);
-                    if (id.HasValue && id.Value != Guid.Empty)
-                    {
-                        dependantIds.Add(id.Value);
-                    }
-                }
-                catch
-                {
-                    // Selector threw an exception (e.g., null reference), skip this ID
-                }
-            }
-
-            // Extract list IDs
-            foreach (var selector in _dependantListIdSelectors)
-            {
-                try
-                {
-                    var ids = selector(projection);
-                    if (ids != null)
-                    {
-                        foreach (var id in ids.Where(id => id != Guid.Empty))
-                        {
-                            dependantIds.Add(id);
-                        }
-                    }
-                }
-                catch
-                {
-                    // Selector threw an exception (e.g., null reference), skip these IDs
-                }
-            }
-
-            // Extract nullable list IDs
             foreach (var selector in _nullableDependantListIdSelectors)
             {
-                try
+                var ids = selector(projection);
+                if (ids != null)
                 {
-                    var ids = selector(projection);
-                    if (ids != null)
+                    foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty))
                     {
-                        foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty))
-                        {
-                            dependantIds.Add(id!.Value);
-                        }
+                        dependantIds.Add(id!.Value);
                     }
-                }
-                catch
-                {
-                    // Selector threw an exception (e.g., null reference), skip these IDs
                 }
             }
         }
@@ -1356,7 +1424,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         var newIds = dependantIds.Except(existingEventIds).ToList();
 
         // Only query if there are new IDs to fetch
-        if (newIds.Any())
+        if (newIds.Count != 0)
         {
             // Query for events matching the dependent IDs
             var query = eventStoreContainer.GetItemLinqQueryable<Event>()
@@ -1374,66 +1442,48 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             foreach (var projection in projectionsWithAppliedEvents)
             {
                 var projectionDependantIds = new HashSet<Guid>();
-                
-                // Get IDs from this projection's selectors
+
+                // Re-evaluate selectors to map fetched events back to each projection.
                 foreach (var selector in _dependantIdSelectors)
                 {
-                    try
+                    var id = selector(projection);
+                    if (id != Guid.Empty && newIds.Contains(id))
                     {
-                        var id = selector(projection);
-                        if (id != Guid.Empty && newIds.Contains(id))
-                        {
-                            projectionDependantIds.Add(id);
-                        }
+                        projectionDependantIds.Add(id);
                     }
-                    catch { }
                 }
 
-                // Get IDs from nullable single selectors
                 foreach (var selector in _nullableDependantIdSelectors)
                 {
-                    try
+                    var id = selector(projection);
+                    if (id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value))
                     {
-                        var id = selector(projection);
-                        if (id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value))
-                        {
-                            projectionDependantIds.Add(id.Value);
-                        }
+                        projectionDependantIds.Add(id.Value);
                     }
-                    catch { }
                 }
 
                 foreach (var selector in _dependantListIdSelectors)
                 {
-                    try
+                    var ids = selector(projection);
+                    if (ids != null)
                     {
-                        var ids = selector(projection);
-                        if (ids != null)
+                        foreach (var id in ids.Where(id => id != Guid.Empty && newIds.Contains(id)))
                         {
-                            foreach (var id in ids.Where(id => id != Guid.Empty && newIds.Contains(id)))
-                            {
-                                projectionDependantIds.Add(id);
-                            }
+                            projectionDependantIds.Add(id);
                         }
                     }
-                    catch { }
                 }
 
-                // Get IDs from nullable list selectors
                 foreach (var selector in _nullableDependantListIdSelectors)
                 {
-                    try
+                    var ids = selector(projection);
+                    if (ids != null)
                     {
-                        var ids = selector(projection);
-                        if (ids != null)
+                        foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value)))
                         {
-                            foreach (var id in ids.Where(id => id.HasValue && id.Value != Guid.Empty && newIds.Contains(id.Value)))
-                            {
-                                projectionDependantIds.Add(id!.Value);
-                            }
+                            projectionDependantIds.Add(id!.Value);
                         }
                     }
-                    catch { }
                 }
 
                 // Get events for this projection's dependent IDs
@@ -1441,7 +1491,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     .Where(e => projectionDependantIds.Contains(e.aggregateRootId))
                     .ToList();
 
-                if (projectionEvents.Any())
+                if (projectionEvents.Count != 0)
                 {
                     // Find the original projection (not the copy)
                     var originalProjection = _projectionsToInit.First(p => p.id == projection.id);
@@ -1466,23 +1516,23 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             // Create a deep copy of the projection using JSON serialization
             var json = JsonConvert.SerializeObject(projection);
             var projectionCopy = JsonConvert.DeserializeObject<P>(json);
-            
+
             if (projectionCopy == null)
             {
                 continue;
             }
-            
+
             // Find events for this projection and apply them
             var eventsForProjection = initialEvents
                 .Where(e => e.aggregateRootId == projection.id)
                 .SelectMany(e => e.events)
                 .OrderBy(e => e.timestamp);
-            
+
             foreach (var evt in eventsForProjection)
             {
                 projectionCopy.Apply(evt);
             }
-            
+
             projectionsWithAppliedEvents.Add(projectionCopy);
         }
 
@@ -1608,123 +1658,171 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             timeoutSeconds = parsedTimeout;
         }
 
-        // Create a dedicated consumer per request to avoid thread-safety issues with shared IConsumer instances.
-        // Confluent's IConsumer is not thread-safe; concurrent projection initializations for the same
-        // projection type would otherwise share and race on the same cached consumer instance.
-        var consumerGroup = P.containerName;
+        // Create a dedicated consumer and consumer group per factory invocation. A unique group prevents
+        // concurrent projection initializations from partition-sharing response records and avoids stale
+        // committed offsets influencing AutoOffsetReset.Latest assignment.
+        var consumerGroup = $"{P.containerName}-{Guid.NewGuid():N}";
         var consumer = _nostify.CreateKafkaConsumer(consumerGroup);
 
         try
         {
-        // Process each requestor
-        foreach (var requestor in requestors)
-        {
-            // Collect all foreign IDs for this requestor
-            var allSelectors = requestor.ListSelectors.Any()
-                ? requestor.GetAllForeignIdSelectors(projections)
-                : requestor.ForeignIdSelectors;
-
-            var foreignIds = (
-                from p in projections
-                from f in allSelectors
-                let foreignId = f(p)
-                where foreignId.HasValue && foreignId.Value != Guid.Empty
-                select foreignId!.Value
-            ).Distinct().ToList();
-
-            if (!foreignIds.Any())
+            // Process each requestor
+            foreach (var requestor in requestors)
             {
-                continue;
-            }
+                // Collect all foreign IDs for this requestor.
+                var allSelectors = requestor.ListSelectors.Length != 0
+                    ? requestor.GetAllForeignIdSelectors(projections)
+                    : requestor.ForeignIdSelectors;
 
-            // Ensure consumer is subscribed to the response topic
-            var responseTopic = requestor.ResponseTopicName;
-            var currentSubscription = consumer.Subscription ?? new List<string>();
-            if (!currentSubscription.Contains(responseTopic))
-            {
-                var newSubscription = currentSubscription.Concat(new[] { responseTopic }).Distinct().ToList();
-                consumer.Subscribe(newSubscription);
-                // Poll briefly to trigger partition assignment
-                consumer.Consume(TimeSpan.FromMilliseconds(100));
-            }
-
-            // Generate correlation ID for this request
-            var correlationId = Guid.NewGuid().ToString();
-
-            // Produce the request
-            var request = new AsyncEventRequest
-            {
-                topic = requestor.TopicName,
-                responseTopic = responseTopic,
-                subtopic = "",
-                aggregateRootIds = foreignIds,
-                pointInTime = _pointInTime,
-                correlationId = correlationId
-            };
-            var requestJson = JsonConvert.SerializeObject(request);
-            await _nostify.KafkaProducer.ProduceAsync(requestor.TopicName, new Message<string, string> { Value = requestJson });
-
-            // Consume responses until complete or timeout
-            var accumulatedEvents = new List<Event>();
-            var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-            bool complete = false;
-
-            while (!complete && DateTime.UtcNow < deadline)
-            {
-                var remaining = deadline - DateTime.UtcNow;
-                if (remaining <= TimeSpan.Zero) break;
-
-                var consumeResult = consumer.Consume(remaining < TimeSpan.FromSeconds(1) ? remaining : TimeSpan.FromSeconds(1));
-                if (consumeResult == null) continue;
-
-                // Try to deserialize as a response
-                AsyncEventRequestResponse response;
-                try
-                {
-                    response = JsonConvert.DeserializeObject<AsyncEventRequestResponse>(consumeResult.Message.Value);
-                }
-                catch
-                {
-                    // Not a response message (could be a request from another service), skip
-                    continue;
-                }
-
-                // Check if this response matches our correlation ID
-                if (response?.correlationId != correlationId) continue;
-
-                // Accumulate events
-                if (response.events != null)
-                {
-                    accumulatedEvents.AddRange(response.events);
-                }
-
-                // Reset deadline on each matching message
-                deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-
-                if (response.complete)
-                {
-                    complete = true;
-                }
-            }
-
-            // Map accumulated events back to projections
-            if (accumulatedEvents.Any())
-            {
-                var eventsByAggRoot = accumulatedEvents.ToLookup(e => e.aggregateRootId);
-
-                var mappedEvents = (
+                var foreignIds = (
                     from p in projections
                     from f in allSelectors
                     let foreignId = f(p)
-                    where foreignId.HasValue
-                    let eventList = eventsByAggRoot[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
-                    where eventList.Any()
-                    select new ExternalDataEvent(p.id, eventList)
-                ).ToList();
+                    where foreignId.HasValue && foreignId.Value != Guid.Empty
+                    select foreignId!.Value
+                ).Distinct().ToList();
 
-                result.AddRange(mappedEvents);
+                if (foreignIds.Count == 0)
+                {
+                    continue;
+                }
+
+                // Ensure consumer is subscribed to the response topic
+                var responseTopic = requestor.ResponseTopicName;
+                var currentSubscription = consumer.Subscription ?? new List<string>();
+                if (!currentSubscription.Contains(responseTopic))
+                {
+                    var newSubscription = currentSubscription.Concat(new[] { responseTopic }).Distinct().ToList();
+                    consumer.Subscribe(newSubscription);
+
+                    // Wait for the rebalance, then explicitly establish a high-watermark
+                    // boundary before publishing. Assignment alone can be visible before
+                    // librdkafka has resolved AutoOffsetReset.Latest; an immediate response
+                    // in that window could otherwise become the eventual "latest" offset
+                    // and be skipped.
+                    var assignmentDeadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+                    while (!consumer.Assignment.Any(partition => partition.Topic == responseTopic) &&
+                           DateTime.UtcNow < assignmentDeadline)
+                    {
+                        consumer.Consume(TimeSpan.FromMilliseconds(100));
+                    }
+
+                    List<TopicPartition> responseAssignments = consumer.Assignment
+                        .Where(partition => partition.Topic == responseTopic)
+                        .ToList();
+                    if (responseAssignments.Count == 0)
+                    {
+                        throw new TimeoutException(
+                            $"Kafka consumer group '{consumerGroup}' was not assigned response topic " +
+                            $"'{responseTopic}' within {timeoutSeconds} seconds. Subscription: " +
+                            $"'{string.Join(",", consumer.Subscription ?? new List<string>())}'; " +
+                            $"broker: '{_nostify.KafkaUrl}'.");
+                    }
+
+                    var startingOffsets = new List<TopicPartitionOffset>();
+                    foreach (TopicPartition partition in responseAssignments)
+                    {
+                        TimeSpan remaining = assignmentDeadline - DateTime.UtcNow;
+                        if (remaining <= TimeSpan.Zero)
+                        {
+                            throw new TimeoutException(
+                                $"Kafka consumer group '{consumerGroup}' could not establish the " +
+                                $"starting offset for response topic '{responseTopic}' within " +
+                                $"{timeoutSeconds} seconds; broker: '{_nostify.KafkaUrl}'.");
+                        }
+
+                        WatermarkOffsets watermarks = consumer.QueryWatermarkOffsets(
+                            partition,
+                            remaining);
+                        startingOffsets.Add(new TopicPartitionOffset(
+                            partition,
+                            watermarks.High));
+                    }
+
+                    // Replace the subscription-derived assignment with explicit
+                    // offsets. A Seek can still be superseded by deferred group
+                    // offset initialization; Assign makes the pre-publish boundary
+                    // authoritative for every response partition.
+                    consumer.Assign(startingOffsets);
+                }
+
+                // Generate correlation ID for this request
+                var correlationId = Guid.NewGuid().ToString();
+
+                // Produce the request
+                var request = new AsyncEventRequest
+                {
+                    topic = requestor.TopicName,
+                    responseTopic = responseTopic,
+                    subtopic = "",
+                    aggregateRootIds = foreignIds,
+                    pointInTime = _pointInTime,
+                    correlationId = correlationId
+                };
+                var requestJson = JsonConvert.SerializeObject(request);
+                await _nostify.KafkaProducer.ProduceAsync(requestor.TopicName, new Message<string, string> { Value = requestJson });
+
+                // Consume responses until complete or timeout
+                var accumulatedEvents = new List<Event>();
+                var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+                bool complete = false;
+
+                while (!complete && DateTime.UtcNow < deadline)
+                {
+                    var remaining = deadline - DateTime.UtcNow;
+                    if (remaining <= TimeSpan.Zero) break;
+
+                    var consumeResult = consumer.Consume(remaining < TimeSpan.FromSeconds(1) ? remaining : TimeSpan.FromSeconds(1));
+                    if (consumeResult == null) continue;
+
+                    // Try to deserialize as a response
+                    AsyncEventRequestResponse? response;
+                    try
+                    {
+                        response = JsonConvert.DeserializeObject<AsyncEventRequestResponse>(consumeResult.Message.Value);
+                    }
+                    catch
+                    {
+                        // Not a response message (could be a request from another service), skip
+                        continue;
+                    }
+
+                    // Check if this response matches our correlation ID
+                    if (response?.correlationId != correlationId) continue;
+
+                    // Accumulate events
+                    if (response.events != null)
+                    {
+                        accumulatedEvents.AddRange(response.events);
+                    }
+
+                    // Reset deadline on each matching message
+                    deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+
+                    if (response.complete)
+                    {
+                        complete = true;
+                    }
+                }
+
+                // Map accumulated events back to projections
+                if (accumulatedEvents.Count != 0)
+                {
+                    var eventsByAggRoot = accumulatedEvents.ToLookup(e => e.aggregateRootId);
+
+                    var mappedEvents = (
+                        from p in projections
+                        from f in allSelectors
+                        let foreignId = f(p)
+                        where foreignId.HasValue
+                        let eventList = eventsByAggRoot[foreignId!.Value].OrderBy(e => e.timestamp).ToList()
+                        where eventList.Count != 0
+                        select new ExternalDataEvent(p.id, eventList)
+                    ).ToList();
+
+                    result.AddRange(mappedEvents);
+                }
             }
-        }
         }
         finally
         {
@@ -1732,8 +1830,17 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             {
                 consumer.Close();
             }
-            catch { }
-            consumer.Dispose();
+            catch (Exception ex)
+            {
+                if (_nostify.Logger?.IsEnabled(LogLevel.Warning) == true)
+                {
+                    LogKafkaConsumerCloseFailure(_nostify.Logger, ex);
+                }
+            }
+            finally
+            {
+                consumer.Dispose();
+            }
         }
         return result;
     }

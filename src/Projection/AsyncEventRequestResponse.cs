@@ -12,14 +12,14 @@ namespace nostify;
 public class AsyncEventRequestResponse
 {
     /// <summary>
-    /// The Kafka topic this response was published to.
+    /// Gets or sets the Kafka topic to which this response was published.
     /// </summary>
-    public string topic { get; set; }
+    public string topic { get; set; } = string.Empty;
 
     /// <summary>
-    /// Reserved for future use. Subtopic for more granular filtering.
+    /// Gets or sets the optional subtopic reserved for more granular filtering.
     /// </summary>
-    public string subtopic { get; set; }
+    public string subtopic { get; set; } = string.Empty;
 
     /// <summary>
     /// Whether this is the final chunk of the response.
@@ -33,9 +33,9 @@ public class AsyncEventRequestResponse
     public List<Event> events { get; set; } = new List<Event>();
 
     /// <summary>
-    /// The correlation ID matching the original <see cref="AsyncEventRequest.correlationId"/>.
+    /// Gets or sets the correlation identifier matching the original <see cref="AsyncEventRequest.correlationId"/>.
     /// </summary>
-    public string correlationId { get; set; }
+    public string correlationId { get; set; } = string.Empty;
 
     /// <summary>
     /// Splits a list of events into chunks that fit within the specified maximum byte size when serialized.

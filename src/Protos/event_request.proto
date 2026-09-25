@@ -5,7 +5,6 @@ option csharp_namespace = "nostify.Grpc";
 package nostify;
 
 import "google/protobuf/timestamp.proto";
-import "google/protobuf/wrappers.proto";
 
 /// Service for requesting events from an external microservice's event store.
 /// This is the gRPC equivalent of the HTTP EventRequest endpoint and the Kafka AsyncEventRequest pattern.

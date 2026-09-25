@@ -63,6 +63,7 @@ public static class WorkerConfigurationExtensions
         };
 
         options.Converters.Add(new JsonStringEnumConverter());
+        options.Converters.Add(new SystemTextEventTypeJsonConverter());
         options.Converters.Add(new InterfaceConverter<IEvent, Event>());
         options.Converters.Add(new InterfaceConverter<ISaga, Saga>());
         options.Converters.Add(new InterfaceConverter<ISagaStep, SagaStep>());

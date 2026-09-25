@@ -1,6 +1,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
@@ -223,7 +224,7 @@ public static class PagedQueryExtensions
         {
             throw new ArgumentException($"Page size must be greater than or equal to 1. Received: {tableState.pageSize}", "tableState.pageSize");
         }
-        
+
         // Check for potential overflow in offset calculation: (page - 1) * pageSize
         try
         {
@@ -233,7 +234,7 @@ public static class PagedQueryExtensions
         {
             throw new ArgumentException(
                 $"The combination of page ({tableState.page}) and pageSize ({tableState.pageSize}) would cause an arithmetic overflow.",
-                "tableState");
+                nameof(tableState));
         }
     }
 
@@ -258,11 +259,11 @@ public static class PagedQueryExtensions
             // Build expression: x => x.PropertyName == filterValue
             var parameter = Expression.Parameter(typeof(T), "x");
             var property = Expression.Property(parameter, filter.Key);
-            
+
             // Convert filter value to the property type
             var propertyType = typeof(T).GetProperty(filter.Key)?.PropertyType ?? typeof(string);
             object? convertedValue = ConvertFilterValue(filter.Key, filter.Value, propertyType);
-            
+
             var constant = Expression.Constant(convertedValue, propertyType);
             var equality = Expression.Equal(property, constant);
             var lambda = Expression.Lambda<Func<T, bool>>(equality, parameter);
@@ -295,19 +296,19 @@ public static class PagedQueryExtensions
             }
             if (targetType == typeof(int))
             {
-                return int.Parse(value);
+                return int.Parse(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(long))
             {
-                return long.Parse(value);
+                return long.Parse(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(decimal))
             {
-                return decimal.Parse(value);
+                return decimal.Parse(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(double))
             {
-                return double.Parse(value);
+                return double.Parse(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(bool))
             {
@@ -315,7 +316,7 @@ public static class PagedQueryExtensions
             }
             if (targetType == typeof(DateTime))
             {
-                return DateTime.Parse(value);
+                return DateTime.Parse(value, CultureInfo.InvariantCulture);
             }
             if (Nullable.GetUnderlyingType(targetType) != null)
             {
@@ -326,7 +327,7 @@ public static class PagedQueryExtensions
                 return ConvertFilterValue(filterKey, value, Nullable.GetUnderlyingType(targetType)!);
             }
 
-            return Convert.ChangeType(value, targetType);
+            return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
         }
         catch (FormatException ex)
         {
@@ -372,8 +373,10 @@ public static class PagedQueryExtensions
         var property = Expression.Property(parameter, sortColumn);
         var lambda = Expression.Lambda(property, parameter);
 
-        // Determine sort method name
-        var methodName = sortDirection?.ToLower() == "desc" ? "OrderByDescending" : "OrderBy";
+        // Determine sort method name using protocol-level ordinal comparison.
+        var methodName = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase)
+            ? "OrderByDescending"
+            : "OrderBy";
 
         // Create the OrderBy/OrderByDescending call
         var resultExpression = Expression.Call(
@@ -396,7 +399,7 @@ public interface IPagedResult<T>
     /// Gets or sets the list of items for the current page.
     /// </summary>
     public List<T> items { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the total count of items matching the query criteria.
     /// </summary>
@@ -410,7 +413,7 @@ public interface IPagedResult<T>
 public class PagedResult<T> : IPagedResult<T>
 {
     /// <inheritdoc/>
-    public List<T> items { get; set; }
+    public List<T> items { get; set; } = new();
     /// <inheritdoc/>
     public int totalCount { get; set; }
 }
@@ -424,22 +427,22 @@ public interface ITableStateChange
     /// Gets or sets the current page number.
     /// </summary>
     public int page { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the number of items per page.
     /// </summary>
     public int pageSize { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the filter criteria as a list of key-value pairs.
     /// </summary>
     public List<KeyValuePair<string, string>>? filters { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the column to sort by.
     /// </summary>
     public string? sortColumn { get; set; }
-    
+
     /// <summary>
     /// Gets or sets the sort direction (ascending or descending).
     /// </summary>

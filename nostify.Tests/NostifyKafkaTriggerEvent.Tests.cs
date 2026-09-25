@@ -5,12 +5,27 @@ using System.Text;
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using nostify;
+using SystemTextJsonSerializer = System.Text.Json.JsonSerializer;
 using Xunit;
 
 namespace nostify.Tests;
 
 public class NostifyKafkaTriggerEventTests
 {
+    public sealed class Update_ResourceGrade : EventType
+    {
+        public Update_ResourceGrade() : base("Update_ResourceGrade")
+        {
+        }
+    }
+
+    public sealed class Legacy_Update_ResourceGrade : NostifyCommand
+    {
+        public Legacy_Update_ResourceGrade() : base("Update_ResourceGrade")
+        {
+        }
+    }
+
     private NostifyKafkaTriggerEvent CreateKafkaEvent(string commandName)
     {
         var originalEvent = new Event
@@ -681,12 +696,12 @@ public class NostifyKafkaTriggerEventTests
         // Act
         var kafkaEvent = new NostifyKafkaTriggerEvent();
 
-        // Assert
+        // Assert non-null defaults match the trigger binding contract and nullable annotations.
         Assert.NotNull(kafkaEvent);
-        Assert.Null(kafkaEvent.Value);
-        Assert.Null(kafkaEvent.Topic);
-        Assert.Null(kafkaEvent.Key);
-        Assert.Null(kafkaEvent.Headers);
+        Assert.Empty(kafkaEvent.Value);
+        Assert.Empty(kafkaEvent.Topic);
+        Assert.Empty(kafkaEvent.Key);
+        Assert.Empty(kafkaEvent.Headers);
     }
 
     [Fact]
@@ -719,6 +734,259 @@ public class NostifyKafkaTriggerEventTests
         Assert.NotNull(result);
         Assert.NotNull(result.payload);
         Assert.Equal("Create_ComplexObject", result.command.name);
+    }
+
+    [Fact]
+    public void GetEvent_WithLegacyNostifyCommand_ResolvesToConcreteEventTypeByName()
+    {
+        // Arrange
+        var originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            command = new NostifyCommand("Update_ResourceGrade"),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var kafkaEvent = new NostifyKafkaTriggerEvent
+        {
+            Value = JsonConvert.SerializeObject(originalEvent, SerializationSettings.NostifyDefault),
+            Offset = 1,
+            Partition = 0,
+            Topic = "test-topic"
+        };
+
+        // Act
+        var result = kafkaEvent.GetEvent("Update_ResourceGrade");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
+        Assert.Equal("Update_ResourceGrade", result.eventType.name);
+    }
+
+    [Fact]
+    public void GetEvent_WithDifferentlyCasedName_DoesNotResolveConcreteEventType()
+    {
+        // Arrange: logical event names use ordinal, case-sensitive identity.
+        var originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            command = new NostifyCommand("update_resourcegrade"),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var kafkaEvent = new NostifyKafkaTriggerEvent
+        {
+            Value = JsonConvert.SerializeObject(originalEvent, SerializationSettings.NostifyDefault),
+            Offset = 1,
+            Partition = 0,
+            Topic = "test-topic"
+        };
+
+        // Act
+        var result = kafkaEvent.GetEvent();
+
+        // Assert: preserve the unknown name and metadata through the compatibility adapter.
+        Assert.NotNull(result);
+        Assert.IsType<LegacyNostifyCommandEventType>(result.eventType);
+        Assert.Equal("update_resourcegrade", result.eventType.name);
+    }
+
+    [Fact]
+    public void GetEvent_WithDerivedLegacyCommand_ResolvesToConcreteEventTypeByName()
+    {
+        // Arrange
+        var originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            command = new Legacy_Update_ResourceGrade(),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var kafkaEvent = new NostifyKafkaTriggerEvent
+        {
+            Value = JsonConvert.SerializeObject(originalEvent, SerializationSettings.NostifyDefault),
+            Offset = 1,
+            Partition = 0,
+            Topic = "test-topic"
+        };
+
+        // Act
+        var result = kafkaEvent.GetEvent("Update_ResourceGrade");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
+        Assert.Equal("Update_ResourceGrade", result.eventType.name);
+    }
+
+    [Fact]
+    public void GetEvent_WithConcreteCanonicalEventType_UsesStaticInstance()
+    {
+        // Arrange
+        var originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            eventType = new Update_ResourceGrade(),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var kafkaEvent = new NostifyKafkaTriggerEvent
+        {
+            Value = JsonConvert.SerializeObject(originalEvent, SerializationSettings.NostifyDefault),
+            Offset = 1,
+            Partition = 0,
+            Topic = "test-topic"
+        };
+
+        // Act
+        var result = kafkaEvent.GetEvent("Update_ResourceGrade");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
+    }
+
+    [Fact]
+    public void GetEvent_WithOtherLoadedEventTypes_ResolvesConcreteEventTypeByName()
+    {
+        // Arrange
+        var originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            command = new NostifyCommand("Update_ResourceGrade"),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var kafkaEvent = new NostifyKafkaTriggerEvent
+        {
+            Value = JsonConvert.SerializeObject(originalEvent, SerializationSettings.NostifyDefault),
+            Offset = 1,
+            Partition = 0,
+            Topic = "test-topic"
+        };
+
+        // Act
+        var result = kafkaEvent.GetEvent("Update_ResourceGrade");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
+        Assert.Equal("Update_ResourceGrade", result.eventType.name);
+    }
+
+    [Fact]
+    public void NewtonsoftJson_RoundTrip_ReturnsCanonicalInstance_AndSchemaVersion2()
+    {
+        var originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            eventType = new Update_ResourceGrade(),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var json = JsonConvert.SerializeObject(originalEvent, SerializationSettings.NostifyDefault);
+        var result = JsonConvert.DeserializeObject<Event>(json, SerializationSettings.NostifyDefault);
+
+        Assert.NotNull(result);
+        Assert.IsType<Update_ResourceGrade>(result.eventType);
+        Assert.Equal(2, result.schemaVersion);
+    }
+
+    [Fact]
+    public void NewtonsoftJson_CommandOnlyDocument_RemainsSchemaVersion1AndReadable()
+    {
+        var json = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "aggregateRootId": "22222222-2222-2222-2222-222222222222",
+          "timestamp": "2026-01-01T00:00:00Z",
+          "userId": "33333333-3333-3333-3333-333333333333",
+          "partitionKey": "44444444-4444-4444-4444-444444444444",
+          "command": {
+            "name": "Update_ResourceGrade",
+            "isNew": false,
+            "allowNullPayload": false
+          },
+          "payload": {
+            "id": "55555555-5555-5555-5555-555555555555",
+            "value": "updated"
+          }
+        }
+        """;
+
+        var result = JsonConvert.DeserializeObject<Event>(json, SerializationSettings.NostifyDefault);
+
+        Assert.NotNull(result);
+        Assert.Equal(1, result.schemaVersion);
+        Assert.IsType<LegacyNostifyCommandEventType>(result.eventType);
+        Assert.Equal("Update_ResourceGrade", result.eventType.name);
+    }
+
+    [Fact]
+    public void SystemTextJson_RoundTrip_ResolvesStaticInstanceByName()
+    {
+        // Arrange
+        var options = WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions();
+        IEvent originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            eventType = new Update_ResourceGrade(),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+        string json = SystemTextJsonSerializer.Serialize(originalEvent, options);
+
+        // Act
+        var result = SystemTextJsonSerializer.Deserialize<IEvent>(json, options);
+
+        // Assert
+        var deserializedEvent = Assert.IsType<Event>(result);
+        Assert.IsType<Update_ResourceGrade>(deserializedEvent.eventType);
+        Assert.Equal("Update_ResourceGrade", deserializedEvent.command.name);
+    }
+
+    [Fact]
+    public void SystemTextJson_RoundTrip_WithTypedEvent_WritesAndReadsSchemaVersion2()
+    {
+        var options = WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions();
+        IEvent originalEvent = new Event
+        {
+            aggregateRootId = Guid.NewGuid(),
+            eventType = new Update_ResourceGrade(),
+            timestamp = DateTime.UtcNow,
+            userId = Guid.NewGuid(),
+            partitionKey = Guid.NewGuid(),
+            payload = new { id = Guid.NewGuid(), value = "updated" }
+        };
+
+        var json = SystemTextJsonSerializer.Serialize(originalEvent, options);
+        var result = SystemTextJsonSerializer.Deserialize<IEvent>(json, options);
+
+        var deserializedEvent = Assert.IsType<Event>(result);
+        Assert.Contains("\"schemaVersion\":2", json);
+        Assert.Equal(2, deserializedEvent.schemaVersion);
+        Assert.IsType<Update_ResourceGrade>(deserializedEvent.eventType);
     }
 
     #endregion

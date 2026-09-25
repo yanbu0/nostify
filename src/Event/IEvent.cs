@@ -1,41 +1,47 @@
 using System;
-using System.ComponentModel.DataAnnotations;
-using System.Collections.Generic;
 
 namespace nostify;
 
 /// <summary>
-/// Represents events in event store
+/// Represents a persisted Nostify event and the metadata required to apply it to an aggregate or projection.
 /// </summary>
 public interface IEvent
 {
     /// <summary>
-    /// Timestamp of event
+    /// Timestamp of event.
     /// </summary>
     DateTime timestamp { get; set; }
 
     /// <summary>
-    /// Partition key to apply event to
+    /// Partition key to apply event to.
     /// </summary>
     Guid partitionKey { get; set; }
 
     /// <summary>
-    /// Id of user
+    /// Id of user.
     /// </summary>
     Guid userId { get; set; }
 
     /// <summary>
-    /// Id of event
+    /// Id of event.
     /// </summary>
     Guid id { get; set; }
 
     /// <summary>
-    /// Command to perform, defined in Aggregate implementation
+    /// Event type to perform, defined in Aggregate implementation.
     /// </summary>
+    EventType eventType { get; set; }
+
+    /// <summary>
+    /// Legacy command compatibility metadata.
+    /// For non-legacy typed event types, this returns a cached <see cref="NostifyCommand"/>
+    /// shim that mirrors the current <see cref="eventType"/> metadata.
+    /// </summary>
+    [Obsolete("Use eventType instead.")]
     NostifyCommand command { get; set; }
 
     /// <summary>
-    /// Key of the Aggregate to perform the event on
+    /// Gets or sets the identifier of the aggregate root to which the event applies.
     /// </summary>
     /// <para>
     /// <strong>The series of events for an Aggregate should have the same key.</strong>
@@ -43,20 +49,18 @@ public interface IEvent
     Guid aggregateRootId { get; set; }
 
     /// <summary>
-    /// Object containing properties of Aggregate to perform the command on
+    /// Gets or sets the properties to apply, or <see langword="null"/> for legacy or interoperable events without a payload.
     /// </summary>
-    /// <para>
-    /// Properties must be the exact same name to have updates applied.
-    /// </para>
-    /// <para>
-    /// Delete command should contain solelly the id value of the Aggregate to delete.
-    /// </para>
-    object payload { get; set; }
+    /// <remarks>
+    /// Payload property names must match target property names. Delete events conventionally carry only the identifier of the aggregate to delete.
+    /// </remarks>
+    object? payload { get; set; }
 
     /// <summary>
-    /// Checks if the payload of this event has a property
+    /// Determines whether the payload contains a property with the specified name.
     /// </summary>
-    /// <param name="propertyName">Property to check for</param>
+    /// <param name="propertyName">The property name to locate.</param>
+    /// <returns><see langword="true"/> when the payload contains the property; otherwise, <see langword="false"/>.</returns>
     bool PayloadHasProperty(string propertyName);
 
     /// <summary>
@@ -65,8 +69,11 @@ public interface IEvent
     int schemaVersion { get; }
 
     /// <summary>
-    /// Returns typed value of payload
+    /// Deserializes the payload as the requested type.
     /// </summary>
+    /// <typeparam name="T">The payload type to return.</typeparam>
+    /// <returns>The deserialized payload.</returns>
+    /// <exception cref="InvalidOperationException">The event has no payload.</exception>
     T GetPayload<T>();
 
     /// <summary>

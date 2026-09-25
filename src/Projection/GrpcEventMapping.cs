@@ -19,7 +19,15 @@ public static class GrpcEventMapping
     /// <returns>A nostify Event instance</returns>
     public static Event MapFromProto(EventMessage msg)
     {
-        if (msg == null) throw new ArgumentNullException(nameof(msg));
+        ArgumentNullException.ThrowIfNull(msg);
+
+        var eventTypeName = msg.Command?.Name;
+        var resolvedType = EventTypeResolver.Resolve(eventTypeName);
+        var resolvedEventType = EventTypeResolver.CreateInstance(
+            resolvedType,
+            eventTypeName,
+            msg.Command?.IsNew ?? false,
+            msg.Command?.AllowNullPayload ?? false);
 
         var evt = new Event
         {
@@ -28,11 +36,8 @@ public static class GrpcEventMapping
             timestamp = msg.Timestamp?.ToDateTime() ?? DateTime.UtcNow,
             partitionKey = string.IsNullOrEmpty(msg.PartitionKey) ? Guid.Empty : Guid.Parse(msg.PartitionKey),
             userId = string.IsNullOrEmpty(msg.UserId) ? Guid.Empty : Guid.Parse(msg.UserId),
-            command = new NostifyCommand(
-                msg.Command?.Name ?? "Unknown",
-                msg.Command?.IsNew ?? false,
-                msg.Command?.AllowNullPayload ?? false
-            ),
+            eventType = resolvedEventType,
+            schemaVersion = msg.SchemaVersion,
             payload = string.IsNullOrEmpty(msg.PayloadJson)
                 ? null!
                 : JsonConvert.DeserializeObject<object>(msg.PayloadJson)!
@@ -48,7 +53,7 @@ public static class GrpcEventMapping
     /// <returns>A protobuf EventMessage instance</returns>
     public static EventMessage MapToProto(Event evt)
     {
-        if (evt == null) throw new ArgumentNullException(nameof(evt));
+        ArgumentNullException.ThrowIfNull(evt);
 
         var msg = new EventMessage
         {
@@ -61,12 +66,12 @@ public static class GrpcEventMapping
             PayloadJson = evt.payload != null
                 ? JsonConvert.SerializeObject(evt.payload)
                 : string.Empty,
-            Command = evt.command != null
+            Command = evt.eventType != null
                 ? new CommandMessage
                 {
-                    Name = evt.command.name ?? "Unknown",
-                    IsNew = evt.command.isNew,
-                    AllowNullPayload = evt.command.allowNullPayload
+                    Name = evt.eventType.name ?? "Unknown",
+                    IsNew = evt.eventType.isNew,
+                    AllowNullPayload = evt.eventType.allowNullPayload
                 }
                 : new CommandMessage { Name = "Unknown" }
         };

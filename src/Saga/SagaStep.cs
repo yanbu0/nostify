@@ -9,7 +9,7 @@ namespace nostify;
 public class SagaStep : ISagaStep
 {
     /// <inheritdoc/>
-    public int order { get; set; } = 0;
+    public int order { get; set; }
     /// <inheritdoc/>
     public IEvent stepEvent { get; set; }
     /// <inheritdoc/>

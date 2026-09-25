@@ -2,17 +2,25 @@
 
 using System.Net.Http.Json;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json;
 using nostify;
 
 namespace _ReplaceMe__Service;
-
+ 
 public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_ProjectionName_>
 {
-    public _ProjectionName_()
+    private readonly ILogger<_ProjectionName_> _logger;
+ 
+    public _ProjectionName_() : this(NullLogger<_ProjectionName_>.Instance)
     {
-        
-    }   
+    }
+
+    public _ProjectionName_(ILogger<_ProjectionName_> logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
 
     public static string containerName => "_ProjectionName_";
 
@@ -51,19 +59,118 @@ public class _ProjectionName_ : NostifyObject, IProjection, IHasExternalData<_Pr
 
     //**********************************************************************************************
 
-    public override void Apply(IEvent eventToApply)
+    // Apply handlers use attribute-based dispatch so the projection can map concrete EventType
+    // classes directly and still fall back to string-based mappings when cross-service types
+    // are not available in the current project.
+
+    /// <summary>
+    /// Handles Create events for the projection.
+    /// Populates the projection properties from the event payload.
+    /// </summary>
+    [ApplyEvents(typeof(Create__ReplaceMe_))]
+    protected void ApplyCreate(IEvent eventToApply)
     {
-        //Should update the command tree below to not use string matching
-        if (eventToApply.command.name.Equals("Create__ReplaceMe_") 
-                || eventToApply.command.name.Equals("Update__ReplaceMe_"))
+        try
         {
             this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
         }
-        else if (eventToApply.command.name.Equals("Delete__ReplaceMe_"))
+        catch (Exception ex)
         {
-            this.isDeleted = true;
-            this.ttl = 1;
+            _logger.LogError(ex,
+                "Error applying Create event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
+                containerName,
+                typeof(Create__ReplaceMe_).Name,
+                eventToApply);
+            throw;
         }
+    }
+
+    /// <summary>
+    /// Handles Update events for the projection.
+    /// Populates the projection properties from the event payload.
+    /// </summary>
+    [ApplyEvents(typeof(Update__ReplaceMe_))]
+    protected void ApplyUpdate(IEvent eventToApply)
+    {
+        try
+        {
+            this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error applying Update event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
+                containerName,
+                typeof(Update__ReplaceMe_).Name,
+                eventToApply);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Handles bulk create events for the projection.
+    /// Populates the projection properties from the event payload.
+    /// </summary>
+    [ApplyEvents(typeof(BulkCreate__ReplaceMe_))]
+    protected void ApplyBulkCreate(IEvent eventToApply)
+    {
+        try
+        {
+            this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error applying BulkCreate event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
+                containerName,
+                typeof(BulkCreate__ReplaceMe_).Name,
+                eventToApply);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Handles bulk update events for the projection.
+    /// Populates the projection properties from the event payload.
+    /// </summary>
+    [ApplyEvents(typeof(BulkUpdate__ReplaceMe_))]
+    protected void ApplyBulkUpdate(IEvent eventToApply)
+    {
+        try
+        {
+            this.UpdateProperties<_ProjectionName_>(eventToApply.payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error applying BulkUpdate event to projection {ProjectionName}. EventType: {EventType}, Event: {@Event}",
+                containerName,
+                typeof(BulkUpdate__ReplaceMe_).Name,
+                eventToApply);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Handles delete events for the projection.
+    /// Marks the projection as deleted and sets a TTL for soft deletion.
+    /// </summary>
+    [ApplyEvents(typeof(Delete__ReplaceMe_))]
+    protected void ApplyDelete(IEvent eventToApply)
+    {
+        this.isDeleted = true;
+        this.ttl = 1;
+    }
+
+    /// <summary>
+    /// Handles bulk delete events for the projection.
+    /// Marks the projection as deleted and sets a TTL for soft deletion.
+    /// </summary>
+    [ApplyEvents(typeof(BulkDelete__ReplaceMe_))]
+    protected void ApplyBulkDelete(IEvent eventToApply)
+    {
+        this.isDeleted = true;
+        this.ttl = 1;
     }
 
     public async static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<_ProjectionName_> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)

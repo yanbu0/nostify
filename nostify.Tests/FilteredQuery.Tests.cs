@@ -4,6 +4,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
+using Moq;
 using Xunit;
 using nostify;
 
@@ -21,7 +22,7 @@ public class FilteredQueryTests
         public string Name { get; set; } = string.Empty;
         public int Value { get; set; }
 
-        public override void Apply(IEvent e)
+        protected override void Apply(EventType eventType, IEvent e)
         {
             UpdateProperties<TestTenantEntity>(e.payload);
         }
@@ -125,6 +126,72 @@ public class FilteredQueryTests
                     "FilteredQuery's filterExpression parameter should be optional");
             }
         }
+    }
+
+    [Fact]
+    public void FilteredQuery_WithPartitionKeyAndFilter_AppliesFilterAndScopesRequest()
+    {
+        var included = new TestTenantEntity { Name = "included", Value = 20 };
+        var excluded = new TestTenantEntity { Name = "excluded", Value = 5 };
+        QueryRequestOptions? capturedOptions = null;
+        var container = new Moq.Mock<Container>();
+        container
+            .Setup(value => value.GetItemLinqQueryable<TestTenantEntity>(
+                It.IsAny<bool>(),
+                It.IsAny<string>(),
+                It.IsAny<QueryRequestOptions>(),
+                It.IsAny<CosmosLinqSerializerOptions>()))
+            .Callback<bool, string, QueryRequestOptions, CosmosLinqSerializerOptions>(
+                (_, _, options, _) => capturedOptions = options)
+            .Returns(new[] { included, excluded }.AsQueryable().OrderBy(_ => 1));
+        var partitionKey = new PartitionKey("tenant-a");
+
+        List<TestTenantEntity> result = container.Object
+            .FilteredQuery<TestTenantEntity>(partitionKey, entity => entity.Value > 10)
+            .ToList();
+
+        Assert.Equal([included], result);
+        Assert.NotNull(capturedOptions);
+        Assert.Equal(partitionKey, capturedOptions.PartitionKey);
+    }
+
+    [Fact]
+    public void FilteredQuery_WithStringPartitionAndNoFilter_ReturnsUnderlyingQuery()
+    {
+        var entities = new List<TestTenantEntity>
+        {
+            new() { Name = "first", Value = 1 },
+            new() { Name = "second", Value = 2 },
+        };
+        var container = CosmosTestHelpers.CreateMockContainer(entities);
+
+        List<TestTenantEntity> result = container.Object
+            .FilteredQuery<TestTenantEntity>("tenant-a")
+            .ToList();
+
+        Assert.Equal(entities, result);
+    }
+
+    [Fact]
+    public void FilteredQuery_WithTenantId_DelegatesToPartitionQuery()
+    {
+        var tenantId = Guid.NewGuid();
+        QueryRequestOptions? capturedOptions = null;
+        var container = new Moq.Mock<Container>();
+        container
+            .Setup(value => value.GetItemLinqQueryable<TestTenantEntity>(
+                It.IsAny<bool>(),
+                It.IsAny<string>(),
+                It.IsAny<QueryRequestOptions>(),
+                It.IsAny<CosmosLinqSerializerOptions>()))
+            .Callback<bool, string, QueryRequestOptions, CosmosLinqSerializerOptions>(
+                (_, _, options, _) => capturedOptions = options)
+            .Returns(Array.Empty<TestTenantEntity>().AsQueryable().OrderBy(_ => 1));
+
+        _ = container.Object.FilteredQuery<TestTenantEntity>(tenantId).ToList();
+
+        Assert.NotNull(capturedOptions);
+        Assert.Equal(tenantId.ToPartitionKey(), capturedOptions.PartitionKey);
     }
 
     [Fact]

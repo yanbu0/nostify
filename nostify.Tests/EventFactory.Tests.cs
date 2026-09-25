@@ -19,15 +19,19 @@ public class EventFactoryTests
         public new Guid id { get; set; }
         public bool isDeleted { get; set; }
 
-        public override void Apply(IEvent eventToApply)
+        protected override void Apply(EventType eventType, IEvent eventToApply)
         {
             throw new NotImplementedException();
         }
     }
 
-    public class TestCommand : NostifyCommand
+    /// <summary>
+    /// Event metadata used to exercise the supported EventType-based factory API.
+    /// </summary>
+    public class TestCommand : EventType
     {
         public static readonly TestCommand Create = new TestCommand("Test_Create", true);
+        public TestCommand() : base("Test_Create", true) { }
         public TestCommand(string name, bool isNew = false) : base(name, isNew) { }
     }
 
@@ -59,7 +63,7 @@ public class EventFactoryTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(command, result.command);
+        Assert.Equal(command, result.eventType);
         Assert.Equal(aggregateId, result.aggregateRootId);
     }
 
@@ -106,7 +110,7 @@ public class EventFactoryTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(command, result.command);
+        Assert.Equal(command, result.eventType);
         Assert.Equal(aggregateId, result.aggregateRootId);
     }
 
@@ -142,7 +146,7 @@ public class EventFactoryTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(command, result.command);
+        Assert.Equal(command, result.eventType);
         Assert.Equal(Guid.Parse(aggregateId), result.aggregateRootId);
     }
 
@@ -185,7 +189,7 @@ public class EventFactoryTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(command, result.command);
+        Assert.Equal(command, result.eventType);
         Assert.Equal(aggregateId, result.aggregateRootId);
     }
 
@@ -215,7 +219,7 @@ public class EventFactoryTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(command, result.command);
+        Assert.Equal(command, result.eventType);
         Assert.Equal(aggregateId, result.aggregateRootId);
         Assert.Equal(userId, result.userId);
         Assert.Equal(partitionKey, result.partitionKey);
@@ -241,7 +245,7 @@ public class EventFactoryTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(command, result.command);
+        Assert.Equal(command, result.eventType);
         Assert.Equal(aggregateId, result.aggregateRootId);
         Assert.Equal(userId, result.userId);
         Assert.Equal(partitionKey, result.partitionKey);
@@ -249,7 +253,7 @@ public class EventFactoryTests
     }
 
     [Fact]
-    public void CreateNullPayloadEvent_ShouldAutomaticallyDisableValidation()
+    public void CreateNullPayloadEvent_ShouldNotMutateValidationSetting()
     {
         // Arrange
         var factory = new EventFactory();
@@ -262,8 +266,8 @@ public class EventFactoryTests
         // Act
         var result = factory.CreateNullPayloadEvent(command, aggregateId);
 
-        // Assert - Validation should be disabled after calling CreateNullPayloadEvent
-        Assert.False(factory.ValidatePayload);
+        // Assert - Creating a null-payload event should not mutate factory-wide validation settings
+        Assert.True(factory.ValidatePayload);
         Assert.NotNull(result);
     }
 
@@ -293,5 +297,72 @@ public class EventFactoryTests
         
         // Verify payload is serialized as empty object
         Assert.Contains("\"payload\":{}", json);
+    }
+
+    [Fact]
+    public void Create_WithEventTypeAndPayloadId_UsesModernOverload()
+    {
+        // Statically type the metadata as EventType to exercise the supported API.
+        EventType eventType = TestCommand.Create;
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { id = aggregateId, name = "Modern event" };
+
+        IEvent result = new EventFactory().Create<TestAggregate>(
+            eventType,
+            payload,
+            userId,
+            partitionKey);
+
+        Assert.Equal(eventType, result.eventType);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+    }
+
+    [Fact]
+    public void Create_WithEventTypeAndStringIds_UsesModernOverload()
+    {
+        // EventType static typing exercises the supported API contract.
+        EventType eventType = TestCommand.Create;
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+        var payload = new { id = aggregateId, name = "Modern string event" };
+
+        IEvent result = new EventFactory().Create<TestAggregate>(
+            eventType,
+            aggregateId.ToString(),
+            payload,
+            userId.ToString(),
+            partitionKey.ToString());
+
+        Assert.Equal(eventType, result.eventType);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+    }
+
+    [Fact]
+    public void CreateNullPayloadEvent_WithEventTypeAndStringIds_UsesModernOverload()
+    {
+        // Verify the modern string overload parses all identifiers and supplies an empty payload.
+        EventType eventType = TestCommand.Create;
+        var aggregateId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var partitionKey = Guid.NewGuid();
+
+        IEvent result = new EventFactory().CreateNullPayloadEvent(
+            eventType,
+            aggregateId.ToString(),
+            userId.ToString(),
+            partitionKey.ToString());
+
+        Assert.Equal(eventType, result.eventType);
+        Assert.Equal(aggregateId, result.aggregateRootId);
+        Assert.Equal(userId, result.userId);
+        Assert.Equal(partitionKey, result.partitionKey);
+        Assert.NotNull(result.payload);
     }
 }

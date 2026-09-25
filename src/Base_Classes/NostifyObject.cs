@@ -4,19 +4,77 @@ using System.Reflection;
 using System.Linq;
 using Microsoft.Azure.Cosmos;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 namespace nostify;
 
+/// <summary>
+/// Defines an object that can apply a Nostify event to its state.
+/// </summary>
 public interface IApplyable
 {
+    /// <summary>
+    /// Applies an event to the implementing object's state.
+    /// </summary>
+    /// <param name="eventToApply">The event whose payload and metadata are applied.</param>
     public abstract void Apply(IEvent eventToApply);
 }
 
-///<summary>
-///Internal class inherited by Aggregate and Projection
-///</summary>
+/// <summary>
+/// Provides the shared identity, tenant, event-application, and property-update behavior for aggregates and projections.
+/// </summary>
 public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, IApplyable
 {
+    /// <summary>
+    /// Cached MethodInfo for NostifyExtensions.GetValue to avoid repeated reflection
+    /// lookups on the NostifyExtensions type for each property update.
+    /// </summary>
+    private static readonly MethodInfo _getValueMethodInfo = typeof(NostifyExtensions)
+        .GetMethod("GetValue", BindingFlags.Public | BindingFlags.Static)
+        ?? throw new MissingMethodException(typeof(NostifyExtensions).FullName, "GetValue");
+
+    /// <summary>
+    /// Cache of writable properties for each NostifyObject-derived type T,
+    /// keyed by property name for fast lookup.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> _propertyMapCache = new();
+
+    /// <summary>
+    /// Get or build a dictionary of writable properties for type T keyed by property name.
+    /// This is the core reflection cache used by UpdateProperties and UpdateProperty.
+    /// </summary>
+    private static Dictionary<string, PropertyInfo> GetPropertyMap<T>() where T : NostifyObject
+    {
+        return _propertyMapCache.GetOrAdd(typeof(T), t =>
+        {
+            return t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.GetSetMethod() != null)
+                .ToDictionary(p => p.Name, p => p);
+        });
+    }
+
+    /// <summary>
+    /// Internal helper that performs a single property update using cached reflection
+    /// metadata to minimize overhead. All public UpdateProperties overloads delegate
+    /// into this method.
+    /// </summary>
+    private void UpdatePropertyInternal<T>(string propertyToSet, string propertyToGetValueFrom, JObject jPayload, Dictionary<string, PropertyInfo> propertyMap) where T : NostifyObject
+    {
+        if (!propertyMap.TryGetValue(propertyToSet, out var propToUpdate))
+        {
+            // Property does not exist on T; behavior matches original implementation (no-op).
+            return;
+        }
+
+        // Reuse cached MethodInfo for GetValue and only construct the closed generic method
+        // for the specific property type we are updating.
+        var getValueRef = _getValueMethodInfo.MakeGenericMethod(propToUpdate.PropertyType);
+        var valueToSet = getValueRef.Invoke(null, new object[] { jPayload, propertyToGetValueFrom });
+
+        // Use the PropertyInfo we already have instead of querying typeof(T) again.
+        propToUpdate.SetValue(this, valueToSet);
+    }
+
     ///<summary>
     ///This type should never be directly instantiated
     ///</summary>
@@ -43,25 +101,98 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
 
 
     ///<summary>
-    ///Applies event to this Aggregate or Projection
+    ///Applies event to this Aggregate or Projection.
+    ///
+    /// Dispatch order:
+    /// 1. If any methods on the concrete type are decorated with <see cref="ApplyEventsAttribute"/>
+    ///    for the event's <see cref="EventType"/>, they are invoked first.
+    /// 2. If no attribute-based handler exists, falls back to the existing dynamic
+    ///    overload-based dispatch: <c>Apply((dynamic)eventToApply.eventType, eventToApply)</c>.
+    ///
+    /// This allows aggregates and projections to opt into attribute-based handling
+    /// without breaking existing overload patterns.
     ///</summary>
-    public abstract void Apply(IEvent eventToApply);
+    public void Apply(IEvent eventToApply)
+    {
+        if (!TryApplyWithAttributes(eventToApply))
+        {
+            // Fallback to existing dynamic overload dispatch
+            Apply((dynamic)eventToApply.eventType, eventToApply);
+        }
+    }
+
+    /// <summary>
+    /// Applies an event to this object using attribute-based dispatch if possible.
+    /// </summary>
+    /// <param name="eventToApply">The event instance to apply.</param>
+    /// <returns>
+    /// <c>true</c> if an attribute-based handler was found and invoked; otherwise <c>false</c>.
+    /// </returns>
+    protected virtual bool TryApplyWithAttributes(IEvent eventToApply)
+    {
+        ArgumentNullException.ThrowIfNull(eventToApply);
+
+        var eventType = eventToApply.eventType;
+        if (eventType == null)
+        {
+            // If there is no event type, we cannot perform attribute-based routing.
+            return false;
+        }
+
+        // Resolve the concrete type of this NostifyObject (aggregate or projection).
+        var targetType = GetType();
+
+        // Logical event names are the stable identity across current and legacy envelopes.
+        // Use one case-sensitive lookup regardless of how the handler attribute was declared.
+        var handlerLookup = ApplyEventsHandlerCache.GetOrBuildHandlerLookup(targetType);
+        if (string.IsNullOrWhiteSpace(eventType.name) ||
+            !handlerLookup.Handlers.TryGetValue(eventType.name, out var handler))
+        {
+            // No attribute-based handler for this event type on this object.
+            return false;
+        }
+
+        // Invoke the handler. We expect methods to accept a single IEvent parameter.
+        handler(this, eventToApply);
+        return true;
+    }
+
+    ///<summary>
+    ///Applies event to this Aggregate or Projection based on its event type.
+    /// Override this method to customize the catch-all fallback behavior, or add
+    /// overloads like <c>Apply(SpecificEventType, IEvent)</c> to participate in the
+    /// dynamic dispatch fallback. The default implementation throws for unhandled
+    /// event types.
+    ///</summary>
+    protected virtual void Apply(EventType eventType, IEvent eventToApply)
+    {
+        throw new InvalidOperationException(
+            $"Unsupported event type '{eventType?.ToString() ?? "<null>"}' for '{GetType().Name}'.");
+    }
 
     ///<summary>
     ///Updates properties of Aggregate or Projection
     ///</summary>
-    ///<param name="payload">Must be payload from Event, name of property in payload must match property name in T</param>
-    public void UpdateProperties<T>(object payload) where T : NostifyObject
+    ///<param name="payload">Payload from an event, or <see langword="null"/> to perform no updates. Property names in a non-null payload must match property names in T.</param>
+    public void UpdateProperties<T>(object? payload) where T : NostifyObject
     {
-        var nosObjProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.GetSetMethod() != null)
-            .ToList();
+        // A payload-less event has no properties to apply.
+        if (payload is null)
+        {
+            return;
+        }
+
+        // Convert the payload to a JObject once and reuse for all property updates
         var jPayload = JObject.FromObject(payload);
         var payloadProps = jPayload.Children<JProperty>();
 
+        // Use cached reflection metadata for writable properties of T
+        var propertyMap = GetPropertyMap<T>();
+
         foreach (JProperty prop in payloadProps)
         {
-            UpdateProperty<T>(prop.Name, prop.Name, jPayload, nosObjProps);
+            // Default behavior: map payload property to projection/aggregate property by name
+            UpdatePropertyInternal<T>(prop.Name, prop.Name, jPayload, propertyMap);
         }
     }
 
@@ -78,22 +209,35 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///</code>
     ///</example>
     ///</summary>
-    ///<param name="payload">Must be payload from Event, name of property in payload must be set to match a property in the propertyPairs dictionary, or must match property name in T if strict is turned off</param>
+    ///<param name="payload">Payload from an event, or <see langword="null"/> to perform no updates. Property names in a non-null payload must occur in <paramref name="propertyPairs"/>, or match property names in T when <paramref name="strict"/> is false.</param>
     ///<param name="propertyPairs">Dictionary of property pairs. Key is property name in payload to get value from, Value is property name in T to set value to. Example: {"name", "inventoryGroupName"}</param>
     ///<param name="strict">If true, only properties in the propertyPairs dictionary will be updated, if false, will also automatically match up properties by their name. The propertyPair dictionary will take precedence.</param>
-    public void UpdateProperties<T>(object payload, Dictionary<string, string> propertyPairs, bool strict = false) where T : NostifyObject
+    public void UpdateProperties<T>(object? payload, Dictionary<string, string> propertyPairs, bool strict = false) where T : NostifyObject
     {
-        var nosObjProps = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
+        // A payload-less event has no properties to apply.
+        if (payload is null)
+        {
+            return;
+        }
+
+        ArgumentNullException.ThrowIfNull(propertyPairs);
+
+        // Convert the payload to a JObject once and reuse for all property updates
         var jPayload = JObject.FromObject(payload);
         var payloadProps = jPayload.Children<JProperty>();
 
+        // Use cached reflection metadata for writable properties of T
+        var propertyMap = GetPropertyMap<T>();
+
         foreach (JProperty prop in payloadProps)
         {
+            // Determine whether this payload property should be applied
             bool doUpdate = !strict || propertyPairs.ContainsKey(prop.Name);
             if (doUpdate)
             {
-                string propToSet = propertyPairs.ContainsKey(prop.Name) ? propertyPairs[prop.Name] : prop.Name;
-                UpdateProperty<T>(propToSet, prop.Name, jPayload, nosObjProps);
+                // If a mapping exists, use the mapped target property name, otherwise fall back to the same name
+                string propToSet = propertyPairs.TryGetValue(prop.Name, out string? value) ? value : prop.Name;
+                UpdatePropertyInternal<T>(propToSet, prop.Name, jPayload, propertyMap);
             }
         }
 
@@ -106,7 +250,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="propertyToGetValueFrom">Name of property to get value from in the payload</param>
     ///<param name="payload">Payload from Event</param>
     ///<param name="thisNostifyObjectProps">Optional. List of properties of this object. Set this if you are looping through a list to avoid calling GetProperties() multiple times.</param>
-    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, object payload, List<PropertyInfo> thisNostifyObjectProps = null) where T : NostifyObject
+    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, object payload, List<PropertyInfo>? thisNostifyObjectProps = null) where T : NostifyObject
     {
         var jPayload = JObject.FromObject(payload);
         UpdateProperty<T>(propertyToSet, propertyToGetValueFrom, jPayload, thisNostifyObjectProps);
@@ -119,17 +263,23 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<param name="propertyToGetValueFrom">Name of property to get value from in the payload</param>
     ///<param name="jPayload">JObject of payload</param>
     ///<param name="thisNostifyObjectProps">Optional. List of properties of this object. Set this if you are looping through a list to avoid calling GetProperties() multiple times.</param>
-    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, JObject jPayload, List<PropertyInfo> thisNostifyObjectProps = null) where T : NostifyObject
+    public void UpdateProperty<T>(string propertyToSet, string propertyToGetValueFrom, JObject jPayload, List<PropertyInfo>? thisNostifyObjectProps = null) where T : NostifyObject
     {
-        var nosObjProps = thisNostifyObjectProps ?? typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
-        PropertyInfo propToUpdate = nosObjProps.Where(p => p.Name == propertyToSet).SingleOrDefault();
-        if (propToUpdate != null)
+        // For callers that still pass a List<PropertyInfo> (for example legacy code paths),
+        // honor that list and perform a one-off update using the optimized internal helper.
+        if (thisNostifyObjectProps != null)
         {
-            var eg = typeof(NostifyExtensions).GetMethod("GetValue");
-            var getValueRef = eg.MakeGenericMethod(propToUpdate.PropertyType);
-            var valueToSet = getValueRef.Invoke(null, new object[] { jPayload, propertyToGetValueFrom });
-            typeof(T).GetProperty(propToUpdate.Name).SetValue(this, valueToSet);
+            var propertyMap = thisNostifyObjectProps
+                .Where(p => p.GetSetMethod() != null)
+                .ToDictionary(p => p.Name, p => p);
+
+            UpdatePropertyInternal<T>(propertyToSet, propertyToGetValueFrom, jPayload, propertyMap);
+            return;
         }
+
+        // If no List<PropertyInfo> is supplied, fall back to the cached property map for T.
+        var cachedPropertyMap = GetPropertyMap<T>();
+        UpdatePropertyInternal<T>(propertyToSet, propertyToGetValueFrom, jPayload, cachedPropertyMap);
     }
 
     ///<summary>
@@ -156,21 +306,34 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///</example>
     ///</summary>
     /// <param name="eventAggregateRootId">The aggregate root ID from the event to match against PropertyCheck ID values</param>
-    ///<param name="payload">The event payload containing the property values to update with</param>
+    ///<param name="payload">The event payload containing the property values to update with, or <see langword="null"/> to perform no updates.</param>
     ///<param name="propertyCheckValues">List of PropertyCheck objects defining the conditional mapping rules</param>
-    public void UpdateProperties<T>(Guid eventAggregateRootId, object payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
+    public void UpdateProperties<T>(Guid eventAggregateRootId, object? payload, List<PropertyCheck> propertyCheckValues) where T : NostifyObject
     {
-        List<PropertyInfo> thisNostifyObjectProps = typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public).ToList();
+        // A payload-less event has no properties to apply.
+        if (payload is null)
+        {
+            return;
+        }
+
+        ArgumentNullException.ThrowIfNull(propertyCheckValues);
+
+        // Convert the payload to a JObject once and reuse for all property updates
         JObject jObject = JObject.FromObject(payload);
+
+        // Use cached reflection metadata for writable properties of T
+        var propertyMap = GetPropertyMap<T>();
 
         foreach (PropertyCheck propertyCheck in propertyCheckValues)
         {
+            // Only apply mappings where the projectionIdPropertyValue matches the aggregate root id (if provided)
             if (!propertyCheck.projectionIdPropertyValue.HasValue || eventAggregateRootId == propertyCheck.projectionIdPropertyValue.Value)
             {
                 JToken? jt = jObject[propertyCheck.eventPropertyName];
                 if (jt != null)
                 {
-                    UpdateProperty<T>(propertyCheck.projectionPropertyName, propertyCheck.eventPropertyName, jObject, thisNostifyObjectProps);
+                    // Conditional mapping: projectionPropertyName is the target, eventPropertyName is the source
+                    UpdatePropertyInternal<T>(propertyCheck.projectionPropertyName, propertyCheck.eventPropertyName, jObject, propertyMap);
                 }
             }
         }
@@ -197,7 +360,12 @@ public class PropertyCheck
         this.projectionIdPropertyValue = projectionIdPropertyValue;
     }
 
-    public string eventPropertyName { get; set; } 
-    public string projectionPropertyName { get; set; } 
+    /// <summary>Gets or sets the source property name in the event payload.</summary>
+    public string eventPropertyName { get; set; }
+
+    /// <summary>Gets or sets the target property name in the aggregate or projection.</summary>
+    public string projectionPropertyName { get; set; }
+
+    /// <summary>Gets or sets the projection identifier that must match the event aggregate-root identifier.</summary>
     public Guid? projectionIdPropertyValue { get; set; }
 }

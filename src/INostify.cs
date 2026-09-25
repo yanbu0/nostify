@@ -33,10 +33,15 @@ public interface INostify
     ///</summary>
     string KafkaUrl { get; }
 
-    ///<summary>
-    /// For creating internal HttpClient instances
+    /// <summary>
+    /// Gets the optional factory used to create HTTP clients for projection initialization.
     /// </summary>
-    IHttpClientFactory HttpClientFactory { get; }
+    /// <remarks>
+    /// This value is <see langword="null"/> when <c>WithHttp</c> was not included in the
+    /// factory configuration. HTTP-dependent operations throw <see cref="InvalidOperationException"/>
+    /// when invoked without a configured factory.
+    /// </remarks>
+    IHttpClientFactory? HttpClientFactory { get; }
 
     ///<summary>
     ///Kafka producer
@@ -79,7 +84,7 @@ public interface INostify
     ///<summary>
     /// Default retry options applied by retry-enabled default event handlers and bulk command handlers when no
     /// explicit <see cref="RetryOptions"/> are provided and <c>allowRetry</c> is <c>true</c>. Configured via
-    /// <see cref="NostifyFactory.WithCosmos"/> or defaults to <c>new RetryOptions()</c>
+    /// <see cref="NostifyFactory.WithCosmos(string, string, string, bool?, int?, bool, RetryOptions?)"/> or defaults to <c>new RetryOptions()</c>
     /// (3 retries, 1 s delay, exponential backoff).
     ///</summary>
     RetryOptions DefaultRetryOptions { get; }
@@ -174,13 +179,13 @@ public interface INostify
     ///<param name="publishErrorEvents">Optional. If true, will publish error events to Kafka as well as write to undeliverableEvents container.  Default is false.</param>
     public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false);
 
-    ///<summary>
-    ///Writes Event to the undeliverable events container. Use for handling errors to prevent constant retry.
-    ///</summary>
-    ///<param name="functionName">Name of function that failed, should be able to trace failure back to Azure function</param>
-    ///<param name="errorMessage">Error message to capture</param>
-    ///<param name="eventToHandle">The event that failed to process</param>
-    ///<param name="errorCommand">Optional. The command that failed, if null will not publish to Kafka</param>
+    /// <summary>
+    /// Writes an event to the undeliverable-events container and optionally publishes a legacy error event.
+    /// </summary>
+    /// <param name="functionName">The function or operation name used to trace the failure.</param>
+    /// <param name="errorMessage">The error message to capture.</param>
+    /// <param name="eventToHandle">The event that failed to process.</param>
+    /// <param name="errorCommand">Optional legacy error command. When <see langword="null"/>, no error event is published to Kafka.</param>
     public Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null);
 
     ///<summary>
@@ -414,8 +419,8 @@ public interface INostify
     ///</para>
     ///</summary>
     ///<param name="partitionKeyPath">Path to the partition key.  Defaults to "/tenantId".</param>
-    ///<param name="loopSize">Number of items to init at a time.  Defaults to 1000.</param>
-    public Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 1000) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new();
+    ///<param name="loopSize">Number of items to init at a time.  Defaults to 100.</param>
+    public Task InitContainerAsync<P, A>(string partitionKeyPath = "/tenantId", int loopSize = 100) where A : IAggregate where P : NostifyObject, IProjection, IHasExternalData<P>, new();
 
     ///<summary>
     ///Init all non-initialized projections in the container.  Will requery all needed data from all external services by calling InitAsync  

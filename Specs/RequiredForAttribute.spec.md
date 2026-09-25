@@ -222,5 +222,5 @@ This interface allows the validation system to identify command-aware validation
 
 - [INostifyValidation](INostifyValidation.spec.md) - Validation interface
 - [NostifyValidationException](NostifyValidationException.spec.md) - Validation exception
-- [NostifyValidationExceptionHandler](NostifyValidationExceptionHandler.spec.md) - Validation utilities
+- [NostifyValidationExceptionHandler](NostifyValidation.spec.md) - Validation utilities
 - [NostifyCommand](NostifyCommand.spec.md) - Command class

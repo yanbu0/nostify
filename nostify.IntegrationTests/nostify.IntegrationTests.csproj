@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <!-- Integration fixtures own native resources and intentionally use descriptive test names. -->
+    <NoWarn>$(NoWarn);CA1001;CA1016;CA1707;CA1711;CA1816;CA1822;CA2000;CA2007;CA1852</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\nostify.csproj" />
+    <ProjectReference Include="..\nostify.IntegrationTestModels\nostify.IntegrationTestModels.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Layered settings are resolved from the test output directory on every runner. -->
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="local.appsettings.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('local.appsettings.json')" />
+  </ItemGroup>
+
+</Project>

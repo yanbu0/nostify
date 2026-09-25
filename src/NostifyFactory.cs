@@ -18,24 +18,24 @@ namespace nostify;
 public class NostifyConfig
 {
     /// <summary>
-    /// The API key for accessing the Cosmos DB.
+    /// The API key for accessing the Cosmos DB, or <see langword="null"/> until Cosmos is configured.
     /// </summary>
-    public string cosmosApiKey { get; set; }
+    public string? cosmosApiKey { get; set; }
 
     /// <summary>
-    /// The name of the Cosmos DB.
+    /// The name of the Cosmos DB, or <see langword="null"/> until Cosmos is configured.
     /// </summary>
-    public string cosmosDbName { get; set; }
+    public string? cosmosDbName { get; set; }
 
     /// <summary>
-    /// The endpoint URI for the Cosmos DB.
+    /// The endpoint URI for the Cosmos DB, or <see langword="null"/> until Cosmos is configured.
     /// </summary>
-    public string cosmosEndpointUri { get; set; }
+    public string? cosmosEndpointUri { get; set; }
 
     /// <summary>
-    /// The URL for the Kafka server.
+    /// The URL for the Kafka server, or <see langword="null"/> until Kafka is configured.
     /// </summary>
-    public string kafkaUrl { get; set; }
+    public string? kafkaUrl { get; set; }
 
     /// <summary>
     /// Number of partitions to use when automatically creating Kafka topics.
@@ -43,19 +43,19 @@ public class NostifyConfig
     public int kafkaTopicAutoCreatePartitions { get; set; } = 2;
 
     /// <summary>
-    /// The username for accessing Kafka.
+    /// The optional username for accessing Kafka.
     /// </summary>
-    public string kafkaUserName { get; set; }
+    public string? kafkaUserName { get; set; }
 
     /// <summary>
-    /// The password for accessing Kafka.
+    /// The optional password for accessing Kafka.
     /// </summary>
-    public string kafkaPassword { get; set; }
+    public string? kafkaPassword { get; set; }
 
     /// <summary>
-    /// The default partition key path for Cosmos DB.
+    /// The default partition key path for Cosmos DB, or <see langword="null"/> to use <c>/tenantId</c>.
     /// </summary>
-    public string defaultPartitionKeyPath { get; set; }
+    public string? defaultPartitionKeyPath { get; set; }
 
     /// <summary>
     /// The default tenant ID.
@@ -92,13 +92,13 @@ public class NostifyConfig
     /// <summary>
     /// The IHttpClientFactory instance for creating HttpClient instances to make HTTP requests.
     /// </summary>
-    public IHttpClientFactory? httpClientFactory { get; set; } = null;
+    public IHttpClientFactory? httpClientFactory { get; set; }
 
     /// <summary>
     /// Optional logger instance for structured logging throughout the Nostify framework.
     /// When set, replaces Console.WriteLine calls with structured log output.
     /// </summary>
-    public ILogger? logger { get; set; } = null;
+    public ILogger? logger { get; set; }
 
     /// <summary>
     /// When true, <see cref="NostifyFactory.Build{T}"/> will auto-create
@@ -106,7 +106,7 @@ public class NostifyConfig
     /// found in the assembly.  Set via <see cref="NostifyFactory.WithAsyncEventRequest"/>.
     /// Default is <c>false</c>.
     /// </summary>
-    public bool autoCreateEventRequestTopics { get; set; } = false;
+    public bool autoCreateEventRequestTopics { get; set; }
 
 }
 
@@ -115,6 +115,23 @@ public class NostifyConfig
 ///</summary>
 public static class NostifyFactory
 {
+    private static readonly Action<ILogger, Exception?> LogLoggerConfigured =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(1, nameof(LogLoggerConfigured)),
+            "ILogger configured for Nostify. Structured logging enabled.");
+
+    private static readonly Action<ILogger, string, Exception?> LogStartupDiagnostic =
+        LoggerMessage.Define<string>(
+            LogLevel.Debug,
+            new EventId(2, nameof(LogStartupDiagnostic)),
+            "{StartupMessage}");
+
+    private static readonly Action<ILogger, string, Exception?> LogStartupFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Error,
+            new EventId(3, nameof(LogStartupFailure)),
+            "{StartupError}");
     /// <summary>
     /// Creates a new instance of Nostify using Cosmos.
     /// </summary>
@@ -153,14 +170,17 @@ public static class NostifyFactory
     /// </summary>
     public static NostifyConfig WithKafka(this NostifyConfig config, ProducerConfig producerConfig)
     {
+        ArgumentNullException.ThrowIfNull(producerConfig);
+
         config.producerConfig = producerConfig;
+        config.kafkaUrl = producerConfig.BootstrapServers;
         return config;
     }
 
     /// <summary>
     /// Creates a new instance of Nostify using Kafka.
     /// </summary>
-    public static NostifyConfig WithKafka(string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
+    public static NostifyConfig WithKafka(string kafkaUrl, string? kafkaUserName = null, string? kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
     {
         NostifyConfig config = new NostifyConfig();
         return config.WithKafka(kafkaUrl, kafkaUserName, kafkaPassword, kafkaTopicAutoCreatePartitions);
@@ -169,7 +189,7 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Kafka.
     /// </summary>
-    public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string kafkaUserName = null, string kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
+    public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string? kafkaUserName = null, string? kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
     {
         config.kafkaTopicAutoCreatePartitions = kafkaTopicAutoCreatePartitions;
 
@@ -195,7 +215,7 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Azure Event Hubs.
     /// </summary>
-    public static NostifyConfig WithEventHubs(string eventHubsConnectionString, bool diagnosticLogging = false, int kafkaTopicAutoCreatePartitions = 2  )
+    public static NostifyConfig WithEventHubs(string eventHubsConnectionString, bool diagnosticLogging = false, int kafkaTopicAutoCreatePartitions = 2)
     {
         NostifyConfig config = new NostifyConfig();
         return config.WithEventHubs(eventHubsConnectionString, diagnosticLogging, kafkaTopicAutoCreatePartitions);
@@ -208,10 +228,10 @@ public static class NostifyFactory
     {
         // Parse Event Hubs connection string to extract namespace
         var connectionStringParts = eventHubsConnectionString.Split(';');
-        string endpoint = connectionStringParts.FirstOrDefault(p => p.StartsWith("Endpoint="))?.Replace("Endpoint=sb://", "").Replace("/", "") ?? "";
+        string endpoint = connectionStringParts.FirstOrDefault(p => p.StartsWith("Endpoint=", StringComparison.Ordinal))?.Replace("Endpoint=sb://", "", StringComparison.Ordinal).Replace("/", "", StringComparison.Ordinal) ?? "";
 
         // Add port 9093 for Kafka protocol
-        if (!endpoint.Contains(":"))
+        if (!endpoint.Contains(':'))
         {
             endpoint = $"{endpoint}:9093";
         }
@@ -254,8 +274,8 @@ public static class NostifyFactory
     public static NostifyConfig WithLogger(this NostifyConfig config, ILogger logger)
     {
         config.logger = logger;
-        config.logger.LogInformation("ILogger configured for Nostify. Structured logging enabled.");
-        
+        LogLoggerConfigured(config.logger, null);
+
         return config;
     }
 
@@ -279,23 +299,29 @@ public static class NostifyFactory
     /// </summary>
     public static INostify Build(this NostifyConfig config)
     {
-        var Repository = new NostifyCosmosClient(config.cosmosApiKey,
-            config.cosmosDbName,
-            config.cosmosEndpointUri,
+        ArgumentNullException.ThrowIfNull(config);
+
+        string cosmosApiKey = RequireConfigurationValue(config.cosmosApiKey, nameof(config.cosmosApiKey), "WithCosmos");
+        string cosmosDbName = RequireConfigurationValue(config.cosmosDbName, nameof(config.cosmosDbName), "WithCosmos");
+        string cosmosEndpointUri = RequireConfigurationValue(config.cosmosEndpointUri, nameof(config.cosmosEndpointUri), "WithCosmos");
+        string kafkaUrl = RequireConfigurationValue(config.producerConfig.BootstrapServers, nameof(config.kafkaUrl), "WithKafka or WithEventHubs");
+
+        var Repository = new NostifyCosmosClient(cosmosApiKey,
+            cosmosDbName,
+            cosmosEndpointUri,
             UseGatewayConnection: config.useGatewayConnection,
             DefaultContainerThroughput: config.containerThroughput ?? -1,
             DefaultDbThroughput: config.containerThroughput ?? -1,
             logger: config.logger
         );
-        var DefaultPartitionKeyPath = config.defaultPartitionKeyPath;
+        var DefaultPartitionKeyPath = config.defaultPartitionKeyPath ?? "/tenantId";
         var DefaultTenantId = config.defaultTenantId;
-        var KafkaUrl = config.kafkaUrl;
         var KafkaProducer = new ProducerBuilder<string, string>(config.producerConfig).Build();
         var HttpClientFactory = config.httpClientFactory;
 
         // Build base consumer config from producer settings (without GroupId — set per consumer)
         ConsumerConfig? baseConsumerConfig = null;
-        if (!string.IsNullOrEmpty(config.kafkaUrl))
+        if (!string.IsNullOrEmpty(kafkaUrl))
         {
             baseConsumerConfig = new ConsumerConfig
             {
@@ -327,7 +353,7 @@ public static class NostifyFactory
             Repository,
             DefaultPartitionKeyPath,
             DefaultTenantId,
-            KafkaUrl,
+            kafkaUrl,
             KafkaProducer,
             HttpClientFactory,
             config.logger,
@@ -336,95 +362,77 @@ public static class NostifyFactory
         );
     }
 
+    private static string RequireConfigurationValue(string? value, string propertyName, string configurationMethod)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"{propertyName} is not configured. Call {configurationMethod}() before Build().");
+        }
+
+        return value;
+    }
+
 
     /// <summary>
-    /// Builds the Nostify instance. Will autocreate topics in Kafka for each NostifyCommand found in the assembly of T.
+    /// Builds the Nostify instance. Will autocreate topics in Kafka for each EventType found in the assembly of T.
     /// </summary>
     /// <param name="config">The Nostify configuration settings.</param>
-    /// <param name="verbose">If true, will write to console the steps taken to create the containers and topics</param>
+    /// <param name="verbose">
+    /// If true and no <see cref="ILogger"/> has been configured, writes startup diagnostics to the console while creating topics
+    /// and containers. When a logger is configured it always wins, which avoids duplicating output when that logger already
+    /// writes to the console.
+    /// </param>
     public static INostify Build<T>(this NostifyConfig config, bool verbose = false) where T : IAggregate
     {
-        try 
+        try
         {
-        
-            if (config.logger != null) config.logger.LogDebug("ILogger is available and will be used for logging.");
-            else if (verbose) Console.WriteLine("******* Logger is null. Will try to fall back to console logging. Enable logging by using .WithLogger(yourLogger). There isn't really a reason not to enable logging, you should do it. *********");
-            //Create Confluent admin client
-            if (config.logger != null) config.logger.LogDebug("Building Admin Client");
-            else if (verbose) Console.WriteLine("Building Admin Client");
+            LogDebugOrVerboseConsole(
+                config,
+                verbose,
+                "******* Logger is null. Will try to fall back to console logging. Enable logging by using .WithLogger(yourLogger). There isn't really a reason not to enable logging, you should do it. *********",
+                "ILogger is available and will be used for logging.");
+
+            // Build a Kafka admin client first so topic discovery and container initialization share the same startup flow.
+            LogDebugOrVerboseConsole(config, verbose, "Building Admin Client");
             var adminClientConfig = new AdminClientConfig(config.producerConfig);
             var adminClient = new AdminClientBuilder(adminClientConfig).Build();
-            if (config.logger != null) config.logger.LogDebug("Admin Client built");
-            else if (verbose) Console.WriteLine("Admin Client built");
+            LogDebugOrVerboseConsole(config, verbose, "Admin Client built");
 
-            //Find all NostifyCommand instances in this assembly of T and create a topic for each
             var assembly = typeof(T).Assembly;
-            var commandTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(NostifyCommand)));
-            if (config.logger != null) config.logger.LogDebug("Found {CommandTypes} command definitions in assembly {Assembly}", string.Join(", ", commandTypes.Select(c => c.Name)), assembly.FullName);
-            else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandTypes.Select(c => c.Name))} command definitions in assembly {assembly.FullName}");
-            
-            //Get any static properties of each commandType that inherit type NostifyCommand        
-            var commandProperties = commandTypes
-                .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static)
-                .Where(p => p.FieldType.IsSubclassOf(typeof(NostifyCommand))));
+            List<TopicSpecification> topics = GetAutoCreateTopicSpecifications(assembly, config, verbose);
 
-            if (config.logger != null) config.logger.LogDebug("Found {Commands} commands", string.Join(", ", commandProperties.Select(c => c.Name)));
-            else if (verbose) Console.WriteLine($"Found {string.Join(", ", commandProperties.Select(c => c.Name))} commands");
-
-            List<TopicSpecification> topics = new List<TopicSpecification>();
-            foreach (var commandType in commandProperties)
-            {
-                //Get the name property value of the commandType
-                var topic = commandType.GetValue(null).GetType().GetProperty("name").GetValue(commandType.GetValue(null)).ToString();
-                var topicSpec = new TopicSpecification { Name = topic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 };
-                topics.Add(topicSpec);
-            }
-
-            // Also create _EventRequest topics for each IAggregate in the assembly (opt-in via WithAsyncEventRequest)
-            if (config.autoCreateEventRequestTopics)
-            {
-                var aggregateTypes = assembly.GetTypes().Where(t => typeof(IAggregate).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-                foreach (var aggType in aggregateTypes)
-                {
-                    var aggTypeProp = aggType.GetProperty("aggregateType", BindingFlags.Public | BindingFlags.Static);
-                    if (aggTypeProp != null)
-                    {
-                        var aggTypeName = aggTypeProp.GetValue(null)?.ToString();
-                        if (!string.IsNullOrEmpty(aggTypeName))
-                        {
-                            var eventRequestTopic = $"{aggTypeName}_EventRequest";
-                            topics.Add(new TopicSpecification { Name = eventRequestTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
-                            if (config.logger != null) config.logger.LogDebug("Adding EventRequest topic: {Topic}", eventRequestTopic);
-                            else if (verbose) Console.WriteLine($"Adding EventRequest topic: {eventRequestTopic}");
-
-                            var eventRequestResponseTopic = $"{aggTypeName}_EventRequestResponse";
-                            topics.Add(new TopicSpecification { Name = eventRequestResponseTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
-                            if (config.logger != null) config.logger.LogDebug("Adding EventRequestResponse topic: {Topic}", eventRequestResponseTopic);
-                            else if (verbose) Console.WriteLine($"Adding EventRequestResponse topic: {eventRequestResponseTopic}");
-                        }
-                    }
-                }
-            }
-
-            //Filter topics to only create new topics
+            // Filter topic candidates against broker metadata so repeated startup stays idempotent.
             var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-            topics = topics.Where(t => !existingTopics.Any(et => et.Topic.ToLower() == t.Name.ToLower())).ToList();
-            if (config.logger != null) config.logger.LogDebug("Creating topics: {Topics}", string.Join(", ", topics.Select(t => t.Name)));
-            else if (verbose) Console.WriteLine($"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}");
+            topics = topics.Where(t => !existingTopics.Any(et => et.Topic.Equals(t.Name, StringComparison.OrdinalIgnoreCase))).ToList();
+            LogDebugOrVerboseConsole(
+                config,
+                verbose,
+                $"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}",
+                "Creating topics: {Topics}",
+                string.Join(", ", topics.Select(t => t.Name)));
 
-            //Create any new topics needed
+            // Only issue create calls when something is missing; otherwise Kafka startup remains a metadata-only check.
             if (topics.Count > 0)
             {
                 adminClient.CreateTopicsAsync(topics).Wait();
                 var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-                if (config.logger != null) config.logger.LogDebug("Current topics: {Topics}", string.Join(", ", currentTopics.Select(t => t.Topic)));
-                else if (verbose) Console.WriteLine($"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}");
+                LogDebugOrVerboseConsole(
+                    config,
+                    verbose,
+                    $"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}",
+                    "Current topics: {Topics}",
+                    string.Join(", ", currentTopics.Select(t => t.Topic)));
             }
 
             var nostify = Build(config);
 
-            if (config.logger != null) config.logger.LogDebug("Creating containers for {Assembly}: {CreateContainers}", typeof(T).Assembly.FullName, config.createContainers);
-            else if (verbose) Console.WriteLine($"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}");
+            LogDebugOrVerboseConsole(
+                config,
+                verbose,
+                $"Creating containers for {typeof(T).Assembly.FullName}: {config.createContainers}",
+                "Creating containers for {Assembly}: {CreateContainers}",
+                typeof(T).Assembly.FullName ?? typeof(T).Assembly.GetName().Name ?? typeof(T).Name,
+                config.createContainers);
             if (config.createContainers)
             {
                 nostify.CreateContainersAsync<T>(false, config.containerThroughput, verbose).Wait();
@@ -434,10 +442,163 @@ public static class NostifyFactory
         }
         catch (Exception ex)
         {
-            if (config.logger != null) config.logger.LogError(ex, "Error building Nostify with autocreate topics");
-            else Console.WriteLine("Error building Nostify with autocreate topics: " + ex.Message + " " + ex.InnerException?.Message);
+            LogErrorOrConsole(config, ex, "Error building Nostify with autocreate topics");
             throw new NostifyException("Error building Nostify with autocreate topics " + ex.Message + " " + ex.InnerException?.Message);
         }
-        
+
+    }
+
+    /// <summary>
+    /// Collects every topic that <see cref="Build{T}(NostifyConfig, bool)"/> should auto-create for an assembly.
+    /// This includes event topics discovered from concrete <see cref="EventType"/> definitions plus optional async request/response topics for aggregates when
+    /// <see cref="NostifyConfig.autoCreateEventRequestTopics"/> is enabled.
+    /// </summary>
+    internal static List<TopicSpecification> GetAutoCreateTopicSpecifications(Assembly assembly, NostifyConfig config, bool verbose = false)
+    {
+        var eventTypeDefinitions = assembly.GetTypes()
+            .Where(t => typeof(EventType).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+            .Where(t => t != typeof(LegacyNostifyCommandEventType))
+            .Select(t => new
+            {
+                Type = t,
+                Name = GetTopicName(t, config, verbose)
+            })
+            .ToList();
+
+        var duplicateNames = eventTypeDefinitions
+            .GroupBy(definition => definition.Name, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => new
+            {
+                Name = group.Key,
+                Types = group
+                    .Select(definition => definition.Type)
+                    .OrderBy(type => type.AssemblyQualifiedName, StringComparer.Ordinal)
+                    .ToArray()
+            })
+            .ToArray();
+
+        if (duplicateNames.Length > 0)
+        {
+            var conflicts = string.Join(
+                "; ",
+                duplicateNames.Select(duplicate =>
+                    $"'{duplicate.Name}': {string.Join(", ", duplicate.Types.Select(type => $"'{type.AssemblyQualifiedName}'"))}"));
+            throw new InvalidOperationException(
+                $"Multiple concrete EventType definitions declare duplicate logical names in assembly '{assembly.FullName}': {conflicts}. " +
+                "EventType names must be unique using ordinal, case-sensitive comparison.");
+        }
+
+        var eventTypeNames = eventTypeDefinitions
+            .Select(definition => definition.Name)
+            .ToList();
+
+        LogDebugOrVerboseConsole(
+            config,
+            verbose,
+            $"Found {string.Join(", ", eventTypeNames)} EventType definitions in assembly {assembly.FullName}",
+            "Found {EventTypes} EventType definitions in assembly {Assembly}",
+            string.Join(", ", eventTypeNames),
+            assembly.FullName ?? assembly.GetName().Name ?? nameof(assembly));
+
+        List<TopicSpecification> topics = eventTypeNames
+            .Select(eventTypeName => new TopicSpecification { Name = eventTypeName, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 })
+            .ToList();
+
+        if (config.autoCreateEventRequestTopics)
+        {
+            var aggregateTypes = assembly.GetTypes().Where(t => typeof(IAggregate).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+            foreach (var aggType in aggregateTypes)
+            {
+                var aggTypeProp = aggType.GetProperty("aggregateType", BindingFlags.Public | BindingFlags.Static);
+                if (aggTypeProp != null)
+                {
+                    var aggTypeName = aggTypeProp.GetValue(null)?.ToString();
+                    if (!string.IsNullOrEmpty(aggTypeName))
+                    {
+                        var eventRequestTopic = $"{aggTypeName}_EventRequest";
+                        topics.Add(new TopicSpecification { Name = eventRequestTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
+                        LogDebugOrVerboseConsole(
+                            config,
+                            verbose,
+                            $"Adding EventRequest topic: {eventRequestTopic}",
+                            "Adding EventRequest topic: {Topic}",
+                            eventRequestTopic);
+
+                        var eventRequestResponseTopic = $"{aggTypeName}_EventRequestResponse";
+                        topics.Add(new TopicSpecification { Name = eventRequestResponseTopic, NumPartitions = config.kafkaTopicAutoCreatePartitions, ReplicationFactor = 1 });
+                        LogDebugOrVerboseConsole(
+                            config,
+                            verbose,
+                            $"Adding EventRequestResponse topic: {eventRequestResponseTopic}",
+                            "Adding EventRequestResponse topic: {Topic}",
+                            eventRequestResponseTopic);
+                    }
+                }
+            }
+        }
+
+        return topics
+            .GroupBy(topic => topic.Name)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    /// <summary>
+    /// Resolves the Kafka topic name for a concrete <see cref="EventType"/> definition.
+    /// </summary>
+    private static string GetTopicName(Type eventTypeClass, NostifyConfig config, bool verbose)
+    {
+        var eventType = EventType.GetRequiredInstance(eventTypeClass);
+        var topicName = eventType.name;
+        if (string.IsNullOrWhiteSpace(topicName))
+        {
+            throw new InvalidOperationException(
+                $"Event type '{eventTypeClass.FullName}' has an empty event type name.");
+        }
+
+        LogDebugOrVerboseConsole(
+            config,
+            verbose,
+            $"Using EventType definition from {eventTypeClass.FullName} with logical topic name {topicName} for auto-topic discovery.",
+            "Using EventType definition from {EventType} with logical topic name {Topic} for auto-topic discovery.",
+            eventTypeClass.FullName ?? eventTypeClass.Name,
+            topicName);
+
+        return topicName;
+    }
+
+    /// <summary>
+    /// Writes startup diagnostics through <see cref="ILogger"/> when available, otherwise falls back to console output only
+    /// when verbose startup tracing is explicitly requested.
+    /// </summary>
+    private static void LogDebugOrVerboseConsole(NostifyConfig config, bool verbose, string consoleMessage, string? loggerMessage = null, params object?[] loggerArgs)
+    {
+        if (config.logger != null)
+        {
+            // consoleMessage is already rendered for the console fallback and avoids dynamic log templates.
+            LogStartupDiagnostic(config.logger, consoleMessage, null);
+            return;
+        }
+
+        if (verbose)
+        {
+            Console.WriteLine(consoleMessage);
+        }
+    }
+
+    /// <summary>
+    /// Emits startup failures through the configured logger or the console fallback when no logger has been registered.
+    /// </summary>
+    private static void LogErrorOrConsole(NostifyConfig config, Exception ex, string message)
+    {
+        if (config.logger != null)
+        {
+            LogStartupFailure(config.logger, message, ex);
+            return;
+        }
+
+        Console.WriteLine(message + ": " + ex.Message + " " + ex.InnerException?.Message);
     }
 }

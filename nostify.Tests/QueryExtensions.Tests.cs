@@ -1,141 +1,76 @@
-// using System;
-// using System.Collections.Generic;
-// using System.Linq;
-// using System.Threading.Tasks;
-// using Microsoft.Azure.Cosmos;
-// using Moq;
-// using Xunit;
-// using nostify;
+using Microsoft.Azure.Cosmos;
+using Moq;
+using Xunit;
 
-// namespace nostify.Tests;
+namespace nostify.Tests;
 
-// public class QueryExtensionsTests
-// {
-//     public class TestEntity
-//     {
-//         public Guid Id { get; set; }
-//         public string? Name { get; set; }
-//         public int Value { get; set; }
+/// <summary>
+/// Behavioral tests for feed-iterator query helpers.
+/// </summary>
+public sealed class QueryExtensionsTests
+{
+    [Fact]
+    public async Task ReadFeedIteratorAsync_WithNoPages_ReturnsEmptyList()
+    {
+        var iterator = new Mock<FeedIterator<TestEntity>>();
+        iterator.SetupGet(value => value.HasMoreResults).Returns(false);
 
-//         public TestEntity()
-//         {
-//             Id = Guid.NewGuid();
-//         }
+        List<TestEntity> result = await iterator.Object.ReadFeedIteratorAsync();
 
-//         public TestEntity(string name, int value) : this()
-//         {
-//             Name = name;
-//             Value = value;
-//         }
-//     }
+        Assert.Empty(result);
+        iterator.Verify(
+            value => value.ReadNextAsync(It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 
-//     [Fact]
-//     public async Task ReadFeedIteratorAsync_WithEmptyResults_ShouldReturnEmptyList()
-//     {
-//         // Arrange
-//         var mockFeedIterator = new Mock<FeedIterator<TestEntity>>();
-//         mockFeedIterator.SetupGet(x => x.HasMoreResults).Returns(false);
+    [Fact]
+    public async Task ReadFeedIteratorAsync_WithMultiplePages_ReturnsItemsInPageOrder()
+    {
+        TestEntity first = new("first");
+        TestEntity second = new("second");
+        TestEntity third = new("third");
+        FeedResponse<TestEntity> firstPage = CreatePage(first, second);
+        FeedResponse<TestEntity> secondPage = CreatePage(third);
+        var iterator = new Mock<FeedIterator<TestEntity>>();
+        iterator
+            .SetupSequence(value => value.HasMoreResults)
+            .Returns(true)
+            .Returns(true)
+            .Returns(false);
+        iterator
+            .SetupSequence(value => value.ReadNextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(firstPage)
+            .ReturnsAsync(secondPage);
 
-//         // Act
-//         var result = await mockFeedIterator.Object.ReadFeedIteratorAsync();
+        List<TestEntity> result = await iterator.Object.ReadFeedIteratorAsync();
 
-//         // Assert
-//         Assert.NotNull(result);
-//         Assert.Empty(result);
-//     }
+        Assert.Equal([first, second, third], result);
+    }
 
-//     [Fact]
-//     public async Task ReadFeedIteratorAsync_WithSingleBatch_ShouldReturnAllItems()
-//     {
-//         // Arrange
-//         var testEntities = new List<TestEntity>
-//         {
-//             new TestEntity("Entity1", 1),
-//             new TestEntity("Entity2", 2),
-//             new TestEntity("Entity3", 3)
-//         };
+    [Fact]
+    public async Task ReadFeedIteratorAsync_WhenPageReadFails_PreservesException()
+    {
+        var expected = new InvalidOperationException("query failed");
+        var iterator = new Mock<FeedIterator<TestEntity>>();
+        iterator.SetupGet(value => value.HasMoreResults).Returns(true);
+        iterator
+            .Setup(value => value.ReadNextAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(expected);
 
-//         var mockFeedResponse = new Mock<FeedResponse<TestEntity>>();
-//         mockFeedResponse.Setup(x => x.GetEnumerator()).Returns(testEntities.GetEnumerator());
+        InvalidOperationException actual = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => iterator.Object.ReadFeedIteratorAsync());
 
-//         var mockFeedIterator = new Mock<FeedIterator<TestEntity>>();
-//         mockFeedIterator.SetupSequence(x => x.HasMoreResults)
-//             .Returns(true)   // First call - has results
-//             .Returns(false); // Second call - no more results
-//         mockFeedIterator.Setup(x => x.ReadNextAsync())
-//             .Returns(Task.FromResult(mockFeedResponse.Object));
+        Assert.Same(expected, actual);
+    }
 
-//         // Act
-//         var result = await mockFeedIterator.Object.ReadFeedIteratorAsync();
+    private static FeedResponse<TestEntity> CreatePage(params TestEntity[] entities)
+    {
+        var response = new Mock<FeedResponse<TestEntity>>();
+        response.Setup(value => value.GetEnumerator()).Returns(() => entities.AsEnumerable().GetEnumerator());
+        return response.Object;
+    }
 
-//         // Assert
-//         Assert.NotNull(result);
-//         Assert.Equal(3, result.Count);
-//         Assert.Equal("Entity1", result[0].Name);
-//         Assert.Equal("Entity2", result[1].Name);
-//         Assert.Equal("Entity3", result[2].Name);
-//     }
-
-//     [Fact]
-//     public async Task ReadFeedIteratorAsync_WithException_ShouldPropagateException()
-//     {
-//         // Arrange
-//         var mockFeedIterator = new Mock<FeedIterator<TestEntity>>();
-//         mockFeedIterator.SetupGet(x => x.HasMoreResults).Returns(true);
-//         mockFeedIterator.Setup(x => x.ReadNextAsync())
-//             .Returns(Task.FromException<FeedResponse<TestEntity>>(new CosmosException("Test exception", System.Net.HttpStatusCode.InternalServerError, 0, "test", 1.0)));
-
-//         // Act & Assert
-//         await Assert.ThrowsAsync<CosmosException>(async () => 
-//             await mockFeedIterator.Object.ReadFeedIteratorAsync());
-//     }
-
-//     [Fact]
-//     public void ReadFeedIteratorAsync_ShouldBeExtensionMethod()
-//     {
-//         // This test verifies that the method exists as an extension method
-//         // and can be called on FeedIterator<T> instances
-
-//         // Arrange
-//         var mockFeedIterator = new Mock<FeedIterator<TestEntity>>();
-
-//         // Act & Assert
-//         // The fact that this compiles proves the extension method exists
-//         var task = mockFeedIterator.Object.ReadFeedIteratorAsync();
-//         Assert.NotNull(task);
-//     }
-
-//     // Simplified tests for the other extension methods since they depend on Cosmos DB specifics
-//     [Fact]
-//     public void QueryExtensionMethods_ShouldExistAndBeAccessible()
-//     {
-//         // This test verifies the extension methods exist by checking their method signatures
-//         var extensionMethods = typeof(QueryExtensions).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-        
-//         var firstOrNewMethod = extensionMethods.FirstOrDefault(m => m.Name == "FirstOrNewAsync");
-//         var firstOrDefaultMethod = extensionMethods.FirstOrDefault(m => m.Name == "FirstOrDefaultAsync");
-//         var readAllMethod = extensionMethods.FirstOrDefault(m => m.Name == "ReadAllAsync");
-//         var readFeedIteratorMethod = extensionMethods.FirstOrDefault(m => m.Name == "ReadFeedIteratorAsync");
-
-//         Assert.NotNull(firstOrNewMethod);
-//         Assert.NotNull(firstOrDefaultMethod);
-//         Assert.NotNull(readAllMethod);
-//         Assert.NotNull(readFeedIteratorMethod);
-
-//         // Verify they are generic methods
-//         Assert.True(firstOrNewMethod.IsGenericMethodDefinition);
-//         Assert.True(firstOrDefaultMethod.IsGenericMethodDefinition);
-//         Assert.True(readAllMethod.IsGenericMethodDefinition);
-//         Assert.True(readFeedIteratorMethod.IsGenericMethodDefinition);
-//     }
-
-//     [Fact]
-//     public void QueryExtensions_ShouldBeStaticClass()
-//     {
-//         // Verify QueryExtensions is a static class
-//         var type = typeof(QueryExtensions);
-//         Assert.True(type.IsSealed);
-//         Assert.True(type.IsAbstract);
-//         Assert.True(type.IsClass);
-//     }
-// }
+    // The model must be public so Castle DynamicProxy can construct proxies for
+    // the strong-named Cosmos generic types used by these tests.
+    public sealed record TestEntity(string Name);
+}

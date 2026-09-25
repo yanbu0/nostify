@@ -8,7 +8,7 @@ using Xunit.Sdk;
 
 
 /// <summary>
-/// Attribute to specify that a property is required for an Event with a specified NostifyCommand.
+/// Attribute to specify that a property is required for an Event with a specified event type name.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public class RequiredForAttribute : RequiredAttribute, INostifyValidation
@@ -51,20 +51,35 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     /// </returns>
     protected override ValidationResult IsValid(object? value, ValidationContext validationContext)
     {
-        NostifyCommand? command = validationContext.Items.ContainsKey("command") ? validationContext.Items["command"] as NostifyCommand : null;
-        // If command is null return ValidationResult
-        if (command is null)
+        EventType? eventType = validationContext.Items.ContainsKey("eventType") ? validationContext.Items["eventType"] as EventType : null;
+        string? eventTypeName = eventType?.name;
+
+        if (string.IsNullOrWhiteSpace(eventTypeName) && validationContext.Items.ContainsKey("command"))
         {
-            return new ValidationResult($"The property '{validationContext.MemberName}' requires a command to be specified in the validation context.");
+#pragma warning disable CS0618 // Continue accepting legacy validation contexts created with NostifyCommand.
+            eventTypeName = validationContext.Items["command"] switch
+            {
+                NostifyCommand command => command.name,
+                EventType legacyEventType => legacyEventType.name,
+                _ => null
+            };
+#pragma warning restore CS0618
         }
 
-        if (Commands.Contains(command.name))
+        if (string.IsNullOrWhiteSpace(eventTypeName))
+        {
+            return new ValidationResult($"The property '{validationContext.MemberName}' requires an event type to be specified in the validation context.");
+        }
+
+        if (Commands.Contains(eventTypeName))
         {
             bool baseResult = base.IsValid(value);
-            // If baseResult is null return ValidationResult
             if (!baseResult)
             {
-                return new ValidationResult(ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the command '{command.name}'.");
+                // Preserve the member name so structured validation responses do not discard this error.
+                return new ValidationResult(
+                    ErrorMessage ?? $"The property '{validationContext.MemberName}' is required for the event type '{eventTypeName}'.",
+                    [validationContext.MemberName ?? "Unknown"]);
             }
         }
 

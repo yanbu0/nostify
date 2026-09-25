@@ -250,7 +250,7 @@ public class GrpcEventRequester<TProjection> where TProjection : IUniquelyIdenti
     /// <returns>Array of all foreign ID selectors</returns>
     public Func<TProjection, Guid?>[] GetAllForeignIdSelectors(List<TProjection> projections)
     {
-        if (!ListSelectors.Any())
+        if (ListSelectors.Length == 0)
         {
             return SingleSelectors;
         }

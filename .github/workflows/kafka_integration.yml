@@ -1,0 +1,52 @@
+name: Kafka Integration Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'nostify.IntegrationTests/**'
+      - 'nostify.IntegrationTestModels/**'
+      - 'nostify.csproj'
+      - '.github/workflows/kafka_integration.yml'
+
+jobs:
+  kafka-integration:
+    runs-on: ubuntu-latest
+    services:
+      kafka:
+        image: apache/kafka:4.1.0
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+    env:
+      KAFKA_UNIT_TESTING_BOOTSTRAP_SERVERS: localhost:9092
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore integration dependencies
+        run: dotnet restore ./nostify.IntegrationTests/nostify.IntegrationTests.csproj
+
+      - name: Run explicitly selected Kafka integration tests
+        run: dotnet test ./nostify.IntegrationTests/nostify.IntegrationTests.csproj --no-restore --filter "Dependency=Kafka" --verbosity normal

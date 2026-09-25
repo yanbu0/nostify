@@ -168,7 +168,7 @@ public class RequiredForAttributeTests
         Assert.NotNull(result);
         Assert.NotEqual(ValidationResult.Success, result);
         Assert.Contains("TestProperty", result.ErrorMessage);
-        Assert.Contains("command to be specified", result.ErrorMessage);
+        Assert.Contains("event type to be specified", result.ErrorMessage);
     }
 
     [Fact]

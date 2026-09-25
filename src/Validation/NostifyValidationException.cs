@@ -31,7 +31,7 @@ public class NostifyValidationException : ValidationException
     /// with a list of validation messages.
     /// </summary>
     /// <param name="validationMessages">The list of validation messages.</param>
-    public NostifyValidationException(List<ValidationResult> validationMessages) 
+    public NostifyValidationException(List<ValidationResult> validationMessages)
         : base(BuildErrorMessage(validationMessages))
     {
         ValidationMessages = validationMessages ?? new List<ValidationResult>();
@@ -43,7 +43,7 @@ public class NostifyValidationException : ValidationException
     /// </summary>
     /// <param name="validationMessages">The list of validation messages.</param>
     /// <param name="innerException">The inner exception.</param>
-    public NostifyValidationException(List<ValidationResult> validationMessages, Exception innerException) 
+    public NostifyValidationException(List<ValidationResult> validationMessages, Exception innerException)
         : base(BuildErrorMessage(validationMessages), innerException)
     {
         ValidationMessages = validationMessages ?? new List<ValidationResult>();
@@ -55,7 +55,7 @@ public class NostifyValidationException : ValidationException
     /// </summary>
     /// <param name="message">The custom error message.</param>
     /// <param name="validationMessages">The list of validation messages.</param>
-    public NostifyValidationException(string message, List<ValidationResult> validationMessages) 
+    public NostifyValidationException(string message, List<ValidationResult> validationMessages)
         : base(message)
     {
         ValidationMessages = validationMessages ?? new List<ValidationResult>();
@@ -67,7 +67,7 @@ public class NostifyValidationException : ValidationException
     /// <returns>A formatted string containing all validation error messages.</returns>
     public string GetAllErrorMessages()
     {
-        if (ValidationMessages == null || !ValidationMessages.Any())
+        if (ValidationMessages == null || ValidationMessages.Count == 0)
             return Message;
 
         return string.Join(" ", ValidationMessages.Select(vm => vm.ErrorMessage));
@@ -81,13 +81,13 @@ public class NostifyValidationException : ValidationException
     {
         var errorsByMember = new Dictionary<string, List<string>>();
 
-        if (ValidationMessages == null || !ValidationMessages.Any())
+        if (ValidationMessages == null || ValidationMessages.Count == 0)
             return errorsByMember;
 
         foreach (var validationResult in ValidationMessages)
         {
             var memberNames = validationResult.MemberNames?.ToList() ?? new List<string> { "Unknown" };
-            
+
             foreach (var memberName in memberNames)
             {
                 if (!errorsByMember.ContainsKey(memberName))
@@ -108,7 +108,7 @@ public class NostifyValidationException : ValidationException
     /// <returns>A formatted error message string.</returns>
     private static string BuildErrorMessage(List<ValidationResult> validationMessages)
     {
-        if (validationMessages == null || !validationMessages.Any())
+        if (validationMessages == null || validationMessages.Count == 0)
             return "Validation failed with no specific errors.";
 
         var errorMessages = validationMessages

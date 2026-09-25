@@ -4,37 +4,54 @@ using nostify;
 
 namespace _ReplaceMe__Service;
 
-public class _ReplaceMe_Command : NostifyCommand
+public sealed class Create__ReplaceMe_ : EventType
 {
-    ///<summary>
-    ///Base Create Command
-    ///</summary>
-    public static readonly _ReplaceMe_Command Create = new _ReplaceMe_Command("Create__ReplaceMe_", true);
-    ///<summary>
-    ///Base Update Command
-    ///</summary>
-    public static readonly _ReplaceMe_Command Update = new _ReplaceMe_Command("Update__ReplaceMe_");
-    ///<summary>
-    ///Base Delete Command
-    ///</summary>
-    public static readonly _ReplaceMe_Command Delete = new _ReplaceMe_Command("Delete__ReplaceMe_");
-    ///<summary>
-    ///Bulk Create Command
-    ///</summary>
-    public static readonly _ReplaceMe_Command BulkCreate = new _ReplaceMe_Command("BulkCreate__ReplaceMe_", true);
-    ///<summary>
-    ///Bulk Update Command
-    ///</summary>
-    public static readonly _ReplaceMe_Command BulkUpdate = new _ReplaceMe_Command("BulkUpdate__ReplaceMe_");
-    ///<summary>
-    ///Bulk Delete Command
-    ///</summary>
-    public static readonly _ReplaceMe_Command BulkDelete = new _ReplaceMe_Command("BulkDelete__ReplaceMe_");
-
-
-    public _ReplaceMe_Command(string name, bool isNew = false)
-    : base(name, isNew)
+    public Create__ReplaceMe_() : base("Create__ReplaceMe_", isNew: true)
     {
-
     }
+}
+
+public sealed class Update__ReplaceMe_ : EventType
+{
+    public Update__ReplaceMe_() : base("Update__ReplaceMe_")
+    {
+    }
+}
+
+public sealed class Delete__ReplaceMe_ : EventType
+{
+    public Delete__ReplaceMe_() : base("Delete__ReplaceMe_", isNew: false, allowNullPayload: true)
+    {
+    }
+}
+
+public sealed class BulkCreate__ReplaceMe_ : EventType
+{
+    public BulkCreate__ReplaceMe_() : base("BulkCreate__ReplaceMe_", isNew: true)
+    {
+    }
+}
+
+public sealed class BulkUpdate__ReplaceMe_ : EventType
+{
+    public BulkUpdate__ReplaceMe_() : base("BulkUpdate__ReplaceMe_")
+    {
+    }
+}
+
+public sealed class BulkDelete__ReplaceMe_ : EventType
+{
+    public BulkDelete__ReplaceMe_() : base("BulkDelete__ReplaceMe_", isNew: false, allowNullPayload: true)
+    {
+    }
+}
+
+public static class _ReplaceMe_Command
+{
+    public static Create__ReplaceMe_ Create => new Create__ReplaceMe_();
+    public static Update__ReplaceMe_ Update => new Update__ReplaceMe_();
+    public static Delete__ReplaceMe_ Delete => new Delete__ReplaceMe_();
+    public static BulkCreate__ReplaceMe_ BulkCreate => new BulkCreate__ReplaceMe_();
+    public static BulkUpdate__ReplaceMe_ BulkUpdate => new BulkUpdate__ReplaceMe_();
+    public static BulkDelete__ReplaceMe_ BulkDelete => new BulkDelete__ReplaceMe_();
 }

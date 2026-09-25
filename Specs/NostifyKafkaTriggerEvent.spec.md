@@ -171,6 +171,8 @@ The constructor:
 3. Deserializes the event JSON to an `Event` object
 4. Stores both the raw Kafka data and the parsed event
 
+`GetEvent(...)` and `GetIEvent(...)` deserialize with `SerializationSettings.NostifyDefault`, including the `EventType` converter. The logical `eventType.name` is the sole wire identity and is matched with ordinal, case-sensitive comparison. A unique loaded concrete definition is restored by exact name and supplies canonical metadata. Unknown names hydrate as `LegacyNostifyCommandEventType`, preserving serialized `name`, `isNew`, and `allowNullPayload` values. Duplicate exact concrete names are rejected as invalid configuration.
+
 ## Error Handling
 
 | Exception | Condition |

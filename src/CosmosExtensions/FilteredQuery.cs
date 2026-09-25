@@ -49,9 +49,10 @@ public static class FilteredQueryExtensions
     /// <returns>An IQueryable of type T filtered by the specified criteria.</returns>
     public static IQueryable<T> FilteredQuery<T>(this Container container, PartitionKey partitionKey, Expression<Func<T, bool>>? filterExpression = null) where T : NostifyObject
     {
-        var query = container.GetItemLinqQueryable<T>(requestOptions: new QueryRequestOptions { 
-                PartitionKey = partitionKey
-            })
+        var query = container.GetItemLinqQueryable<T>(requestOptions: new QueryRequestOptions
+        {
+            PartitionKey = partitionKey
+        })
             .AsQueryable();
 
         if (filterExpression != null)

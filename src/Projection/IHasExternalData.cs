@@ -8,17 +8,19 @@ using System.Threading.Tasks;
 namespace nostify;
 
 /// <summary>
-/// Projection must implement this interface to query external data to update the projection.
+/// Defines how a projection retrieves external events required during initialization.
 /// </summary>
+/// <typeparam name="P">The projection type being initialized.</typeparam>
 public interface IHasExternalData<P> where P : IProjection
 {
-    ///<summary>
-    ///Queries any necessary external data to create a list of Events to update all of the projections in the param. Gets called in InitAsync.
-    ///</summary>
-    ///<param name="projectionsToInit">List of projections to query external data for. If empty, will update </param>
-    ///<param name="nostify">Nostify instance to use to get current state containers</param>
-    ///<param name="httpClient">HttpClient to use to query external data. Can be null if no events external to this service are needed.</param>
-    ///<param name="pointInTime">Point in time to query external data.  If null, will query current state. Use when pulling a previous point in time state of Projection.</param>
+    /// <summary>
+    /// Queries external data and creates the events needed to update the supplied projections.
+    /// </summary>
+    /// <param name="projectionsToInit">The projections for which external events are requested. An empty list produces no projection-specific requests.</param>
+    /// <param name="nostify">The Nostify instance used to access local event and current-state containers.</param>
+    /// <param name="httpClient">The optional HTTP client for remote services; may be <see langword="null"/> when no HTTP requests are needed.</param>
+    /// <param name="pointInTime">The optional inclusive historical cutoff; <see langword="null"/> requests current data.</param>
+    /// <returns>The external events to apply during projection initialization.</returns>
     public abstract static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<P> projectionsToInit,
                                                             INostify nostify,
                                                             HttpClient? httpClient = null,
