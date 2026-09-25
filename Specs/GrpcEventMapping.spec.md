@@ -105,7 +105,7 @@ response.Events.AddRange(GrpcEventMapping.MapToProto(allEvents));
 ## Key Relationships
 
 - [`Event`](Event.spec.md) - The domain event class being mapped
-- [`DefaultEventRequestHandlers`](DefaultEventRequestHandlers.spec.md) - Uses `MapToProto` in `HandleGrpcEventRequestAsync`
+- `DefaultEventRequestHandlers` - Uses `MapToProto` in `HandleGrpcEventRequestAsync`
 - [`ExternalDataEvent`](ExternalDataEvent.spec.md) - Uses `MapFromProto` in `GetEventsViaGrpcAsync`
 - [`GrpcEventRequester`](GrpcEventRequester.spec.md) - Requestor class that triggers gRPC event fetching
 

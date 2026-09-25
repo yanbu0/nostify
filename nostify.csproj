@@ -18,6 +18,8 @@
     <IsPackable>true</IsPackable>
     <IsTestProject>false</IsTestProject>
     <Nullable>enable</Nullable>
+    <!-- Template scripts are content for generated projects, not NuGet install scripts. -->
+    <NoWarn>$(NoWarn);NU5110;NU5111</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.13.1" />

@@ -2,7 +2,7 @@
 
 ## Overview
 
-`ExternalDataEventFactory<P>` is a fluent builder for gathering external data events during projection initialization. It provides a unified interface for fetching events from both the same service's event store, external services via HTTP, and external services via Kafka async messaging.
+`ExternalDataEventFactory<P>` is a fluent builder for gathering external data events during projection initialization. It provides a unified interface for fetching events from the same service's event store and from external services via HTTP, Kafka async messaging, or gRPC.
 
 ## Type Parameters
 
@@ -21,7 +21,8 @@ public ExternalDataEventFactory(
     DateTime? pointInTime = null,
     IQueryExecutor? queryExecutor = null,
     string? authToken = null,
-    string? grpcAddress = null)
+    string? grpcAddress = null,
+    bool removeNonAppliedEvents = true)
 ```
 
 ### Parameters
@@ -35,6 +36,22 @@ public ExternalDataEventFactory(
 | `queryExecutor` | `IQueryExecutor?` | No | Query executor for unit testing. Defaults to `CosmosQueryExecutor.Default` |
 | `authToken` | `string?` | No | Default authentication token used by gRPC requestors when no per-call token is specified. When provided, all `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads that omit the `authToken` parameter will use this value. Per-call `authToken` parameters always take precedence. |
 | `grpcAddress` | `string?` | No | Default gRPC endpoint address used by the single-string overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor`. When non-empty, those overloads treat their first parameter as a **service name** (for multi-service gateway routing) rather than an endpoint address. When null or empty (the default), those overloads treat the first parameter as the endpoint address directly (original behavior). |
+| `removeNonAppliedEvents` | `bool` | No | Controls client-side removal of events that `P` cannot apply. Defaults to `true`. |
+
+## Event Filtering Configuration
+
+The read-only `RemoveNonAppliedEvents` property exposes the constructor setting. When it is `true`, every returned event batch is filtered by the case-sensitive logical `Event.eventType.name` values handled by `P`. Handler names are discovered once per projection type and cached from:
+
+- Methods declared with `ApplyEventsAttribute`, including both type-based and string-based declarations.
+- Legacy event-specific `Apply(ConcreteEventType, IEvent)` overloads.
+
+Filtering preserves aggregate-root mappings and event order. A mapping is removed when none of its events remain. Primary batches are filtered before dependent selectors are evaluated, so unrelated initial events are not applied during dependent hydration.
+
+If a complete finite handled-event set cannot be inferred—such as when the projection overrides the catch-all `NostifyObject.Apply(EventType, IEvent)` method or implements a custom non-`NostifyObject` dispatch strategy—the factory retains all events for compatibility and logs a warning through `INostify.Logger` when warning logging is enabled.
+
+When `RemoveNonAppliedEvents` is `false`, all events are retained. The projection developer may need to override `NostifyObject`'s catch-all dispatch to avoid exceptions for unsupported event types.
+
+This feature is client-side only. Same-service, HTTP, Kafka, and gRPC request and response contracts are unchanged, and upstream services may still send unrelated events. Filtering therefore improves application safety and dependent hydration but does not reduce transport bandwidth or server-side query cost.
 
 ## Methods
 
@@ -320,7 +337,7 @@ Six overloads matching the primary `WithGrpcEventRequestor(address, serviceName,
 public async Task<List<ExternalDataEvent>> GetEventsAsync(bool enableLogging = false)
 ```
 
-Executes all configured selectors and requestors and returns the collected events.
+Executes all configured selectors and requestors and returns the collected events. Unless `RemoveNonAppliedEvents` is `false` or handler discovery is indeterminate, each same-service, HTTP, Kafka, and gRPC result is filtered before it is added to the returned collection.
 
 When `enableLogging` is `true`, `GetEventsAsync` emits per-stage timing logs and a total elapsed-time log through `INostify.Logger`. Timing `Stopwatch` instances are only created when logging is effectively active (`enableLogging == true` and a logger is configured). If logging is enabled but no logger is configured, the method writes a console guidance message instructing users to configure logging via `NostifyFactory.WithLogger(...)`.
 
@@ -329,9 +346,11 @@ When `enableLogging` is `true`, `GetEventsAsync` emits per-stage timing logs and
 2. Same-service list ID selectors (non-nullable and nullable)
 3. External service requestors (HTTP)
 4. Async event requestors (Kafka)
-5. Dependant same-service selectors (after applying initial events)
-6. Dependant external service requestors (HTTP, after applying initial events)
-7. Dependant async event requestors (Kafka, after applying initial events)
+5. gRPC event requestors
+6. Dependant same-service selectors (after applying filtered initial events)
+7. Dependant external service requestors (HTTP, after applying filtered initial events)
+8. Dependant async event requestors (Kafka, after applying filtered initial events)
+9. Dependant gRPC event requestors (after applying filtered initial events)
 
 ## Internal Storage
 
@@ -357,6 +376,10 @@ private EventRequester<P>[] _dependantEventRequestors;
 // Async external requestors (Kafka)
 private AsyncEventRequester<P>[] _asyncEventRequestors;
 private AsyncEventRequester<P>[] _dependantAsyncEventRequestors;
+
+// gRPC external requestors
+private GrpcEventRequester<P>[] _grpcEventRequestors;
+private GrpcEventRequester<P>[] _dependantGrpcEventRequestors;
 ```
 
 ## Null Handling
@@ -526,6 +549,7 @@ var factory = new ExternalDataEventFactory<TestProjection>(
 
 ## Version History
 
+- **5.0.0** - Added client-side handled-event filtering, the `removeNonAppliedEvents` constructor parameter, the read-only `RemoveNonAppliedEvents` property, cached handler discovery, and compatibility fallback with warning logging for indeterminate dispatch.
 - **4.8.0** - Added constructor `authToken` parameter to `ExternalDataEventFactory`. Added 12 new overloads of `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` that accept `(address, serviceName, selectors)` without a per-call `authToken`, using the constructor token instead. Per-call `authToken` always takes precedence over the constructor token.
 - **4.7.1** - Added optional `enableLogging` parameter to `GetEventsAsync`, including per-stage timing logs, total elapsed-time logging, and console guidance when logging is enabled without a configured logger
 - **4.5.0** - Added `WithGrpcEventRequestor` and `WithDependantGrpcEventRequestor` overloads with `serviceName` + `authToken` parameters (12 new overloads). Added address-only gRPC overloads (12 overloads), `AddGrpcEventRequestors`, `AddDependantGrpcEventRequestors`. Added `WithAsyncEventRequestor`, `WithDependantAsyncEventRequestor`, `AddAsyncEventRequestors`, `AddDependantAsyncEventRequestors` for Kafka-based async event fetching

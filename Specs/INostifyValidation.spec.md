@@ -106,5 +106,5 @@ public static List<ValidationResult>? ValidateWithCommand(object obj, NostifyCom
 ## Related Types
 
 - [RequiredForAttribute](RequiredForAttribute.spec.md) - Primary implementation
-- [NostifyValidationExceptionHandler](NostifyValidationExceptionHandler.spec.md) - Validation utilities
+- [NostifyValidationExceptionHandler](NostifyValidation.spec.md) - Validation utilities
 - [NostifyCommand](NostifyCommand.spec.md) - Command context

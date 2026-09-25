@@ -61,6 +61,21 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
             new EventId(3, nameof(LogKafkaConsumerCloseFailure)),
             "Kafka consumer close failed during external event request cleanup; disposal will continue");
 
+    private static readonly Action<ILogger, string, string, Exception?> LogIndeterminateEventFilter =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Warning,
+            new EventId(4, nameof(LogIndeterminateEventFilter)),
+            "ExternalDataEventFactory could not determine all handled event types for projection={ProjectionType}; returned events will not be filtered. Reason={Reason}");
+
+    /// <summary>
+    /// Gets whether events that the projection cannot apply are removed from event retrieval results.
+    /// The default is <see langword="true"/>. When set to <see langword="false"/>, all returned
+    /// events are retained and the developer may need to override the catch-all
+    /// <see cref="NostifyObject.Apply(EventType, IEvent)"/> dispatch to avoid exceptions for
+    /// unsupported event types.
+    /// </summary>
+    public bool RemoveNonAppliedEvents { get; }
+
     /// <summary>
     /// Creates a new ExternalDataEventFactory
     /// </summary>
@@ -71,7 +86,13 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
     /// <param name="queryExecutor">Optional query executor for unit testing. Defaults to CosmosQueryExecutor.</param>
     /// <param name="authToken">Optional default authentication token used by gRPC requestors when no per-call token is specified</param>
     /// <param name="grpcAddress">Optional default gRPC endpoint address used by <c>WithGrpcEventRequestor</c> and <c>WithDependantGrpcEventRequestor</c> overloads that omit the <c>address</c> parameter. When provided, the single-string overloads treat their first parameter as a service name rather than an endpoint address.</param>
-    public ExternalDataEventFactory(INostify nostify, List<P> projectionsToInit, HttpClient? httpClient = null, DateTime? pointInTime = null, IQueryExecutor? queryExecutor = null, string? authToken = null, string? grpcAddress = null)
+    /// <param name="removeNonAppliedEvents">
+    /// Whether to remove returned events that have no event-specific handler on <typeparamref name="P"/>.
+    /// Defaults to <see langword="true"/>. If set to <see langword="false"/>, the developer may
+    /// need to override the catch-all <see cref="NostifyObject.Apply(EventType, IEvent)"/> dispatch
+    /// to avoid exceptions for unsupported event types.
+    /// </param>
+    public ExternalDataEventFactory(INostify nostify, List<P> projectionsToInit, HttpClient? httpClient = null, DateTime? pointInTime = null, IQueryExecutor? queryExecutor = null, string? authToken = null, string? grpcAddress = null, bool removeNonAppliedEvents = true)
     {
         this._nostify = nostify;
         this._httpClient = httpClient;
@@ -80,6 +101,45 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
         this._queryExecutor = queryExecutor ?? CosmosQueryExecutor.Default;
         this._grpcAuthToken = authToken;
         this._grpcAddress = grpcAddress;
+        RemoveNonAppliedEvents = removeNonAppliedEvents;
+    }
+
+    /// <summary>
+    /// Removes events that are not handled by the projection when a complete finite handler set
+    /// can be discovered. If discovery is indeterminate, all events are retained for compatibility.
+    /// </summary>
+    private List<ExternalDataEvent> FilterNonAppliedEvents(List<ExternalDataEvent> externalEvents)
+    {
+        if (!RemoveNonAppliedEvents || externalEvents.Count == 0)
+        {
+            return externalEvents;
+        }
+
+        HandledEventTypeResolver.Resolution resolution = HandledEventTypeResolver.GetOrBuild(typeof(P));
+        if (!resolution.IsDeterminate)
+        {
+            ILogger? logger = _nostify.Logger;
+            if (logger?.IsEnabled(LogLevel.Warning) == true)
+            {
+                LogIndeterminateEventFilter(
+                    logger,
+                    typeof(P).FullName ?? typeof(P).Name,
+                    resolution.IndeterminateReason ?? "Unknown reason.",
+                    null);
+            }
+
+            return externalEvents;
+        }
+
+        // Preserve each projection mapping and event order while dropping empty mappings.
+        return externalEvents
+            .Select(externalEvent => new ExternalDataEvent(
+                externalEvent.aggregateRootId,
+                externalEvent.events
+                    .Where(evt => evt.eventType != null && resolution.EventTypeNames.Contains(evt.eventType.name))
+                    .ToList()))
+            .Where(externalEvent => externalEvent.events.Count != 0)
+            .ToList();
     }
 
     /// <summary>
@@ -1146,7 +1206,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     _pointInTime,
                     _foreignKeySelectors.ToArray());
                 StopAndLogCall(singleIdStopwatch, "WithSameServiceIdSelectors", "eventStore");
-                result.AddRange(singleIdEvents);
+                result.AddRange(FilterNonAppliedEvents(singleIdEvents));
             }
 
             // Get events for single-ID selectors (nullable) - nulls filtered by HasValue in ExternalDataEvent
@@ -1160,7 +1220,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     _pointInTime,
                     _nullableForeignKeySelectors.ToArray());
                 StopAndLogCall(nullableSingleIdStopwatch, "WithSameServiceIdSelectorsNullable", "eventStore");
-                result.AddRange(nullableSingleIdEvents);
+                result.AddRange(FilterNonAppliedEvents(nullableSingleIdEvents));
             }
 
             // Get events for list-ID selectors (non-nullable)
@@ -1174,7 +1234,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     _pointInTime,
                     _foreignKeyListSelectors.ToArray());
                 StopAndLogCall(listIdStopwatch, "WithSameServiceListIdSelectors", "eventStore");
-                result.AddRange(listIdEvents);
+                result.AddRange(FilterNonAppliedEvents(listIdEvents));
             }
 
             // Get events for list-ID selectors (nullable) - nulls within lists filtered by HasValue in ExternalDataEvent
@@ -1188,7 +1248,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     _pointInTime,
                     _nullableForeignKeyListSelectors.ToArray());
                 StopAndLogCall(nullableListIdStopwatch, "WithSameServiceListIdSelectorsNullable", "eventStore");
-                result.AddRange(nullableListIdEvents);
+                result.AddRange(FilterNonAppliedEvents(nullableListIdEvents));
             }
 
             // Handle external service IDs before dependent selectors
@@ -1201,7 +1261,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     this._pointInTime,
                     this._eventRequestors);
                 StopAndLogCall(externalEventsStopwatch, "WithEventRequestor", BuildTargetsString(this._eventRequestors.Select(r => r.Url)));
-                result.AddRange(externalEvents);
+                result.AddRange(FilterNonAppliedEvents(externalEvents));
             }
 
             // Handle async (Kafka) event requestors
@@ -1210,7 +1270,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 var asyncEventsStopwatch = StartCallStopwatch();
                 var asyncEvents = await GetAsyncEventsAsync(_asyncEventRequestors, _projectionsToInit);
                 StopAndLogCall(asyncEventsStopwatch, "WithAsyncEventRequestor", BuildTargetsString(_asyncEventRequestors.Select(r => r.ServiceName)));
-                result.AddRange(asyncEvents);
+                result.AddRange(FilterNonAppliedEvents(asyncEvents));
             }
 
             // Handle gRPC event requestors
@@ -1222,7 +1282,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                     this._pointInTime,
                     this._grpcEventRequestors);
                 StopAndLogCall(grpcEventsStopwatch, "WithGrpcEventRequestor", BuildTargetsString(this._grpcEventRequestors.Select(r => $"{r.ServiceName}@{r.Address}")));
-                result.AddRange(grpcEvents);
+                result.AddRange(FilterNonAppliedEvents(grpcEvents));
             }
 
             // Handle dependent selectors - these require applying ALL initial events first to get the IDs
@@ -1232,7 +1292,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 var dependantEventsStopwatch = StartCallStopwatch();
                 var dependantEvents = await GetDependantEventsAsync(eventStoreContainer!, result);
                 StopAndLogCall(dependantEventsStopwatch, "WithSameServiceDependantSelectors", "eventStore");
-                result.AddRange(dependantEvents);
+                result.AddRange(FilterNonAppliedEvents(dependantEvents));
             }
 
             // Handle dependent external event requestors - these also require applying initial events first
@@ -1241,7 +1301,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 var dependantExternalEventsStopwatch = StartCallStopwatch();
                 var dependantExternalEvents = await GetDependantExternalEventsAsync(result);
                 StopAndLogCall(dependantExternalEventsStopwatch, "WithDependantEventRequestor", BuildTargetsString(_dependantEventRequestors.Select(r => r.Url)));
-                result.AddRange(dependantExternalEvents);
+                result.AddRange(FilterNonAppliedEvents(dependantExternalEvents));
             }
 
             // Handle dependent async (Kafka) event requestors - these also require applying initial events first
@@ -1250,7 +1310,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 var dependantAsyncEventsStopwatch = StartCallStopwatch();
                 var dependantAsyncEvents = await GetDependantAsyncEventsAsync(result);
                 StopAndLogCall(dependantAsyncEventsStopwatch, "WithDependantAsyncEventRequestor", BuildTargetsString(_dependantAsyncEventRequestors.Select(r => r.ServiceName)));
-                result.AddRange(dependantAsyncEvents);
+                result.AddRange(FilterNonAppliedEvents(dependantAsyncEvents));
             }
 
             // Handle dependent gRPC event requestors - these also require applying initial events first
@@ -1259,7 +1319,7 @@ public class ExternalDataEventFactory<P> where P : IProjection, IUniquelyIdentif
                 var dependantGrpcEventsStopwatch = StartCallStopwatch();
                 var dependantGrpcEvents = await GetDependantGrpcEventsAsync(result);
                 StopAndLogCall(dependantGrpcEventsStopwatch, "WithDependantGrpcEventRequestor", BuildTargetsString(_dependantGrpcEventRequestors.Select(r => $"{r.ServiceName}@{r.Address}")));
-                result.AddRange(dependantGrpcEvents);
+                result.AddRange(FilterNonAppliedEvents(dependantGrpcEvents));
             }
 
             return result;

@@ -23,8 +23,15 @@ namespace nostify
 
             /// <summary>
             /// Gets handlers keyed by the case-sensitive logical <see cref="EventType.name"/>.
+            /// The keys also provide the canonical event names used by handled-event discovery.
             /// </summary>
             public Dictionary<string, Action<NostifyObject, IEvent>> Handlers { get; }
+
+            /// <summary>
+            /// Gets the case-sensitive logical event names declared by
+            /// <see cref="ApplyEventsAttribute"/> handlers.
+            /// </summary>
+            public IReadOnlyCollection<string> EventTypeNames => Handlers.Keys;
         }
 
         /// <summary>

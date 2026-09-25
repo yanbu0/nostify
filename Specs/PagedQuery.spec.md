@@ -340,4 +340,4 @@ Assert.Equal(3, result.totalCount);
 - [IQueryExecutor](IQueryExecutor.spec.md) — query execution interface.
 - [CosmosQueryExecutor](CosmosQueryExecutor.spec.md) — production Cosmos DB implementation.
 - [ITenantFilterable](ITenantFilterable.spec.md) — tenant filtering contract.
-- [FilteredQuery](FilteredQuery.spec.md) — helpers for constructing partition-scoped LINQ queries.
+- `FilteredQueryExtensions` — helpers in `src/CosmosExtensions/FilteredQuery.cs` for constructing partition-scoped LINQ queries.
