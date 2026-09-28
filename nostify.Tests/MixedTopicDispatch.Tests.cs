@@ -353,8 +353,7 @@ public sealed class MixedTopicDispatchTests
         nostify.Setup(n => n.HandleUndeliverableAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<IEvent>(),
-                It.IsAny<ErrorCommand?>()))
+                It.IsAny<IEvent>()))
             .Returns(Task.CompletedTask);
         return nostify;
     }

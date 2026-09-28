@@ -329,5 +329,101 @@ namespace nostify.Tests
             Assert.Single(deserialized.steps);
             Assert.Equal(step.order, deserialized.steps[0].order);
         }
+
+        [Fact]
+        public async Task Saga_LegacyCommandOnlyJson_RoundTripsAndPersistsHydratedEvents()
+        {
+            Guid stepAggregateId = Guid.NewGuid();
+            Guid rollbackAggregateId = Guid.NewGuid();
+            string json = $$"""
+            {
+              "name": "LegacySaga",
+              "status": 0,
+              "steps": [
+                {
+                  "order": 1,
+                  "status": 0,
+                  "stepEvent": {
+                    "aggregateRootId": "{{stepAggregateId}}",
+                    "command": { "name": "LegacyStep", "isNew": true, "allowNullPayload": false },
+                    "payload": { "value": 1 }
+                  },
+                  "rollbackEvent": {
+                    "aggregateRootId": "{{rollbackAggregateId}}",
+                    "command": { "name": "LegacyRollback", "isNew": false, "allowNullPayload": true },
+                    "payload": null
+                  }
+                }
+              ]
+            }
+            """;
+
+            Saga? saga = JsonConvert.DeserializeObject<Saga>(json, SerializationSettings.NostifyDefault);
+
+            SagaStep step = Assert.Single(saga!.steps);
+            Assert.Equal("LegacyStep", step.stepEvent.eventType.name);
+            Assert.True(step.stepEvent.eventType.isNew);
+            Assert.IsType<LegacyNostifyCommandEventType>(step.stepEvent.eventType);
+            Assert.Equal("LegacyRollback", step.rollbackEvent?.eventType.name);
+            Assert.True(step.rollbackEvent?.eventType.allowNullPayload);
+
+            string reserialized = JsonConvert.SerializeObject(saga, SerializationSettings.NostifyDefault);
+            Saga? secondRoundTrip = JsonConvert.DeserializeObject<Saga>(reserialized, SerializationSettings.NostifyDefault);
+            SagaStep hydratedStep = Assert.Single(secondRoundTrip!.steps);
+            Assert.Equal("LegacyStep", hydratedStep.stepEvent.eventType.name);
+            Assert.Equal("LegacyRollback", hydratedStep.rollbackEvent?.eventType.name);
+
+            // Legacy command-only events must remain executable through the modern
+            // IEvent persistence boundary without rebuilding the stored saga.
+            var persistedEvents = new List<IEvent>();
+            _nostifyMock
+                .Setup(n => n.PersistEventAsync(It.IsAny<IEvent>()))
+                .Callback<IEvent>(persistedEvents.Add)
+                .Returns(Task.CompletedTask);
+
+            await hydratedStep.StartAsync(_nostifyMock.Object);
+            await hydratedStep.RollbackAsync(_nostifyMock.Object);
+
+            Assert.Collection(
+                persistedEvents,
+                persisted => Assert.Same(hydratedStep.stepEvent, persisted),
+                persisted => Assert.Same(hydratedStep.rollbackEvent, persisted));
+            Assert.Equal(SagaStepStatus.RollingBack, hydratedStep.status);
+        }
+
+        [Fact]
+        public void Saga_MixedVersionJson_ResolvesCanonicalAndLegacyEventTypes()
+        {
+            string json = $$"""
+            {
+              "name": "MixedSaga",
+              "status": 0,
+              "steps": [
+                {
+                  "order": 1,
+                  "status": 0,
+                  "stepEvent": {
+                    "aggregateRootId": "{{Guid.NewGuid()}}",
+                    "eventType": { "name": "Error_BulkPersistEvent", "isNew": false, "allowNullPayload": false },
+                    "schemaVersion": 2,
+                    "payload": { "value": 1 }
+                  },
+                  "rollbackEvent": {
+                    "aggregateRootId": "{{Guid.NewGuid()}}",
+                    "command": { "name": "CustomLegacyRollback", "isNew": false, "allowNullPayload": false },
+                    "payload": { "value": 2 }
+                  }
+                }
+              ]
+            }
+            """;
+
+            Saga? saga = JsonConvert.DeserializeObject<Saga>(json, SerializationSettings.NostifyDefault);
+
+            SagaStep step = Assert.Single(saga!.steps);
+            Assert.IsType<BulkPersistErrorEventType>(step.stepEvent.eventType);
+            Assert.IsType<LegacyNostifyCommandEventType>(step.rollbackEvent?.eventType);
+            Assert.Equal("CustomLegacyRollback", step.rollbackEvent?.eventType.name);
+        }
     }
 }

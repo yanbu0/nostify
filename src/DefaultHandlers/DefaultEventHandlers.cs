@@ -211,7 +211,7 @@ public static class DefaultEventHandlers
         {
             IEvent undeliverableEvent = newEvent
                 ?? new EventFactory().NoValidate().CreateNullPayloadEvent(
-                    (EventType)ErrorCommand.HandleMultiApplyEvent,
+                    new HandleMultiApplyEventErrorEventType(),
                     Guid.Empty);
             await nostify.HandleUndeliverableAsync(
                 $"{nameof(HandleMultiApplyEventAsync)}:{nameof(P)}",

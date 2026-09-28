@@ -269,7 +269,7 @@ public sealed class NostifyBehaviorTests
         Assert.Equal(nameof(Nostify.BulkPersistEventAsync), undeliverable.FunctionName);
         Assert.Equal(expected.Message, undeliverable.ErrorMessage);
         Assert.Same(failedEvent, undeliverable.Event);
-        Assert.Equal(ErrorCommand.BulkPersistEvent, undeliverable.Command);
+        Assert.IsType<BulkPersistErrorEventType>(undeliverable.ErrorEventType);
     }
 
     [Fact]
@@ -606,20 +606,20 @@ public sealed class NostifyBehaviorTests
             string FunctionName,
             string ErrorMessage,
             IEvent Event,
-            ErrorCommand? Command)> UndeliverableCalls { get; } = [];
+            ErrorEventType ErrorEventType)> UndeliverableCalls { get; } = [];
 
         public override Task<Container> GetEventStoreContainerAsync(bool allowBulk = false)
         {
             return Task.FromResult(_eventContainer);
         }
 
-        public override Task HandleUndeliverableAsync(
+        public override Task HandleUndeliverableWithErrorEventAsync(
             string functionName,
             string errorMessage,
             IEvent eventToHandle,
-            ErrorCommand? errorCommand = null)
+            ErrorEventType errorEventType)
         {
-            UndeliverableCalls.Add((functionName, errorMessage, eventToHandle, errorCommand));
+            UndeliverableCalls.Add((functionName, errorMessage, eventToHandle, errorEventType));
             return Task.CompletedTask;
         }
     }

@@ -31,7 +31,7 @@ public class DefaultCommandHandlersTests
         _mockNostify = new Mock<INostify>();
         _mockNostify
             .Setup(n => n.HandleUndeliverableAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()))
             .Returns(Task.CompletedTask);
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
@@ -341,7 +341,7 @@ public class DefaultCommandHandlersTests
         private readonly Container? _fakeEventContainer;
         private readonly Exception? _containerException;
 
-        public List<(string FunctionName, string ErrorMessage, IEvent Event, ErrorCommand? Command)> UndeliverableCalls { get; } = new();
+        public List<(string FunctionName, string ErrorMessage, IEvent Event)> UndeliverableCalls { get; } = new();
 
         /// <summary>Simulates a successful container resolution that returns the supplied fake.</summary>
         public TestableNostify(Container fakeEventContainer)
@@ -377,9 +377,9 @@ public class DefaultCommandHandlersTests
         }
 
         public override Task HandleUndeliverableAsync(
-            string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
+            string functionName, string errorMessage, IEvent eventToHandle)
         {
-            UndeliverableCalls.Add((functionName, errorMessage, eventToHandle, errorCommand));
+            UndeliverableCalls.Add((functionName, errorMessage, eventToHandle));
             return Task.CompletedTask;
         }
     }
@@ -430,7 +430,6 @@ public class DefaultCommandHandlersTests
         Assert.Equal(nameof(Nostify.PersistEventAsync), call.FunctionName);
         Assert.Equal(failure.Message, call.ErrorMessage);
         Assert.Same(testEvent, call.Event);
-        Assert.Null(call.Command);
     }
 
     /// <summary>
@@ -471,7 +470,6 @@ public class DefaultCommandHandlersTests
         Assert.Equal(nameof(Nostify.PersistEventAsync), call.FunctionName);
         Assert.Equal(failure.Message, call.ErrorMessage);
         Assert.Same(testEvent, call.Event);
-        Assert.Null(call.Command);
     }
 
     [Fact]
