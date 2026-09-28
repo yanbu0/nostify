@@ -180,13 +180,30 @@ public interface INostify
     public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false);
 
     /// <summary>
-    /// Writes an event to the undeliverable-events container and optionally publishes a legacy error event.
+    /// Writes an event to the undeliverable-events container without publishing an error event.
     /// </summary>
     /// <param name="functionName">The function or operation name used to trace the failure.</param>
     /// <param name="errorMessage">The error message to capture.</param>
     /// <param name="eventToHandle">The event that failed to process.</param>
-    /// <param name="errorCommand">Optional legacy error command. When <see langword="null"/>, no error event is published to Kafka.</param>
-    public Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null);
+    public Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle);
+
+    /// <summary>
+    /// Writes an event to the undeliverable-events container and publishes a modern error event.
+    /// </summary>
+    /// <param name="functionName">The function or operation name used to trace the failure.</param>
+    /// <param name="errorMessage">The error message to capture.</param>
+    /// <param name="eventToHandle">The event that failed to process.</param>
+    /// <param name="errorEventType">Error-event metadata used for publication.</param>
+    public Task HandleUndeliverableWithErrorEventAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorEventType errorEventType);
+
+    /// <summary>
+    /// Writes an event to the undeliverable-events container and optionally publishes a legacy error command.
+    /// </summary>
+    /// <remarks>This overload is retained for source compatibility and authors schema-version-2 error events.</remarks>
+    [Obsolete("Use HandleUndeliverableAsync(...) or HandleUndeliverableWithErrorEventAsync(..., ErrorEventType) instead.")]
+#pragma warning disable CS0618 // The signature intentionally preserves ErrorCommand source compatibility.
+    public Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand);
+#pragma warning restore CS0618
 
     ///<summary>
     ///Published event to messaging bus

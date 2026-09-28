@@ -39,6 +39,18 @@ public Saga()
 
 For JSON deserialization from Cosmos DB.
 
+## Stored JSON Compatibility
+
+Saga persistence supports both modern EventType envelopes and historical command-only events:
+
+- A command-only `stepEvent` or `rollbackEvent` hydrates as an `IEvent` backed by the internal legacy EventType adapter. Its exact logical name, `isNew`, and `allowNullPayload` metadata are retained.
+- A modern envelope whose exact, case-sensitive `eventType.name` matches a loaded concrete definition restores that canonical EventType.
+- Unknown modern names retain their serialized metadata through the same compatibility adapter.
+- Mixed-version steps may contain a modern event and a legacy rollback event, or the reverse.
+- `SagaStep.StartAsync` and `SagaStep.RollbackAsync` persist the hydrated `IEvent` objects directly, so existing Saga documents do not need a rewrite before execution or compensation.
+
+This is a stored-JSON compatibility guarantee. Obsolete `ErrorCommand` APIs also retain source compatibility, but binary compatibility with assemblies compiled against older releases is not guaranteed.
+
 ## Properties
 
 | Property | Type | Description |

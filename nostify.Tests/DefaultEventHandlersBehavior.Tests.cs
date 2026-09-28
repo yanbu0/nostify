@@ -20,8 +20,7 @@ public sealed class DefaultEventHandlersBehaviorTests
             .Setup(n => n.HandleUndeliverableAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<IEvent>(),
-                It.IsAny<ErrorCommand?>()))
+                It.IsAny<IEvent>()))
             .Returns(Task.CompletedTask);
     }
 
@@ -110,8 +109,7 @@ public sealed class DefaultEventHandlersBehaviorTests
         _nostify.Verify(n => n.HandleUndeliverableAsync(
             It.IsAny<string>(),
             It.IsAny<string>(),
-            It.IsAny<IEvent>(),
-            It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<IEvent>()), Times.Never);
     }
 
     [Fact]
@@ -133,8 +131,7 @@ public sealed class DefaultEventHandlersBehaviorTests
         _nostify.Verify(n => n.HandleUndeliverableAsync(
             "HandleMultiApplyEventAsync:P",
             expected.Message,
-            It.Is<IEvent>(reported => reported.id == @event.id),
-            It.IsAny<ErrorCommand?>()), Times.Once);
+            It.Is<IEvent>(reported => reported.id == @event.id)), Times.Once);
     }
 
     private static Event CreateEvent(Guid aggregateId, object payload)

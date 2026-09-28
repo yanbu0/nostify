@@ -81,6 +81,8 @@
  
 ### Updates
   
+- 5.0.1
+    - Migrated framework error events to canonical `ErrorEventType` definitions while preserving stable topic names, stored Saga JSON compatibility, and obsolete `ErrorCommand` source compatibility.
 - 5.0.0 (BREAKING CHANGES!)
     - **EventType Is the Canonical Event Metadata**: New events use concrete `EventType` classes. `EventFactory` exposes only `EventType`-based `Create<T>(...)` and `CreateNullPayloadEvent(...)` signatures; the obsolete `NostifyCommand` factory overloads were removed. Legacy event envelopes and the obsolete `IEvent.command` alias remain readable for migration compatibility, but new code should use `IEvent.eventType`.
     - **Logical Name Is the Wire Identity**: `eventType.name` is the sole persisted event-type identity and uses ordinal, case-sensitive matching. Serialized event-type metadata contains `name`, `isNew`, and `allowNullPayload`. A unique loaded concrete `EventType` is restored by exact name, unknown names use the legacy adapter, and duplicate exact names fail with a descriptive configuration error.
@@ -845,6 +847,8 @@ public class Test : NostifyObject, IAggregate
 ### Saga
 
 The `Saga` pattern allows you to create multi-step, long lived transactions across multiple services and define rollback actions in case of failure to maintain data consistency. `nostify` does not require a particular method of implementation but provides a class structure and some basic functions to support implementing `Saga` orchestration.
+
+Stored Saga documents are migration-compatible with the EventType architecture. Command-only `stepEvent` and `rollbackEvent` envelopes hydrate as valid `IEvent` instances and can be persisted during forward execution or compensation without rewriting the stored Saga first. Mixed documents are also supported: known modern `eventType` names restore canonical concrete definitions, while unknown names and legacy `command` metadata retain their logical names and flags through the compatibility adapter. This guarantee covers stored JSON and source compatibility for the obsolete `ErrorCommand` shim; it does not provide binary compatibility for previously compiled consumers.
 
 ## Core Interfaces
 
@@ -2064,6 +2068,20 @@ catch (Exception e)
     await _nostify.HandleUndeliverableAsync(nameof(OnTestCreated), e.Message, newEvent);
 }
 ```
+
+To store the failed event and also publish a typed error event, use the explicit error-event API:
+
+```C#
+await _nostify.HandleUndeliverableWithErrorEventAsync(
+    nameof(OnTestCreated),
+    exception.Message,
+    newEvent,
+    new HandleProjectionErrorEventType());
+```
+
+Built-in error topics are represented by public, parameterless `ErrorEventType` definitions such as `BulkPersistErrorEventType`, `HandleProjectionErrorEventType`, and `HandleMultiApplyEventErrorEventType`. Their logical names are unchanged, so existing Kafka and Event Hubs topic routing remains stable. Newly authored error events use schema version 2.
+
+`ErrorCommand` and the `NostifyErrorEvent(ErrorCommand, ...)` constructor remain obsolete source-compatibility shims. Built-in command names map to their canonical concrete error types. A custom `ErrorCommand` name authors a schema-version-2 event with a non-legacy error type; if that custom name has no discoverable concrete definition when later deserialized, its name and flags are preserved through the general legacy EventType adapter. This preserves wire metadata but does not promise the same custom CLR type after hydration.
 
 #### Custom Exception Handling
 

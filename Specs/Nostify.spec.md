@@ -109,6 +109,17 @@ On any exception from the Cosmos write:
 2. Attempts to write the event to the undeliverable events container via `HandleUndeliverableAsync`. If this write also fails, the error is logged and swallowed so it cannot mask the original persistence exception.
 3. Re-throws the original exception so the calling HTTP handler still returns a failure response.
 
+### Error Event Publication
+
+`HandleUndeliverableAsync(functionName, errorMessage, eventToHandle)` stores a failed event without publishing an error topic. `HandleUndeliverableWithErrorEventAsync(functionName, errorMessage, eventToHandle, errorEventType)` additionally publishes a `NostifyErrorEvent` using a concrete `ErrorEventType` and a schema-version-2 envelope.
+
+The framework provides parameterless concrete definitions for all stable built-in error names. These preserve existing wire/topic names while allowing EventType resolution to restore canonical CLR definitions. `ErrorCommand` and the four-argument `HandleUndeliverableAsync(..., ErrorCommand?)` overload are obsolete source-compatibility shims:
+
+- Built-in names map to canonical concrete error EventTypes.
+- Custom names author schema-version-2 events through a non-legacy ad-hoc error EventType.
+- If a custom name has no loaded concrete definition during deserialization, its name and flags survive in the internal legacy EventType adapter; the ad-hoc CLR type itself is not retained.
+- Binary compatibility with previously compiled consumers is not guaranteed.
+
 ### PublishEventAsync
 
 Persists an event to Cosmos DB and publishes to Kafka:

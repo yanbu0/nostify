@@ -22,7 +22,7 @@ public class DefaultEventHandlersTests
             .Setup(n => n.Logger)
             .Returns(Mock.Of<ILogger>());
         _mockNostify
-            .Setup(n => n.HandleUndeliverableAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()))
+            .Setup(n => n.HandleUndeliverableAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()))
             .Returns(Task.CompletedTask);
         _mockNostify
             .Setup(n => n.InitAsync<TestProjection>(It.IsAny<List<TestProjection>>()))
@@ -203,7 +203,7 @@ public class DefaultEventHandlersTests
 
         // Assert - HandleUndeliverableAsync was NOT called
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -246,7 +246,7 @@ public class DefaultEventHandlersTests
 
         // Assert - HandleUndeliverableAsync was NOT called
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -289,7 +289,7 @@ public class DefaultEventHandlersTests
 
         // Assert - HandleUndeliverableAsync was NOT called
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -331,8 +331,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("Retry")),
             It.Is<string>(s => s.Contains("Not found after 3 retries")),
-            It.IsAny<IEvent>(),
-            It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
 
         // Assert - InitAsync was called with an empty list (nothing succeeded)
         _mockNostify.Verify(n => n.InitAsync<TestProjection>(It.Is<List<TestProjection>>(l => l.Count == 0)), Times.Once);
@@ -377,8 +376,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("NotFound")),
             It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
-            It.IsAny<IEvent>(),
-            It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     #endregion
@@ -462,7 +460,7 @@ public class DefaultEventHandlersTests
 
         // Assert - No undeliverable events
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -497,8 +495,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("NotFound")),
             It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
-            It.IsAny<IEvent>(),
-            It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     #endregion
@@ -549,8 +546,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => !s.Contains("Retry")),
             It.IsAny<string>(),
-            It.IsAny<IEvent>(),
-            It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     #endregion
@@ -591,8 +587,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("Retry")),
             It.Is<string>(s => s.Contains("Not found after 0 retries")),
-            It.IsAny<IEvent>(),
-            It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     #endregion
@@ -804,7 +799,7 @@ public class DefaultEventHandlersTests
                 _mockNostify.Object, events));
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.AtLeastOnce);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.AtLeastOnce);
     }
 
     #endregion
@@ -949,7 +944,7 @@ public class DefaultEventHandlersTests
                 _mockNostify.Object, events));
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.AtLeastOnce);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.AtLeastOnce);
     }
 
     #endregion
@@ -1078,7 +1073,7 @@ public class DefaultEventHandlersTests
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -1107,7 +1102,7 @@ public class DefaultEventHandlersTests
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -1136,7 +1131,7 @@ public class DefaultEventHandlersTests
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(4));
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -1167,7 +1162,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("Retry")),
             It.Is<string>(s => s.Contains("Not found after 3 retries")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     #endregion
@@ -1198,7 +1193,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("NotFound")),
             It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     #endregion
@@ -1228,7 +1223,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("NotFound")),
             It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     [Fact]
@@ -1253,7 +1248,7 @@ public class DefaultEventHandlersTests
             It.IsAny<string>(), It.IsAny<PartitionKey>(),
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -1290,7 +1285,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => !s.Contains("Retry") && !s.Contains("NotFound")),
             It.IsAny<string>(),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     #endregion
@@ -1321,7 +1316,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("Retry")),
             It.Is<string>(s => s.Contains("Not found after 0 retries")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
     }
 
     #endregion
@@ -1351,7 +1346,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.InitAsync<TestProjection>(It.Is<List<TestProjection>>(l => l.Count == 1)), Times.Once);
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
 
         Assert.Equal(1, result);
     }
@@ -1379,7 +1374,7 @@ public class DefaultEventHandlersTests
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
 
         Assert.Equal(1, result);
     }
@@ -1409,7 +1404,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("Retry")),
             It.Is<string>(s => s.Contains("Not found after 3 retries")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
 
         Assert.Equal(0, result);
     }
@@ -1439,7 +1434,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("NotFound")),
             It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
 
         Assert.Equal(0, result);
     }
@@ -1467,7 +1462,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("NotFound")),
             It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
 
         Assert.Equal(0, result);
     }
@@ -1497,7 +1492,7 @@ public class DefaultEventHandlersTests
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
         _mockNostify.Verify(n => n.InitAsync<TestProjection>(It.IsAny<List<TestProjection>>()), Times.Once);
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     #endregion
@@ -1525,7 +1520,7 @@ public class DefaultEventHandlersTests
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
 
         Assert.Equal(1, result);
     }
@@ -1553,7 +1548,7 @@ public class DefaultEventHandlersTests
             It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
 
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
 
         Assert.Equal(1, result);
     }
@@ -1583,7 +1578,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("Retry")),
             It.Is<string>(s => s.Contains("Not found after 3 retries")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
 
         Assert.Equal(0, result);
     }
@@ -1613,7 +1608,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("NotFound")),
             It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
 
         Assert.Equal(0, result);
     }
@@ -1641,7 +1636,7 @@ public class DefaultEventHandlersTests
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
             It.Is<string>(s => s.Contains("NotFound")),
             It.Is<string>(s => s.Contains("RetryWhenNotFound is false")),
-            It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Once);
+            It.IsAny<IEvent>()), Times.Once);
 
         Assert.Equal(0, result);
     }
@@ -1692,7 +1687,7 @@ public class DefaultEventHandlersTests
         Assert.NotNull(result);
         // No undeliverable event should have been raised
         _mockNostify.Verify(n => n.HandleUndeliverableAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()), Times.Never);
     }
 
     [Fact]

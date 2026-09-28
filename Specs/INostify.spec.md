@@ -100,6 +100,16 @@ public interface INostify
 |--------|-----------|-------------|
 | `PersistEventAsync` | `Task PersistEventAsync(IEvent eventToPersist)` | Persists one event directly with the standard Cosmos SDK create path, while still logging and routing failures to the undeliverable container before re-throwing. |
 
+### Undeliverable and Error Events
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `HandleUndeliverableAsync` | `Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle)` | Stores the failed event without publishing a separate error event. |
+| `HandleUndeliverableWithErrorEventAsync` | `Task HandleUndeliverableWithErrorEventAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorEventType errorEventType)` | Stores the failed event and publishes a schema-version-2 `NostifyErrorEvent` using the supplied typed error metadata. |
+| `HandleUndeliverableAsync` (obsolete) | `Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand)` | Source-compatible adapter. Built-in names map to canonical concrete error types; custom names author schema-version-2 events through an ad-hoc non-legacy error type. |
+
+The modern publication method has a distinct name to prevent optional-overload ambiguity with historical calls that omitted the old fourth argument. `ErrorCommand` compatibility is source-level only; binary compatibility is not guaranteed.
+
 ### Saga Operations
 
 | Method | Signature | Description |

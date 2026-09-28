@@ -481,9 +481,9 @@ public class Nostify : INostify, IDisposable
             var result = await retryable.ApplyAndPersistAsync<P>(
                 pe,
                 id,
-                onExhausted: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Exhausted retries", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
-                onNotFound: () => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), "Not found", pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null),
-                onException: (ex) => HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null)
+                onExhausted: () => HandleBulkPersistenceFailureAsync(nameof(MultiApplyAndPersistAsync), "Exhausted retries", pe, publishErrorEvents),
+                onNotFound: () => HandleBulkPersistenceFailureAsync(nameof(MultiApplyAndPersistAsync), "Not found", pe, publishErrorEvents),
+                onException: (ex) => HandleBulkPersistenceFailureAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents)
             );
             return result;
         }
@@ -495,7 +495,7 @@ public class Nostify : INostify, IDisposable
             }
             catch (Exception ex)
             {
-                await HandleUndeliverableAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                await HandleBulkPersistenceFailureAsync(nameof(MultiApplyAndPersistAsync), ex.Message, pe, publishErrorEvents);
                 throw;
             }
         }
@@ -538,7 +538,7 @@ public class Nostify : INostify, IDisposable
                             LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(pe), ex);
                         }
 
-                        await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                        await HandleBulkPersistenceFailureAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents);
                     }
                 );
             }
@@ -557,7 +557,7 @@ public class Nostify : INostify, IDisposable
                             LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(pe), ex);
                         }
 
-                        await HandleUndeliverableAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents ? ErrorCommand.BulkPersistEvent : null);
+                        await HandleBulkPersistenceFailureAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents);
                     }
                 });
                 await Task.WhenAll(persistenceTasks);
@@ -565,8 +565,42 @@ public class Nostify : INostify, IDisposable
         }
     }
 
+    private Task HandleBulkPersistenceFailureAsync(string functionName, string errorMessage, IEvent eventToHandle, bool publishErrorEvents) =>
+        publishErrorEvents
+            ? HandleUndeliverableWithErrorEventAsync(functionName, errorMessage, eventToHandle, new BulkPersistErrorEventType())
+            : HandleUndeliverableAsync(functionName, errorMessage, eventToHandle);
+
     ///<inheritdoc />
-    public virtual async Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand = null)
+    public virtual Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle) =>
+        HandleUndeliverableCoreAsync(functionName, errorMessage, eventToHandle, errorEventType: null);
+
+    ///<inheritdoc />
+    public virtual Task HandleUndeliverableWithErrorEventAsync(
+        string functionName,
+        string errorMessage,
+        IEvent eventToHandle,
+        ErrorEventType errorEventType)
+    {
+        ArgumentNullException.ThrowIfNull(errorEventType);
+        return HandleUndeliverableCoreAsync(functionName, errorMessage, eventToHandle, errorEventType);
+    }
+
+    ///<inheritdoc />
+    [Obsolete("Use HandleUndeliverableAsync(...) or HandleUndeliverableWithErrorEventAsync(..., ErrorEventType) instead.")]
+#pragma warning disable CS0618 // This overload is the source-compatibility boundary.
+    public virtual Task HandleUndeliverableAsync(string functionName, string errorMessage, IEvent eventToHandle, ErrorCommand? errorCommand) =>
+        HandleUndeliverableCoreAsync(
+            functionName,
+            errorMessage,
+            eventToHandle,
+            errorCommand is null ? null : ErrorEventTypeMapper.FromCommand(errorCommand));
+#pragma warning restore CS0618
+
+    private async Task HandleUndeliverableCoreAsync(
+        string functionName,
+        string errorMessage,
+        IEvent eventToHandle,
+        ErrorEventType? errorEventType)
     {
         if (Logger?.IsEnabled(LogLevel.Error) == true)
         {
@@ -574,13 +608,19 @@ public class Nostify : INostify, IDisposable
         }
 
         var undeliverableContainer = await GetUndeliverableEventsContainerAsync();
+        await undeliverableContainer.CreateItemAsync(
+            new UndeliverableEvent(functionName, errorMessage, eventToHandle),
+            eventToHandle.aggregateRootId.ToPartitionKey());
 
-        await undeliverableContainer.CreateItemAsync(new UndeliverableEvent(functionName, errorMessage, eventToHandle), eventToHandle.aggregateRootId.ToPartitionKey());
-        if (errorCommand is not null)
+        if (errorEventType is not null)
         {
             var errorPayload = new ErrorPayload(errorMessage, eventToHandle);
-            //Publish error event to kafka
-            await PublishEventAsync(new NostifyErrorEvent(errorCommand, eventToHandle.aggregateRootId, errorPayload, eventToHandle.userId, eventToHandle.partitionKey));
+            await PublishEventAsync(new NostifyErrorEvent(
+                errorEventType,
+                eventToHandle.aggregateRootId,
+                errorPayload,
+                eventToHandle.userId,
+                eventToHandle.partitionKey));
         }
     }
 

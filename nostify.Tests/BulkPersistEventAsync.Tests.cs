@@ -25,7 +25,7 @@ public class BulkPersistEventAsyncTests
     {
         _mockNostify = new Mock<INostify>();
         _mockNostify
-            .Setup(n => n.HandleUndeliverableAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>(), It.IsAny<ErrorCommand?>()))
+            .Setup(n => n.HandleUndeliverableAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()))
             .Returns(Task.CompletedTask);
         _mockNostify
             .Setup(n => n.DefaultRetryOptions)
