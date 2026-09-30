@@ -71,6 +71,11 @@ Terminates a running orchestration (if any), waits for it to complete, and then 
 ```csharp
 Task OrchestrateInitAsync(
     TaskOrchestrationContext context,
+    DurableTenantInitActivityNames activities,
+    ILogger? logger = null)
+
+Task OrchestrateInitAsync(
+    TaskOrchestrationContext context,
     string deleteActivityName,
     string getTenantIdsActivityName,
     string getIdsActivityName,
@@ -78,16 +83,17 @@ Task OrchestrateInitAsync(
     ILogger? logger = null)
 ```
 
-Tenant-partitioned orchestrator body. Use this overload when the aggregate's current-state container is partitioned by `tenantId`. Orchestration steps:
+Tenant-partitioned orchestrator body. Prefer the `DurableTenantInitActivityNames` overload, which groups the four related activity names and validates that none are blank. The positional-string overload remains supported and delegates to the typed overload.
 
-1. Call `deleteActivityName` — deletes all existing projections.
-2. Call `getTenantIdsActivityName` — fetches distinct tenant IDs (`List<Guid>`) from the aggregate's current-state container.
-3. For each tenant, page through aggregate IDs (calling `getIdsActivityName` with `DurableInitPageInfo`) and fan out `processBatchActivityName` calls concurrently (up to `concurrentBatchCount` at a time).
+Use this orchestration when the aggregate's current-state container is partitioned by `tenantId`. Its steps are:
 
-By default, each activity is made with a 3-attempt retry policy (5 s initial delay, 2× backoff).
+1. Call the delete activity to remove existing projections.
+2. Call the tenant-ID activity to fetch distinct tenant IDs (`List<Guid>`) from the aggregate's current-state container.
+3. For each tenant, page through aggregate IDs (calling the get-IDs activity with `DurableInitPageInfo`) and fan out process activity calls concurrently (up to `concurrentBatchCount` at a time).
 
+The process activity payload remains `List<Guid>`. Tenant partitioning scopes aggregate-ID discovery in the current-state container; events are subsequently retrieved by `aggregateRootId`, which is the event store's physical partition key. No tenant value is propagated through the process activity or event-retrieval transports.
 
-Pass `context.CreateReplaySafeLogger` for the `logger` argument to avoid duplicate log entries during orchestration replay.
+By default, each activity is made with a 3-attempt retry policy (5 s initial delay, 2× backoff). Pass `context.CreateReplaySafeLogger` for the `logger` argument to report deletion, tenant count, processed count, and completion without duplicate log entries during orchestration replay.
 
 ### OrchestrateInitByPartitionAsync
 
@@ -156,7 +162,27 @@ Returns a page of aggregate IDs for an arbitrary Cosmos partition, ordered by `i
 Task ProcessBatch(List<Guid> ids)
 ```
 
-Replays all events for the supplied aggregate IDs, builds `TProjection` instances, and persists them via `ProjectionInitializer.InitAsync`. Intended to be called from the process-batch activity function (shared by both orchestrator overloads).
+Retrieves events for the supplied aggregate IDs through `IQueryExecutor`, builds `TProjection` instances, and persists them via `ProjectionInitializer.InitAsync`. Each aggregate stream is replayed in ascending `timestamp` order with `id` as a deterministic tie-breaker. The method is intended to be called from the process-batch activity function shared by both orchestrators.
+
+## DurableTenantInitActivityNames
+
+```csharp
+public sealed class DurableTenantInitActivityNames
+{
+    public DurableTenantInitActivityNames(
+        string delete,
+        string getTenantIds,
+        string getIds,
+        string processBatch);
+
+    public string Delete { get; }
+    public string GetTenantIds { get; }
+    public string GetIds { get; }
+    public string ProcessBatch { get; }
+}
+```
+
+Strongly typed grouping for tenant-orchestration activity names. Its constructor rejects null, empty, or whitespace names, reducing positional-string wiring mistakes without changing Durable Function names or serialized activity payloads.
 
 ## DurableInitPageInfo
 
@@ -219,10 +245,11 @@ public class MyProjectionDurableInit
     public Task OrchestrateMyProjectionDurableInit([OrchestrationTrigger] TaskOrchestrationContext context)
         => _initializer.OrchestrateInitAsync(
             context,
-            nameof(DeleteAllMyProjection),
-            nameof(GetDistinctTenantIdsMyProjection),
-            nameof(GetMyAggregateIdsForTenantMyProjection),
-            nameof(ProcessMyProjectionBatch),
+            new DurableTenantInitActivityNames(
+                nameof(DeleteAllMyProjection),
+                nameof(GetDistinctTenantIdsMyProjection),
+                nameof(GetMyAggregateIdsForTenantMyProjection),
+                nameof(ProcessMyProjectionBatch)),
             context.CreateReplaySafeLogger<MyProjectionDurableInit>());
 
     [Function(nameof(DeleteAllMyProjection))]

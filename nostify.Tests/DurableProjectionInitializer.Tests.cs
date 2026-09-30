@@ -141,6 +141,39 @@ public class DurableProjectionInitializerTests
 
     #endregion
 
+    #region DurableTenantInitActivityNames Tests
+
+    [Fact]
+    public void DurableTenantInitActivityNames_Constructor_SetsAllNames()
+    {
+        var activities = new DurableTenantInitActivityNames(
+            "Delete",
+            "GetTenantIds",
+            "GetIds",
+            "ProcessBatch");
+
+        Assert.Equal("Delete", activities.Delete);
+        Assert.Equal("GetTenantIds", activities.GetTenantIds);
+        Assert.Equal("GetIds", activities.GetIds);
+        Assert.Equal("ProcessBatch", activities.ProcessBatch);
+    }
+
+    [Fact]
+    public void DurableTenantInitActivityNames_Constructor_RejectsBlankNames()
+    {
+        // Each activity name crosses a Durable Function boundary and must be usable.
+        Assert.Throws<ArgumentException>(() =>
+            new DurableTenantInitActivityNames("", "GetTenantIds", "GetIds", "ProcessBatch"));
+        Assert.Throws<ArgumentException>(() =>
+            new DurableTenantInitActivityNames("Delete", " ", "GetIds", "ProcessBatch"));
+        Assert.Throws<ArgumentException>(() =>
+            new DurableTenantInitActivityNames("Delete", "GetTenantIds", "", "ProcessBatch"));
+        Assert.Throws<ArgumentException>(() =>
+            new DurableTenantInitActivityNames("Delete", "GetTenantIds", "GetIds", "\t"));
+    }
+
+    #endregion
+
     #region DurableInitPageInfo Tests
 
     [Fact]
@@ -708,6 +741,43 @@ public class DurableProjectionInitializerTests
     #endregion
 
     #region OrchestrateInitAsync Tests
+
+    [Fact]
+    public async Task OrchestrateInitAsync_WithTypedActivityNames_PassesAggregateIdsAsList()
+    {
+        var tenantId = Guid.NewGuid();
+        var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
+        var contextMock = new Mock<TaskOrchestrationContext>();
+        object? capturedProcessInput = null;
+
+        SetupOrchestratorActivities(
+            contextMock,
+            "DeleteActivity",
+            "GetTenantIds",
+            new[] { tenantId },
+            "GetIds",
+            ids,
+            "ProcessBatch");
+
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(n => n.Name == "ProcessBatch"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, input, _) => capturedProcessInput = input)
+            .Returns(Task.CompletedTask);
+
+        var activities = new DurableTenantInitActivityNames(
+            "DeleteActivity",
+            "GetTenantIds",
+            "GetIds",
+            "ProcessBatch");
+        var initializer = CreateInitializer(batchSize: 5, concurrentBatchCount: 2);
+
+        await initializer.OrchestrateInitAsync(contextMock.Object, activities);
+
+        var processIds = Assert.IsType<List<Guid>>(capturedProcessInput);
+        Assert.Equal(ids, processIds);
+    }
 
     [Fact]
     public async Task OrchestrateInitAsync_AlwaysCallsDeleteActivityFirst()

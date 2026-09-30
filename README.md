@@ -81,6 +81,10 @@
  
 ### Updates
   
+- 5.1.0
+    - **Safer Durable Projection Wiring**: Added `DurableTenantInitActivityNames` as the preferred, validated way to group tenant initialization activity names while retaining the positional-string overload and existing Durable Function names and payloads.
+    - **Deterministic Projection Rebuilds**: Durable projection batches now retrieve events through `IQueryExecutor` and replay equal-timestamp events by event ID for stable ordering. Tenant partitioning remains limited to aggregate-ID discovery in the current-state container; event retrieval continues to use the event store's `aggregateRootId` partition key.
+    - **Replay-Safe Progress Visibility**: Projection templates pass `context.CreateReplaySafeLogger(...)` so deletion, tenant count, processed count, and completion progress can be logged without replay duplicates.
 - 5.0.1
     - Migrated framework error events to canonical `ErrorEventType` definitions while preserving stable topic names, stored Saga JSON compatibility, and obsolete `ErrorCommand` source compatibility.
 - 5.0.0 (BREAKING CHANGES!)

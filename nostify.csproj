@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>nostify</PackageId>
-    <Version>5.0.1</Version>
+    <Version>5.1.0</Version>
     <Authors>Travis Boyle</Authors>
     <Company>
     </Company>
@@ -47,7 +47,7 @@
     <Protobuf Include="src/Protos/event_request.proto" GrpcServices="Both" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="templates\**\*" Exclude="templates\**\bin\**;template\**\obj\**" />
+    <Content Include="templates\**\*" Exclude="templates\**\bin\**;templates\**\obj\**" />
     <Compile Remove="templates\**\*" />
     <Compile Remove="nostify.Tests\**\*" />
     <Compile Remove="nostify.IntegrationTests\**\*" />

@@ -44,10 +44,11 @@ public class _ProjectionName_Init
         [OrchestrationTrigger] TaskOrchestrationContext context)
         => _initializer.OrchestrateInitAsync(
             context,
-            nameof(DeleteAll_ProjectionName_),
-            nameof(GetDistinctTenantIds__ProjectionName_),
-            nameof(Get_ReplaceMe_IdsForTenant__ProjectionName_),
-            nameof(Process_ProjectionName_Batch),
+            new DurableTenantInitActivityNames(
+                nameof(DeleteAll_ProjectionName_),
+                nameof(GetDistinctTenantIds__ProjectionName_),
+                nameof(Get_ReplaceMe_IdsForTenant__ProjectionName_),
+                nameof(Process_ProjectionName_Batch)),
             context.CreateReplaySafeLogger<_ProjectionName_Init>());
 
     /// <summary>Deletes existing projection documents before rebuilding them.</summary>
