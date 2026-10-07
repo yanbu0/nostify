@@ -265,12 +265,12 @@ The `Build` method performs these steps:
 1. **Validate Cosmos Settings** - Requires the Cosmos API key, database name, and endpoint configured by `WithCosmos()`.
 2. **Create Cosmos Client** - Initializes `CosmosClient` with the selected connection mode and serializer.
 3. **Create NostifyCosmosClient** - Wraps the Cosmos client for nostify operations.
-4. **Optionally Create Kafka Resources** - Creates the producer and base consumer configuration only when a non-empty broker was supplied through `WithKafka()` or `WithEventHubs()`.
+4. **Optionally Create Kafka Resources** - Creates the producer and base consumer configuration only when a valid broker was supplied through `WithKafka()` or `WithEventHubs()`. Explicit blank messaging inputs are rejected by their configurators.
 5. **Return Nostify Instance** - Returns a messaging-enabled instance when a broker exists, or a Cosmos-only instance otherwise.
 
 ### Cosmos-Only Builds
 
-Calling `Build()` or `Build<T>()` after `WithCosmos()` without calling `WithKafka()` or `WithEventHubs()` is valid starting in 5.0.2. `Build<T>()` bypasses admin-client creation, topic discovery, and topic creation, but still performs configured Cosmos container initialization. Kafka-dependent producer access, publishing, and consumer creation throw an actionable `NostifyException` identifying `WithKafka()` and `WithEventHubs()` when invoked on a Cosmos-only instance.
+Calling `Build()` or `Build<T>()` after `WithCosmos()` without calling `WithKafka()` or `WithEventHubs()` is valid starting in 5.0.2. Explicitly calling either messaging configurator with a blank input throws `ArgumentException` instead of creating a Cosmos-only instance. `Build<T>()` bypasses admin-client creation, topic discovery, and topic creation, but still performs configured Cosmos container initialization. Kafka-dependent producer access, publishing, and consumer creation throw an actionable `NostifyException` identifying `WithKafka()` and `WithEventHubs()` when invoked on a Cosmos-only instance.
 
 ### Build<T>() Auto-Topic Creation
 
