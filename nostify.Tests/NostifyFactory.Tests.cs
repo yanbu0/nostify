@@ -184,6 +184,12 @@ public class NostifyFactoryTests
     }
 
     [Fact]
+    public void WithEventHubs_WithBlankConnectionString_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => NostifyFactory.WithEventHubs(" "));
+    }
+
+    [Fact]
     public void WithKafka_WithProducerConfigWithoutBootstrapServers_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentNullException>(() => NostifyFactory.WithKafka(new ProducerConfig()));
