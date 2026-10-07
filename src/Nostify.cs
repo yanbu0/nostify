@@ -30,7 +30,7 @@ public class Nostify : INostify, IDisposable
     /// <inheritdoc />
     public string KafkaUrl { get; }
     /// <inheritdoc />
-    public IProducer<string, string> KafkaProducer { get; }
+    public IProducer<string, string> KafkaProducer => RequireKafkaProducer();
     /// <inheritdoc />
     public IProjectionInitializer ProjectionInitializer { get; } = new ProjectionInitializer();
     /// <inheritdoc />
@@ -40,6 +40,7 @@ public class Nostify : INostify, IDisposable
     /// <inheritdoc />
     public RetryOptions DefaultRetryOptions { get; }
 
+    private readonly IProducer<string, string>? _kafkaProducer;
     private readonly ConsumerConfig? _baseConsumerConfig;
     private readonly ConcurrentDictionary<string, IConsumer<string, string>> _kafkaConsumers = new();
     private int _disposeState;
@@ -104,13 +105,13 @@ public class Nostify : INostify, IDisposable
     {
     }
 
-    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string> kafkaProducer, IHttpClientFactory? httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null, RetryOptions? defaultRetryOptions = null)
+    internal Nostify(NostifyCosmosClient repository, string defaultPartitionKeyPath, Guid defaultTenantId, string kafkaUrl, IProducer<string, string>? kafkaProducer, IHttpClientFactory? httpClientFactory, ILogger? logger = null, ConsumerConfig? baseConsumerConfig = null, RetryOptions? defaultRetryOptions = null)
     {
         Repository = repository;
         DefaultPartitionKeyPath = defaultPartitionKeyPath;
         DefaultTenantId = defaultTenantId;
         KafkaUrl = kafkaUrl;
-        KafkaProducer = kafkaProducer;
+        _kafkaProducer = kafkaProducer;
         HttpClientFactory = httpClientFactory;
         Logger = logger;
         _baseConsumerConfig = baseConsumerConfig;
@@ -141,8 +142,19 @@ public class Nostify : INostify, IDisposable
             producerConfig.Add(new KeyValuePair<string, string>("security.protocol", "SASL_SSL"));
             producerConfig.Add(new KeyValuePair<string, string>("sasl.mechanisms", "PLAIN"));
         }
-        KafkaProducer = new ProducerBuilder<string, string>(producerConfig).Build();
+        _kafkaProducer = new ProducerBuilder<string, string>(producerConfig).Build();
         DefaultRetryOptions = new RetryOptions();
+    }
+
+    /// <summary>
+    /// Returns the configured producer or reports which fluent configuration methods enable messaging.
+    /// Keeping this guard behind the public property also protects collaborators that publish directly.
+    /// </summary>
+    private IProducer<string, string> RequireKafkaProducer()
+    {
+        return _kafkaProducer
+            ?? throw new NostifyException(
+                "Kafka producer is not available. Ensure WithKafka() or WithEventHubs() was called during configuration.");
     }
 
     /// <inheritdoc />
@@ -223,23 +235,26 @@ public class Nostify : INostify, IDisposable
         }
         _kafkaConsumers.Clear();
 
-        try
+        if (_kafkaProducer != null)
         {
-            KafkaProducer.Flush(TimeSpan.FromSeconds(5));
-        }
-        catch (Exception ex)
-        {
-            LogResourceDisposalFailureIfEnabled("Cosmos repository", ex);
-        }
+            try
+            {
+                _kafkaProducer.Flush(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex)
+            {
+                LogResourceDisposalFailureIfEnabled("Kafka producer", ex);
+            }
 
-        try
-        {
-            // Flush failures must not prevent the producer's native resources from being released.
-            KafkaProducer.Dispose();
-        }
-        catch (Exception ex)
-        {
-            LogResourceDisposalFailureIfEnabled("Kafka producer", ex);
+            try
+            {
+                // Flush failures must not prevent the producer's native resources from being released.
+                _kafkaProducer.Dispose();
+            }
+            catch (Exception ex)
+            {
+                LogResourceDisposalFailureIfEnabled("Kafka producer", ex);
+            }
         }
 
         try
@@ -315,12 +330,13 @@ public class Nostify : INostify, IDisposable
     public async Task PublishEventAsync(List<IEvent> peList, bool showOutput = false)
     {
         ArgumentNullException.ThrowIfNull(peList);
+        IProducer<string, string> kafkaProducer = RequireKafkaProducer();
 
         List<Task> publishTasks = new List<Task>();
         foreach (IEvent pe in peList)
         {
             string topic = pe.eventType.name;
-            publishTasks.Add(KafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) }));
+            publishTasks.Add(kafkaProducer.ProduceAsync(topic, new Message<string, string> { Value = JsonConvert.SerializeObject(pe) }));
         }
 
         try

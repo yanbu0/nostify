@@ -247,32 +247,52 @@ public class DefaultCommandHandlersTests
     #region Single-event handlers use PersistEventAsync(IEvent)
 
     [Fact]
-    public async Task HandlePatchAsync_UsesSingleEventPersist()
+    public async Task HandlePatchAsync_WithOnlyChangedProperties_PersistsPartialPayloadAndLeavesOmittedPropertiesUnchanged()
     {
+        IEvent? persistedEvent = null;
         _mockNostify
             .Setup(n => n.PersistEventAsync(It.IsAny<IEvent>()))
+            .Callback<IEvent>(@event => persistedEvent = @event)
             .Returns(Task.CompletedTask);
 
         var aggregateId = Guid.NewGuid();
 
+        // A typical UI PATCH sends only the changed field; the ID is supplied separately by the route.
         var result = await DefaultCommandHandler.HandlePatchAsync<TestAggregate>(
             _mockNostify.Object,
             new NostifyCommand("PatchTestAggregate"),
-            new { id = aggregateId, name = "Updated" },
+            new { name = "Updated" },
             aggregateId);
 
         Assert.Equal(aggregateId, result);
+        Assert.NotNull(persistedEvent);
+        Assert.Equal(aggregateId, persistedEvent.aggregateRootId);
+
+        JObject payload = JObject.FromObject(persistedEvent.payload!);
+        JProperty changedProperty = Assert.Single(payload.Properties());
+        Assert.Equal("name", changedProperty.Name);
+        Assert.Equal("Updated", changedProperty.Value.Value<string>());
+
+        // Applying the emitted event proves an omitted property is not reset to its default value.
+        var aggregate = new TestAggregate { name = "Original", isDeleted = true };
+        aggregate.Apply(persistedEvent);
+        Assert.Equal("Updated", aggregate.name);
+        Assert.True(aggregate.isDeleted);
+
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
         _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
-    public async Task HandlePostAsync_UsesSingleEventPersist()
+    public async Task HandlePostAsync_WithOnlyProvidedProperties_PersistsPartialPayloadWithGeneratedMetadata()
     {
+        IEvent? persistedEvent = null;
         _mockNostify
             .Setup(n => n.PersistEventAsync(It.IsAny<IEvent>()))
+            .Callback<IEvent>(@event => persistedEvent = @event)
             .Returns(Task.CompletedTask);
 
+        // UI creation payloads do not need to materialize the complete aggregate object.
         dynamic postObj = JObject.FromObject(new { name = "Created" });
 
         var result = await DefaultCommandHandler.HandlePostAsync<TestAggregate>(
@@ -281,6 +301,16 @@ public class DefaultCommandHandlersTests
             postObj);
 
         Assert.NotEqual(Guid.Empty, result);
+        Assert.NotNull(persistedEvent);
+        Assert.Equal(result, persistedEvent.aggregateRootId);
+
+        JObject payload = JObject.FromObject(persistedEvent.payload!);
+        Assert.Equal("Created", payload.Value<string>("name"));
+        Assert.Equal(result, payload.Value<Guid>("id"));
+        Assert.Equal(Guid.Empty, payload.Value<Guid>("tenantId"));
+        Assert.False(payload.ContainsKey("isDeleted"));
+        Assert.Equal(3, payload.Properties().Count());
+
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
         _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
     }

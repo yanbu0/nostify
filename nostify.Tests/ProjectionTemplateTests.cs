@@ -21,10 +21,15 @@ public class ProjectionTemplateTests
         Assert.Contains("_initializer.StartOrchestration", source);
         Assert.Contains("_initializer.CancelOrchestration", source);
         Assert.Contains("_initializer.OrchestrateInitAsync", source);
+        Assert.Contains("new DurableTenantInitActivityNames(", source);
         Assert.Contains("_initializer.DeleteAllProjections", source);
         Assert.Contains("_initializer.GetDistinctTenantIds", source);
         Assert.Contains("_initializer.GetIdsForTenant", source);
-        Assert.Contains("_initializer.ProcessBatch", source);
+        Assert.Contains("[ActivityTrigger] List<Guid> ids", source);
+        Assert.Contains("_initializer.ProcessBatch(ids, client)", source);
+        Assert.DoesNotContain("DurableTenantInitBatch", source);
+        Assert.DoesNotContain("Process_ProjectionName_BatchV2", source);
+        Assert.DoesNotContain("Orchestrate_ProjectionName_InitV2", source);
         Assert.DoesNotContain("InitContainerAsync", source);
     }
 

@@ -614,7 +614,6 @@ public class NostifyFactoryTests
     [InlineData("cosmosApiKey", "WithCosmos")]
     [InlineData("cosmosDbName", "WithCosmos")]
     [InlineData("cosmosEndpointUri", "WithCosmos")]
-    [InlineData("kafkaUrl", "WithKafka or WithEventHubs")]
     public void Build_WithMissingRequiredConfiguration_ThrowsDescriptiveError(
         string missingProperty,
         string expectedConfigurationMethod)
@@ -635,9 +634,6 @@ public class NostifyFactoryTests
             case "cosmosEndpointUri":
                 config.cosmosEndpointUri = " ";
                 break;
-            case "kafkaUrl":
-                config.producerConfig.BootstrapServers = " ";
-                break;
             default:
                 throw new InvalidOperationException(
                     $"Unsupported test configuration property '{missingProperty}'.");
@@ -650,6 +646,43 @@ public class NostifyFactoryTests
         Assert.Equal(
             $"{missingProperty} is not configured. Call {expectedConfigurationMethod}() before Build().",
             exception.Message);
+    }
+
+    [Fact]
+    public void Build_WithoutKafka_ShouldCreateCosmosOnlyInstance()
+    {
+        // Arrange: messaging is intentionally omitted for a Cosmos-only application.
+        var config = NostifyFactory.WithCosmos(
+            "test-key",
+            "test-db",
+            "https://test.documents.azure.com:443/");
+
+        // Act
+        INostify nostify = config.Build();
+
+        // Assert
+        Assert.NotNull(nostify.Repository);
+        Assert.Equal(string.Empty, nostify.KafkaUrl);
+        NostifyException exception = Assert.Throws<NostifyException>(() => _ = nostify.KafkaProducer);
+        Assert.Contains("WithKafka() or WithEventHubs()", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildGeneric_WithoutKafka_ShouldSkipTopicAdministration()
+    {
+        // Arrange: container creation is disabled, so this verifies a fully local Cosmos-only build.
+        var config = NostifyFactory.WithCosmos(
+            "test-key",
+            "test-db",
+            "https://test.documents.azure.com:443/",
+            createContainers: false);
+
+        // Act
+        INostify nostify = config.Build<TestAggregate>();
+
+        // Assert
+        Assert.NotNull(nostify.Repository);
+        Assert.Equal(string.Empty, nostify.KafkaUrl);
     }
 
     [Fact]

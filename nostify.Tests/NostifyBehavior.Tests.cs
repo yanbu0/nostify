@@ -372,6 +372,27 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
+    public async Task PublishEventAsync_WithoutKafkaProducer_ThrowsActionableError()
+    {
+        Nostify nostify = CreateNostifyWithoutKafka();
+
+        NostifyException exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            nostify.PublishEventAsync(CreateEvent(new PublishEventType("UnavailableTopic"), new { })));
+
+        Assert.Contains("WithKafka() or WithEventHubs()", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dispose_WithoutKafkaProducer_IsSafeAndIdempotent()
+    {
+        Nostify nostify = CreateNostifyWithoutKafka();
+
+        // Cosmos-only instances own no Kafka native resources and should still dispose safely.
+        nostify.Dispose();
+        nostify.Dispose();
+    }
+
+    [Fact]
     public void Dispose_WithCachedConsumer_ClosesAndDisposesItOnlyOnce()
     {
         var consumer = new Mock<IConsumer<string, string>>();
@@ -482,6 +503,17 @@ public sealed class NostifyBehaviorTests
             "localhost:9092",
             new Mock<IProducer<string, string>>().Object,
             httpClientFactory: null);
+    }
+
+    private static Nostify CreateNostifyWithoutKafka()
+    {
+        return new Nostify(
+            new NostifyCosmosClient(),
+            "/tenantId",
+            Guid.Empty,
+            string.Empty,
+            kafkaProducer: null,
+            new Mock<IHttpClientFactory>().Object);
     }
 
     private static Event CreateEvent(EventType eventType, object? payload)

@@ -222,24 +222,48 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     /// <param name="processBatchActivityName">The name of the activity function that processes a batch of aggregates to initialize projections.</param>
     /// <param name="logger">Use `context.CreateReplaySafeLogger` for deployments to avoid logging duplicate messages during orchestration replay.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task OrchestrateInitAsync(
+    public Task OrchestrateInitAsync(
         TaskOrchestrationContext context,
         string deleteActivityName,
         string getTenantIdsActivityName,
         string getIdsActivityName,
         string processBatchActivityName,
-        ILogger? logger = null
-        )
+        ILogger? logger = null)
+        => OrchestrateInitAsync(
+            context,
+            new DurableTenantInitActivityNames(
+                deleteActivityName,
+                getTenantIdsActivityName,
+                getIdsActivityName,
+                processBatchActivityName),
+            logger);
+
+    /// <summary>
+    /// Runs tenant-partitioned projection initialization using a strongly typed activity-name group.
+    /// Aggregate IDs remain the complete process-activity payload because event streams are keyed by aggregate ID.
+    /// </summary>
+    /// <param name="context">The orchestration context provided by the durable task framework.</param>
+    /// <param name="activities">The activity function names used by the orchestration.</param>
+    /// <param name="logger">Use a replay-safe logger to avoid duplicate messages during orchestration replay.</param>
+    public async Task OrchestrateInitAsync(
+        TaskOrchestrationContext context,
+        DurableTenantInitActivityNames activities,
+        ILogger? logger = null)
     {
-        // delete Projections
-        await context.CallActivityAsync(deleteActivityName, null, _durableTaskOptions);
+        ArgumentNullException.ThrowIfNull(activities);
+
+        // Delete projections before rebuilding them from the event store.
+        await context.CallActivityAsync(activities.Delete, null, _durableTaskOptions);
         if (logger != null)
         {
             LogDeletingProjections(logger, _instanceId, null);
         }
 
-        // get tenant ids to query by tenant partition
-        List<Guid> tenantIds = await context.CallActivityAsync<List<Guid>>(getTenantIdsActivityName, null, _durableTaskOptions);
+        // Discover aggregate IDs within each current-state tenant partition.
+        List<Guid> tenantIds = await context.CallActivityAsync<List<Guid>>(
+            activities.GetTenantIds,
+            null,
+            _durableTaskOptions);
         if (logger != null)
         {
             LogTenantCount(logger, _instanceId, tenantIds.Count, null);
@@ -251,8 +275,8 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         {
             await ProcessPartitionPagesAsync(
                 context,
-                getIdsActivityName,
-                processBatchActivityName,
+                activities.GetIds,
+                activities.ProcessBatch,
                 pageNum => new DurableInitPageInfo(tenantId, pageNum),
                 count =>
                 {
@@ -344,7 +368,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     /// <summary>
     /// Pages through aggregate IDs for a single partition, fanning out concurrent process-batch
     /// activity calls (chunked by <c>_batchSize</c>) for each page until an empty or partial page is returned.
-    /// Shared by both <see cref="OrchestrateInitAsync"/> and <see cref="OrchestrateInitByPartitionAsync"/>.
+    /// Shared by the tenant and arbitrary-partition orchestrators.
     /// </summary>
     private async Task ProcessPartitionPagesAsync<TPageInfo>(
         TaskOrchestrationContext context,
@@ -495,13 +519,14 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
                 _queryExecutor)
             .ReadAllAsync();
 
-        // Replay each stream in timestamp order, matching aggregate rehydration semantics.
+        // Use the event ID as a stable tie-breaker when separate events have equal timestamps.
         var projections = ids.Select(id =>
         {
             var projection = new TProjection();
             foreach (var @event in events
                 .Where(item => item.aggregateRootId == id)
-                .OrderBy(item => item.timestamp))
+                .OrderBy(item => item.timestamp)
+                .ThenBy(item => item.id))
             {
                 projection.Apply(@event);
             }
@@ -518,6 +543,43 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         // initialize projections
         await _nostify.ProjectionInitializer.InitAsync(projections, _nostify, _httpClient, null, _cosmosRetryOptions);
     }
+}
+
+/// <summary>
+/// Names of activities used by tenant-partitioned projection initialization.
+/// Grouping the names prevents positional string mistakes while retaining the existing activity payloads.
+/// </summary>
+public sealed class DurableTenantInitActivityNames
+{
+    /// <summary>Creates the activity-name group.</summary>
+    public DurableTenantInitActivityNames(
+        string delete,
+        string getTenantIds,
+        string getIds,
+        string processBatch)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(delete);
+        ArgumentException.ThrowIfNullOrWhiteSpace(getTenantIds);
+        ArgumentException.ThrowIfNullOrWhiteSpace(getIds);
+        ArgumentException.ThrowIfNullOrWhiteSpace(processBatch);
+
+        Delete = delete;
+        GetTenantIds = getTenantIds;
+        GetIds = getIds;
+        ProcessBatch = processBatch;
+    }
+
+    /// <summary>Gets the projection deletion activity name.</summary>
+    public string Delete { get; }
+
+    /// <summary>Gets the distinct-tenant retrieval activity name.</summary>
+    public string GetTenantIds { get; }
+
+    /// <summary>Gets the tenant-specific aggregate-ID retrieval activity name.</summary>
+    public string GetIds { get; }
+
+    /// <summary>Gets the aggregate-ID process-batch activity name.</summary>
+    public string ProcessBatch { get; }
 }
 
 /// <summary>

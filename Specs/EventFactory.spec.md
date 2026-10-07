@@ -101,13 +101,29 @@ Creates null-payload events without invoking payload validation. These methods d
 
 When `ValidatePayload` is `true` (default), the factory calls `Event.ValidatePayload<T>()` which:
 
-1. Extracts properties from the payload
-2. Compares them against public instance properties of the aggregate type `T`
-3. Throws `ValidationException` if payload contains properties not found in the aggregate
+1. Extracts properties from the payload.
+2. Compares them against public instance properties of aggregate type `T`.
+3. Validates values supplied by the payload.
+4. Enforces omitted properties only when `[Required]` applies or `[RequiredFor(...)]` matches the current event type.
+5. Throws `NostifyValidationException` when validation fails, including when the payload contains a property not found on the aggregate.
 
-This ensures that events only contain valid data for the target aggregate type.
+Payload validation supports partial objects. A UI should send only properties intentionally set by the current Create or Update event. It should not serialize the complete aggregate or submit unchanged form/model values. Omitted properties remain unchanged when the event is applied through `UpdateProperties<T>()`; present default-like values such as `null`, `false`, `0`, and empty values are explicit updates.
+
+> **AI-agent implementation rule:** Do not use `NoValidate()` to enable ordinary partial Create or Update payloads. They are supported with validation enabled. Use `[RequiredFor(...)]` to express event-specific required fields, and bypass validation only when the application explicitly requires that separate behavior.
 
 ## Usage Examples
+
+### Recommended Partial Payload with Validation
+
+```csharp
+// Only status and shippedDate are changed by this event. Other Order properties
+// are deliberately absent and will remain unchanged during event application.
+IEvent evt = new EventFactory().Create<Order>(
+    new Update_Order(),
+    orderId,
+    new { status = "Shipped", shippedDate = DateTime.UtcNow },
+    userId);
+```
 
 ### Basic Usage with Validation
 
@@ -121,15 +137,17 @@ var evt = factory.Create<Customer>(
     userId);
 ```
 
-### Skip Validation
+### Skip Validation for an Explicit Exceptional Case
 
 ```csharp
 var factory = new EventFactory();
 
+// Validation bypass is reserved for intentionally unvalidated workflows such as
+// controlled legacy imports. It is not needed for normal partial updates.
 var evt = factory.NoValidate().Create<Customer>(
-    Customer.Update,
+    Customer.LegacyImport,
     customerId,
-    new { temporaryField = "value" },  // Won't be validated
+    importedPayload,
     userId);
 ```
 

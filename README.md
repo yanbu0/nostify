@@ -81,6 +81,13 @@
  
 ### Updates
   
+- 5.1.0
+    - **Safer Durable Projection Wiring**: Added `DurableTenantInitActivityNames` as the preferred, validated way to group tenant initialization activity names while retaining the positional-string overload and existing Durable Function names and payloads.
+    - **Deterministic Projection Rebuilds**: Durable projection batches now retrieve events through `IQueryExecutor` and replay equal-timestamp events by event ID for stable ordering. Tenant partitioning remains limited to aggregate-ID discovery in the current-state container; event retrieval continues to use the event store's `aggregateRootId` partition key.
+    - **Replay-Safe Progress Visibility**: Projection templates pass `context.CreateReplaySafeLogger(...)` so deletion, tenant count, processed count, and completion progress can be logged without replay duplicates.
+- 5.0.2
+    - **Optional Messaging Configuration**: `Build()` and `Build<T>()` support Cosmos-only applications when neither `WithKafka()` nor `WithEventHubs()` is called. Generic builds skip Kafka topic administration while preserving Cosmos initialization.
+    - **Actionable Messaging Errors**: Kafka producer access, publishing, and consumer creation fail at point of use with a clear `NostifyException` when messaging is not configured. Disposal remains safe and idempotent for Cosmos-only instances.
 - 5.0.1
     - Migrated framework error events to canonical `ErrorEventType` definitions while preserving stable topic names, stored Saga JSON compatibility, and obsolete `ErrorCommand` source compatibility.
 - 5.0.0 (BREAKING CHANGES!)
@@ -527,14 +534,22 @@ An `Event` captures a state change to the application. Generally, this is caused
 
 Events implement the `IEvent` interface, which provides better abstraction and testability. The EventFactory returns `IEvent` instances for consistent usage throughout the framework.
 
-In a typical scenario, the `Event` is created in the command handler using `EventFactory`, the `payload` is validated, and then saved to the event store. `EventFactory` accepts canonical `EventType` metadata only:
+In a typical scenario, the `Event` is created in the command handler using `EventFactory`, the `payload` is validated, and then saved to the event store. `EventFactory` accepts canonical `EventType` metadata only. The payload should contain only properties intentionally set by this event:
 
 ```C#
-// Default behavior - validation enabled
-IEvent created = new EventFactory().Create<TestAggregate>(new Create_Test(), newId, newTest);
+// Default behavior: validation enabled for a partial Create payload.
+IEvent created = new EventFactory().Create<TestAggregate>(
+    new Create_Test(),
+    newId,
+    new { name = "New test" });
+await _nostify.PersistEventAsync(created);
 
-// Or disable validation using method chaining
-IEvent imported = new EventFactory().NoValidate().Create<TestAggregate>(new Create_Test(), newId, newTest);
+// Disable validation only for an explicitly unvalidated workflow such as a
+// controlled legacy import, not merely because a payload is partial.
+IEvent imported = new EventFactory().NoValidate().Create<TestAggregate>(
+    new Import_Test(),
+    newId,
+    importedPayload);
 await _nostify.PersistEventAsync(imported);
 ```
 
@@ -587,21 +602,22 @@ public async Task OnTestCreated(
 
 #### Payload Validation
 
-Event payloads are validated by default when using `EventFactory`. This is done by placing `ValidationAttribute` attributes on aggregate properties. It ensures required properties are present and valid for the specified event type. Only properties present on the current payload are validated, except for `[Required]` and `[RequiredFor()]`.
+Event payloads are validated by default when using `EventFactory`. This is done by placing `ValidationAttribute` attributes on aggregate properties. It ensures required properties are present and supplied values are valid for the specified event type. Only properties present on the current payload are validated, except for `[Required]` and matching `[RequiredFor(...)]` declarations. Partial Create and Update payloads remain valid without calling `NoValidate()`.
 
 ```C#
-// EventFactory validates by default - no need for manual validation
-IEvent created = new EventFactory().Create<TestAggregate>(new Create_Test(), newId, newTest);
-await _nostify.PersistEventAsync(created);
+// EventFactory validates a partial payload by default.
+IEvent updated = new EventFactory().Create<TestAggregate>(
+    new Update_Test(),
+    aggregateId,
+    new { name = "Updated test" });
+await _nostify.PersistEventAsync(updated);
 
-// Or skip validation if needed
-IEvent imported = new EventFactory().NoValidate().Create<TestAggregate>(new Create_Test(), newId, newTest);
-await _nostify.PersistEventAsync(imported);
-
-// For events with no payload data (like delete operations)
+// For events with no payload data (like delete operations).
 IEvent deleted = new EventFactory().CreateNullPayloadEvent(new Delete_Test(), aggregateId);
 await _nostify.PersistEventAsync(deleted);
 ```
+
+Use `NoValidate()` only for an intentionally unvalidated workflow, such as a controlled legacy import. Do not use it merely to accept a partial command payload.
 
 Most of the time, you will want to use `RequiredFor` instead of `Required` to mark a property as required for that specific command or list of commands. `Required` is still a valid validation attribute, but it will require that property to be present and not null for EVERY command:
 
@@ -988,6 +1004,8 @@ public class Program
 
 `UseNostifyDefaultConfiguredNewtonsoftJson()` configures the Azure Functions worker to use nostify's default Newtonsoft.Json settings. `UseNostifyDefaultJson()` is the shorter wrapper that applies the same configuration and is what the `nostify` template uses. An experimental `UseNostifySystemTextJson()` helper is also available for evaluating a `System.Text.Json`-based worker serializer with nostify-compatible defaults.
 
+Kafka/Event Hubs configuration is optional when an application only needs Cosmos-backed behavior. In that case, omit both `WithKafka()` and `WithEventHubs()`; `Build()` and `Build<T>()` will create a Cosmos-only instance, and `Build<T>()` will skip topic discovery and creation. Calling a Kafka-dependent API such as `PublishEventAsync()`, `KafkaProducer`, `CreateKafkaConsumer()`, or `GetOrCreateKafkaConsumer()` without messaging configuration throws an actionable `NostifyException`.
+
 #### Using Azure Event Hubs
 
 Azure Event Hubs can be used instead of Kafka for event messaging. Simply use `WithEventHubs()` instead of `WithKafka()` and provide an Event Hubs connection string:
@@ -1167,11 +1185,14 @@ public  class  GetTest
 
 ### Create New Aggregate
 
+> **Payload rule for developers and AI coding agents:** Construct Create and Update event payloads as change sets. Send only the aggregate properties that the current event intentionally sets. Do not serialize a complete UI model, cached aggregate, or default-valued DTO into an event payload. Omission means “this event does not set this property”; an explicit `null`, `false`, `0`, or empty value means “set this property to that value.”
+
 One of the "out of the box" commands handled by `nostify` is the `Create_Aggregate` command.  The template logic flow is:
 
-- Create command is inbound via http post from user interface.  Typically this would indicate the user saved a new record.
-- Body of post must contain JSON with all the properties to set on create. The aggregate's event application logic—typically a `[ApplyEvents(typeof(Create_<Aggregate>))]` handler or typed `Apply(Create_<Aggregate>, IEvent)` overload—can call `UpdateProperties<T>()` to match payload properties onto the aggregate automatically. Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored, so it is only necessary to send the properties that you want to set over the wire.
-- In a typical application there would be validation of the command occuring, validating say that all required properties are set.  `nostify` does not dictate a validation pattern, use the one that makes the most sense for your application.  There would probably be some kind of auth here as well for most apps.
+- Create command is inbound via http post from user interface. Typically this would indicate the user saved a new record.
+- The POST body should contain only the properties this Create event intentionally initializes. `HandlePostAsync<T>()` generates the aggregate `id` and adds the configured partition-key property, so the UI should not construct a complete aggregate merely to call the handler.
+- The aggregate's event application logic—typically an `[ApplyEvents(typeof(Create_<Aggregate>))]` handler or typed `Apply(Create_<Aggregate>, IEvent)` overload—can call `UpdateProperties<T>()` to apply only matching payload properties. Omitted properties retain their aggregate defaults. Unknown payload properties fail the default `EventFactory` validation rather than being silently accepted.
+- Add `[Required]` only when a property must be present for every validated event. Prefer `[RequiredFor("Create_<Aggregate>")]` when it is required specifically by Create. Validation does not require unrelated optional aggregate properties to be included.
 - The command handler creates an `Event` and persists it to the event store.  Note that the command registered must indicate a new record is being created by setting the `isNew` parameter to true:
 `public static readonly TestCommand Create = new TestCommand("Create_Test", true);`
 - The event publisher function is triggered by an event being written to the event store and publishes the event to Kafka.
@@ -1183,11 +1204,13 @@ Other projections added will need to contain their own logic for handling the cr
 
 Updating the aggregate and its base current state projection is also handled by the templates. The template logic flow is:
 
-- Update command comes in via http patch from user interface.  Typically this would indicate a user saved an existing record.
-- Body of the request must contain a JSON object with a property `id` in the default template.
-- The default event handler for the current state container will query the container for the aggregate id, get the current state, apply the update, then save the update to the container.  This is contained in the `ApplyAndPersistAsync<T>()` method.
-- Body of patch must contain JSON with all the properties to update. The aggregate's event application logic—typically a `[ApplyEvents(typeof(Update_<Aggregate>))]` handler or typed `Apply(Update_<Aggregate>, IEvent)` overload—can call `UpdateProperties<T>()` to match payload properties onto the aggregate automatically. Any properties not in the JSON or properties in the JSON that do not match the aggregate will be ignored, so it is only necessary to send the properties that you want to set over the wire.
-- There may be more than one event to subscribe to to update an aggregate if you implement a more complex object. For instance, if you have a property of `List<T>` you may have another command that is issued from the UI that does an http PUT to replace objects in the list.
+- Update command comes in via HTTP PATCH from the user interface. Typically this indicates that a user saved changes to an existing record.
+- The aggregate ID can come from the route binding or the payload. Prefer the route ID and keep the body focused on changed domain properties.
+- **The UI should send only properties changed by this operation.** For example, changing a name should send `{ "name": "New name" }`, not a fully populated aggregate containing stale values or language-default values for untouched fields.
+- The default event handler queries the current-state container, applies the event, and saves the result through `ApplyAndPersistAsync<T>()`.
+- Event application—typically an `[ApplyEvents(typeof(Update_<Aggregate>))]` handler or typed `Apply(Update_<Aggregate>, IEvent)` overload—can call `UpdateProperties<T>()`. It updates properties present in the payload and leaves omitted properties unchanged. Explicit values, including `null`, `false`, `0`, and empty collections or strings, are intentional updates and are applied subject to validation.
+- Default `EventFactory` validation rejects unknown properties and validates supplied values. `[Required]` and matching `[RequiredFor(...)]` declarations can still require fields for a particular event type; do not disable validation merely to permit an ordinary partial update.
+- There may be more than one event to subscribe to to update an aggregate if you implement a more complex object. For instance, if you have a property of `List<T>` you may have another command that is issued from the UI that does an HTTP PUT to replace objects in the list.
 
 The function handling the update event naming convention is: `On<AggregateName>Updated`, for example: "OnTestUpdated".
 
@@ -3938,18 +3961,26 @@ public class OrderAggregate : NostifyObject, IAggregate
 
 #### EventFactory Validation
 
-Validation is performed automatically when using `EventFactory.Create<T>()`:
+Validation is performed automatically when using `EventFactory.Create<T>()`. Partial payloads do not require validation to be disabled:
 
 ```C#
-// Validation enabled by default - throws NostifyValidationException on failure
-IEvent created = new EventFactory().Create<OrderAggregate>(new Create_Order(), newId, orderPayload);
+// Validation remains enabled for a partial update payload.
+IEvent updated = new EventFactory().Create<OrderAggregate>(
+    new Update_Order(),
+    id,
+    new { status = "Shipped" });
 
-// Skip validation when needed
-IEvent updated = new EventFactory().NoValidate().Create<OrderAggregate>(new Update_Order(), id, partialPayload);
+// Skip validation only for an intentional import or compatibility scenario.
+IEvent imported = new EventFactory().NoValidate().Create<OrderAggregate>(
+    new Import_Order(),
+    id,
+    importedPayload);
 
-// Events with no payload skip validation automatically
+// Events with no payload skip validation automatically.
 IEvent deleted = new EventFactory().CreateNullPayloadEvent(new Delete_Order(), aggregateId);
 ```
+
+Do not call `NoValidate()` merely because a Create or Update payload is partial. Normal validation accepts omitted optional properties while still rejecting unknown properties and enforcing `[Required]`, matching `[RequiredFor(...)]`, and constraints on supplied values.
 
 ## Performance Considerations
 
