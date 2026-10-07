@@ -198,12 +198,24 @@ public class TenantOrder : NostifyObject, IAggregate, IApplyable, ITenantFiltera
 }
 ```
 
+## Partial Payload Application Contract
+
+`UpdateProperties<T>()` treats an event payload as a change set:
+
+- It updates matching target properties that are present in the payload.
+- It leaves target properties omitted from the payload unchanged.
+- It ignores payload properties that do not map to the target at application time; normal `EventFactory` validation should reject unknown properties before persistence.
+- It treats a present `null`, `false`, `0`, empty string, or empty collection as an intentional value rather than an omission, subject to type conversion and validation.
+
+UI clients and AI-generated command handlers should therefore send only properties intentionally set by the current Create or Update event. They should not expand a partial form into a complete aggregate DTO with default or stale values.
+
 ## Best Practices
 
-1. **Always Call Base Constructor** - Use `: base()` or `: base(id)` in derived classes
-2. **Implement Required Interfaces** - Combine with `IAggregate` or `IProjection`
-3. **Choose a dispatch style intentionally** - Use `[ApplyEvents]` for attribute-based handlers, or typed `Apply(SpecificEventType, IEvent)` overloads plus an optional catch-all override
-4. **Use Lowercase id** - Matches Cosmos DB conventions
+1. **Use change-set payloads** - Include only properties intentionally set by the current Create or Update event; preserve omission versus explicit default/null semantics.
+2. **Always Call Base Constructor** - Use `: base()` or `: base(id)` in derived classes.
+3. **Implement Required Interfaces** - Combine with `IAggregate` or `IProjection`.
+4. **Choose a dispatch style intentionally** - Use `[ApplyEvents]` for attribute-based handlers, or typed `Apply(SpecificEventType, IEvent)` overloads plus an optional catch-all override.
+5. **Use Lowercase id** - Matches Cosmos DB conventions.
 
 ## Related Types
 

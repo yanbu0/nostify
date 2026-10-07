@@ -295,7 +295,9 @@ public static class NostifyFactory
     }
 
     /// <summary>
-    /// Builds the Nostify instance. Use generic method if wanting verbose output and/or autocreate topics.
+    /// Builds the Nostify instance. Kafka/Event Hubs configuration is optional; messaging operations
+    /// throw an actionable configuration exception when invoked without it.
+    /// Use the generic method for verbose output, topic auto-creation, and container initialization.
     /// </summary>
     public static INostify Build(this NostifyConfig config)
     {
@@ -304,7 +306,8 @@ public static class NostifyFactory
         string cosmosApiKey = RequireConfigurationValue(config.cosmosApiKey, nameof(config.cosmosApiKey), "WithCosmos");
         string cosmosDbName = RequireConfigurationValue(config.cosmosDbName, nameof(config.cosmosDbName), "WithCosmos");
         string cosmosEndpointUri = RequireConfigurationValue(config.cosmosEndpointUri, nameof(config.cosmosEndpointUri), "WithCosmos");
-        string kafkaUrl = RequireConfigurationValue(config.producerConfig.BootstrapServers, nameof(config.kafkaUrl), "WithKafka or WithEventHubs");
+        string? kafkaUrl = config.producerConfig.BootstrapServers;
+        bool hasKafkaConfiguration = !string.IsNullOrWhiteSpace(kafkaUrl);
 
         var Repository = new NostifyCosmosClient(cosmosApiKey,
             cosmosDbName,
@@ -316,12 +319,15 @@ public static class NostifyFactory
         );
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath ?? "/tenantId";
         var DefaultTenantId = config.defaultTenantId;
-        var KafkaProducer = new ProducerBuilder<string, string>(config.producerConfig).Build();
+        // Avoid allocating a native Kafka producer for Cosmos-only applications.
+        IProducer<string, string>? KafkaProducer = hasKafkaConfiguration
+            ? new ProducerBuilder<string, string>(config.producerConfig).Build()
+            : null;
         var HttpClientFactory = config.httpClientFactory;
 
-        // Build base consumer config from producer settings (without GroupId — set per consumer)
+        // Build base consumer config from producer settings (without GroupId — set per consumer).
         ConsumerConfig? baseConsumerConfig = null;
-        if (!string.IsNullOrEmpty(kafkaUrl))
+        if (hasKafkaConfiguration)
         {
             baseConsumerConfig = new ConsumerConfig
             {
@@ -353,7 +359,7 @@ public static class NostifyFactory
             Repository,
             DefaultPartitionKeyPath,
             DefaultTenantId,
-            kafkaUrl,
+            kafkaUrl ?? string.Empty,
             KafkaProducer,
             HttpClientFactory,
             config.logger,
@@ -374,7 +380,9 @@ public static class NostifyFactory
 
 
     /// <summary>
-    /// Builds the Nostify instance. Will autocreate topics in Kafka for each EventType found in the assembly of T.
+    /// Builds the Nostify instance. When Kafka/Event Hubs is configured, auto-creates topics for each
+    /// EventType found in the assembly of T. Otherwise, skips messaging setup and still performs any
+    /// requested Cosmos container initialization.
     /// </summary>
     /// <param name="config">The Nostify configuration settings.</param>
     /// <param name="verbose">
@@ -392,36 +400,46 @@ public static class NostifyFactory
                 "******* Logger is null. Will try to fall back to console logging. Enable logging by using .WithLogger(yourLogger). There isn't really a reason not to enable logging, you should do it. *********",
                 "ILogger is available and will be used for logging.");
 
-            // Build a Kafka admin client first so topic discovery and container initialization share the same startup flow.
-            LogDebugOrVerboseConsole(config, verbose, "Building Admin Client");
-            var adminClientConfig = new AdminClientConfig(config.producerConfig);
-            var adminClient = new AdminClientBuilder(adminClientConfig).Build();
-            LogDebugOrVerboseConsole(config, verbose, "Admin Client built");
-
-            var assembly = typeof(T).Assembly;
-            List<TopicSpecification> topics = GetAutoCreateTopicSpecifications(assembly, config, verbose);
-
-            // Filter topic candidates against broker metadata so repeated startup stays idempotent.
-            var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
-            topics = topics.Where(t => !existingTopics.Any(et => et.Topic.Equals(t.Name, StringComparison.OrdinalIgnoreCase))).ToList();
-            LogDebugOrVerboseConsole(
-                config,
-                verbose,
-                $"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}",
-                "Creating topics: {Topics}",
-                string.Join(", ", topics.Select(t => t.Name)));
-
-            // Only issue create calls when something is missing; otherwise Kafka startup remains a metadata-only check.
-            if (topics.Count > 0)
+            if (!string.IsNullOrWhiteSpace(config.producerConfig.BootstrapServers))
             {
-                adminClient.CreateTopicsAsync(topics).Wait();
-                var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+                // Topic administration is meaningful only when a messaging provider was configured.
+                LogDebugOrVerboseConsole(config, verbose, "Building Admin Client");
+                var adminClientConfig = new AdminClientConfig(config.producerConfig);
+                using var adminClient = new AdminClientBuilder(adminClientConfig).Build();
+                LogDebugOrVerboseConsole(config, verbose, "Admin Client built");
+
+                var assembly = typeof(T).Assembly;
+                List<TopicSpecification> topics = GetAutoCreateTopicSpecifications(assembly, config, verbose);
+
+                // Filter topic candidates against broker metadata so repeated startup stays idempotent.
+                var existingTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+                topics = topics.Where(t => !existingTopics.Any(et => et.Topic.Equals(t.Name, StringComparison.OrdinalIgnoreCase))).ToList();
                 LogDebugOrVerboseConsole(
                     config,
                     verbose,
-                    $"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}",
-                    "Current topics: {Topics}",
-                    string.Join(", ", currentTopics.Select(t => t.Topic)));
+                    $"Creating topics: {string.Join(", ", topics.Select(t => t.Name))}",
+                    "Creating topics: {Topics}",
+                    string.Join(", ", topics.Select(t => t.Name)));
+
+                // Only issue create calls when something is missing; otherwise Kafka startup remains a metadata-only check.
+                if (topics.Count > 0)
+                {
+                    adminClient.CreateTopicsAsync(topics).Wait();
+                    var currentTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+                    LogDebugOrVerboseConsole(
+                        config,
+                        verbose,
+                        $"Current topics: {string.Join(", ", currentTopics.Select(t => t.Topic))}",
+                        "Current topics: {Topics}",
+                        string.Join(", ", currentTopics.Select(t => t.Topic)));
+                }
+            }
+            else
+            {
+                LogDebugOrVerboseConsole(
+                    config,
+                    verbose,
+                    "Kafka/Event Hubs is not configured; skipping topic discovery and creation.");
             }
 
             var nostify = Build(config);

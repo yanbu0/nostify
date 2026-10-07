@@ -29,7 +29,7 @@ public interface INostify
     Guid DefaultTenantId { get; }
 
     ///<summary>
-    ///Url for Kafka cluster
+    /// URL for the Kafka cluster, or an empty string when Kafka/Event Hubs is not configured.
     ///</summary>
     string KafkaUrl { get; }
 
@@ -44,8 +44,11 @@ public interface INostify
     IHttpClientFactory? HttpClientFactory { get; }
 
     ///<summary>
-    ///Kafka producer
+    /// Kafka producer.
     ///</summary>
+    ///<exception cref="NostifyException">
+    /// Thrown when Kafka/Event Hubs was not configured with <c>WithKafka()</c> or <c>WithEventHubs()</c>.
+    ///</exception>
     IProducer<string, string> KafkaProducer { get; }
 
     ///<summary>

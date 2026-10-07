@@ -26,12 +26,12 @@ public Nostify(
 )
 ```
 
-The framework-internal constructor (used by `NostifyFactory.Build`) additionally accepts `ILogger?`, `ConsumerConfig?`, and `RetryOptions? defaultRetryOptions`. When `defaultRetryOptions` is `null`, it defaults to `new RetryOptions()`.
+The framework-internal constructor (used by `NostifyFactory.Build`) additionally accepts `IProducer<string, string>?`, `ILogger?`, `ConsumerConfig?`, and `RetryOptions? defaultRetryOptions`. When `defaultRetryOptions` is `null`, it defaults to `new RetryOptions()`. The producer and consumer configuration are null for Cosmos-only builds.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `primaryKey` / `repository` | `string` / `NostifyCosmosClient` | Cosmos DB credentials or pre-built client |
-| `kafkaUrl` | `string` | Kafka broker URL |
+| `kafkaUrl` | `string` | Kafka broker URL, or an empty string for a Cosmos-only instance |
 | `httpClientFactory` | `IHttpClientFactory` | Factory for outbound HTTP calls |
 | `defaultPartitionKeyPath` | `string` | Partition key path for containers (default `/tenantId`) |
 | `defaultTenantId` | `Guid` | Default tenant ID for multi-tenant scenarios |
@@ -43,12 +43,16 @@ The framework-internal constructor (used by `NostifyFactory.Build`) additionally
 | Property | Type | Description |
 |----------|------|-------------|
 | `Repository` | `NostifyCosmosClient` | Cosmos DB client wrapper |
-| `BulkPublisher` | `IProducer<string, string>` | Kafka producer for event publishing |
+| `KafkaProducer` | `IProducer<string, string>` | Kafka producer for event publishing; access throws `NostifyException` when messaging is not configured |
 | `DefaultUserId` | `Guid` | Default user for anonymous operations |
-| `kafkaUrl` | `string` | Kafka connection URL |
+| `KafkaUrl` | `string` | Kafka connection URL, or an empty string when messaging is not configured |
 | `eventStoreContainerName` | `string` | Event store container name |
 | `Logger` | `ILogger?` | Optional structured logger for diagnostic output and retry logging. Set via `NostifyFactory.WithLogger()`. Falls back to `Console.WriteLine` when null. |
 | `DefaultRetryOptions` | `RetryOptions` | Default retry configuration applied by retry-enabled default event handlers and bulk command handlers when `allowRetry = true`. Configured via `NostifyFactory.WithCosmos(defaultRetryOptions)`. Defaults to `new RetryOptions()` (3 retries, 1 s exponential backoff, `RetryWhenNotFound = false`). |
+
+## Optional Kafka Configuration
+
+`NostifyFactory.Build()` and `Build<T>()` support Cosmos-only applications without calling `WithKafka()` or `WithEventHubs()`. The generic build skips Kafka topic administration when no broker is configured while retaining Cosmos container initialization. Kafka-dependent publishing, producer access, and consumer creation fail at point of use with an actionable `NostifyException` that identifies the required configuration methods.
 
 ## Kafka Consumer Cache
 

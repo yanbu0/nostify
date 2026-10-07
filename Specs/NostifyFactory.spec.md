@@ -2,7 +2,7 @@
 
 ## Overview
 
-`NostifyFactory` is a static factory class that creates properly configured `INostify` instances. It handles the setup of Cosmos DB clients, Kafka producers, and JSON serialization settings.
+`NostifyFactory` is a static factory class that creates configured `INostify` instances. It always configures Cosmos DB and configures Kafka or Event Hubs only when `WithKafka()` or `WithEventHubs()` is present in the fluent chain. Version 5.0.2 introduced Cosmos-only builds without creating Kafka producer, consumer, or administration resources.
 
 ## Class Definition
 
@@ -262,16 +262,19 @@ var nostify = NostifyFactory.WithCosmos(apiKey, dbName, endPoint)
 
 The `Build` method performs these steps:
 
-1. **Create JSON Settings** - Merges custom settings with defaults
-2. **Create Cosmos Client** - Initializes `CosmosClient` with connection string and options
-3. **Create NostifyCosmosClient** - Wraps the Cosmos client for nostify operations
-4. **Create Kafka Producer** - Initializes Kafka producer with idempotence enabled
-5. **Create Kafka Consumer Config** - Creates base `ConsumerConfig` with SASL settings mirrored from producer
-6. **Return Nostify Instance** - Returns configured `Nostify` implementation (with consumer config for lazy consumer creation)
+1. **Validate Cosmos Settings** - Requires the Cosmos API key, database name, and endpoint configured by `WithCosmos()`.
+2. **Create Cosmos Client** - Initializes `CosmosClient` with the selected connection mode and serializer.
+3. **Create NostifyCosmosClient** - Wraps the Cosmos client for nostify operations.
+4. **Optionally Create Kafka Resources** - Creates the producer and base consumer configuration only when a non-empty broker was supplied through `WithKafka()` or `WithEventHubs()`.
+5. **Return Nostify Instance** - Returns a messaging-enabled instance when a broker exists, or a Cosmos-only instance otherwise.
+
+### Cosmos-Only Builds
+
+Calling `Build()` or `Build<T>()` after `WithCosmos()` without calling `WithKafka()` or `WithEventHubs()` is valid starting in 5.0.2. `Build<T>()` bypasses admin-client creation, topic discovery, and topic creation, but still performs configured Cosmos container initialization. Kafka-dependent producer access, publishing, and consumer creation throw an actionable `NostifyException` identifying `WithKafka()` and `WithEventHubs()` when invoked on a Cosmos-only instance.
 
 ### Build<T>() Auto-Topic Creation
 
-The generic `Build<T>()` method (where `T : IAggregate`) performs all steps above plus automatic topic creation:
+When messaging is configured, the generic `Build<T>()` method (where `T : IAggregate`) performs all steps above plus automatic topic creation:
 
 1. **Scan for EventType definitions** - Finds all concrete non-legacy `EventType` subclasses in the assembly of `T`, resolves each definition through `EventType.GetRequiredInstance(Type)`, and creates a Kafka topic for each distinct `eventType.name`. Legacy `NostifyCommand` compatibility adapter types are ignored during topic auto-discovery.
 2. **Scan for IAggregate types (opt-in)** - When `config.autoCreateEventRequestTopics` is `true` (set via `.WithAsyncEventRequest()`), finds all concrete `IAggregate` implementations in the same assembly and creates an `{aggregateType}_EventRequest` topic for each. Without `.WithAsyncEventRequest()`, this step is skipped entirely.
@@ -286,9 +289,10 @@ The `_EventRequest` topics use the same partition count (`kafkaTopicAutoCreatePa
 
 | Exception | Condition |
 |-----------|-----------|
-| `ArgumentNullException` | Required parameters are null or empty |
-| `CosmosException` | Invalid Cosmos DB connection string |
-| `KafkaException` | Invalid Kafka URL or broker unavailable |
+| `InvalidOperationException` | Required Cosmos configuration is absent at build time |
+| `NostifyException` | A Kafka-dependent API is used on a Cosmos-only instance |
+| `CosmosException` | Cosmos DB configuration or an operation fails |
+| `KafkaException` | Configured Kafka/Event Hubs connectivity or an operation fails |
 
 ## Best Practices
 

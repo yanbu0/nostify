@@ -115,7 +115,7 @@ Returns the payload as a typed object.
 public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : class
 ```
 
-Validates that payload properties match the aggregate type.
+Validates that payload properties match the aggregate type. Payloads are intentionally allowed to be partial: validation does not require an omitted property unless it has `[Required]` or a `[RequiredFor(...)]` declaration matching this event type. Validation still rejects unknown payload properties and invalid supplied values.
 
 **Returns:** `IEvent` - The current event for chaining; throws if validation fails
 
@@ -150,6 +150,16 @@ Deserialization resolves names with ordinal, case-sensitive comparison. A unique
 
 When both `eventType` and legacy `command` are present in incoming JSON, `command` no longer overwrites an already resolved concrete `eventType`; it only hydrates `eventType` when no concrete value exists yet (or when the current value is still the internal legacy adapter).
 
+## Payload Semantics
+
+An event payload is a **change set**, not an aggregate snapshot. UI clients, generated clients, and AI agents should include only properties the current Create or Update event intentionally sets.
+
+- A missing property means the event does not set that property.
+- A present property with `null`, `false`, `0`, an empty string, or an empty collection is an explicit update.
+- Applying a payload through `UpdateProperties<T>()` changes matching properties that are present and preserves omitted properties.
+- Create payloads may omit aggregate properties that should retain their defaults, subject to `[Required]` and matching `[RequiredFor(...)]` validation.
+- Update payloads should avoid unchanged values because stale UI state can overwrite newer aggregate state and makes the event history inaccurately describe the change.
+
 ## Usage Examples
 
 ### Creating Events
@@ -170,9 +180,9 @@ var @event = new Event(
     userId
 );
 
-// Create update event
+// Create update event. Include only properties changed by this event.
 var updateEvent = new Event(
-    NostifyCommand.Update("Order"),
+    new Update_Order(),
     orderId,
     new { Status = "Shipped", ShippedDate = DateTime.UtcNow },
     userId

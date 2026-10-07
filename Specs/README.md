@@ -4,6 +4,14 @@
 
 Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosmos DB and Apache Kafka integration.
 
+### Command Payload Contract for Consumers and AI Agents
+
+Create and Update payloads are event-specific change sets, not complete aggregate snapshots. Clients **should send only properties intentionally set by the current event**. Omitted properties remain unchanged on Update and retain defaults on Create; present `null`, `false`, `0`, and empty values are explicit updates. Normal validation supports partial payloads while still enforcing `[Required]`, matching `[RequiredFor(...)]`, supplied-value constraints, and rejection of unknown properties. Do not disable validation merely to submit a partial payload. See [DefaultCommandHandler](DefaultCommandHandlers.spec.md), [Event](Event.spec.md), [EventFactory](EventFactory.spec.md), and [NostifyObject](NostifyObject.spec.md).
+
+### 5.0.2 Optional Messaging Contract
+
+`NostifyFactory.Build()` and `Build<T>()` require Cosmos configuration but do not require `WithKafka()` or `WithEventHubs()`. Without messaging configuration, both methods return a Cosmos-only instance and the generic build skips Kafka topic administration. Producer access, publishing, and consumer creation throw an actionable `NostifyException` at point of use.
+
 ### 5.0 Event Identity Contract
 
 `EventType.name` is the sole persisted event-type identity. Matching is ordinal and case-sensitive. Serialized event-type metadata contains `name`, `isNew`, and `allowNullPayload`. Unique loaded concrete definitions are restored by exact name; unknown names use the legacy compatibility adapter, and duplicate exact names are rejected with a descriptive configuration error. `ExternalDataEventFactory<P>` uses the same identity to remove events without discoverable handlers before projection hydration by default.
@@ -110,7 +118,8 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 ## Quick Start
 
 ```csharp
-// 1. Configure Nostify. Build validates required Cosmos and broker settings immediately.
+// 1. Configure Nostify. Cosmos is required; Kafka/Event Hubs is optional until a
+// messaging-dependent API is used.
 INostify nostify = NostifyFactory
     .WithCosmos(cosmosApiKey, "MyEventStore", cosmosEndpoint)
     .WithKafka("localhost:9092")
@@ -153,7 +162,8 @@ The default Cosmos partition-key path is `/tenantId`. Configure `WithHttp(...)` 
 
 ## Version History
 
-- **5.1.0** - Added validated `DurableTenantInitActivityNames` wiring, replay-safe projection initialization progress logging, and deterministic timestamp-plus-event-ID replay ordering while retaining aggregate-ID process payloads and aggregate-root-partitioned event retrieval.
+- **5.1.0** - Added validated `DurableTenantInitActivityNames`, replay-safe projection progress logging, and deterministic timestamp-plus-event-ID replay ordering.
+- **5.0.2** - Made Kafka/Event Hubs optional at build time for Cosmos-only applications; generic builds without messaging skip topic administration; messaging-dependent operations fail with actionable point-of-use errors.
 - **5.0.1** - Migrated framework error events to canonical `ErrorEventType` definitions while preserving stable topic names, stored Saga JSON compatibility, and obsolete `ErrorCommand` source compatibility.
 - **5.0.0 (breaking)** - Made concrete `EventType` classes and `IEvent.eventType` canonical; introduced cached `[ApplyEvents(typeof(...))]` dispatch ahead of typed and catch-all `Apply(...)` handlers; made `ExternalDataEventFactory<P>` filter non-applied events by default with an explicit opt-out and compatibility fallback; hardened Kafka restoration and handler validation; removed obsolete `NostifyCommand` overloads from `EventFactory` while retaining legacy envelope deserialization compatibility; removed obsolete non-async default-handler wrappers; made durable aggregate current-state and projection initialization the default generated template flow via `DurableCurrentStateInitializer<TAggregate>` and `DurableProjectionInitializer<TProjection, TAggregate>`; added fail-fast Cosmos/broker configuration validation and the `/tenantId` partition default; corrected nullable HTTP and apply-result contracts; added explicit payload conversion failures, structured logging, ordinal comparisons, and `NostifyCosmosClient` disposal; and enabled warnings-as-errors, recommended analyzers, nullable analysis, deterministic CI builds, code-style enforcement, public XML-documentation gates, and broad regression coverage
 - **4.9.2** - Updated a dependency package to a patched version to address a known security vulnerability
