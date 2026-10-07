@@ -186,7 +186,7 @@ public class NostifyFactoryTests
     [Fact]
     public void WithKafka_WithProducerConfigWithoutBootstrapServers_ShouldThrowArgumentException()
     {
-        Assert.Throws<ArgumentException>(() => NostifyFactory.WithKafka(new ProducerConfig()));
+        Assert.Throws<ArgumentNullException>(() => NostifyFactory.WithKafka(new ProducerConfig()));
     }
 
     [Fact]
