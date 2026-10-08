@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,6 +15,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 
 namespace nostify;
 
@@ -66,6 +68,12 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
             LogLevel.Information,
             new EventId(5, nameof(LogInitializationComplete)),
             "{InstanceId}: projection initialization complete");
+
+    private static readonly Action<ILogger, string, Guid, int, Exception?> LogRollingFallback =
+        LoggerMessage.Define<string, Guid, int>(
+            LogLevel.Warning,
+            new EventId(6, nameof(LogRollingFallback)),
+            "{InstanceId}: unconditional rolling write for hot projection {ProjectionId} after {ConflictCount} concurrency conflicts");
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DurableProjectionInitializer{TProjection, TAggregate}"/> class.
@@ -153,6 +161,37 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(orchestratorName, new StartOrchestrationOptions(_instanceId));
+        return await client.CreateCheckStatusResponseAsync(req, _instanceId);
+    }
+
+    /// <summary>
+    /// Starts a non-destructive rolling projection orchestration with immutable input.
+    /// </summary>
+    /// <param name="req">The triggering HTTP request.</param>
+    /// <param name="client">The Durable task client.</param>
+    /// <param name="orchestratorName">The rolling orchestrator name.</param>
+    /// <param name="input">Rolling rebuild input.</param>
+    /// <returns>A conflict response when this initializer is active; otherwise, a status response.</returns>
+    public async Task<HttpResponseData> StartRollingOrchestration(
+        HttpRequestData req,
+        DurableTaskClient client,
+        string orchestratorName,
+        DurableRollingProjectionInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var existing = await client.GetInstanceAsync(_instanceId);
+        if (IsInstanceActive(existing))
+        {
+            var conflict = req.CreateResponse(HttpStatusCode.Conflict);
+            conflict.WriteString($"{_instanceId} is already running");
+            return conflict;
+        }
+
+        ValidateSelectedProperties(input.Options);
+        await client.ScheduleNewOrchestrationInstanceAsync(
+            orchestratorName,
+            input,
+            new StartOrchestrationOptions(_instanceId));
         return await client.CreateCheckStatusResponseAsync(req, _instanceId);
     }
 
@@ -295,6 +334,57 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     }
 
     /// <summary>
+    /// Runs a non-destructive, tenant-partitioned rolling projection rebuild.
+    /// </summary>
+    /// <param name="context">Durable orchestration context.</param>
+    /// <param name="activities">Rolling activity names.</param>
+    /// <param name="input">Immutable rolling options.</param>
+    /// <param name="logger">Replay-safe logger.</param>
+    public async Task OrchestrateRollingInitAsync(
+        TaskOrchestrationContext context,
+        DurableRollingTenantInitActivityNames activities,
+        DurableRollingProjectionInput input,
+        ILogger? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(activities);
+        ArgumentNullException.ThrowIfNull(input);
+
+        List<Guid> tenantIds = await context.CallActivityAsync<List<Guid>>(
+            activities.GetTenantIds,
+            null,
+            _durableTaskOptions);
+        if (logger != null)
+        {
+            LogTenantCount(logger, _instanceId, tenantIds.Count, null);
+        }
+
+        int totalProcessed = 0;
+        foreach (Guid tenantId in tenantIds)
+        {
+            await ProcessRollingPartitionPagesAsync(
+                context,
+                activities.GetIds,
+                activities.ProcessBatch,
+                page => new DurableInitPageInfo(tenantId, page),
+                id => new DurableRollingProjectionWorkItem(id, tenantId.ToString(), true),
+                input.Options,
+                count =>
+                {
+                    totalProcessed += count;
+                    if (logger != null)
+                    {
+                        LogProcessedCount(logger, _instanceId, totalProcessed, null);
+                    }
+                });
+        }
+
+        if (logger != null)
+        {
+            LogInitializationComplete(logger, _instanceId, null);
+        }
+    }
+
+    /// <summary>
     /// The orchestrator that runs the projection initialization logic, paging through aggregates by an arbitrary partition key.
     /// Use this overload when the aggregate's container is partitioned by something other than tenantId.
     /// </summary>
@@ -337,6 +427,59 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
                 getIdsActivityName,
                 processBatchActivityName,
                 pageNum => new DurablePartitionInitPageInfo(pk, pageNum),
+                count =>
+                {
+                    totalProcessed += count;
+                    if (logger != null)
+                    {
+                        LogProcessedCount(logger, _instanceId, totalProcessed, null);
+                    }
+                });
+        }
+
+        if (logger != null)
+        {
+            LogInitializationComplete(logger, _instanceId, null);
+        }
+    }
+
+    /// <summary>
+    /// Runs a non-destructive rolling rebuild using an arbitrary string partition key.
+    /// </summary>
+    /// <param name="context">Durable orchestration context.</param>
+    /// <param name="getPartitionKeysActivityName">Distinct partition-key activity name.</param>
+    /// <param name="getIdsActivityName">Paged aggregate-ID activity name.</param>
+    /// <param name="processBatchActivityName">Rolling batch activity name.</param>
+    /// <param name="input">Immutable rolling options.</param>
+    /// <param name="logger">Replay-safe logger.</param>
+    public async Task OrchestrateRollingInitByPartitionAsync(
+        TaskOrchestrationContext context,
+        string getPartitionKeysActivityName,
+        string getIdsActivityName,
+        string processBatchActivityName,
+        DurableRollingProjectionInput input,
+        ILogger? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        List<string> partitionKeys = await context.CallActivityAsync<List<string>>(
+            getPartitionKeysActivityName,
+            null,
+            _durableTaskOptions);
+        if (logger != null)
+        {
+            LogPartitionCount(logger, _instanceId, partitionKeys.Count, null);
+        }
+
+        int totalProcessed = 0;
+        foreach (string partitionKey in partitionKeys)
+        {
+            await ProcessRollingPartitionPagesAsync(
+                context,
+                getIdsActivityName,
+                processBatchActivityName,
+                page => new DurablePartitionInitPageInfo(partitionKey, page),
+                id => new DurableRollingProjectionWorkItem(id, partitionKey, false),
+                input.Options,
                 count =>
                 {
                     totalProcessed += count;
@@ -402,6 +545,44 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
             if (pageIds.Count < _pageSize)
             {
                 // at the last page
+                break;
+            }
+        }
+    }
+
+    private async Task ProcessRollingPartitionPagesAsync<TPageInfo>(
+        TaskOrchestrationContext context,
+        string getIdsActivityName,
+        string processBatchActivityName,
+        Func<int, TPageInfo> pageInfoFactory,
+        Func<Guid, DurableRollingProjectionWorkItem> workItemFactory,
+        DurableRollingProjectionOptions options,
+        Action<int> onPageProcessed)
+    {
+        int pageNumber = 0;
+        while (true)
+        {
+            List<Guid> ids = await context.CallActivityAsync<List<Guid>>(
+                getIdsActivityName,
+                pageInfoFactory(pageNumber),
+                _durableTaskOptions);
+            if (ids.Count == 0)
+            {
+                break;
+            }
+
+            pageNumber++;
+            var tasks = ids
+                .Chunk(_batchSize)
+                .Select(chunk => context.CallActivityAsync(
+                    processBatchActivityName,
+                    new DurableRollingProjectionBatch(chunk.Select(workItemFactory).ToArray(), options),
+                    _durableTaskOptions));
+            await Task.WhenAll(tasks);
+            onPageProcessed(ids.Count);
+
+            if (ids.Count < _pageSize)
+            {
                 break;
             }
         }
@@ -542,6 +723,351 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
 
         // initialize projections
         await _nostify.ProjectionInitializer.InitAsync(projections, _nostify, _httpClient, null, _cosmosRetryOptions);
+    }
+
+    /// <summary>
+    /// Replays and persists a non-destructive rolling projection batch.
+    /// </summary>
+    /// <param name="batch">Partition-aware work items and immutable rolling options.</param>
+    /// <param name="client">Optional Durable client used to observe cancellation.</param>
+    public async Task ProcessRollingBatch(
+        DurableRollingProjectionBatch batch,
+        DurableTaskClient? client = null)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+        ValidateSelectedProperties(batch.Options);
+
+        if (client != null && await IsCancellationRequestedAsync(client))
+        {
+            return;
+        }
+
+        foreach (DurableRollingProjectionWorkItem item in batch.Items)
+        {
+            if (client != null && await IsCancellationRequestedAsync(client))
+            {
+                return;
+            }
+
+            await ProcessRollingItemAsync(item, batch.Options);
+        }
+    }
+
+    private async Task ProcessRollingItemAsync(
+        DurableRollingProjectionWorkItem item,
+        DurableRollingProjectionOptions options)
+    {
+        Container projectionContainer = await _nostify.GetProjectionContainerAsync<TProjection>(options.PartitionKeyPath);
+        PartitionKey partitionKey = item.ToPartitionKey();
+
+        for (int conflictAttempt = 0; ; conflictAttempt++)
+        {
+            ItemResponse<TProjection>? existing = await ReadProjectionAsync(
+                projectionContainer,
+                item.Id,
+                partitionKey);
+            TProjection rebuilt = await RebuildProjectionAsync(item.Id, options.SelectedProperties);
+
+            try
+            {
+                if (existing == null)
+                {
+                    // A missing selective target must be complete, not a sparse selected-property document.
+                    if (options.IsSelective)
+                    {
+                        rebuilt = await RebuildProjectionAsync(item.Id, []);
+                    }
+
+                    rebuilt.initialized = true;
+                    await ExecuteCosmosWithThrottleRetryAsync(() => projectionContainer.CreateItemAsync(
+                        rebuilt,
+                        partitionKey));
+                }
+                else if (options.IsSelective)
+                {
+                    TProjection merged = MergeSelectedProperties(existing.Resource, rebuilt, options.SelectedProperties);
+                    await ExecuteCosmosWithThrottleRetryAsync(() => projectionContainer.ReplaceItemAsync(
+                        merged,
+                        item.Id.ToString(),
+                        partitionKey,
+                        new ItemRequestOptions { IfMatchEtag = existing.ETag }));
+                }
+                else
+                {
+                    rebuilt.initialized = true;
+                    await ExecuteCosmosWithThrottleRetryAsync(() => projectionContainer.ReplaceItemAsync(
+                        rebuilt,
+                        item.Id.ToString(),
+                        partitionKey,
+                        new ItemRequestOptions { IfMatchEtag = existing.ETag }));
+                }
+
+                return;
+            }
+            catch (CosmosException exception) when (
+                exception.StatusCode == HttpStatusCode.PreconditionFailed
+                || exception.StatusCode == HttpStatusCode.Conflict)
+            {
+                if (conflictAttempt < options.MaxEtagRetries)
+                {
+                    await Task.Delay(options.GetBackoff(conflictAttempt));
+                    continue;
+                }
+
+                if (_nostify.Logger != null)
+                {
+                    LogRollingFallback(
+                        _nostify.Logger,
+                        _instanceId,
+                        item.Id,
+                        conflictAttempt + 1,
+                        exception);
+                }
+
+                // The explicitly chosen hot-document policy favors completion and eventual consistency.
+                if (options.IsSelective)
+                {
+                    IReadOnlyList<PatchOperation> operations = CreateSelectedPatchOperations(
+                        rebuilt,
+                        options.SelectedProperties);
+                    await ExecuteCosmosWithThrottleRetryAsync(() => projectionContainer.PatchItemAsync<TProjection>(
+                        item.Id.ToString(),
+                        partitionKey,
+                        operations));
+                }
+                else
+                {
+                    rebuilt.initialized = true;
+                    await ExecuteCosmosWithThrottleRetryAsync(() => projectionContainer.UpsertItemAsync(
+                        rebuilt,
+                        partitionKey));
+                }
+
+                return;
+            }
+        }
+    }
+
+    private async Task<TProjection> RebuildProjectionAsync(
+        Guid id,
+        IReadOnlyList<string> selectedProperties)
+    {
+        Container eventStore = await _nostify.GetEventStoreContainerAsync();
+        IQueryable<Event> query = eventStore
+            .GetItemLinqQueryable<Event>()
+            .Where(item => item.aggregateRootId == id);
+        List<Event> baseEvents = await new RetryableQuery<Event>(query, _cosmosRetryOptions, _queryExecutor)
+            .ReadAllAsync();
+        List<Event> orderedBaseEvents = baseEvents
+            .OrderBy(item => item.timestamp)
+            .ThenBy(item => item.id)
+            .ToList();
+
+        // Always build complete state first because external-data selectors may depend on any base property.
+        var shadow = new TProjection();
+        foreach (Event @event in orderedBaseEvents)
+        {
+            shadow.Apply(@event);
+        }
+
+        List<Event> externalEvents = (await TProjection.GetExternalDataEventsAsync(
+                [shadow],
+                _nostify,
+                _httpClient,
+                null))
+            .Where(group => group.aggregateRootId == shadow.id)
+            .SelectMany(group => group.events)
+            .OrderBy(item => item.timestamp)
+            .ThenBy(item => item.id)
+            .ToList();
+
+        if (selectedProperties.Count == 0)
+        {
+            foreach (Event @event in externalEvents)
+            {
+                shadow.Apply(@event);
+            }
+
+            return shadow;
+        }
+
+        var selectedProjection = new TProjection();
+
+        // Preserve normal initialization semantics: replay all base events first, followed by
+        // external events. Each group is already ordered deterministically above.
+        foreach (Event @event in orderedBaseEvents)
+        {
+            Event? reduced = CreateReducedEvent(@event, selectedProperties);
+            if (reduced != null)
+            {
+                selectedProjection.Apply(reduced);
+            }
+        }
+
+        foreach (Event @event in externalEvents)
+        {
+            Event? reduced = CreateReducedEvent(@event, selectedProperties);
+            if (reduced != null)
+            {
+                selectedProjection.Apply(reduced);
+            }
+        }
+
+        return selectedProjection;
+    }
+
+    private static Event? CreateReducedEvent(Event source, IReadOnlyList<string> selectedProperties)
+    {
+        if (source.payload == null)
+        {
+            return null;
+        }
+
+        JObject sourcePayload = JObject.FromObject(source.payload);
+        var reducedPayload = new JObject();
+        JToken? idToken = sourcePayload[nameof(NostifyObject.id)];
+        if (idToken != null)
+        {
+            reducedPayload[nameof(NostifyObject.id)] = idToken.DeepClone();
+        }
+        else
+        {
+            reducedPayload[nameof(NostifyObject.id)] = source.aggregateRootId;
+        }
+
+        bool containsSelectedProperty = false;
+        foreach (string property in selectedProperties)
+        {
+            JToken? value = sourcePayload[property];
+            if (value != null)
+            {
+                reducedPayload[property] = value.DeepClone();
+                containsSelectedProperty = true;
+            }
+        }
+
+        if (!containsSelectedProperty)
+        {
+            return null;
+        }
+
+        return new Event
+        {
+            id = source.id,
+            aggregateRootId = source.aggregateRootId,
+            partitionKey = source.partitionKey,
+            userId = source.userId,
+            timestamp = source.timestamp,
+            eventType = source.eventType,
+            schemaVersion = source.schemaVersion,
+            payload = reducedPayload
+        };
+    }
+
+    private static TProjection MergeSelectedProperties(
+        TProjection existing,
+        TProjection rebuilt,
+        IReadOnlyList<string> selectedProperties)
+    {
+        foreach (string propertyName in selectedProperties)
+        {
+            PropertyInfo property = typeof(TProjection).GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance)!;
+            property.SetValue(existing, property.GetValue(rebuilt));
+        }
+
+        return existing;
+    }
+
+    private static PatchOperation[] CreateSelectedPatchOperations(
+        TProjection rebuilt,
+        IReadOnlyList<string> selectedProperties)
+        => selectedProperties
+            .Select(propertyName =>
+            {
+                PropertyInfo property = typeof(TProjection).GetProperty(
+                    propertyName,
+                    BindingFlags.Public | BindingFlags.Instance)!;
+                string escapedPath = propertyName.Replace("~", "~0", StringComparison.Ordinal)
+                    .Replace("/", "~1", StringComparison.Ordinal);
+                return PatchOperation.Set($"/{escapedPath}", property.GetValue(rebuilt));
+            })
+            .ToArray();
+
+    private static void ValidateSelectedProperties(DurableRollingProjectionOptions options)
+    {
+        string partitionProperty = options.PartitionKeyPath.TrimStart('/');
+        var protectedProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            nameof(NostifyObject.id),
+            nameof(NostifyObject.tenantId),
+            nameof(NostifyObject.ttl),
+            nameof(IProjection.initialized),
+            partitionProperty,
+            "_etag",
+            "_rid",
+            "_self",
+            "_attachments",
+            "_ts"
+        };
+
+        foreach (string propertyName in options.SelectedProperties)
+        {
+            PropertyInfo? property = typeof(TProjection).GetProperty(
+                propertyName,
+                BindingFlags.Public | BindingFlags.Instance);
+            if (property == null || property.SetMethod == null)
+            {
+                throw new ArgumentException(
+                    $"Selected property '{propertyName}' is not a writable public property on {typeof(TProjection).Name}.",
+                    nameof(options));
+            }
+
+            if (protectedProperties.Contains(propertyName))
+            {
+                throw new ArgumentException(
+                    $"Selected property '{propertyName}' is managed by Nostify or Cosmos and cannot be selectively rebuilt.",
+                    nameof(options));
+            }
+        }
+    }
+
+    private async Task<ItemResponse<TProjection>?> ReadProjectionAsync(
+        Container container,
+        Guid id,
+        PartitionKey partitionKey)
+    {
+        try
+        {
+            return await ExecuteCosmosWithThrottleRetryAsync(() => container.ReadItemAsync<TProjection>(
+                id.ToString(),
+                partitionKey));
+        }
+        catch (CosmosException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    private async Task<T> ExecuteCosmosWithThrottleRetryAsync<T>(Func<Task<T>> operation)
+    {
+        int throttleAttempt = 0;
+        while (true)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (CosmosException exception) when (
+                exception.StatusCode == HttpStatusCode.TooManyRequests
+                && throttleAttempt < _cosmosRetryOptions.MaxRetries)
+            {
+                TimeSpan delay = exception.RetryAfter is TimeSpan retryAfter && retryAfter > TimeSpan.Zero
+                    ? retryAfter
+                    : _cosmosRetryOptions.GetDelayForAttempt(throttleAttempt);
+                throttleAttempt++;
+                await Task.Delay(delay);
+            }
+        }
     }
 }
 

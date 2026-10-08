@@ -31,6 +31,21 @@ public class _ProjectionName_Init
         [DurableClient] DurableTaskClient client)
         => _initializer.StartOrchestration(req, client, nameof(Orchestrate_ProjectionName_Init));
 
+    /// <summary>
+    /// Starts a rolling rebuild without deleting existing projection documents.
+    /// The JSON body supplies the required <see cref="DurableRollingProjectionInput"/>.
+    /// </summary>
+    [Function(nameof(Rolling_ProjectionName_Init))]
+    public Task<HttpResponseData> Rolling_ProjectionName_Init(
+        [HttpTrigger("post", Route = "_ProjectionName_Init/rolling")] HttpRequestData req,
+        [FromBody] DurableRollingProjectionInput input,
+        [DurableClient] DurableTaskClient client)
+        => _initializer.StartRollingOrchestration(
+            req,
+            client,
+            nameof(OrchestrateRolling_ProjectionName_Init),
+            input);
+
     /// <summary>Cancels and purges the active projection rebuild, when one exists.</summary>
     [Function(nameof(Cancel_ProjectionName_Init))]
     public Task<HttpResponseData> Cancel_ProjectionName_Init(
@@ -49,6 +64,20 @@ public class _ProjectionName_Init
                 nameof(GetDistinctTenantIds__ProjectionName_),
                 nameof(Get_ReplaceMe_IdsForTenant__ProjectionName_),
                 nameof(Process_ProjectionName_Batch)),
+            context.CreateReplaySafeLogger<_ProjectionName_Init>());
+
+    /// <summary>Coordinates a non-destructive tenant-partitioned rolling rebuild.</summary>
+    [Function(nameof(OrchestrateRolling_ProjectionName_Init))]
+    public Task OrchestrateRolling_ProjectionName_Init(
+        [OrchestrationTrigger] TaskOrchestrationContext context)
+        => _initializer.OrchestrateRollingInitAsync(
+            context,
+            new DurableRollingTenantInitActivityNames(
+                nameof(GetDistinctTenantIds__ProjectionName_),
+                nameof(Get_ReplaceMe_IdsForTenant__ProjectionName_),
+                nameof(ProcessRolling_ProjectionName_Batch)),
+            context.GetInput<DurableRollingProjectionInput>()
+                ?? new DurableRollingProjectionInput(),
             context.CreateReplaySafeLogger<_ProjectionName_Init>());
 
     /// <summary>Deletes existing projection documents before rebuilding them.</summary>
@@ -76,4 +105,11 @@ public class _ProjectionName_Init
         [ActivityTrigger] List<Guid> ids,
         [DurableClient] DurableTaskClient client)
         => _initializer.ProcessBatch(ids, client);
+
+    /// <summary>Replays and conditionally persists one rolling projection batch.</summary>
+    [Function(nameof(ProcessRolling_ProjectionName_Batch))]
+    public Task ProcessRolling_ProjectionName_Batch(
+        [ActivityTrigger] DurableRollingProjectionBatch batch,
+        [DurableClient] DurableTaskClient client)
+        => _initializer.ProcessRollingBatch(batch, client);
 }

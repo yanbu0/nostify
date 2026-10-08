@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Functions.Worker;
@@ -2028,6 +2029,183 @@ public class DurableProjectionInitializerTests
             Assert.Equal(expectedPolicy.FirstRetryInterval, actualPolicy.FirstRetryInterval);
             Assert.Equal(expectedPolicy.BackoffCoefficient, actualPolicy.BackoffCoefficient);
         });
+    }
+
+    #endregion
+
+    #region Rolling Initialization Tests
+
+    [Fact]
+    public void DurableRollingProjectionOptions_NormalizesPropertiesAndBackoff()
+    {
+        var options = new DurableRollingProjectionOptions(
+            [" Name ", "Age", "Name"],
+            maxEtagRetries: 4,
+            initialBackoff: TimeSpan.FromMilliseconds(100),
+            backoffCoefficient: 3,
+            partitionKeyPath: "organizationId");
+
+        Assert.Equal(["Age", "Name"], options.SelectedProperties);
+        Assert.Equal(4, options.MaxEtagRetries);
+        Assert.Equal(TimeSpan.FromMilliseconds(900), options.GetBackoff(2));
+        Assert.Equal("/organizationId", options.PartitionKeyPath);
+        Assert.True(options.IsSelective);
+    }
+
+    [Fact]
+    public void DurableRollingProjectionBatch_SystemTextJsonRoundTrip_PreservesImmutablePayload()
+    {
+        Guid id = Guid.NewGuid();
+        var batch = new DurableRollingProjectionBatch(
+            [new DurableRollingProjectionWorkItem(id, "west", false)],
+            new DurableRollingProjectionOptions(
+                ["name"],
+                maxEtagRetries: 5,
+                initialBackoff: TimeSpan.FromMilliseconds(75),
+                backoffCoefficient: 1.5,
+                partitionKeyPath: "/region"));
+
+        string json = JsonSerializer.Serialize(batch);
+        DurableRollingProjectionBatch? restored =
+            JsonSerializer.Deserialize<DurableRollingProjectionBatch>(json);
+
+        Assert.NotNull(restored);
+        Assert.Equal(id, Assert.Single(restored!.Items).Id);
+        Assert.Equal("west", restored.Items[0].PartitionKey);
+        Assert.False(restored.Items[0].PartitionKeyIsGuid);
+        Assert.Equal(["name"], restored.Options.SelectedProperties);
+        Assert.Equal(5, restored.Options.MaxEtagRetries);
+        Assert.Equal(TimeSpan.FromMilliseconds(75), restored.Options.InitialBackoff);
+        Assert.Equal(1.5, restored.Options.BackoffCoefficient);
+        Assert.Equal("/region", restored.Options.PartitionKeyPath);
+    }
+
+    [Fact]
+    public async Task OrchestrateRollingInitAsync_DoesNotDeleteAndUsesPartitionAwareBatch()
+    {
+        Guid tenantId = Guid.NewGuid();
+        Guid projectionId = Guid.NewGuid();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+        DurableRollingProjectionBatch? capturedBatch = null;
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(name => name.Name == "GetTenants"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync([tenantId]);
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(name => name.Name == "GetIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync([projectionId]);
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(name => name.Name == "RollingBatch"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, payload, _) =>
+                capturedBatch = Assert.IsType<DurableRollingProjectionBatch>(payload))
+            .Returns(Task.CompletedTask);
+
+        var options = new DurableRollingProjectionOptions(["Name"]);
+        await CreateInitializer().OrchestrateRollingInitAsync(
+            contextMock.Object,
+            new DurableRollingTenantInitActivityNames("GetTenants", "GetIds", "RollingBatch"),
+            new DurableRollingProjectionInput(options));
+
+        Assert.NotNull(capturedBatch);
+        Assert.Same(options, capturedBatch!.Options);
+        DurableRollingProjectionWorkItem item = Assert.Single(capturedBatch.Items);
+        Assert.Equal(projectionId, item.Id);
+        Assert.Equal(tenantId.ToString(), item.PartitionKey);
+        Assert.True(item.PartitionKeyIsGuid);
+        contextMock.Verify(c => c.CallActivityAsync(
+            It.Is<TaskName>(name => name.Name.Contains("Delete", StringComparison.Ordinal)),
+            It.IsAny<object?>(),
+            It.IsAny<TaskOptions?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task OrchestrateRollingInitByPartitionAsync_UsesStringPartitionWorkItems()
+    {
+        Guid projectionId = Guid.NewGuid();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+        DurableRollingProjectionBatch? capturedBatch = null;
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(name => name.Name == "GetPartitions"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(["west"]);
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(name => name.Name == "GetIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync([projectionId]);
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(name => name.Name == "RollingBatch"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, payload, _) =>
+                capturedBatch = Assert.IsType<DurableRollingProjectionBatch>(payload))
+            .Returns(Task.CompletedTask);
+
+        await CreateInitializer().OrchestrateRollingInitByPartitionAsync(
+            contextMock.Object,
+            "GetPartitions",
+            "GetIds",
+            "RollingBatch",
+            new DurableRollingProjectionInput());
+
+        DurableRollingProjectionWorkItem item = Assert.Single(capturedBatch!.Items);
+        Assert.Equal("west", item.PartitionKey);
+        Assert.False(item.PartitionKeyIsGuid);
+    }
+
+    [Fact]
+    public async Task ProcessRollingBatch_WhenCancelled_DoesNotTouchProjectionContainer()
+    {
+        var clientMock = new Mock<DurableTaskClient>("test");
+        clientMock.Setup(c => c.GetInstanceAsync(
+                "test-instance",
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateMetadataWithStatus(OrchestrationRuntimeStatus.Terminated));
+        var batch = new DurableRollingProjectionBatch(
+            [new DurableRollingProjectionWorkItem(Guid.NewGuid(), Guid.NewGuid().ToString(), true)],
+            new DurableRollingProjectionOptions());
+
+        await CreateInitializer("test-instance").ProcessRollingBatch(batch, clientMock.Object);
+
+        _nostifyMock.Verify(
+            value => value.GetProjectionContainerAsync<TestProjection>(It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData("id")]
+    [InlineData("tenantId")]
+    [InlineData("ttl")]
+    [InlineData("initialized")]
+    [InlineData("_etag")]
+    public async Task ProcessRollingBatch_RejectsManagedSelectedProperties(string propertyName)
+    {
+        var batch = new DurableRollingProjectionBatch(
+            [],
+            new DurableRollingProjectionOptions([propertyName]));
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            CreateInitializer().ProcessRollingBatch(batch));
+    }
+
+    [Fact]
+    public async Task ProcessRollingBatch_RejectsUnknownSelectedProperty()
+    {
+        var batch = new DurableRollingProjectionBatch(
+            [],
+            new DurableRollingProjectionOptions(["DoesNotExist"]));
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            CreateInitializer().ProcessRollingBatch(batch));
     }
 
     #endregion

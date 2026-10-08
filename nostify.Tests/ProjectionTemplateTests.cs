@@ -27,6 +27,15 @@ public class ProjectionTemplateTests
         Assert.Contains("_initializer.GetIdsForTenant", source);
         Assert.Contains("[ActivityTrigger] List<Guid> ids", source);
         Assert.Contains("_initializer.ProcessBatch(ids, client)", source);
+        Assert.Contains("Rolling_ProjectionName_Init", source);
+        Assert.Contains("[FromBody] DurableRollingProjectionInput input", source);
+        Assert.DoesNotContain("ReadFromJsonAsync<DurableRollingProjectionInput>", source);
+        Assert.Contains("_initializer.StartRollingOrchestration", source);
+        Assert.Contains("_initializer.OrchestrateRollingInitAsync", source);
+        Assert.Contains("new DurableRollingTenantInitActivityNames(", source);
+        Assert.Contains("DurableRollingProjectionInput", source);
+        Assert.Contains("[ActivityTrigger] DurableRollingProjectionBatch batch", source);
+        Assert.Contains("_initializer.ProcessRollingBatch(batch, client)", source);
         Assert.DoesNotContain("DurableTenantInitBatch", source);
         Assert.DoesNotContain("Process_ProjectionName_BatchV2", source);
         Assert.DoesNotContain("Orchestrate_ProjectionName_InitV2", source);

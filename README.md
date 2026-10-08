@@ -81,6 +81,11 @@
  
 ### Updates
   
+- 5.2.0
+    - **Rolling Durable Projection Initialization**: Durable projection initialization can rebuild and upsert projections without deleting the container, allowing new projection fields to be backfilled without planned service disruption.
+    - **Selective Property Backfills**: Rolling initialization can replay only events containing selected payload properties and update only those fields on existing projections while fully reconstructing missing documents.
+    - **Optimistic Concurrency Protection**: Rolling writes use ETag-guarded retries with exponential backoff and an unconditional final write after bounded conflicts, while Cosmos throttling retries remain independent.
+    - **Projection Template Support**: Generated projection initializers include the rolling HTTP endpoint, orchestrator, and batch activity alongside the existing destructive initialization flow.
 - 5.1.0
     - **Safer Durable Projection Wiring**: Added `DurableTenantInitActivityNames` as the preferred, validated way to group tenant initialization activity names while retaining the positional-string overload and existing Durable Function names and payloads.
     - **Deterministic Projection Rebuilds**: Durable projection batches now retrieve events through `IQueryExecutor` and replay equal-timestamp events by event ID for stable ordering. Tenant partitioning remains limited to aggregate-ID discovery in the current-state container; event retrieval continues to use the event store's `aggregateRootId` partition key.
@@ -3390,8 +3395,8 @@ Initialize entire projection containers:
 ```C#
 // Initialize all projections in a container (rebuilds from event store)
 await nostify.InitContainerAsync<TestProjection, TestAggregate>(
-    httpClient, 
-    partitionKeyPath: "/tenantId", 
+    httpClient,
+    partitionKeyPath: "/tenantId",
     loopSize: 100
 );
 
@@ -3406,6 +3411,27 @@ await nostify.ProjectionInitializer.InitAsync<TestProjection>(
     pointInTime: null  // or DateTime for historical state
 );
 ```
+
+The APIs above retain their existing destructive/full-rebuild behavior. For a no-downtime backfill, the generated Durable projection initializer also exposes a rolling endpoint. Rolling initialization is Durable-only: it does not delete the projection container, does not remove orphaned documents, and rewrites each discovered projection while the service remains online.
+
+```http
+POST /api/TestProjection_Init/rolling
+Content-Type: application/json
+
+{
+  "options": {
+    "selectedProperties": ["newProperty", "anotherProperty"],
+    "maxEtagRetries": 3,
+    "initialBackoff": "00:00:01",
+    "backoffCoefficient": 2.0,
+    "partitionKeyPath": "/tenantId"
+  }
+}
+```
+
+Omit `selectedProperties` (or pass an empty list) for a full rolling rebuild. In selective mode, Nostify still reconstructs a complete shadow projection before discovering external-data dependencies, then replays cloned events whose payloads contain a selected property. Each replay payload is reduced to `id` plus the selected properties. Existing documents retain unselected fields and their current `initialized` value; a missing document is fully reconstructed and created instead of being written as a sparse document.
+
+Rolling writes use Cosmos ETags and bounded exponential conflict retries. Because the Cosmos SDK does not support `IfMatchEtag` for patch operations, selective conditional writes merge selected values into the point-read document and issue an ETag-guarded replace. If conflicts remain after the configured retries, full mode performs an unconditional upsert and selective mode performs an unconditional patch containing only selected paths. This intentionally favors completion and eventual consistency for hot documents. Cosmos 429 retries are handled independently and do not consume ETag conflict attempts.
 
 ### Rehydration and Point-in-Time Queries
 
