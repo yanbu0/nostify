@@ -31,14 +31,14 @@ public class TestProjection : NostifyObject, IProjection, IHasExternalData<TestP
         UpdateProperties<TestProjection>(e.payload);
     }
 
-    public static async Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<TestProjection> projections, INostify nostify, HttpClient? httpClient = null)
+    public static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(
+        List<TestProjection> projectionsToInit,
+        INostify nostify,
+        HttpClient? httpClient = null,
+        DateTime? pointInTime = null)
     {
-        // Mock implementation for fetching external data events
-        return await Task.FromResult(new List<ExternalDataEvent>());
-    }
-
-    public static Task<List<ExternalDataEvent>> GetExternalDataEventsAsync(List<TestProjection> projectionsToInit, INostify nostify, HttpClient? httpClient = null, DateTime? pointInTime = null)
-    {
-        throw new NotImplementedException();
+        // The shared test projection has no external dependencies. Returning an empty result from
+        // the interface's canonical overload also lets rolling replay tests exercise this path.
+        return Task.FromResult(new List<ExternalDataEvent>());
     }
 }

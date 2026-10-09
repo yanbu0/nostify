@@ -8,6 +8,10 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 
 Create and Update payloads are event-specific change sets, not complete aggregate snapshots. Clients **should send only properties intentionally set by the current event**. Omitted properties remain unchanged on Update and retain defaults on Create; present `null`, `false`, `0`, and empty values are explicit updates. Normal validation supports partial payloads while still enforcing `[Required]`, matching `[RequiredFor(...)]`, supplied-value constraints, and rejection of unknown properties. Do not disable validation merely to submit a partial payload. See [DefaultCommandHandler](DefaultCommandHandlers.spec.md), [Event](Event.spec.md), [EventFactory](EventFactory.spec.md), and [NostifyObject](NostifyObject.spec.md).
 
+### 5.2.0 Rolling Durable Projection Initialization
+
+`DurableProjectionInitializer<TProjection, TAggregate>` supports non-destructive rolling rebuilds in full-document and selected-property modes. Existing documents use ETag-guarded writes with bounded exponential-backoff retries and an unconditional final write after repeated live-write conflicts. Selected-property runs preserve unselected fields, fully reconstruct missing documents, and discover external dependencies from a complete shadow projection. The generated projection template exposes the rolling HTTP endpoint, orchestrator, and batch activity alongside the existing destructive workflow.
+
 ### 5.0.2 Optional Messaging Contract
 
 `NostifyFactory.Build()` and `Build<T>()` require Cosmos configuration but do not require `WithKafka()` or `WithEventHubs()`. Without messaging configuration, both methods return a Cosmos-only instance and the generic build skips Kafka topic administration. Producer access, publishing, and consumer creation throw an actionable `NostifyException` at point of use.
@@ -162,6 +166,7 @@ The default Cosmos partition-key path is `/tenantId`. Configure `WithHttp(...)` 
 
 ## Version History
 
+- **5.2.0** - Added non-destructive Durable rolling projection initialization, selected-property backfills, ETag conflict retries with exponential backoff and eventual unconditional fallback, and rolling endpoint/orchestrator/activity wiring in the projection template.
 - **5.1.0** - Added validated `DurableTenantInitActivityNames`, replay-safe projection progress logging, and deterministic timestamp-plus-event-ID replay ordering.
 - **5.0.2** - Made Kafka/Event Hubs optional at build time for Cosmos-only applications; generic builds without messaging skip topic administration; messaging-dependent operations fail with actionable point-of-use errors.
 - **5.0.1** - Migrated framework error events to canonical `ErrorEventType` definitions while preserving stable topic names, stored Saga JSON compatibility, and obsolete `ErrorCommand` source compatibility.

@@ -2,16 +2,18 @@
 
 ## Overview
 
-`DurableProjectionInitializer<TProjection, TAggregate>` coordinates full projection rebuilds using Azure Durable Functions orchestration. It is the recommended approach for large datasets where a single Azure Function execution would time out before all projections are initialized.
+`DurableProjectionInitializer<TProjection, TAggregate>` coordinates destructive and rolling projection rebuilds using Azure Durable Functions orchestration. It is the recommended approach for large datasets where a single Azure Function execution would time out before all projections are initialized.
 
 The class breaks the work into paged, concurrent batches partitioned by either tenant ID or an arbitrary Cosmos partition key, enforces that only one rebuild can run at a time (via a fixed orchestration instance ID), and exposes activity-level helper methods so the host Azure Function class remains thin.
 
-Two orchestrator entry points are provided so the class works with any container partitioning scheme:
+Four orchestrator entry points are provided so the class works with either rebuild policy and any supported container partitioning scheme:
 
-- `OrchestrateInitAsync` — convenience overload for aggregates partitioned by `tenantId` (`Guid`).
-- `OrchestrateInitByPartitionAsync` — general overload that works with any string-valued partition key.
+- `OrchestrateInitAsync` — destructive rebuild for aggregates partitioned by `tenantId` (`Guid`).
+- `OrchestrateInitByPartitionAsync` — destructive rebuild for any string-valued partition key.
+- `OrchestrateRollingInitAsync` — non-destructive rolling rebuild for `tenantId` partitioning.
+- `OrchestrateRollingInitByPartitionAsync` — non-destructive rolling rebuild for any string-valued partition key.
 
-The tenant overload internally delegates to the same per-partition page-loop helper used by the partition overload, so there is a single source of truth for paging, chunking, retries, and concurrency.
+The existing destructive APIs and all non-Durable initialization APIs remain unchanged. Rolling initialization is available only through `DurableProjectionInitializer` and its generated Durable Functions.
 
 ## Type Parameters
 
@@ -54,7 +56,19 @@ Task<HttpResponseData> StartOrchestration(
     string orchestratorName)
 ```
 
-Starts the durable orchestration. Returns **409 Conflict** (with a descriptive message) if an orchestration with the same `instanceId` is already `Running`; otherwise schedules a new orchestration and returns the standard **202 Accepted** check-status response (including a `Location` header and polling URLs).
+Starts the durable orchestration. Returns **409 Conflict** (with a descriptive message) if an orchestration with the same `instanceId` is active (`Running`, `Pending`, or `Suspended`); otherwise schedules a new orchestration and returns the standard **202 Accepted** check-status response (including a `Location` header and polling URLs).
+
+### StartRollingOrchestration
+
+```csharp
+Task<HttpResponseData> StartRollingOrchestration(
+    HttpRequestData req,
+    DurableTaskClient client,
+    string orchestratorName,
+    DurableRollingProjectionInput input)
+```
+
+Validates the rolling options, applies the same fixed-instance concurrency check as `StartOrchestration`, and schedules the rolling orchestrator with immutable serialized input. It returns **409 Conflict** when the instance is `Running`, `Pending`, or `Suspended`; otherwise it returns the standard **202 Accepted** check-status response.
 
 ### CancelOrchestration
 
@@ -64,7 +78,7 @@ Task<HttpResponseData> CancelOrchestration(
     DurableTaskClient client)
 ```
 
-Terminates a running orchestration (if any), waits for it to complete, and then purges the instance record. Always returns **200 OK**.
+Terminates an active orchestration (if any), waits for it to complete, and then purges the completed instance record. A suspended instance is resumed before termination so cancellation can complete. Always returns **200 OK**.
 
 ### OrchestrateInitAsync
 
@@ -114,13 +128,35 @@ General partition-key orchestrator body. Use this overload when the aggregate's 
 
 Both overloads share the same paging, chunking, retry, and concurrency behavior.
 
+### Rolling Orchestrations
+
+```csharp
+Task OrchestrateRollingInitAsync(
+    TaskOrchestrationContext context,
+    DurableRollingTenantInitActivityNames activities,
+    DurableRollingProjectionInput input,
+    ILogger? logger = null)
+
+Task OrchestrateRollingInitByPartitionAsync(
+    TaskOrchestrationContext context,
+    string getPartitionKeysActivityName,
+    string getIdsActivityName,
+    string processBatchActivityName,
+    DurableRollingProjectionInput input,
+    ILogger? logger = null)
+```
+
+Rolling orchestrations use the same aggregate discovery, stable paging, chunking, Durable activity retries, and concurrency limits as destructive orchestration. They never invoke a delete activity. Their process activities receive `DurableRollingProjectionBatch`, whose work items include both aggregate ID and physical partition key so activities can use Cosmos point reads and conditional writes.
+
+Rolling orchestration does not remove orphaned projection documents that no longer correspond to a current aggregate. Documents may temporarily contain mixed old and rebuilt values while a run is in progress.
+
 ### DeleteAllProjections
 
 ```csharp
-Task DeleteAllProjections()
+Task DeleteAllProjections(DurableTaskClient? client = null)
 ```
 
-Deletes every document of type `TProjection` from the bulk projection container. Intended to be called from the delete activity function.
+Deletes every document of type `TProjection` from the bulk projection container. When a Durable client is supplied, the method returns without touching the projection container if cancellation has been requested. Intended to be called from the delete activity function.
 
 ### GetDistinctTenantIds
 
@@ -159,10 +195,35 @@ Returns a page of aggregate IDs for an arbitrary Cosmos partition, ordered by `i
 ### ProcessBatch
 
 ```csharp
-Task ProcessBatch(List<Guid> ids)
+Task ProcessBatch(List<Guid> ids, DurableTaskClient? client = null)
 ```
 
-Retrieves events for the supplied aggregate IDs through `IQueryExecutor`, builds `TProjection` instances, and persists them via `ProjectionInitializer.InitAsync`. Each aggregate stream is replayed in ascending `timestamp` order with `id` as a deterministic tie-breaker. The method is intended to be called from the process-batch activity function shared by both orchestrators.
+Retrieves events for the supplied aggregate IDs through `IQueryExecutor`, builds `TProjection` instances, and persists them via `ProjectionInitializer.InitAsync`. Each aggregate stream is replayed in ascending `timestamp` order with `id` as a deterministic tie-breaker. When a Durable client is supplied, cancellation is checked before event retrieval and again before persistence. The method is intended to be called from the process-batch activity function shared by both destructive orchestrators.
+
+### ProcessRollingBatch
+
+```csharp
+Task ProcessRollingBatch(
+    DurableRollingProjectionBatch batch,
+    DurableTaskClient? client = null)
+```
+
+Processes each work item independently and observes cancellation between items. Events are queried by aggregate root ID and ordered deterministically by `timestamp`, then event `id`. Base events are replayed first; external events are discovered from the complete base-event shadow and replayed second, matching normal initialization semantics.
+
+In full mode, the rebuilt projection is ETag-replaced when the target exists or created when absent. In selective mode:
+
+1. A complete shadow is built from base events before external-data discovery, so selectors may depend on properties outside the selected set.
+2. Queried events are not mutated. Relevant events are cloned, and their payloads are reduced to `id` plus selected properties.
+3. Existing documents preserve unselected fields and `initialized`. Selected values are merged into the latest point-read resource and written with an ETag-guarded replace.
+4. Missing targets are fully reconstructed and created as complete projections.
+
+Cosmos patch operations do not support `IfMatchEtag`; therefore the conditional selective write is a merged replace rather than a patch. HTTP 409 and 412 responses consume the bounded ETag retry budget and use exponential backoff. After exhaustion, full mode performs an unconditional upsert while selective mode performs an unconditional patch of selected paths only. A structured warning identifies this hot-document fallback. HTTP 429 handling uses the independent Cosmos retry policy and does not consume conflict attempts; after the configured Cosmos retry count is exhausted, the 429 response propagates to fail the activity.
+
+## Rolling Contracts
+
+`DurableRollingProjectionOptions` contains normalized `SelectedProperties`, `MaxEtagRetries`, `InitialBackoff`, `BackoffCoefficient`, and `PartitionKeyPath`. An empty selected-property list means full mode. Selected properties must be writable public projection properties and cannot be identity, partition, initialization, TTL, or Cosmos system fields.
+
+`DurableRollingProjectionInput` wraps those options for orchestration serialization. `DurableRollingProjectionWorkItem` carries an aggregate ID, serialized physical partition-key value, and a flag identifying GUID partition keys. `DurableRollingProjectionBatch` combines work items with options. `DurableRollingTenantInitActivityNames` groups the three rolling tenant activity names; unlike destructive orchestration, it has no delete activity.
 
 ## DurableTenantInitActivityNames
 
@@ -208,21 +269,22 @@ public struct DurablePartitionInitPageInfo
 
 Lightweight input struct passed to `GetIdsForPartition`. Carries the partition key value as a `string` (so it can be serialized across Durable Function activity boundaries) and the zero-based page number. Reconstruct a `Microsoft.Azure.Cosmos.PartitionKey` via `new PartitionKey(request.PartitionKey)` if you need the strongly-typed value directly.
 
-## Usage — Template-generated Activity Class (Tenant-partitioned)
+## Usage — Template-generated Initializer Class (Tenant-partitioned)
 
-The `nostifyProjection` template generates a ready-to-use class (`_ProjectionName_DurableInit`) that:
+The `nostifyProjection` template generates a ready-to-use class (`_ProjectionName_Init`) that:
 
-- Injects `HttpClient`, `INostify`, and `ILogger` via constructor DI.
-- Constructs a `DurableProjectionInitializer` with `nameof(_ProjectionName_DurableInit)` as the instance ID.
-- Exposes a `POST` HTTP trigger to start the orchestration and a `DELETE` HTTP trigger to cancel it.
-- Wires the orchestrator and four activity functions (`DeleteAll`, `GetDistinctTenantIds`, `GetIdsForTenant`, `ProcessBatch`) to the corresponding helper methods.
+- Injects `HttpClient` and `INostify` via constructor DI.
+- Constructs a `DurableProjectionInitializer` with the generated initializer name as the instance ID.
+- Exposes the existing destructive `POST` endpoint, a rolling `POST .../rolling` endpoint, and the existing `DELETE` cancellation endpoint.
+- Wires the destructive orchestrator and activities without changing their contracts.
+- Wires a rolling orchestrator and `ProcessRollingBatch` activity that reuse tenant and aggregate-ID discovery but omit deletion.
 
 ```csharp
 public class MyProjectionDurableInit
 {
     private readonly DurableProjectionInitializer<MyProjection, MyAggregate> _initializer;
 
-    public MyProjectionDurableInit(HttpClient httpClient, INostify nostify, ILogger<MyProjectionDurableInit> logger)
+    public MyProjectionDurableInit(HttpClient httpClient, INostify nostify)
     {
         _initializer = new DurableProjectionInitializer<MyProjection, MyAggregate>(
             httpClient, nostify, nameof(MyProjectionDurableInit),
@@ -253,8 +315,10 @@ public class MyProjectionDurableInit
             context.CreateReplaySafeLogger<MyProjectionDurableInit>());
 
     [Function(nameof(DeleteAllMyProjection))]
-    public Task DeleteAllMyProjection([ActivityTrigger] TaskActivityContext context)
-        => _initializer.DeleteAllProjections();
+    public Task DeleteAllMyProjection(
+        [ActivityTrigger] TaskActivityContext context,
+        [DurableClient] DurableTaskClient client)
+        => _initializer.DeleteAllProjections(client);
 
     [Function(nameof(GetDistinctTenantIdsMyProjection))]
     public Task<List<Guid>> GetDistinctTenantIdsMyProjection([ActivityTrigger] TaskActivityContext context)
@@ -265,8 +329,37 @@ public class MyProjectionDurableInit
         => _initializer.GetIdsForTenant(request);
 
     [Function(nameof(ProcessMyProjectionBatch))]
-    public Task ProcessMyProjectionBatch([ActivityTrigger] List<Guid> ids)
-        => _initializer.ProcessBatch(ids);
+    public Task ProcessMyProjectionBatch(
+        [ActivityTrigger] List<Guid> ids,
+        [DurableClient] DurableTaskClient client)
+        => _initializer.ProcessBatch(ids, client);
+
+    [Function(nameof(RollingMyProjectionDurableInit))]
+    public Task<HttpResponseData> RollingMyProjectionDurableInit(
+        [HttpTrigger("post", Route = "MyProjectionDurableInit/rolling")] HttpRequestData req,
+        [FromBody] DurableRollingProjectionInput input,
+        [DurableClient] DurableTaskClient client)
+        => _initializer.StartRollingOrchestration(
+            req, client, nameof(OrchestrateRollingMyProjectionDurableInit), input);
+
+    [Function(nameof(OrchestrateRollingMyProjectionDurableInit))]
+    public Task OrchestrateRollingMyProjectionDurableInit(
+        [OrchestrationTrigger] TaskOrchestrationContext context)
+        => _initializer.OrchestrateRollingInitAsync(
+            context,
+            new DurableRollingTenantInitActivityNames(
+                nameof(GetDistinctTenantIdsMyProjection),
+                nameof(GetMyAggregateIdsForTenantMyProjection),
+                nameof(ProcessRollingMyProjectionBatch)),
+            context.GetInput<DurableRollingProjectionInput>()
+                ?? new DurableRollingProjectionInput(),
+            context.CreateReplaySafeLogger<MyProjectionDurableInit>());
+
+    [Function(nameof(ProcessRollingMyProjectionBatch))]
+    public Task ProcessRollingMyProjectionBatch(
+        [ActivityTrigger] DurableRollingProjectionBatch batch,
+        [DurableClient] DurableTaskClient client)
+        => _initializer.ProcessRollingBatch(batch, client);
 }
 ```
 
@@ -279,7 +372,7 @@ public class MyProjectionDurableInit
 {
     private readonly DurableProjectionInitializer<MyProjection, MyAggregate> _initializer;
 
-    public MyProjectionDurableInit(HttpClient httpClient, INostify nostify, ILogger<MyProjectionDurableInit> logger)
+    public MyProjectionDurableInit(HttpClient httpClient, INostify nostify)
     {
         _initializer = new DurableProjectionInitializer<MyProjection, MyAggregate>(
             httpClient, nostify, nameof(MyProjectionDurableInit));
