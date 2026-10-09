@@ -8,8 +8,24 @@ namespace nostify;
 /// <summary>
 /// Immutable options for a non-destructive Durable projection rebuild.
 /// </summary>
-public sealed class DurableRollingProjectionOptions
+public sealed class DurableRollingProjectionOptions : IJsonOnDeserialized
 {
+    private IReadOnlyList<string> _selectedProperties = [];
+    private int _maxEtagRetries = 3;
+    private TimeSpan _initialBackoff = TimeSpan.FromMilliseconds(250);
+    private double _backoffCoefficient = 2.0;
+    private string _partitionKeyPath = "/tenantId";
+    private bool _hasMaxEtagRetries;
+    private bool _hasInitialBackoff;
+    private bool _hasBackoffCoefficient;
+    private bool _hasPartitionKeyPath;
+
+    [JsonConstructor]
+    [Newtonsoft.Json.JsonConstructor]
+    private DurableRollingProjectionOptions()
+    {
+    }
+
     /// <summary>
     /// Creates rolling rebuild options.
     /// </summary>
@@ -27,71 +43,80 @@ public sealed class DurableRollingProjectionOptions
         double backoffCoefficient = 2.0,
         string partitionKeyPath = "/tenantId")
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(maxEtagRetries);
-        if (initialBackoff < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(initialBackoff));
-        }
+        var resolvedInitialBackoff = initialBackoff ?? TimeSpan.FromMilliseconds(250);
+        ValidateOptions(maxEtagRetries, resolvedInitialBackoff, backoffCoefficient, partitionKeyPath);
 
-        if (backoffCoefficient < 1.0 || double.IsNaN(backoffCoefficient) || double.IsInfinity(backoffCoefficient))
-        {
-            throw new ArgumentOutOfRangeException(nameof(backoffCoefficient));
-        }
-
-        ArgumentException.ThrowIfNullOrWhiteSpace(partitionKeyPath);
-
-        SelectedProperties = (selectedProperties ?? [])
-            .Select(property => property?.Trim())
-            .Where(property => !string.IsNullOrWhiteSpace(property))
-            .Select(property => property!)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(property => property, StringComparer.Ordinal)
-            .ToArray();
-        MaxEtagRetries = maxEtagRetries;
-        InitialBackoff = initialBackoff ?? TimeSpan.FromMilliseconds(250);
-        BackoffCoefficient = backoffCoefficient;
-        PartitionKeyPath = partitionKeyPath.StartsWith('/')
+        _selectedProperties = NormalizeSelectedProperties(selectedProperties);
+        _maxEtagRetries = maxEtagRetries;
+        _initialBackoff = resolvedInitialBackoff;
+        _backoffCoefficient = backoffCoefficient;
+        _partitionKeyPath = partitionKeyPath.StartsWith('/')
             ? partitionKeyPath
             : $"/{partitionKeyPath}";
     }
 
-    /// <summary>Creates rolling rebuild options from a serialized Durable payload.</summary>
-    /// <param name="selectedProperties">Projection properties to rebuild selectively.</param>
-    /// <param name="maxEtagRetries">Maximum optimistic-concurrency retries.</param>
-    /// <param name="initialBackoff">Delay before the first retry.</param>
-    /// <param name="backoffCoefficient">Exponential retry multiplier.</param>
-    /// <param name="partitionKeyPath">Projection container partition-key path.</param>
-    [JsonConstructor]
-    [Newtonsoft.Json.JsonConstructor]
-    public DurableRollingProjectionOptions(
-        IReadOnlyList<string>? selectedProperties,
-        int maxEtagRetries,
-        TimeSpan initialBackoff,
-        double backoffCoefficient,
-        string partitionKeyPath)
-        : this(
-            selectedProperties,
-            maxEtagRetries,
-            (TimeSpan?)initialBackoff,
-            backoffCoefficient,
-            partitionKeyPath)
+    /// <summary>Gets the normalized properties selected for replay.</summary>
+    [JsonInclude]
+    [Newtonsoft.Json.JsonProperty]
+    public IReadOnlyList<string> SelectedProperties
     {
+        get => _selectedProperties;
+        private set => _selectedProperties = NormalizeSelectedProperties(value);
     }
 
-    /// <summary>Gets the normalized properties selected for replay.</summary>
-    public IReadOnlyList<string> SelectedProperties { get; }
-
     /// <summary>Gets the maximum number of ETag conflict retries.</summary>
-    public int MaxEtagRetries { get; }
+    [JsonInclude]
+    [Newtonsoft.Json.JsonProperty]
+    public int MaxEtagRetries
+    {
+        get => _maxEtagRetries;
+        private set
+        {
+            _maxEtagRetries = value;
+            _hasMaxEtagRetries = true;
+        }
+    }
 
     /// <summary>Gets the delay before the first ETag conflict retry.</summary>
-    public TimeSpan InitialBackoff { get; }
+    [JsonInclude]
+    [Newtonsoft.Json.JsonProperty]
+    public TimeSpan InitialBackoff
+    {
+        get => _initialBackoff;
+        private set
+        {
+            _initialBackoff = value;
+            _hasInitialBackoff = true;
+        }
+    }
 
     /// <summary>Gets the exponential backoff coefficient.</summary>
-    public double BackoffCoefficient { get; }
+    [JsonInclude]
+    [Newtonsoft.Json.JsonProperty]
+    public double BackoffCoefficient
+    {
+        get => _backoffCoefficient;
+        private set
+        {
+            _backoffCoefficient = value;
+            _hasBackoffCoefficient = true;
+        }
+    }
 
     /// <summary>Gets the projection container partition-key path.</summary>
-    public string PartitionKeyPath { get; }
+    [JsonInclude]
+    [Newtonsoft.Json.JsonProperty]
+    public string PartitionKeyPath
+    {
+        get => _partitionKeyPath;
+        private set
+        {
+            _partitionKeyPath = string.IsNullOrWhiteSpace(value) || value.StartsWith('/')
+                ? value!
+                : $"/{value}";
+            _hasPartitionKeyPath = true;
+        }
+    }
 
     /// <summary>Gets a value indicating whether selected-property replay is enabled.</summary>
     public bool IsSelective => SelectedProperties.Count != 0;
@@ -103,6 +128,45 @@ public sealed class DurableRollingProjectionOptions
         return TimeSpan.FromMilliseconds(
             InitialBackoff.TotalMilliseconds * Math.Pow(BackoffCoefficient, attempt));
     }
+
+    void IJsonOnDeserialized.OnDeserialized() => ValidateDeserializedOptions();
+
+    [System.Runtime.Serialization.OnDeserialized]
+    private void OnNewtonsoftJsonDeserialized(System.Runtime.Serialization.StreamingContext context)
+        => ValidateDeserializedOptions();
+
+    private void ValidateDeserializedOptions()
+    {
+        if (!_hasMaxEtagRetries || !_hasInitialBackoff || !_hasBackoffCoefficient || !_hasPartitionKeyPath)
+        {
+            throw new ArgumentException("Serialized rolling projection options must include all retry settings and the partition key path.");
+        }
+
+        ValidateOptions(MaxEtagRetries, InitialBackoff, BackoffCoefficient, PartitionKeyPath);
+    }
+
+    private static void ValidateOptions(
+        int maxEtagRetries, TimeSpan initialBackoff, double backoffCoefficient, string partitionKeyPath)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxEtagRetries);
+        ArgumentOutOfRangeException.ThrowIfLessThan(initialBackoff, TimeSpan.Zero);
+
+        if (backoffCoefficient < 1.0 || double.IsNaN(backoffCoefficient) || double.IsInfinity(backoffCoefficient))
+        {
+            throw new ArgumentOutOfRangeException(nameof(backoffCoefficient));
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(partitionKeyPath);
+    }
+
+    private static string[] NormalizeSelectedProperties(IReadOnlyList<string>? selectedProperties)
+        => (selectedProperties ?? [])
+            .Select(property => property?.Trim())
+            .Where(property => !string.IsNullOrWhiteSpace(property))
+            .Select(property => property!)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(property => property, StringComparer.Ordinal)
+            .ToArray();
 }
 
 /// <summary>
