@@ -181,25 +181,38 @@ public class DurableProjectionInitializerTests
     public void DurableInitPageInfo_Constructor_SetsTenantId()
     {
         var tenantId = Guid.NewGuid();
-        var pageInfo = new DurableInitPageInfo(tenantId, 3);
+        var pageInfo = new DurableInitPageInfo(tenantId, Guid.NewGuid());
 
         Assert.Equal(tenantId, pageInfo.TenantId);
     }
 
     [Fact]
-    public void DurableInitPageInfo_Constructor_SetsPageNumber()
+    public void DurableInitPageInfo_Constructor_SetsLastSeenId()
     {
-        var pageInfo = new DurableInitPageInfo(Guid.NewGuid(), 5);
+        var lastSeenId = Guid.NewGuid();
+        var pageInfo = new DurableInitPageInfo(Guid.NewGuid(), lastSeenId);
 
-        Assert.Equal(5, pageInfo.PageNumber);
+        Assert.Equal(lastSeenId, pageInfo.LastSeenId);
     }
 
     [Fact]
-    public void DurableInitPageInfo_PageNumberZero_IsValid()
+    public void DurableInitPageInfo_FirstPage_HasNullLastSeenId()
     {
-        var pageInfo = new DurableInitPageInfo(Guid.NewGuid(), 0);
+        var pageInfo = new DurableInitPageInfo(Guid.NewGuid());
 
-        Assert.Equal(0, pageInfo.PageNumber);
+        Assert.Null(pageInfo.LastSeenId);
+    }
+
+    [Fact]
+    public void DurableInitPageInfo_RoundTripsThroughJsonSerialization()
+    {
+        var original = new DurableInitPageInfo(Guid.NewGuid(), Guid.NewGuid());
+
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(original);
+        var roundTripped = Newtonsoft.Json.JsonConvert.DeserializeObject<DurableInitPageInfo>(json);
+
+        Assert.Equal(original.TenantId, roundTripped.TenantId);
+        Assert.Equal(original.LastSeenId, roundTripped.LastSeenId);
     }
 
     #endregion
@@ -209,25 +222,38 @@ public class DurableProjectionInitializerTests
     [Fact]
     public void DurablePartitionInitPageInfo_Constructor_SetsPartitionKey()
     {
-        var pageInfo = new DurablePartitionInitPageInfo("org-123", 3);
+        var pageInfo = new DurablePartitionInitPageInfo("org-123", Guid.NewGuid());
 
         Assert.Equal("org-123", pageInfo.PartitionKey);
     }
 
     [Fact]
-    public void DurablePartitionInitPageInfo_Constructor_SetsPageNumber()
+    public void DurablePartitionInitPageInfo_Constructor_SetsLastSeenId()
     {
-        var pageInfo = new DurablePartitionInitPageInfo("org-123", 5);
+        var lastSeenId = Guid.NewGuid();
+        var pageInfo = new DurablePartitionInitPageInfo("org-123", lastSeenId);
 
-        Assert.Equal(5, pageInfo.PageNumber);
+        Assert.Equal(lastSeenId, pageInfo.LastSeenId);
     }
 
     [Fact]
-    public void DurablePartitionInitPageInfo_PageNumberZero_IsValid()
+    public void DurablePartitionInitPageInfo_FirstPage_HasNullLastSeenId()
     {
-        var pageInfo = new DurablePartitionInitPageInfo("org-123", 0);
+        var pageInfo = new DurablePartitionInitPageInfo("org-123");
 
-        Assert.Equal(0, pageInfo.PageNumber);
+        Assert.Null(pageInfo.LastSeenId);
+    }
+
+    [Fact]
+    public void DurablePartitionInitPageInfo_RoundTripsThroughJsonSerialization()
+    {
+        var original = new DurablePartitionInitPageInfo("org-123", Guid.NewGuid());
+
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(original);
+        var roundTripped = Newtonsoft.Json.JsonConvert.DeserializeObject<DurablePartitionInitPageInfo>(json);
+
+        Assert.Equal(original.PartitionKey, roundTripped.PartitionKey);
+        Assert.Equal(original.LastSeenId, roundTripped.LastSeenId);
     }
 
     [Fact]
@@ -235,7 +261,7 @@ public class DurableProjectionInitializerTests
     {
         // Common pattern: serialize a Guid partition key to its string form.
         var guid = Guid.NewGuid();
-        var pageInfo = new DurablePartitionInitPageInfo(guid.ToString(), 2);
+        var pageInfo = new DurablePartitionInitPageInfo(guid.ToString());
 
         Assert.Equal(guid.ToString(), pageInfo.PartitionKey);
     }
@@ -1140,7 +1166,7 @@ public class DurableProjectionInitializerTests
     [Fact]
     public async Task OrchestrateInitAsync_PassesDurableInitPageInfoToGetIds()
     {
-        // Verifies that GetIds receives a DurableInitPageInfo with the correct TenantId and page 0.
+        // Verifies that GetIds receives a DurableInitPageInfo with the correct TenantId and no cursor for the first page.
         var tenantId = Guid.NewGuid();
         var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
         DurableInitPageInfo? capturedPageInfo = null;
@@ -1177,14 +1203,14 @@ public class DurableProjectionInitializerTests
 
         Assert.NotNull(capturedPageInfo);
         Assert.Equal(tenantId, capturedPageInfo!.Value.TenantId);
-        Assert.Equal(0, capturedPageInfo!.Value.PageNumber);
+        Assert.Null(capturedPageInfo!.Value.LastSeenId);
     }
 
     [Fact]
-    public async Task OrchestrateInitAsync_WithMultiplePages_IncrementsPageNumber()
+    public async Task OrchestrateInitAsync_WithMultiplePages_PassesLastSeenIdCursor()
     {
         // batchSize=5, concurrentBatchCount=2 → pageSize=10
-        // First page full (10 ids) → page number increments; second page partial (3) → breaks
+        // First page full (10 ids) → cursor advances to its last id; second page partial (3) → breaks
         var tenantId = Guid.NewGuid();
         var fullPage = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid()).ToList();
         var partialPage = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToList();
@@ -1223,8 +1249,8 @@ public class DurableProjectionInitializerTests
             "DeleteActivity", "GetTenantIds", "GetIds", "ProcessBatch");
 
         Assert.Equal(2, capturedPageInfos.Count);
-        Assert.Equal(0, capturedPageInfos[0].PageNumber);
-        Assert.Equal(1, capturedPageInfos[1].PageNumber);
+        Assert.Null(capturedPageInfos[0].LastSeenId);
+        Assert.Equal(fullPage[^1], capturedPageInfos[1].LastSeenId);
     }
 
     [Fact]
@@ -1427,7 +1453,7 @@ public class DurableProjectionInitializerTests
     [Fact]
     public async Task OrchestrateInitByPartitionAsync_PassesDurablePartitionInitPageInfoToGetIds()
     {
-        // Verifies GetIds receives a DurablePartitionInitPageInfo carrying the correct partition key string and page 0.
+        // Verifies GetIds receives a DurablePartitionInitPageInfo carrying the correct partition key string and no cursor for the first page.
         const string partitionKey = "org-abc-123";
         var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
         DurablePartitionInitPageInfo? capturedPageInfo = null;
@@ -1464,7 +1490,7 @@ public class DurableProjectionInitializerTests
 
         Assert.NotNull(capturedPageInfo);
         Assert.Equal(partitionKey, capturedPageInfo!.Value.PartitionKey);
-        Assert.Equal(0, capturedPageInfo!.Value.PageNumber);
+        Assert.Null(capturedPageInfo!.Value.LastSeenId);
     }
 
     [Fact]
@@ -1513,7 +1539,7 @@ public class DurableProjectionInitializerTests
     }
 
     [Fact]
-    public async Task OrchestrateInitByPartitionAsync_WithMultiplePages_IncrementsPageNumberAndKeepsPartitionKey()
+    public async Task OrchestrateInitByPartitionAsync_WithMultiplePages_PassesLastSeenIdCursorAndKeepsPartitionKey()
     {
         // batchSize=5, concurrentBatchCount=2 → pageSize=10
         // First page full (10) → continue; second partial (3) → break
@@ -1555,8 +1581,8 @@ public class DurableProjectionInitializerTests
             "DeleteActivity", "GetPartitionKeys", "GetIds", "ProcessBatch");
 
         Assert.Equal(2, capturedPageInfos.Count);
-        Assert.Equal(0, capturedPageInfos[0].PageNumber);
-        Assert.Equal(1, capturedPageInfos[1].PageNumber);
+        Assert.Null(capturedPageInfos[0].LastSeenId);
+        Assert.Equal(fullPage[^1], capturedPageInfos[1].LastSeenId);
         Assert.All(capturedPageInfos, p => Assert.Equal(partitionKey, p.PartitionKey));
     }
 
@@ -1646,7 +1672,7 @@ public class DurableProjectionInitializerTests
     //   - GetDistinctTenantIds:    distinct tenant IDs are returned from the aggregate container
     //   - GetDistinctPartitionKeys: distinct partition values for an arbitrary selector are returned as strings
     //   - GetIdsForTenant:         delegates to GetIdsForPartition with tenantId.ToPartitionKey()
-    //   - GetIdsForPartition:      correct page-based pagination (Skip/Take) per partition
+    //   - GetIdsForPartition:      correct cursor-based pagination (id > lastSeenId, Take) per partition
     //   - ProcessBatch:            events are fetched, applied to projections, and InitAsync is called
     //   - cosmosRetryOptions:      custom RetryOptions are forwarded to every WithRetry(...) call inside
     //                              DeleteAllProjections, GetDistinctTenantIds, GetDistinctPartitionKeys,
@@ -2159,6 +2185,181 @@ public class DurableProjectionInitializerTests
         DurableRollingProjectionWorkItem item = Assert.Single(capturedBatch!.Items);
         Assert.Equal("west", item.PartitionKey);
         Assert.False(item.PartitionKeyIsGuid);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task OrchestrateRollingInitAsync_WithInsertsAndDeletesBetweenPages_ProcessesEachOriginalIdOnce(bool deleteProcessed, bool insertBehindCursor)
+    {
+        // pageSize = 5 * 2 = 10. A live store is emulated with Cosmos semantics (string-ordered ids,
+        // id > lastSeenId). Between pages an earlier-page aggregate is deleted and a new aggregate is
+        // inserted before the page boundary; offset paging would skip or duplicate ids here.
+        Guid tenantId = Guid.NewGuid();
+        var store = new LiveIdStore(25, deleteProcessed, insertBehindCursor);
+        var processed = new List<Guid>();
+        var cursors = new List<Guid?>();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(name => name.Name == "GetTenants"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync([tenantId]);
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(name => name.Name == "GetIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Returns<TaskName, object?, TaskOptions?>((_, input, _) =>
+            {
+                var page = Assert.IsType<DurableInitPageInfo>(input);
+                Assert.Equal(tenantId, page.TenantId);
+                cursors.Add(page.LastSeenId);
+                return Task.FromResult(store.NextPage(page.LastSeenId, 10));
+            });
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(name => name.Name == "RollingBatch"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, payload, _) =>
+            {
+                var batch = Assert.IsType<DurableRollingProjectionBatch>(payload);
+                processed.AddRange(batch.Items.Select(item => item.Id));
+                store.MutateAfterFirstPage();
+            })
+            .Returns(Task.CompletedTask);
+
+        await CreateInitializer(batchSize: 5, concurrentBatchCount: 2).OrchestrateRollingInitAsync(
+            contextMock.Object,
+            new DurableRollingTenantInitActivityNames("GetTenants", "GetIds", "RollingBatch"),
+            new DurableRollingProjectionInput());
+
+        Assert.Null(cursors[0]);
+        // Every original aggregate (including the one deleted after it was processed) is handled exactly once;
+        // the id inserted behind the cursor is not re-read and nothing is duplicated.
+        Assert.Equal(processed.Distinct().Count(), processed.Count);
+        Assert.Equal(store.Original.OrderBy(id => id), processed.OrderBy(id => id));
+        Assert.Empty(store.Ids.Except(processed).Except(store.InsertedBeforeCursor));
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task OrchestrateRollingInitByPartitionAsync_WithInsertsAndDeletesBetweenPages_ProcessesEachLiveIdOnce(bool deleteProcessed, bool insertBehindCursor)
+    {
+        var store = new LiveIdStore(25, deleteProcessed, insertBehindCursor);
+        var processed = new List<Guid>();
+        var contextMock = new Mock<TaskOrchestrationContext>();
+
+        contextMock.Setup(c => c.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(name => name.Name == "GetPartitions"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .ReturnsAsync(["west"]);
+        contextMock.Setup(c => c.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(name => name.Name == "GetIds"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Returns<TaskName, object?, TaskOptions?>((_, input, _) =>
+            {
+                var page = Assert.IsType<DurablePartitionInitPageInfo>(input);
+                Assert.Equal("west", page.PartitionKey);
+                return Task.FromResult(store.NextPage(page.LastSeenId, 10));
+            });
+        contextMock.Setup(c => c.CallActivityAsync(
+                It.Is<TaskName>(name => name.Name == "RollingBatch"),
+                It.IsAny<object?>(),
+                It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, payload, _) =>
+            {
+                var batch = Assert.IsType<DurableRollingProjectionBatch>(payload);
+                processed.AddRange(batch.Items.Select(item => item.Id));
+                store.MutateAfterFirstPage();
+            })
+            .Returns(Task.CompletedTask);
+
+        await CreateInitializer(batchSize: 5, concurrentBatchCount: 2).OrchestrateRollingInitByPartitionAsync(
+            contextMock.Object,
+            "GetPartitions",
+            "GetIds",
+            "RollingBatch",
+            new DurableRollingProjectionInput());
+
+        // Every original aggregate (including the one deleted after it was processed) is handled exactly once;
+        // the id inserted behind the cursor is not re-read and nothing is duplicated.
+        Assert.Equal(processed.Distinct().Count(), processed.Count);
+        Assert.Equal(store.Original.OrderBy(id => id), processed.OrderBy(id => id));
+        Assert.Empty(store.Ids.Except(processed).Except(store.InsertedBeforeCursor));
+    }
+
+    /// <summary>
+    /// Emulates a live aggregate container queried with cursor semantics matching Cosmos
+    /// (ids ordered and compared as strings). After the first page is processed, optionally one
+    /// already-processed id is deleted and/or one new id is inserted before the page boundary.
+    /// </summary>
+    private sealed class LiveIdStore
+    {
+        private readonly bool _deleteProcessed;
+        private readonly bool _insertBehindCursor;
+        private bool _mutated;
+
+        public LiveIdStore(int count, bool deleteProcessed, bool insertBehindCursor)
+        {
+            _deleteProcessed = deleteProcessed;
+            _insertBehindCursor = insertBehindCursor;
+            Ids = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
+            Original = Ids.ToList();
+        }
+
+        public List<Guid> Original { get; }
+
+        public List<Guid> Ids { get; }
+
+        public List<Guid> InsertedBeforeCursor { get; } = new();
+
+        private List<Guid> Ordered => Ids.OrderBy(id => id.ToString(), StringComparer.Ordinal).ToList();
+
+        public List<Guid> NextPage(Guid? lastSeenId, int pageSize)
+            => Ordered
+                .Where(id => lastSeenId is null
+                    || string.CompareOrdinal(id.ToString(), lastSeenId.Value.ToString()) > 0)
+                .Take(pageSize)
+                .ToList();
+
+        public void MutateAfterFirstPage()
+        {
+            if (_mutated)
+            {
+                return;
+            }
+
+            _mutated = true;
+            List<Guid> ordered = Ordered;
+            if (_deleteProcessed)
+            {
+                // Delete an aggregate from the first page: offset paging would then skip one id.
+                Ids.Remove(ordered[0]);
+            }
+
+            if (!_insertBehindCursor)
+            {
+                return;
+            }
+
+            // Insert an aggregate sorting before the first page's last id: offset paging would then
+            // re-read a boundary id. A cursor correctly ignores it (it belongs to an already-read range).
+            string boundary = ordered[9].ToString();
+            Guid inserted;
+            do
+            {
+                inserted = Guid.NewGuid();
+            }
+            while (string.CompareOrdinal(inserted.ToString(), boundary) >= 0);
+            Ids.Add(inserted);
+            InsertedBeforeCursor.Add(inserted);
+        }
     }
 
     [Fact]
