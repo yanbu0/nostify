@@ -766,18 +766,17 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
                 projectionContainer,
                 item.Id,
                 partitionKey);
-            TProjection rebuilt = await RebuildProjectionAsync(item.Id, options.SelectedProperties);
+
+            // A missing selective target must be complete, not a sparse selected-property document.
+            // Choose the full property set before rebuilding so the event-store query and
+            // external-data lookup run only once per attempt.
+            IReadOnlyList<string> rebuildProperties = existing == null ? [] : options.SelectedProperties;
+            TProjection rebuilt = await RebuildProjectionAsync(item.Id, rebuildProperties);
 
             try
             {
                 if (existing == null)
                 {
-                    // A missing selective target must be complete, not a sparse selected-property document.
-                    if (options.IsSelective)
-                    {
-                        rebuilt = await RebuildProjectionAsync(item.Id, []);
-                    }
-
                     rebuilt.initialized = true;
                     await ExecuteCosmosWithThrottleRetryAsync(() => projectionContainer.CreateItemAsync(
                         rebuilt,
