@@ -2191,7 +2191,7 @@ public class DurableProjectionInitializerTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public async Task OrchestrateRollingInitAsync_WithInsertsAndDeletesBetweenPages_ProcessesEachLiveIdOnce(bool deleteProcessed, bool insertBehindCursor)
+    public async Task OrchestrateRollingInitAsync_WithInsertsAndDeletesBetweenPages_ProcessesEachOriginalIdOnce(bool deleteProcessed, bool insertBehindCursor)
     {
         // pageSize = 5 * 2 = 10. A live store is emulated with Cosmos semantics (string-ordered ids,
         // id > lastSeenId). Between pages an earlier-page aggregate is deleted and a new aggregate is
