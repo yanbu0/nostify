@@ -4,6 +4,8 @@
     <PackageId>nostify</PackageId>
     <Version>5.2.0</Version>
     <Authors>Travis Boyle</Authors>
+    <RepositoryUrl>https://github.com/yanbu0/nostify</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <Company>
     </Company>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
