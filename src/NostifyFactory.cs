@@ -171,6 +171,7 @@ public static class NostifyFactory
     public static NostifyConfig WithKafka(this NostifyConfig config, ProducerConfig producerConfig)
     {
         ArgumentNullException.ThrowIfNull(producerConfig);
+        ArgumentException.ThrowIfNullOrWhiteSpace(producerConfig.BootstrapServers);
 
         config.producerConfig = producerConfig;
         config.kafkaUrl = producerConfig.BootstrapServers;
@@ -191,6 +192,8 @@ public static class NostifyFactory
     /// </summary>
     public static NostifyConfig WithKafka(this NostifyConfig config, string kafkaUrl, string? kafkaUserName = null, string? kafkaPassword = null, int kafkaTopicAutoCreatePartitions = 2)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(kafkaUrl);
+
         config.kafkaTopicAutoCreatePartitions = kafkaTopicAutoCreatePartitions;
 
         config.kafkaUrl = kafkaUrl;
@@ -226,6 +229,8 @@ public static class NostifyFactory
     /// </summary>
     public static NostifyConfig WithEventHubs(this NostifyConfig config, string eventHubsConnectionString, bool diagnosticLogging = false, int kafkaTopicAutoCreatePartitions = 2)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventHubsConnectionString);
+
         // Parse Event Hubs connection string to extract namespace
         var connectionStringParts = eventHubsConnectionString.Split(';');
         string endpoint = connectionStringParts.FirstOrDefault(p => p.StartsWith("Endpoint=", StringComparison.Ordinal))?.Replace("Endpoint=sb://", "", StringComparison.Ordinal).Replace("/", "", StringComparison.Ordinal) ?? "";
