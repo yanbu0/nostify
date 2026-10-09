@@ -130,6 +130,36 @@ public class WorkerConfigurationExtensionsTests
         Assert.IsAssignableFrom<ArgumentException>(exception.GetBaseException());
     }
 
+    [Theory]
+    [InlineData(false, "maxEtagRetries")]
+    [InlineData(true, "maxEtagRetries")]
+    [InlineData(false, "initialBackoff")]
+    [InlineData(true, "initialBackoff")]
+    [InlineData(false, "backoffCoefficient")]
+    [InlineData(true, "backoffCoefficient")]
+    [InlineData(false, "partitionKeyPath")]
+    [InlineData(true, "partitionKeyPath")]
+    public async Task RollingProjectionInput_RequestDeserialization_MissingRequiredOptionFailsValidation(
+        bool useWorkerSerializer, string missingOption)
+    {
+        var options = new Dictionary<string, object?>
+        {
+            ["maxEtagRetries"] = 5,
+            ["initialBackoff"] = TimeSpan.FromMilliseconds(75),
+            ["backoffCoefficient"] = 1.5,
+            ["partitionKeyPath"] = "/region"
+        };
+        options.Remove(missingOption);
+        string json = SystemTextJsonSerializer.Serialize(
+            new { options },
+            WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+
+        var exception = await Record.ExceptionAsync(() => DeserializeRollingRequest(json, useWorkerSerializer));
+
+        Assert.NotNull(exception);
+        Assert.IsAssignableFrom<ArgumentException>(exception.GetBaseException());
+    }
+
     private static async Task<DurableRollingProjectionInput> DeserializeRollingRequest(
         string json, bool useWorkerSerializer)
     {
