@@ -81,6 +81,8 @@
  
 ### Updates
   
+- 5.2.1
+    - **Stable Rolling Rebuild Paging**: Durable projection initialization pages aggregate IDs with a last-seen-ID cursor (`id > lastSeenId`) instead of `Skip`/`Take` offsets, so aggregates inserted or deleted during a rolling rebuild are no longer skipped or processed twice. `DurableInitPageInfo` and `DurablePartitionInitPageInfo` replace `PageNumber` with an optional `LastSeenId`, and `GetIdsForPartition(PartitionKey, Guid?)` replaces the page-number overload.
 - 5.2.0
     - **Rolling Durable Projection Initialization**: Durable projection initialization can rebuild and upsert projections without deleting the container, allowing new projection fields to be backfilled without planned service disruption.
     - **Selective Property Backfills**: Rolling initialization can replay only events containing selected payload properties and update only those fields on existing projections while fully reconstructing missing documents.
