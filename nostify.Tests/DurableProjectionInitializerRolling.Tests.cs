@@ -276,6 +276,116 @@ public sealed class DurableProjectionInitializerRollingTests
     }
 
     [Fact]
+    public async Task ProcessRollingBatch_SelectiveMissingDocument_PerformsSingleReplaySetup()
+    {
+        Guid id = Guid.NewGuid();
+        Event source = CreateEvent(id, new { id, name = "selected", description = "required-full-state" });
+        int externalLookupCount = 0;
+        RollingProjection.ExternalEventsFactory = _ =>
+        {
+            externalLookupCount++;
+            return
+            [
+                new ExternalDataEvent(id,
+                [
+                    CreateEvent(id, new { id, history = "external" }, timestamp: DateTime.UnixEpoch.AddSeconds(5))
+                ])
+            ];
+        };
+
+        try
+        {
+            var projectionContainer = new Mock<Container>();
+            projectionContainer
+                .Setup(container => container.ReadItemAsync<RollingProjection>(
+                    id.ToString(), It.IsAny<PartitionKey>(), null, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new CosmosException("missing", HttpStatusCode.NotFound, 0, string.Empty, 0));
+
+            RollingProjection? created = null;
+            projectionContainer
+                .Setup(container => container.CreateItemAsync(
+                    It.IsAny<RollingProjection>(), It.IsAny<PartitionKey>(),
+                    It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+                .Callback<RollingProjection, PartitionKey?, ItemRequestOptions, CancellationToken>(
+                    (projection, _, _, _) => created = projection)
+                .ReturnsAsync(CreateResponse(new RollingProjection()));
+
+            DurableProjectionInitializer<RollingProjection, RollingAggregate> initializer =
+                CreateInitializer([source], projectionContainer, out Mock<INostify> nostify);
+
+            await initializer.ProcessRollingBatch(CreateBatch(id, [nameof(RollingProjection.name)]));
+
+            Assert.NotNull(created);
+            Assert.Equal("selected", created!.name);
+            Assert.Equal("required-full-state", created.description);
+            Assert.Equal("external", created.history);
+            Assert.True(created.initialized);
+            Assert.Equal(1, externalLookupCount);
+            nostify.Verify(value => value.GetEventStoreContainerAsync(It.IsAny<bool>()), Times.Once);
+        }
+        finally
+        {
+            RollingProjection.ExternalEventsFactory = null;
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProcessRollingBatch_ExistingDocument_PerformsSingleReplaySetup(bool selective)
+    {
+        Guid id = Guid.NewGuid();
+        Event source = CreateEvent(id, new { id, name = "rebuilt", description = "event-description" });
+        int externalLookupCount = 0;
+        RollingProjection.ExternalEventsFactory = _ =>
+        {
+            externalLookupCount++;
+            return [];
+        };
+
+        try
+        {
+            var projectionContainer = new Mock<Container>();
+            projectionContainer
+                .Setup(container => container.ReadItemAsync<RollingProjection>(
+                    id.ToString(), It.IsAny<PartitionKey>(), null, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateResponse(
+                    new RollingProjection { id = id, name = "old", description = "preserve-me", initialized = false },
+                    "etag"));
+
+            RollingProjection? replaced = null;
+            projectionContainer
+                .Setup(container => container.ReplaceItemAsync(
+                    It.IsAny<RollingProjection>(), id.ToString(), It.IsAny<PartitionKey>(),
+                    It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+                .Callback<RollingProjection, string, PartitionKey?, ItemRequestOptions, CancellationToken>(
+                    (projection, _, _, _, _) => replaced = projection)
+                .ReturnsAsync(CreateResponse(new RollingProjection()));
+
+            DurableProjectionInitializer<RollingProjection, RollingAggregate> initializer =
+                CreateInitializer([source], projectionContainer, out Mock<INostify> nostify);
+
+            await initializer.ProcessRollingBatch(CreateBatch(
+                id,
+                selective ? [nameof(RollingProjection.name)] : null));
+
+            Assert.NotNull(replaced);
+            Assert.Equal("rebuilt", replaced!.name);
+            Assert.Equal(selective ? "preserve-me" : "event-description", replaced.description);
+            Assert.Equal(!selective, replaced.initialized);
+            Assert.Equal(1, externalLookupCount);
+            nostify.Verify(value => value.GetEventStoreContainerAsync(It.IsAny<bool>()), Times.Once);
+            projectionContainer.Verify(container => container.CreateItemAsync(
+                It.IsAny<RollingProjection>(), It.IsAny<PartitionKey>(),
+                It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+        finally
+        {
+            RollingProjection.ExternalEventsFactory = null;
+        }
+    }
+
+    [Fact]
     public async Task ProcessRollingBatch_ThrottleAndConflictRetries_AreIndependent()
     {
         Guid id = Guid.NewGuid();
@@ -466,9 +576,16 @@ public sealed class DurableProjectionInitializerRollingTests
         List<Event> events,
         Mock<Container> projectionContainer,
         RetryOptions? retryOptions = null)
+        => CreateInitializer(events, projectionContainer, out _, retryOptions);
+
+    private static DurableProjectionInitializer<RollingProjection, RollingAggregate> CreateInitializer(
+        List<Event> events,
+        Mock<Container> projectionContainer,
+        out Mock<INostify> nostify,
+        RetryOptions? retryOptions = null)
     {
         Mock<Container> eventContainer = CosmosTestHelpers.CreateMockContainer(events);
-        var nostify = new Mock<INostify>();
+        nostify = new Mock<INostify>();
         nostify.Setup(value => value.GetEventStoreContainerAsync(It.IsAny<bool>()))
             .ReturnsAsync(eventContainer.Object);
         nostify.Setup(value => value.GetProjectionContainerAsync<RollingProjection>(It.IsAny<string>()))

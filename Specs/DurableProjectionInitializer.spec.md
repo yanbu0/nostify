@@ -215,7 +215,7 @@ In full mode, the rebuilt projection is ETag-replaced when the target exists or 
 1. A complete shadow is built from base events before external-data discovery, so selectors may depend on properties outside the selected set.
 2. Queried events are not mutated. Relevant events are cloned, and their payloads are reduced to `id` plus selected properties.
 3. Existing documents preserve unselected fields and `initialized`. Selected values are merged into the latest point-read resource and written with an ETag-guarded replace.
-4. Missing targets are fully reconstructed and created as complete projections.
+4. Missing targets are fully reconstructed and created as complete projections. The point-read happens before replay, so a missing target selects the full property set up front and each attempt performs only one event-store query and one external-data lookup.
 
 Cosmos patch operations do not support `IfMatchEtag`; therefore the conditional selective write is a merged replace rather than a patch. HTTP 409 and 412 responses consume the bounded ETag retry budget and use exponential backoff. After exhaustion, full mode performs an unconditional upsert while selective mode performs an unconditional patch of selected paths only. A structured warning identifies this hot-document fallback. HTTP 429 handling uses the independent Cosmos retry policy and does not consume conflict attempts; after the configured Cosmos retry count is exhausted, the 429 response propagates to fail the activity.
 
