@@ -62,6 +62,7 @@ public sealed class DurableRollingProjectionOptions
     /// <param name="backoffCoefficient">Exponential retry multiplier.</param>
     /// <param name="partitionKeyPath">Projection container partition-key path.</param>
     [JsonConstructor]
+    [Newtonsoft.Json.JsonConstructor]
     public DurableRollingProjectionOptions(
         IReadOnlyList<string>? selectedProperties,
         int maxEtagRetries,
@@ -116,10 +117,12 @@ public sealed class DurableRollingProjectionInput
     }
 
     /// <summary>Creates orchestration input.</summary>
-    /// <param name="options">Rolling rebuild options.</param>
-    public DurableRollingProjectionInput(DurableRollingProjectionOptions options)
+    /// <param name="options">Rolling rebuild options, or null to use defaults.</param>
+    [JsonConstructor]
+    [Newtonsoft.Json.JsonConstructor]
+    public DurableRollingProjectionInput(DurableRollingProjectionOptions? options)
     {
-        Options = options ?? throw new ArgumentNullException(nameof(options));
+        Options = options ?? new DurableRollingProjectionOptions();
     }
 
     /// <summary>Gets the rolling rebuild options.</summary>

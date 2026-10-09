@@ -3429,6 +3429,8 @@ Content-Type: application/json
 }
 ```
 
+Post `{}` (or `{"options": null}`) to use all default rolling options. When supplying an `options` object, include the retry settings and partition-key path as shown above; invalid or incomplete options such as `{"options": {}}` are rejected by constructor validation rather than silently replaced with defaults. `initialBackoff` is a TimeSpan string.
+
 Omit `selectedProperties` (or pass an empty list) for a full rolling rebuild. In selective mode, Nostify still reconstructs a complete shadow projection before discovering external-data dependencies, then replays cloned events whose payloads contain a selected property. Each replay payload is reduced to `id` plus the selected properties. Existing documents retain unselected fields and their current `initialized` value; a missing document is fully reconstructed and created instead of being written as a sparse document.
 
 Rolling writes use Cosmos ETags and bounded exponential conflict retries. Because the Cosmos SDK does not support `IfMatchEtag` for patch operations, selective conditional writes merge selected values into the point-read document and issue an ETag-guarded replace. If conflicts remain after the configured retries, full mode performs an unconditional upsert and selective mode performs an unconditional patch containing only selected paths. This intentionally favors completion and eventual consistency for hot documents. Cosmos 429 retries are handled independently and do not consume ETag conflict attempts.
