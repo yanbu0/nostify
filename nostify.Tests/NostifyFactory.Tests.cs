@@ -175,6 +175,26 @@ public class NostifyFactoryTests
         Assert.Contains("Nostify-", GetProducerConfigValue(config, "client.id"));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void WithKafka_WithBlankUrl_ShouldThrowArgumentException(string kafkaUrl)
+    {
+        Assert.Throws<ArgumentException>(() => NostifyFactory.WithKafka(kafkaUrl));
+    }
+
+    [Fact]
+    public void WithEventHubs_WithBlankConnectionString_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => NostifyFactory.WithEventHubs(" "));
+    }
+
+    [Fact]
+    public void WithKafka_WithProducerConfigWithoutBootstrapServers_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentNullException>(() => NostifyFactory.WithKafka(new ProducerConfig()));
+    }
+
     [Fact]
     public void WithKafka_WithCredentials_ShouldConfigureSaslSettings()
     {
