@@ -87,8 +87,8 @@ public interface INostify
     ///<summary>
     /// Default retry options applied by retry-enabled default event handlers and bulk command handlers when no
     /// explicit <see cref="RetryOptions"/> are provided and <c>allowRetry</c> is <c>true</c>. Configured via
-    /// <see cref="NostifyFactory.WithCosmos(string, string, string, bool?, int?, bool, RetryOptions?)"/> or defaults to <c>new RetryOptions()</c>
-    /// (3 retries, 1 s delay, exponential backoff).
+    /// <see cref="NostifyFactory.WithCosmos(string, string, string, bool?, int?, bool, RetryOptions?)"/>
+    /// or defaults to <c>new RetryOptions()</c> (3 retries, 1 s delay, exponential backoff).
     ///</summary>
     RetryOptions DefaultRetryOptions { get; }
 

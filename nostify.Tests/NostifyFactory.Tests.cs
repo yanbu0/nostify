@@ -70,6 +70,62 @@ public class NostifyFactoryTests
     }
 
     [Fact]
+    public void WithCosmos_LegacyStaticAndExtensionSignaturesRemainBinaryCompatible()
+    {
+        Type[] staticParameters =
+        [
+            typeof(string), typeof(string), typeof(string), typeof(bool?), typeof(int?),
+            typeof(bool), typeof(RetryOptions)
+        ];
+        Type[] extensionParameters = [typeof(NostifyConfig), .. staticParameters];
+
+        MethodInfo staticMethod = typeof(NostifyFactory).GetMethod(
+            nameof(NostifyFactory.WithCosmos),
+            staticParameters)!;
+        MethodInfo extensionMethod = typeof(NostifyFactory).GetMethod(
+            nameof(NostifyFactory.WithCosmos),
+            extensionParameters)!;
+
+        Assert.NotNull(staticMethod);
+        Assert.NotNull(extensionMethod);
+        Assert.All(staticMethod.GetParameters().Skip(3), parameter => Assert.True(parameter.IsOptional));
+        Assert.All(extensionMethod.GetParameters().Skip(4), parameter => Assert.True(parameter.IsOptional));
+        Assert.Null(NostifyFactory.WithCosmos("key", "db", "endpoint").cosmosHttpClientFactory);
+        Assert.Null(new NostifyConfig().WithCosmos("key", "db", "endpoint").cosmosHttpClientFactory);
+    }
+
+    [Fact]
+    public void WithCosmos_FactoryAwareStaticAndExtensionOverloadsRetainFactory()
+    {
+        Func<HttpClient> factory = () => new HttpClient();
+
+        NostifyConfig staticConfig = NostifyFactory.WithCosmos(
+            "key", "db", "endpoint", false, null, false, null, factory);
+        var existing = new NostifyConfig();
+        NostifyConfig extensionConfig = existing.WithCosmos(
+            "key", "db", "endpoint", false, null, false, null, factory);
+
+        Assert.Same(factory, staticConfig.cosmosHttpClientFactory);
+        Assert.Same(existing, extensionConfig);
+        Assert.Same(factory, extensionConfig.cosmosHttpClientFactory);
+    }
+
+    [Fact]
+    public void Build_WithCosmosHttpClientFactory_PassesFactoryToRepository()
+    {
+        Func<HttpClient> factory = () => new HttpClient();
+        NostifyConfig config = NostifyFactory.WithCosmos(
+            "key", "db", "https://example.test", false, null, false, null, factory);
+
+        using var nostify = (Nostify)config.Build();
+        var field = typeof(NostifyCosmosClient).GetField(
+            "_httpClientFactory",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        Assert.Same(factory, field.GetValue(nostify.Repository));
+    }
+
+    [Fact]
     public void WithCosmos_ShouldCreateConfigWithCosmosSettings()
     {
         // Arrange

@@ -298,4 +298,5 @@ internal static class IntegrationTraits
     public const string Dependency = "Dependency";
     public const string Kafka = "Kafka";
     public const string Cosmos = "Cosmos";
+    public const string CosmosDocker = "CosmosDocker";
 }

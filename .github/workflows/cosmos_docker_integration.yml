@@ -1,0 +1,43 @@
+name: Cosmos Docker Integration Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'nostify.IntegrationTests/**'
+      - 'nostify.csproj'
+      - 'Directory.Build.props'
+      - '.github/workflows/cosmos_docker_integration.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'nostify.IntegrationTests/**'
+      - 'nostify.csproj'
+      - 'Directory.Build.props'
+      - '.github/workflows/cosmos_docker_integration.yml'
+
+jobs:
+  cosmos-docker-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore integration dependencies
+        run: dotnet restore ./nostify.IntegrationTests/nostify.IntegrationTests.csproj
+
+      # Testcontainers uses the runner's Docker daemon to pull and manage the emulator image.
+      - name: Run Docker-hosted Cosmos integration tests
+        run: dotnet test ./nostify.IntegrationTests/nostify.IntegrationTests.csproj --configuration Release --no-restore --filter "Dependency=CosmosDocker" --verbosity normal

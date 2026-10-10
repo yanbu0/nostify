@@ -866,11 +866,27 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         IReadOnlyList<string> selectedProperties)
     {
         Container eventStore = await _nostify.GetEventStoreContainerAsync();
+        // Nostify stores an aggregate's event stream in the aggregate-root partition. Scope the
+        // replay query accordingly to avoid a cross-partition scan and to support emulator-backed
+        // rolling initialization with the same partition contract used by production writes.
         IQueryable<Event> query = eventStore
-            .GetItemLinqQueryable<Event>()
+            .GetItemLinqQueryable<Event>(
+                requestOptions: new QueryRequestOptions { PartitionKey = id.ToPartitionKey() })
             .Where(item => item.aggregateRootId == id);
-        List<Event> baseEvents = await new RetryableQuery<Event>(query, _cosmosRetryOptions, _queryExecutor)
-            .ReadAllAsync();
+        List<Event> baseEvents;
+        try
+        {
+            baseEvents = await new RetryableQuery<Event>(query, _cosmosRetryOptions, _queryExecutor)
+                .ReadAllAsync();
+        }
+        catch (ArgumentOutOfRangeException exception) when (
+            exception.Message.Contains("Unknown JsonNodeType: Unknown", StringComparison.Ordinal))
+        {
+            // Linux vNext can return event objects that the SDK's query materializer cannot traverse.
+            // Query only scalar IDs in the aggregate partition, then use normal point reads to retain
+            // real Cosmos semantics without asking the emulator to materialize complex query values.
+            baseEvents = await ReadEventsByIdAsync(eventStore, id);
+        }
         List<Event> orderedBaseEvents = baseEvents
             .OrderBy(item => item.timestamp)
             .ThenBy(item => item.id)
@@ -927,6 +943,40 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         }
 
         return selectedProjection;
+    }
+
+    private async Task<List<Event>> ReadEventsByIdAsync(Container eventStore, Guid aggregateRootId)
+    {
+        var definition = new QueryDefinition(
+            "SELECT VALUE eventItem.id FROM eventItem WHERE eventItem.aggregateRootId = @aggregateRootId")
+            .WithParameter("@aggregateRootId", aggregateRootId);
+        PartitionKey partitionKey = aggregateRootId.ToPartitionKey();
+        var requestOptions = new QueryRequestOptions { PartitionKey = partitionKey };
+        using FeedIterator<string> iterator = eventStore.GetItemQueryIterator<string>(
+            definition,
+            requestOptions: requestOptions);
+        var eventIds = new List<string>();
+
+        while (iterator.HasMoreResults)
+        {
+            FeedResponse<string> page = await ExecuteCosmosWithThrottleRetryAsync(
+                () => iterator.ReadNextAsync());
+            eventIds.AddRange(page);
+        }
+
+        var events = new List<Event>(eventIds.Count);
+        foreach (string eventId in eventIds)
+        {
+            ItemResponse<Event> response = await ExecuteCosmosWithThrottleRetryAsync(
+                () => eventStore.ReadItemAsync<Event>(eventId, partitionKey));
+            events.Add(response.Resource);
+        }
+
+        // Point reads follow scalar query order, so explicitly restore the replay contract here.
+        return events
+            .OrderBy(item => item.timestamp)
+            .ThenBy(item => item.id)
+            .ToList();
     }
 
     private static Event? CreateReducedEvent(Event source, IReadOnlyList<string> selectedProperties)

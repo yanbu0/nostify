@@ -171,6 +171,16 @@ dotnet test ./nostify.IntegrationTests/nostify.IntegrationTests.csproj --filter 
 
 The integration fixture does not silently skip an unavailable dependency. Explicitly selected Kafka tests fail with the configured broker, timeout, and override setting in the error message. Temporary topics and consumer groups use run-unique names, and topic cleanup is best effort.
 
+A second Cosmos integration set uses Testcontainers to pull and start the Linux Cosmos DB Emulator automatically. It requires Docker Desktop (or another reachable Linux Docker daemon), but it does not require a separately installed emulator or fixed host port. Run it with:
+
+```powershell
+dotnet test ./nostify.IntegrationTests/nostify.IntegrationTests.csproj --filter "Dependency=CosmosDocker"
+```
+
+The fixture creates a run-unique database and uses Nostify's Newtonsoft serializer. The suite retains its Cosmos SDK, ApplyAndPersist, and serializer checks and additionally exercises public Nostify workflows: `Build<T>()` auto-provisioning (including aggregate, projection, event-store, sequence, and undeliverable containers with their partition-key/TTL contracts) and selected-property durable rolling initialization over persisted event and projection documents. Rolling replay is scoped to the aggregate-root partition, and final state is verified with point reads. Broader typed LINQ scenarios remain excluded because the Linux vNext preview emulator can fail typed responses with `Unknown JsonNodeType: Unknown`. The same filtered suite runs on GitHub-hosted Linux runners through the `Cosmos Docker Integration Tests` workflow.
+
+The original tests for a pre-running Cosmos endpoint remain available with `--filter "Dependency=Cosmos"` and use the layered `IntegrationTesting:Cosmos` settings.
+
 ## Using The Templates
 
 The `nostify` NuGet package includes four .NET templates. Use the service template to start a new Azure Functions microservice, then use the aggregate and projection item templates to extend that service. The gRPC template is optional and creates a standalone event-request gateway.
