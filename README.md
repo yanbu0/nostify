@@ -81,7 +81,7 @@
  
 ### Updates
   
-- 5.2.1
+- 5.2.2
     - **Stable Durable Rebuild Paging**: Aggregate current-state rebuilding and destructive or rolling projection initialization page aggregate IDs with a last-seen-ID cursor (`id > lastSeenId`) instead of `Skip`/`Take` offsets, so concurrent inserts or deletes no longer shift offsets and cause IDs in later pages to be skipped or processed twice. IDs inserted behind the cursor are outside the active scan. `DurableCurrentStatePageInfo`, `DurableInitPageInfo`, and `DurablePartitionInitPageInfo` carry an optional `LastSeenId`; `GetIdsForPartition(PartitionKey, Guid?)` likewise uses the cursor directly.
 - 5.2.0
     - **Rolling Durable Projection Initialization**: Durable projection initialization can rebuild and upsert projections without deleting the container, allowing new projection fields to be backfilled without planned service disruption.
