@@ -81,6 +81,8 @@
  
 ### Updates
   
+- 5.2.1
+    - **Stable Durable Rebuild Paging**: Aggregate current-state rebuilding and destructive or rolling projection initialization page aggregate IDs with a last-seen-ID cursor (`id > lastSeenId`) instead of `Skip`/`Take` offsets, so concurrent inserts or deletes no longer shift offsets and cause IDs in later pages to be skipped or processed twice. IDs inserted behind the cursor are outside the active scan. `DurableCurrentStatePageInfo`, `DurableInitPageInfo`, and `DurablePartitionInitPageInfo` carry an optional `LastSeenId`; `GetIdsForPartition(PartitionKey, Guid?)` likewise uses the cursor directly.
 - 5.2.0
     - **Rolling Durable Projection Initialization**: Durable projection initialization can rebuild and upsert projections without deleting the container, allowing new projection fields to be backfilled without planned service disruption.
     - **Selective Property Backfills**: Rolling initialization can replay only events containing selected payload properties and update only those fields on existing projections while fully reconstructing missing documents.
@@ -3428,6 +3430,8 @@ Content-Type: application/json
   }
 }
 ```
+
+Post `{}` (or `{"options": null}`) to use all default rolling options. When supplying an `options` object, include the retry settings and partition-key path as shown above; invalid or incomplete options such as `{"options": {}}` are rejected by constructor validation rather than silently replaced with defaults. `initialBackoff` is a TimeSpan string.
 
 Omit `selectedProperties` (or pass an empty list) for a full rolling rebuild. In selective mode, Nostify still reconstructs a complete shadow projection before discovering external-data dependencies, then replays cloned events whose payloads contain a selected property. Each replay payload is reduced to `id` plus the selected properties. Existing documents retain unselected fields and their current `initialized` value; a missing document is fully reconstructed and created instead of being written as a sparse document.
 

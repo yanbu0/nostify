@@ -166,6 +166,7 @@ The default Cosmos partition-key path is `/tenantId`. Configure `WithHttp(...)` 
 
 ## Version History
 
+- **5.2.1** - Durable aggregate current-state rebuilding and projection initialization (rolling and destructive) now page aggregate IDs with a last-seen-ID cursor instead of `Skip`/`Take` offsets. `DurableCurrentStatePageInfo`, `DurableInitPageInfo`, and `DurablePartitionInitPageInfo` carry an optional `LastSeenId`, and `GetIdsForPartition(PartitionKey, Guid?)` uses the cursor directly.
 - **5.2.0** - Added non-destructive Durable rolling projection initialization, selected-property backfills, ETag conflict retries with exponential backoff and eventual unconditional fallback, and rolling endpoint/orchestrator/activity wiring in the projection template.
 - **5.1.0** - Added validated `DurableTenantInitActivityNames`, replay-safe projection progress logging, and deterministic timestamp-plus-event-ID replay ordering.
 - **5.0.2** - Made Kafka/Event Hubs optional at build time for Cosmos-only applications; generic builds without messaging skip topic administration; messaging-dependent operations fail with actionable point-of-use errors.

@@ -103,7 +103,7 @@ Use this orchestration when the aggregate's current-state container is partition
 
 1. Call the delete activity to remove existing projections.
 2. Call the tenant-ID activity to fetch distinct tenant IDs (`List<Guid>`) from the aggregate's current-state container.
-3. For each tenant, page through aggregate IDs (calling the get-IDs activity with `DurableInitPageInfo`) and fan out process activity calls concurrently (up to `concurrentBatchCount` at a time).
+3. For each tenant, page through aggregate IDs (calling the get-IDs activity with `DurableInitPageInfo`, passing the last ID of the previous page as the `LastSeenId` cursor) and fan out process activity calls concurrently (up to `concurrentBatchCount` at a time).
 
 The process activity payload remains `List<Guid>`. Tenant partitioning scopes aggregate-ID discovery in the current-state container; events are subsequently retrieved by `aggregateRootId`, which is the event store's physical partition key. No tenant value is propagated through the process activity or event-retrieval transports.
 
@@ -181,16 +181,16 @@ Queries the `TAggregate` current-state container for distinct values of an arbit
 Task<List<Guid>> GetIdsForTenant(DurableInitPageInfo request)
 ```
 
-Returns a page of aggregate IDs for a given tenant, ordered by `id` for stable paging. Internally delegates to `GetIdsForPartition(request.TenantId.ToPartitionKey(), request.PageNumber)`. Intended to be called from the get-IDs activity function used with `OrchestrateInitAsync`.
+Returns a page of aggregate IDs for a given tenant, ordered by `id`, starting strictly after `request.LastSeenId` (or from the beginning when it is `null`). Internally delegates to `GetIdsForPartition(request.TenantId.ToPartitionKey(), request.LastSeenId)`. Intended to be called from the get-IDs activity function used with `OrchestrateInitAsync`.
 
 ### GetIdsForPartition
 
 ```csharp
 Task<List<Guid>> GetIdsForPartition(DurablePartitionInitPageInfo request)
-Task<List<Guid>> GetIdsForPartition(PartitionKey partitionKey, int pageNumber)
+Task<List<Guid>> GetIdsForPartition(PartitionKey partitionKey, Guid? lastSeenId = null)
 ```
 
-Returns a page of aggregate IDs for an arbitrary Cosmos partition, ordered by `id` for stable paging. The `DurablePartitionInitPageInfo` overload is the activity-friendly wrapper (constructs a `PartitionKey` from the string value); the `PartitionKey`/`int` overload is the canonical implementation. Both `GetIdsForTenant` and the `DurablePartitionInitPageInfo` overload delegate here so all paging logic lives in one place.
+Returns a page of aggregate IDs for an arbitrary Cosmos partition, ordered by `id`. Paging is cursor-based (keyset) rather than offset-based: when `lastSeenId` is supplied only IDs strictly greater than it are returned (`WHERE root["id"] > "<lastSeenId>" ORDER BY root["id"]`, using Cosmos string ordering), so aggregates inserted or deleted between pages during a live (rolling) rebuild cannot cause skipped or duplicated IDs. The orchestrators pass the last ID of each page as the cursor for the next page. The `DurablePartitionInitPageInfo` overload is the activity-friendly wrapper (constructs a `PartitionKey` from the string value); the `PartitionKey`/`Guid?` overload is the canonical implementation. Both `GetIdsForTenant` and the `DurablePartitionInitPageInfo` overload delegate here so all paging logic lives in one place.
 
 ### ProcessBatch
 
@@ -215,7 +215,7 @@ In full mode, the rebuilt projection is ETag-replaced when the target exists or 
 1. A complete shadow is built from base events before external-data discovery, so selectors may depend on properties outside the selected set.
 2. Queried events are not mutated. Relevant events are cloned, and their payloads are reduced to `id` plus selected properties.
 3. Existing documents preserve unselected fields and `initialized`. Selected values are merged into the latest point-read resource and written with an ETag-guarded replace.
-4. Missing targets are fully reconstructed and created as complete projections.
+4. Missing targets are fully reconstructed and created as complete projections. The point-read happens before replay, so a missing target selects the full property set up front and each attempt performs only one event-store query and one external-data lookup.
 
 Cosmos patch operations do not support `IfMatchEtag`; therefore the conditional selective write is a merged replace rather than a patch. HTTP 409 and 412 responses consume the bounded ETag retry budget and use exponential backoff. After exhaustion, full mode performs an unconditional upsert while selective mode performs an unconditional patch of selected paths only. A structured warning identifies this hot-document fallback. HTTP 429 handling uses the independent Cosmos retry policy and does not consume conflict attempts; after the configured Cosmos retry count is exhausted, the 429 response propagates to fail the activity.
 
@@ -251,11 +251,13 @@ Strongly typed grouping for tenant-orchestration activity names. Its constructor
 public struct DurableInitPageInfo
 {
     public readonly Guid TenantId;
-    public readonly int PageNumber;
+    public readonly Guid? LastSeenId;
+
+    public DurableInitPageInfo(Guid tenantId, Guid? lastSeenId = null);
 }
 ```
 
-Lightweight input struct passed to `GetIdsForTenant`. Carries the tenant partition key (`Guid`) and the zero-based page number for stable, offset-based paging.
+Lightweight input struct passed to `GetIdsForTenant`. Carries the tenant partition key (`Guid`) and the optional `LastSeenId` cursor (`null` for the first page; otherwise the last aggregate ID of the previous page) for cursor-based paging that remains stable under concurrent inserts and deletes.
 
 ## DurablePartitionInitPageInfo
 
@@ -263,11 +265,13 @@ Lightweight input struct passed to `GetIdsForTenant`. Carries the tenant partiti
 public struct DurablePartitionInitPageInfo
 {
     public readonly string PartitionKey;
-    public readonly int PageNumber;
+    public readonly Guid? LastSeenId;
+
+    public DurablePartitionInitPageInfo(string partitionKey, Guid? lastSeenId = null);
 }
 ```
 
-Lightweight input struct passed to `GetIdsForPartition`. Carries the partition key value as a `string` (so it can be serialized across Durable Function activity boundaries) and the zero-based page number. Reconstruct a `Microsoft.Azure.Cosmos.PartitionKey` via `new PartitionKey(request.PartitionKey)` if you need the strongly-typed value directly.
+Lightweight input struct passed to `GetIdsForPartition`. Carries the partition key value as a `string` (so it can be serialized across Durable Function activity boundaries) and the optional `LastSeenId` cursor (`null` for the first page). Reconstruct a `Microsoft.Azure.Cosmos.PartitionKey` via `new PartitionKey(request.PartitionKey)` if you need the strongly-typed value directly.
 
 ## Usage — Template-generated Initializer Class (Tenant-partitioned)
 

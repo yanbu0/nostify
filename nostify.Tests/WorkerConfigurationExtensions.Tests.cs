@@ -12,6 +12,172 @@ namespace nostify.Tests;
 
 public class WorkerConfigurationExtensionsTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RollingProjectionInput_RequestDeserialization_PreservesOptions(bool useWorkerSerializer)
+    {
+        const string json = """
+        {
+            "options": {
+                "selectedProperties": [" Name ", "Age", "Name", ""],
+                "maxEtagRetries": 5,
+                "initialBackoff": "00:00:00.075",
+                "backoffCoefficient": 1.5,
+                "partitionKeyPath": "region"
+            }
+        }
+        """;
+
+        var input = await DeserializeRollingRequest(json, useWorkerSerializer);
+
+        Assert.Equal(["Age", "Name"], input.Options.SelectedProperties);
+        Assert.Equal(5, input.Options.MaxEtagRetries);
+        Assert.Equal(TimeSpan.FromMilliseconds(75), input.Options.InitialBackoff);
+        Assert.Equal(1.5, input.Options.BackoffCoefficient);
+        Assert.Equal("/region", input.Options.PartitionKeyPath);
+        Assert.True(input.Options.IsSelective);
+        Assert.Equal(TimeSpan.FromMilliseconds(75), input.Options.GetBackoff(0));
+        Assert.Equal(TimeSpan.FromMilliseconds(168.75), input.Options.GetBackoff(2));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RollingProjectionInput_RequestDeserialization_OmittedSelectedPropertiesUsesFullRebuild(
+        bool useWorkerSerializer)
+    {
+        const string json = """
+        {
+            "options": {
+                "maxEtagRetries": 5,
+                "initialBackoff": "00:00:00.075",
+                "backoffCoefficient": 1.5,
+                "partitionKeyPath": "/region"
+            }
+        }
+        """;
+
+        var input = await DeserializeRollingRequest(json, useWorkerSerializer);
+
+        Assert.Empty(input.Options.SelectedProperties);
+        Assert.False(input.Options.IsSelective);
+        Assert.Equal(5, input.Options.MaxEtagRetries);
+        Assert.Equal(TimeSpan.FromMilliseconds(75), input.Options.InitialBackoff);
+        Assert.Equal(1.5, input.Options.BackoffCoefficient);
+        Assert.Equal("/region", input.Options.PartitionKeyPath);
+    }
+
+    [Theory]
+    [InlineData(false, "{}")]
+    [InlineData(true, "{}")]
+    [InlineData(false, """{"options":null}""")]
+    [InlineData(true, """{"options":null}""")]
+    public async Task RollingProjectionInput_RequestDeserialization_MissingOptionsUsesDefaults(
+        bool useWorkerSerializer, string json)
+    {
+        var input = await DeserializeRollingRequest(json, useWorkerSerializer);
+
+        Assert.Empty(input.Options.SelectedProperties);
+        Assert.Equal(3, input.Options.MaxEtagRetries);
+        Assert.Equal(TimeSpan.FromMilliseconds(250), input.Options.InitialBackoff);
+        Assert.Equal(2.0, input.Options.BackoffCoefficient);
+        Assert.Equal("/tenantId", input.Options.PartitionKeyPath);
+        Assert.False(input.Options.IsSelective);
+        Assert.Equal(TimeSpan.FromMilliseconds(1000), input.Options.GetBackoff(2));
+    }
+
+    [Theory]
+    [InlineData(false, -1, "00:00:00.075", 1.5, "/region")]
+    [InlineData(true, -1, "00:00:00.075", 1.5, "/region")]
+    [InlineData(false, 5, "-00:00:00.075", 1.5, "/region")]
+    [InlineData(true, 5, "-00:00:00.075", 1.5, "/region")]
+    [InlineData(false, 5, "00:00:00.075", 0.5, "/region")]
+    [InlineData(true, 5, "00:00:00.075", 0.5, "/region")]
+    [InlineData(false, 5, "00:00:00.075", 1.5, "")]
+    [InlineData(true, 5, "00:00:00.075", 1.5, "")]
+    public async Task RollingProjectionInput_RequestDeserialization_ValidatesOptions(
+        bool useWorkerSerializer, int maxEtagRetries, string initialBackoff,
+        double backoffCoefficient, string partitionKeyPath)
+    {
+        string json = $$"""
+        {
+            "options": {
+                "selectedProperties": ["Name"],
+                "maxEtagRetries": {{maxEtagRetries}},
+                "initialBackoff": "{{initialBackoff}}",
+                "backoffCoefficient": {{backoffCoefficient.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
+                "partitionKeyPath": "{{partitionKeyPath}}"
+            }
+        }
+        """;
+
+        var exception = await Record.ExceptionAsync(() => DeserializeRollingRequest(json, useWorkerSerializer));
+
+        Assert.NotNull(exception);
+        Assert.IsAssignableFrom<ArgumentException>(exception.GetBaseException());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RollingProjectionInput_RequestDeserialization_EmptyOptionsFailsValidation(bool useWorkerSerializer)
+    {
+        var exception = await Record.ExceptionAsync(() =>
+            DeserializeRollingRequest("""{"options":{}}""", useWorkerSerializer));
+
+        Assert.NotNull(exception);
+        Assert.IsAssignableFrom<ArgumentException>(exception.GetBaseException());
+    }
+
+    [Theory]
+    [InlineData(false, "maxEtagRetries")]
+    [InlineData(true, "maxEtagRetries")]
+    [InlineData(false, "initialBackoff")]
+    [InlineData(true, "initialBackoff")]
+    [InlineData(false, "backoffCoefficient")]
+    [InlineData(true, "backoffCoefficient")]
+    [InlineData(false, "partitionKeyPath")]
+    [InlineData(true, "partitionKeyPath")]
+    public async Task RollingProjectionInput_RequestDeserialization_MissingRequiredOptionFailsValidation(
+        bool useWorkerSerializer, string missingOption)
+    {
+        var options = new Dictionary<string, object?>
+        {
+            ["maxEtagRetries"] = 5,
+            ["initialBackoff"] = TimeSpan.FromMilliseconds(75),
+            ["backoffCoefficient"] = 1.5,
+            ["partitionKeyPath"] = "/region"
+        };
+        options.Remove(missingOption);
+        string json = SystemTextJsonSerializer.Serialize(
+            new { options },
+            WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions());
+
+        var exception = await Record.ExceptionAsync(() => DeserializeRollingRequest(json, useWorkerSerializer));
+
+        Assert.NotNull(exception);
+        Assert.IsAssignableFrom<ArgumentException>(exception.GetBaseException());
+    }
+
+    private static async Task<DurableRollingProjectionInput> DeserializeRollingRequest(
+        string json, bool useWorkerSerializer)
+    {
+        using var body = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+        if (useWorkerSerializer)
+        {
+            var workerOptions = BuildWorkerOptions(builder => builder.UseNostifyDefaultJson());
+            Assert.IsType<NewtonsoftJsonObjectSerializer>(workerOptions.Serializer);
+            return Assert.IsType<DurableRollingProjectionInput>(
+                await workerOptions.Serializer!.DeserializeAsync(
+                    body, typeof(DurableRollingProjectionInput), CancellationToken.None));
+        }
+
+        return Assert.IsType<DurableRollingProjectionInput>(
+            await SystemTextJsonSerializer.DeserializeAsync<DurableRollingProjectionInput>(
+                body, WorkerConfigurationExtensions.CreateNostifyDefaultSystemTextJsonOptions()));
+    }
+
     [Fact]
     public void UseNostifyDefaultJson_ConfiguresNewtonsoftWorkerSerializer()
     {

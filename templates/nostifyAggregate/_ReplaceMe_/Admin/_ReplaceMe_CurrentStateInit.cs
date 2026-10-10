@@ -52,7 +52,7 @@ public class _ReplaceMe_CurrentStateInit
         [DurableClient] DurableTaskClient client)
         => _initializer.DeleteAllCurrentState(client);
 
-    /// <summary>Gets one stable page of aggregate identifiers from the event store.</summary>
+    /// <summary>Gets one cursor-bounded page of aggregate identifiers from the event store.</summary>
     [Function(nameof(Get_ReplaceMe_AggregateIds))]
     public Task<List<Guid>> Get_ReplaceMe_AggregateIds(
         [ActivityTrigger] DurableCurrentStatePageInfo request)

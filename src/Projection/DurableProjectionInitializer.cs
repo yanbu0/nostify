@@ -316,7 +316,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
                 context,
                 activities.GetIds,
                 activities.ProcessBatch,
-                pageNum => new DurableInitPageInfo(tenantId, pageNum),
+                lastSeenId => new DurableInitPageInfo(tenantId, lastSeenId),
                 count =>
                 {
                     totalProcessed += count;
@@ -365,7 +365,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
                 context,
                 activities.GetIds,
                 activities.ProcessBatch,
-                page => new DurableInitPageInfo(tenantId, page),
+                lastSeenId => new DurableInitPageInfo(tenantId, lastSeenId),
                 id => new DurableRollingProjectionWorkItem(id, tenantId.ToString(), true),
                 input.Options,
                 count =>
@@ -426,7 +426,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
                 context,
                 getIdsActivityName,
                 processBatchActivityName,
-                pageNum => new DurablePartitionInitPageInfo(pk, pageNum),
+                lastSeenId => new DurablePartitionInitPageInfo(pk, lastSeenId),
                 count =>
                 {
                     totalProcessed += count;
@@ -477,7 +477,7 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
                 context,
                 getIdsActivityName,
                 processBatchActivityName,
-                page => new DurablePartitionInitPageInfo(partitionKey, page),
+                lastSeenId => new DurablePartitionInitPageInfo(partitionKey, lastSeenId),
                 id => new DurableRollingProjectionWorkItem(id, partitionKey, false),
                 input.Options,
                 count =>
@@ -511,26 +511,28 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     /// <summary>
     /// Pages through aggregate IDs for a single partition, fanning out concurrent process-batch
     /// activity calls (chunked by <c>_batchSize</c>) for each page until an empty or partial page is returned.
+    /// Pages are requested with the last-seen aggregate Id as a cursor rather than an offset.
     /// Shared by the tenant and arbitrary-partition orchestrators.
     /// </summary>
     private async Task ProcessPartitionPagesAsync<TPageInfo>(
         TaskOrchestrationContext context,
         string getIdsActivityName,
         string processBatchActivityName,
-        Func<int, TPageInfo> pageInfoFactory,
+        Func<Guid?, TPageInfo> pageInfoFactory,
         Action<int> onPageProcessed)
     {
-        int pageNum = 0;
+        Guid? lastSeenId = null;
         while (true)
         {
-            var pageIds = await context.CallActivityAsync<List<Guid>>(getIdsActivityName, pageInfoFactory(pageNum), _durableTaskOptions);
+            var pageIds = await context.CallActivityAsync<List<Guid>>(getIdsActivityName, pageInfoFactory(lastSeenId), _durableTaskOptions);
             if (pageIds.Count == 0)
             {
                 // no more ids to process
                 break;
             }
 
-            pageNum++;
+            // ids are returned ordered by id, so the last one is the cursor for the next page
+            lastSeenId = pageIds[^1];
 
             // run `concurrentBatchCount` batches concurrently
             // this splits the pageIds into `concurrentBatchCount` batches with at most `_batchSize` ids
@@ -554,24 +556,25 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
         TaskOrchestrationContext context,
         string getIdsActivityName,
         string processBatchActivityName,
-        Func<int, TPageInfo> pageInfoFactory,
+        Func<Guid?, TPageInfo> pageInfoFactory,
         Func<Guid, DurableRollingProjectionWorkItem> workItemFactory,
         DurableRollingProjectionOptions options,
         Action<int> onPageProcessed)
     {
-        int pageNumber = 0;
+        Guid? lastSeenId = null;
         while (true)
         {
             List<Guid> ids = await context.CallActivityAsync<List<Guid>>(
                 getIdsActivityName,
-                pageInfoFactory(pageNumber),
+                pageInfoFactory(lastSeenId),
                 _durableTaskOptions);
             if (ids.Count == 0)
             {
                 break;
             }
 
-            pageNumber++;
+            // Cursor-based paging: resume strictly after the last Id seen so live inserts/deletes cannot skip or duplicate work.
+            lastSeenId = ids[^1];
             var tasks = ids
                 .Chunk(_batchSize)
                 .Select(chunk => context.CallActivityAsync(
@@ -641,34 +644,45 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
     }
 
     /// <summary>
-    /// Gets a page of aggregate Ids for a tenant, ordered by Id for stable paging.
+    /// Gets a page of aggregate Ids for a tenant, ordered by Id, starting after the request's last-seen Id cursor.
     /// </summary>
-    /// <param name="request">Tenant Id and page number.</param>
+    /// <param name="request">Tenant Id and last-seen aggregate Id cursor.</param>
     public Task<List<Guid>> GetIdsForTenant(DurableInitPageInfo request)
-        => GetIdsForPartition(request.TenantId.ToPartitionKey(), request.PageNumber);
+        => GetIdsForPartition(request.TenantId.ToPartitionKey(), request.LastSeenId);
 
     /// <summary>
-    /// Gets a page of aggregate Ids for the specified partition, ordered by Id for stable paging.
+    /// Gets a page of aggregate Ids for the specified partition, ordered by Id, starting after the request's last-seen Id cursor.
     /// Activity-friendly wrapper that accepts a serializable <see cref="DurablePartitionInitPageInfo"/>.
     /// </summary>
-    /// <param name="request">Partition key value (as string) and page number.</param>
+    /// <param name="request">Partition key value (as string) and last-seen aggregate Id cursor.</param>
     public Task<List<Guid>> GetIdsForPartition(DurablePartitionInitPageInfo request)
-        => GetIdsForPartition(new PartitionKey(request.PartitionKey), request.PageNumber);
+        => GetIdsForPartition(new PartitionKey(request.PartitionKey), request.LastSeenId);
 
     /// <summary>
-    /// Gets a page of aggregate Ids for the specified partition, ordered by Id for stable paging.
+    /// Gets a page of aggregate Ids for the specified partition, ordered by Id.
+    /// Uses keyset (cursor) pagination: only Ids strictly greater than <paramref name="lastSeenId"/> are returned,
+    /// so aggregates inserted or deleted between pages cannot cause skipped or duplicated Ids.
     /// </summary>
     /// <param name="partitionKey">The Cosmos partition key to query within.</param>
-    /// <param name="pageNumber">Zero-based page number.</param>
-    public async Task<List<Guid>> GetIdsForPartition(PartitionKey partitionKey, int pageNumber)
+    /// <param name="lastSeenId">The last Id returned by the previous page, or <c>null</c> for the first page.</param>
+    public async Task<List<Guid>> GetIdsForPartition(PartitionKey partitionKey, Guid? lastSeenId = null)
     {
         var container = await _nostify.GetCurrentStateContainerAsync<TAggregate>();
 
-        return await container.WithRetry(_cosmosRetryOptions)
+        RetryableQuery<TAggregate> query = container.WithRetry(_cosmosRetryOptions)
             .FilteredQuery<TAggregate>(partitionKey)
-            .Where(x => !x.isDeleted)
+            .Where(x => !x.isDeleted);
+
+        if (lastSeenId.HasValue)
+        {
+            // Cosmos stores and orders ids as strings; this translates to `root["id"] > "<lastSeenId>"`,
+            // which matches the ORDER BY id comparison used for paging.
+            string cursor = lastSeenId.Value.ToString();
+            query = query.Where(x => x.id.ToString().CompareTo(cursor) > 0);
+        }
+
+        return await query
             .OrderBy(x => x.id)
-            .Skip(pageNumber * _pageSize)
             .Take(_pageSize)
             .Select(x => x.id)
             .ReadAllAsync();
@@ -766,18 +780,17 @@ public class DurableProjectionInitializer<TProjection, TAggregate>
                 projectionContainer,
                 item.Id,
                 partitionKey);
-            TProjection rebuilt = await RebuildProjectionAsync(item.Id, options.SelectedProperties);
+
+            // A missing selective target must be complete, not a sparse selected-property document.
+            // Choose the full property set before rebuilding so the event-store query and
+            // external-data lookup run only once per attempt.
+            IReadOnlyList<string> rebuildProperties = existing == null ? [] : options.SelectedProperties;
+            TProjection rebuilt = await RebuildProjectionAsync(item.Id, rebuildProperties);
 
             try
             {
                 if (existing == null)
                 {
-                    // A missing selective target must be complete, not a sparse selected-property document.
-                    if (options.IsSelective)
-                    {
-                        rebuilt = await RebuildProjectionAsync(item.Id, []);
-                    }
-
                     rebuilt.initialized = true;
                     await ExecuteCosmosWithThrottleRetryAsync(() => projectionContainer.CreateItemAsync(
                         rebuilt,
@@ -1109,46 +1122,54 @@ public sealed class DurableTenantInitActivityNames
 }
 
 /// <summary>
-/// Paging request for durable projection initialization: tenant Id and page number.
+/// Paging request for durable projection initialization: tenant Id and last-seen aggregate Id cursor.
 /// </summary>
 public struct DurableInitPageInfo
 {
     /// <summary>Gets the tenant identifier whose projections are being initialized.</summary>
     public readonly Guid TenantId;
 
-    /// <summary>Gets the zero-based page number.</summary>
-    public readonly int PageNumber;
+    /// <summary>
+    /// Gets the last aggregate Id returned by the previous page, or <c>null</c> for the first page.
+    /// The next page starts strictly after this Id, so concurrent inserts and deletes cannot shift page boundaries.
+    /// </summary>
+    public readonly Guid? LastSeenId;
 
     /// <summary>
     /// Initializes a durable projection page request.
     /// </summary>
     /// <param name="tenantId">The tenant identifier.</param>
-    /// <param name="pageNumber">The zero-based page number.</param>
-    public DurableInitPageInfo(Guid tenantId, int pageNumber)
+    /// <param name="lastSeenId">The last aggregate Id from the previous page, or <c>null</c> for the first page.</param>
+    public DurableInitPageInfo(Guid tenantId, Guid? lastSeenId = null)
     {
         TenantId = tenantId;
-        PageNumber = pageNumber;
+        LastSeenId = lastSeenId;
     }
 }
 
 /// <summary>
 /// Paging request for durable projection initialization by an arbitrary partition key:
-/// the partition key value (as string for activity-boundary serialization) and page number.
+/// the partition key value (as string for activity-boundary serialization) and last-seen aggregate Id cursor.
 /// </summary>
 public struct DurablePartitionInitPageInfo
 {
     /// <summary>The partition key value as a string. Reconstructed via <c>new PartitionKey(value)</c> on the receiving side.</summary>
     public readonly string PartitionKey;
 
-    /// <summary>Zero-based page number.</summary>
-    public readonly int PageNumber;
+    /// <summary>
+    /// The last aggregate Id returned by the previous page, or <c>null</c> for the first page.
+    /// The next page starts strictly after this Id, so concurrent inserts and deletes cannot shift page boundaries.
+    /// </summary>
+    public readonly Guid? LastSeenId;
 
     /// <summary>
     /// Creates a new <see cref="DurablePartitionInitPageInfo"/> from a string partition key value.
     /// </summary>
-    public DurablePartitionInitPageInfo(string partitionKey, int pageNumber)
+    /// <param name="partitionKey">The partition key value as a string.</param>
+    /// <param name="lastSeenId">The last aggregate Id from the previous page, or <c>null</c> for the first page.</param>
+    public DurablePartitionInitPageInfo(string partitionKey, Guid? lastSeenId = null)
     {
         PartitionKey = partitionKey;
-        PageNumber = pageNumber;
+        LastSeenId = lastSeenId;
     }
 }
