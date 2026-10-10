@@ -172,13 +172,13 @@ public class DurableCurrentStateInitializer<TAggregate>
         await context.CallActivityAsync(deleteActivityName, null, _durableTaskOptions);
         if (logger != null) LogCurrentStateDeleted(logger, _instanceId, null);
 
-        var pageNumber = 0;
+        Guid? lastSeenId = null;
         var totalProcessed = 0;
         while (true)
         {
             var ids = await context.CallActivityAsync<List<Guid>>(
                 getIdsActivityName,
-                new DurableCurrentStatePageInfo(pageNumber),
+                new DurableCurrentStatePageInfo(lastSeenId),
                 _durableTaskOptions);
 
             if (ids.Count == 0)
@@ -196,7 +196,7 @@ public class DurableCurrentStateInitializer<TAggregate>
 
             totalProcessed += ids.Count;
             if (logger != null) LogAggregateRebuildProgress(logger, _instanceId, totalProcessed, null);
-            pageNumber++;
+            lastSeenId = ids[^1];
 
             if (ids.Count < _pageSize)
             {
@@ -221,18 +221,24 @@ public class DurableCurrentStateInitializer<TAggregate>
         await DeleteCurrentStateAsync(container, aggregates);
     }
 
-    /// <summary>Gets a stable page of distinct aggregate IDs from the event store.</summary>
+    /// <summary>Gets an ordered page of distinct aggregate IDs after the request cursor.</summary>
     public async Task<List<Guid>> GetAggregateIds(DurableCurrentStatePageInfo request)
     {
         var eventStore = await _nostify.GetEventStoreContainerAsync();
-        var query = eventStore
+        IQueryable<Guid> query = eventStore
             .GetItemLinqQueryable<Event>()
             .Select(@event => @event.aggregateRootId)
-            .Distinct()
+            .Distinct();
+
+        if (request.LastSeenId.HasValue)
+        {
+            string cursor = request.LastSeenId.Value.ToString();
+            query = query.Where(id => id.ToString().CompareTo(cursor) > 0);
+        }
+
+        return await _queryExecutor.ReadAllAsync(query
             .OrderBy(id => id)
-            .Skip(request.PageNumber * _pageSize)
-            .Take(_pageSize);
-        return await _queryExecutor.ReadAllAsync(query);
+            .Take(_pageSize));
     }
 
     /// <summary>Rehydrates and bulk-upserts one batch of aggregate current states.</summary>
@@ -301,17 +307,16 @@ public class DurableCurrentStateInitializer<TAggregate>
                 or OrchestrationRuntimeStatus.Suspended;
 }
 
-/// <summary>Serializable zero-based page request for aggregate current-state rebuilding.</summary>
+/// <summary>Serializable cursor request for aggregate current-state rebuilding.</summary>
 public readonly struct DurableCurrentStatePageInfo
 {
-    /// <summary>Creates a page request.</summary>
-    /// <param name="pageNumber">The zero-based page number.</param>
-    public DurableCurrentStatePageInfo(int pageNumber)
+    /// <summary>Creates a request for the aggregate IDs strictly after the supplied cursor.</summary>
+    /// <param name="lastSeenId">The last aggregate ID from the previous page, or <c>null</c> for the first page.</param>
+    public DurableCurrentStatePageInfo(Guid? lastSeenId = null)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(pageNumber);
-        PageNumber = pageNumber;
+        LastSeenId = lastSeenId;
     }
 
-    /// <summary>Gets the zero-based page number.</summary>
-    public int PageNumber { get; }
+    /// <summary>Gets the last aggregate ID returned by the previous page, or <c>null</c> for the first page.</summary>
+    public Guid? LastSeenId { get; }
 }

@@ -2188,16 +2188,21 @@ public class DurableProjectionInitializerTests
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task OrchestrateRollingInitAsync_WithInsertsAndDeletesBetweenPages_ProcessesEachOriginalIdOnce(bool deleteProcessed, bool insertBehindCursor)
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    public async Task OrchestrateRollingInitAsync_WithInsertsAndDeletesBetweenPages_ProcessesExpectedIdsOnce(
+        bool deleteProcessed,
+        bool insertBehindCursor,
+        bool insertAheadOfCursor)
     {
         // pageSize = 5 * 2 = 10. A live store is emulated with Cosmos semantics (string-ordered ids,
-        // id > lastSeenId). Between pages an earlier-page aggregate is deleted and a new aggregate is
-        // inserted before the page boundary; offset paging would skip or duplicate ids here.
+        // id > lastSeenId). Between pages an earlier-page aggregate may be deleted and new aggregates
+        // may be inserted on either side of the boundary; offset paging would skip or duplicate ids here.
         Guid tenantId = Guid.NewGuid();
-        var store = new LiveIdStore(25, deleteProcessed, insertBehindCursor);
+        var store = new LiveIdStore(25, deleteProcessed, insertBehindCursor, insertAheadOfCursor);
         var processed = new List<Guid>();
         var cursors = new List<Guid?>();
         var contextMock = new Mock<TaskOrchestrationContext>();
@@ -2236,20 +2241,27 @@ public class DurableProjectionInitializerTests
             new DurableRollingProjectionInput());
 
         Assert.Null(cursors[0]);
-        // Every original aggregate (including the one deleted after it was processed) is handled exactly once;
-        // the id inserted behind the cursor is not re-read and nothing is duplicated.
+        // Originals and ahead-of-cursor inserts are handled exactly once. Behind-cursor inserts are
+        // correctly ignored because their ordered range was already consumed.
         Assert.Equal(processed.Distinct().Count(), processed.Count);
-        Assert.Equal(store.Original.OrderBy(id => id), processed.OrderBy(id => id));
+        Assert.Equal(
+            store.Original.Concat(store.InsertedAfterCursor).OrderBy(id => id),
+            processed.OrderBy(id => id));
         Assert.Empty(store.Ids.Except(processed).Except(store.InsertedBeforeCursor));
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task OrchestrateRollingInitByPartitionAsync_WithInsertsAndDeletesBetweenPages_ProcessesEachLiveIdOnce(bool deleteProcessed, bool insertBehindCursor)
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    public async Task OrchestrateRollingInitByPartitionAsync_WithInsertsAndDeletesBetweenPages_ProcessesExpectedIdsOnce(
+        bool deleteProcessed,
+        bool insertBehindCursor,
+        bool insertAheadOfCursor)
     {
-        var store = new LiveIdStore(25, deleteProcessed, insertBehindCursor);
+        var store = new LiveIdStore(25, deleteProcessed, insertBehindCursor, insertAheadOfCursor);
         var processed = new List<Guid>();
         var contextMock = new Mock<TaskOrchestrationContext>();
 
@@ -2287,28 +2299,36 @@ public class DurableProjectionInitializerTests
             "RollingBatch",
             new DurableRollingProjectionInput());
 
-        // Every original aggregate (including the one deleted after it was processed) is handled exactly once;
-        // the id inserted behind the cursor is not re-read and nothing is duplicated.
+        // Originals and ahead-of-cursor inserts are handled exactly once. Behind-cursor inserts are
+        // correctly ignored because their ordered range was already consumed.
         Assert.Equal(processed.Distinct().Count(), processed.Count);
-        Assert.Equal(store.Original.OrderBy(id => id), processed.OrderBy(id => id));
+        Assert.Equal(
+            store.Original.Concat(store.InsertedAfterCursor).OrderBy(id => id),
+            processed.OrderBy(id => id));
         Assert.Empty(store.Ids.Except(processed).Except(store.InsertedBeforeCursor));
     }
 
     /// <summary>
     /// Emulates a live aggregate container queried with cursor semantics matching Cosmos
-    /// (ids ordered and compared as strings). After the first page is processed, optionally one
-    /// already-processed id is deleted and/or one new id is inserted before the page boundary.
+    /// (ids ordered and compared as strings). After the first page is processed, it can delete an
+    /// already-processed id and insert new ids before or after the page boundary.
     /// </summary>
     private sealed class LiveIdStore
     {
         private readonly bool _deleteProcessed;
         private readonly bool _insertBehindCursor;
+        private readonly bool _insertAheadOfCursor;
         private bool _mutated;
 
-        public LiveIdStore(int count, bool deleteProcessed, bool insertBehindCursor)
+        public LiveIdStore(
+            int count,
+            bool deleteProcessed,
+            bool insertBehindCursor,
+            bool insertAheadOfCursor = false)
         {
             _deleteProcessed = deleteProcessed;
             _insertBehindCursor = insertBehindCursor;
+            _insertAheadOfCursor = insertAheadOfCursor;
             Ids = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
             Original = Ids.ToList();
         }
@@ -2318,6 +2338,8 @@ public class DurableProjectionInitializerTests
         public List<Guid> Ids { get; }
 
         public List<Guid> InsertedBeforeCursor { get; } = new();
+
+        public List<Guid> InsertedAfterCursor { get; } = new();
 
         private List<Guid> Ordered => Ids.OrderBy(id => id.ToString(), StringComparer.Ordinal).ToList();
 
@@ -2343,22 +2365,34 @@ public class DurableProjectionInitializerTests
                 Ids.Remove(ordered[0]);
             }
 
-            if (!_insertBehindCursor)
+            string boundary = ordered[9].ToString();
+            if (_insertBehindCursor)
             {
-                return;
+                // A cursor correctly ignores this aggregate because its ordered range was already read.
+                Guid insertedBehind;
+                do
+                {
+                    insertedBehind = Guid.NewGuid();
+                }
+                while (string.CompareOrdinal(insertedBehind.ToString(), boundary) >= 0);
+
+                Ids.Add(insertedBehind);
+                InsertedBeforeCursor.Add(insertedBehind);
             }
 
-            // Insert an aggregate sorting before the first page's last id: offset paging would then
-            // re-read a boundary id. A cursor correctly ignores it (it belongs to an already-read range).
-            string boundary = ordered[9].ToString();
-            Guid inserted;
-            do
+            if (_insertAheadOfCursor)
             {
-                inserted = Guid.NewGuid();
+                // A cursor must discover an aggregate added to a range that has not yet been read.
+                Guid insertedAhead;
+                do
+                {
+                    insertedAhead = Guid.NewGuid();
+                }
+                while (string.CompareOrdinal(insertedAhead.ToString(), boundary) <= 0);
+
+                Ids.Add(insertedAhead);
+                InsertedAfterCursor.Add(insertedAhead);
             }
-            while (string.CompareOrdinal(inserted.ToString(), boundary) >= 0);
-            Ids.Add(inserted);
-            InsertedBeforeCursor.Add(inserted);
         }
     }
 

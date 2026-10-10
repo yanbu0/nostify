@@ -41,11 +41,12 @@ public class DurableCurrentStateInitializerTests
     }
 
     [Fact]
-    public void PageInfo_ValidatesAndStoresPageNumber()
+    public void PageInfo_StoresOptionalLastSeenIdCursor()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DurableCurrentStatePageInfo(-1));
-        Assert.Equal(0, new DurableCurrentStatePageInfo(0).PageNumber);
-        Assert.Equal(7, new DurableCurrentStatePageInfo(7).PageNumber);
+        Guid lastSeenId = Guid.NewGuid();
+
+        Assert.Null(new DurableCurrentStatePageInfo().LastSeenId);
+        Assert.Equal(lastSeenId, new DurableCurrentStatePageInfo(lastSeenId).LastSeenId);
     }
 
     [Fact]
@@ -189,7 +190,7 @@ public class DurableCurrentStateInitializerTests
         var logger = new Mock<ILogger>();
         var ids = Enumerable.Range(1, 5).Select(CreateDeterministicGuid).ToList();
         var calls = new List<string>();
-        var pageRequests = new List<int>();
+        var pageRequests = new List<Guid?>();
         var batches = new List<List<Guid>>();
         int pageCall = 0;
         logger.Setup(candidate => candidate.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
@@ -203,7 +204,7 @@ public class DurableCurrentStateInitializerTests
                 It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
             .Callback<TaskName, object?, TaskOptions?>((_, input, _) =>
             {
-                pageRequests.Add(((DurableCurrentStatePageInfo)input!).PageNumber);
+                pageRequests.Add(((DurableCurrentStatePageInfo)input!).LastSeenId);
                 calls.Add("page");
             })
             .ReturnsAsync(() => pageCall++ == 0 ? ids : new List<Guid>());
@@ -221,7 +222,7 @@ public class DurableCurrentStateInitializerTests
         await initializer.OrchestrateInitAsync(context.Object, "Delete", "GetIds", "Process", logger.Object);
 
         Assert.Equal("delete", calls[0]);
-        Assert.Equal(new[] { 0, 1 }, pageRequests);
+        Assert.Equal(new Guid?[] { null, ids[^1] }, pageRequests);
         Assert.Equal(3, batches.Count);
         Assert.Equal(ids.Take(2), batches[0]);
         Assert.Equal(ids.Skip(2).Take(2), batches[1]);
@@ -255,7 +256,82 @@ public class DurableCurrentStateInitializerTests
     }
 
     [Fact]
-    public async Task GetAggregateIds_ReturnsStableDistinctRequestedPage()
+    public async Task OrchestrateInitAsync_WhenIdsMutateBetweenPages_UsesStableCursorRange()
+    {
+        const int pageSize = 4;
+        var liveIds = Enumerable.Range(0, 9).Select(_ => Guid.NewGuid()).ToList();
+        List<Guid> originalIds = liveIds.ToList();
+        var processed = new List<Guid>();
+        var cursors = new List<Guid?>();
+        var context = new Mock<TaskOrchestrationContext>();
+        bool mutated = false;
+        Guid insertedAhead = Guid.Empty;
+        Guid insertedBehind = Guid.Empty;
+
+        context.Setup(candidate => candidate.CallActivityAsync(
+                It.Is<TaskName>(name => name.Name == "Delete"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns(Task.CompletedTask);
+        context.Setup(candidate => candidate.CallActivityAsync<List<Guid>>(
+                It.Is<TaskName>(name => name.Name == "GetIds"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Returns<TaskName, object?, TaskOptions?>((_, input, _) =>
+            {
+                Guid? cursor = Assert.IsType<DurableCurrentStatePageInfo>(input).LastSeenId;
+                cursors.Add(cursor);
+                return Task.FromResult(liveIds
+                    .OrderBy(id => id.ToString(), StringComparer.Ordinal)
+                    .Where(id => cursor is null
+                        || string.CompareOrdinal(id.ToString(), cursor.Value.ToString()) > 0)
+                    .Take(pageSize)
+                    .ToList());
+            });
+        context.Setup(candidate => candidate.CallActivityAsync(
+                It.Is<TaskName>(name => name.Name == "Process"),
+                It.IsAny<object?>(), It.IsAny<TaskOptions?>()))
+            .Callback<TaskName, object?, TaskOptions?>((_, input, _) =>
+            {
+                processed.AddRange(Assert.IsType<List<Guid>>(input));
+                if (mutated)
+                {
+                    return;
+                }
+
+                mutated = true;
+                List<Guid> ordered = liveIds.OrderBy(id => id.ToString(), StringComparer.Ordinal).ToList();
+                string boundary = ordered[pageSize - 1].ToString();
+                liveIds.Remove(ordered[0]);
+
+                do
+                {
+                    insertedBehind = Guid.NewGuid();
+                }
+                while (string.CompareOrdinal(insertedBehind.ToString(), boundary) >= 0);
+
+                do
+                {
+                    insertedAhead = Guid.NewGuid();
+                }
+                while (string.CompareOrdinal(insertedAhead.ToString(), boundary) <= 0);
+
+                liveIds.Add(insertedBehind);
+                liveIds.Add(insertedAhead);
+            })
+            .Returns(Task.CompletedTask);
+        var initializer = CreateInitializer(Mock.Of<INostify>(), batchSize: 2, concurrentBatchCount: 2);
+
+        await initializer.OrchestrateInitAsync(context.Object, "Delete", "GetIds", "Process");
+
+        Assert.Null(cursors[0]);
+        Assert.Equal(processed.Count, processed.Distinct().Count());
+        Assert.Equal(
+            originalIds.Append(insertedAhead).OrderBy(id => id),
+            processed.OrderBy(id => id));
+        Assert.DoesNotContain(insertedBehind, processed);
+    }
+
+    [Fact]
+    public async Task GetAggregateIds_ReturnsDistinctIdsStrictlyAfterCursor()
     {
         Guid first = CreateDeterministicGuid(1);
         Guid second = CreateDeterministicGuid(2);
@@ -272,7 +348,7 @@ public class DurableCurrentStateInitializerTests
         nostify.Setup(candidate => candidate.GetEventStoreContainerAsync(false)).ReturnsAsync(eventStore.Object);
         var initializer = CreateInitializer(nostify.Object, batchSize: 1, concurrentBatchCount: 2);
 
-        List<Guid> result = await initializer.GetAggregateIds(new DurableCurrentStatePageInfo(1));
+        List<Guid> result = await initializer.GetAggregateIds(new DurableCurrentStatePageInfo(second));
 
         Assert.Equal(new[] { third }, result);
     }
