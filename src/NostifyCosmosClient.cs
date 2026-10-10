@@ -241,7 +241,7 @@ namespace nostify
         }
 
         /// <summary>
-        /// Constructor for a Cosmos client using a custom Cosmos SDK HTTP transport.
+        /// Creates a Cosmos client using a custom Cosmos SDK HTTP transport.
         /// </summary>
         /// <param name="ApiKey">The Cosmos account API key.</param>
         /// <param name="DbName">The Cosmos database name.</param>
@@ -257,7 +257,40 @@ namespace nostify
         /// <param name="SagaContainer">The saga container name.</param>
         /// <param name="SequenceContainer">The sequence container name.</param>
         /// <param name="logger">An optional structured logger.</param>
-        public NostifyCosmosClient(string ApiKey,
+        public static NostifyCosmosClient CreateWithHttpClientFactory(
+            string ApiKey,
+            string DbName,
+            string EndpointUri,
+            Func<HttpClient>? HttpClientFactory,
+            string ConnectionString = "",
+            string EventStorePartitionKey = "/aggregateRootId",
+            string EventStoreContainer = "eventStore",
+            string UndeliverableEvents = "undeliverableEvents",
+            int DefaultContainerThroughput = -1,
+            int DefaultDbThroughput = -1,
+            bool UseGatewayConnection = false,
+            string SagaContainer = "sagaContainer",
+            string SequenceContainer = "sequenceContainer",
+            ILogger? logger = null)
+        {
+            return new NostifyCosmosClient(
+                ApiKey,
+                DbName,
+                EndpointUri,
+                HttpClientFactory,
+                ConnectionString,
+                EventStorePartitionKey,
+                EventStoreContainer,
+                UndeliverableEvents,
+                DefaultContainerThroughput,
+                DefaultDbThroughput,
+                UseGatewayConnection,
+                SagaContainer,
+                SequenceContainer,
+                logger);
+        }
+
+        private NostifyCosmosClient(string ApiKey,
             string DbName,
             string EndpointUri,
             Func<HttpClient>? HttpClientFactory,

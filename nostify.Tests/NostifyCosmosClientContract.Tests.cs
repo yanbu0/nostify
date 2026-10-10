@@ -31,10 +31,10 @@ public sealed class NostifyCosmosClientContractTests
     }
 
     [Fact]
-    public void GetClient_FactoryAwareConstructorConfiguresRegularAndBulkClients()
+    public void GetClient_FactoryAwareFactoryConfiguresRegularAndBulkClients()
     {
         Func<HttpClient> factory = () => new HttpClient();
-        using var repository = new NostifyCosmosClient(
+        using var repository = NostifyCosmosClient.CreateWithHttpClientFactory(
             Convert.ToBase64String(new byte[64]),
             "db",
             "https://example.documents.azure.com",
@@ -45,6 +45,15 @@ public sealed class NostifyCosmosClientContractTests
 
         Assert.Same(factory, regular.ClientOptions.HttpClientFactory);
         Assert.Same(factory, bulk.ClientOptions.HttpClientFactory);
+    }
+
+    [Fact]
+    public void ConfiguredConstructor_NullConnectionStringRemainsUnambiguous()
+    {
+        using var client = new NostifyCosmosClient("key", "db", "endpoint", null!);
+
+        Assert.Equal("endpoint", client.EndpointUri);
+        Assert.Null(client.ConnectionString);
     }
 
     [Fact]

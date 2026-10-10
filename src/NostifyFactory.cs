@@ -385,7 +385,7 @@ public static class NostifyFactory
         string? kafkaUrl = config.producerConfig.BootstrapServers;
         bool hasKafkaConfiguration = !string.IsNullOrWhiteSpace(kafkaUrl);
 
-        var Repository = new NostifyCosmosClient(
+        var Repository = NostifyCosmosClient.CreateWithHttpClientFactory(
             cosmosApiKey,
             cosmosDbName,
             cosmosEndpointUri,
