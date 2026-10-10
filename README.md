@@ -81,7 +81,7 @@
  
 ### Updates
   
-- 5.2.1
+- 5.2.2
     - **Stable Durable Rebuild Paging**: Aggregate current-state rebuilding and destructive or rolling projection initialization page aggregate IDs with a last-seen-ID cursor (`id > lastSeenId`) instead of `Skip`/`Take` offsets, so concurrent inserts or deletes no longer shift offsets and cause IDs in later pages to be skipped or processed twice. IDs inserted behind the cursor are outside the active scan. `DurableCurrentStatePageInfo`, `DurableInitPageInfo`, and `DurablePartitionInitPageInfo` carry an optional `LastSeenId`; `GetIdsForPartition(PartitionKey, Guid?)` likewise uses the cursor directly.
 - 5.2.0
     - **Rolling Durable Projection Initialization**: Durable projection initialization can rebuild and upsert projections without deleting the container, allowing new projection fields to be backfilled without planned service disruption.
@@ -170,6 +170,16 @@ dotnet test ./nostify.IntegrationTests/nostify.IntegrationTests.csproj --filter 
 ```
 
 The integration fixture does not silently skip an unavailable dependency. Explicitly selected Kafka tests fail with the configured broker, timeout, and override setting in the error message. Temporary topics and consumer groups use run-unique names, and topic cleanup is best effort.
+
+A second Cosmos integration set uses Testcontainers to pull and start the Linux Cosmos DB Emulator automatically. It requires Docker Desktop (or another reachable Linux Docker daemon), but it does not require a separately installed emulator or fixed host port. Run it with:
+
+```powershell
+dotnet test ./nostify.IntegrationTests/nostify.IntegrationTests.csproj --filter "Dependency=CosmosDocker"
+```
+
+The fixture creates a run-unique database and uses Nostify's Newtonsoft serializer. The suite retains its Cosmos SDK, ApplyAndPersist, and serializer checks and additionally exercises public Nostify workflows: `Build<T>()` auto-provisioning (including aggregate, projection, event-store, sequence, and undeliverable containers with their partition-key/TTL contracts) and selected-property durable rolling initialization over persisted event and projection documents. Rolling replay is scoped to the aggregate-root partition, and final state is verified with point reads. Broader typed LINQ scenarios remain excluded because the Linux vNext preview emulator can fail typed responses with `Unknown JsonNodeType: Unknown`. The same filtered suite runs on GitHub-hosted Linux runners through the `Cosmos Docker Integration Tests` workflow.
+
+The original tests for a pre-running Cosmos endpoint remain available with `--filter "Dependency=Cosmos"` and use the layered `IntegrationTesting:Cosmos` settings.
 
 ## Using The Templates
 

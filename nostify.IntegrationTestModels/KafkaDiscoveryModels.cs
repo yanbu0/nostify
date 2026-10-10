@@ -19,6 +19,22 @@ public sealed class KafkaDiscoveryAggregate : NostifyObject, IAggregate
     }
 }
 
+/// <summary>A minimal projection used to verify reflection-based Cosmos container provisioning.</summary>
+public sealed class CosmosProvisioningProjection : NostifyObject, IProjection
+{
+    /// <summary>Gets the stable projection container name.</summary>
+    public static string containerName => "NostifyIntegrationDiscoveryProjection";
+
+    /// <summary>Gets or sets whether the projection was initialized.</summary>
+    public bool initialized { get; set; }
+
+    /// <inheritdoc />
+    protected override void Apply(EventType eventType, IEvent eventToApply)
+    {
+        // Provisioning tests inspect only the projection's static container contract.
+    }
+}
+
 /// <summary>The first logical topic discovered from the isolated model assembly.</summary>
 public sealed class Create_NostifyIntegrationDiscovery : EventType
 {

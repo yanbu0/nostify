@@ -13,6 +13,50 @@ namespace nostify.Tests;
 public sealed class NostifyCosmosClientContractTests
 {
     [Fact]
+    public void ConfiguredConstructor_LegacySignatureRemainsBinaryCompatible()
+    {
+        Type[] parameterTypes =
+        [
+            typeof(string), typeof(string), typeof(string), typeof(string), typeof(string),
+            typeof(string), typeof(string), typeof(int), typeof(int), typeof(bool), typeof(string),
+            typeof(string), typeof(ILogger)
+        ];
+
+        ConstructorInfo constructor = typeof(NostifyCosmosClient).GetConstructor(parameterTypes)!;
+
+        Assert.NotNull(constructor);
+        Assert.All(constructor.GetParameters().Skip(2), parameter => Assert.True(parameter.IsOptional));
+        using var client = new NostifyCosmosClient("key", "db");
+        Assert.Null(GetPrivateField<Func<HttpClient>?>(client, "_httpClientFactory"));
+    }
+
+    [Fact]
+    public void GetClient_FactoryAwareFactoryConfiguresRegularAndBulkClients()
+    {
+        Func<HttpClient> factory = () => new HttpClient();
+        using var repository = NostifyCosmosClient.CreateWithHttpClientFactory(
+            Convert.ToBase64String(new byte[64]),
+            "db",
+            "https://example.documents.azure.com",
+            factory);
+
+        CosmosClient regular = repository.GetClient();
+        CosmosClient bulk = repository.GetClient(allowBulk: true);
+
+        Assert.Same(factory, regular.ClientOptions.HttpClientFactory);
+        Assert.Same(factory, bulk.ClientOptions.HttpClientFactory);
+    }
+
+    [Fact]
+    public void ConfiguredConstructor_NullConnectionStringRemainsUnambiguous()
+    {
+        using var client = new NostifyCosmosClient("key", "db", "endpoint", null!);
+
+        Assert.Equal("endpoint", client.EndpointUri);
+        Assert.Null(client.ConnectionString);
+    }
+
+    [Fact]
     public void ConfiguredConstructor_WithDefaults_PreservesConfigurationAndBuildsConnectionString()
     {
         var logger = new Mock<ILogger>();
@@ -259,8 +303,15 @@ public sealed class NostifyCosmosClientContractTests
     /// <summary>Reads private cached state to assert externally observable cache behavior.</summary>
     private static T GetPrivateField<T>(NostifyCosmosClient repository, string name)
     {
+        PropertyInfo? property = typeof(NostifyCosmosClient)
+            .GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic);
+        if (property != null)
+        {
+            return (T)property.GetValue(repository)!;
+        }
+
         return (T)typeof(NostifyCosmosClient)
-            .GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(repository)!;
     }
 }

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Configuration;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Http;
 using Microsoft.Azure.Cosmos;
 using System.Linq;
 using Microsoft.Extensions.Logging;
@@ -125,6 +126,11 @@ namespace nostify
         ///</summary>
         public readonly ILogger? _logger;
 
+        /// <summary>
+        /// Optional HTTP client factory passed to Cosmos SDK clients.
+        /// </summary>
+        private readonly Func<HttpClient>? _httpClientFactory;
+
         private static readonly Action<ILogger, string, Exception?> LogKnownContainer =
             LoggerMessage.Define<string>(
                 LogLevel.Debug,
@@ -190,9 +196,104 @@ namespace nostify
         ///<summary>
         ///Constructor for cosmos client
         ///</summary>
+        /// <param name="ApiKey">The Cosmos account API key.</param>
+        /// <param name="DbName">The Cosmos database name.</param>
+        /// <param name="EndpointUri">The Cosmos account endpoint URI.</param>
+        /// <param name="ConnectionString">An optional complete Cosmos connection string.</param>
+        /// <param name="EventStorePartitionKey">The event-store partition-key path.</param>
+        /// <param name="EventStoreContainer">The event-store container name.</param>
+        /// <param name="UndeliverableEvents">The undeliverable-events container name.</param>
+        /// <param name="DefaultContainerThroughput">The default throughput used when creating containers.</param>
+        /// <param name="DefaultDbThroughput">The default throughput used when creating the database.</param>
+        /// <param name="UseGatewayConnection">Whether Cosmos clients use gateway connection mode.</param>
+        /// <param name="SagaContainer">The saga container name.</param>
+        /// <param name="SequenceContainer">The sequence container name.</param>
+        /// <param name="logger">An optional structured logger.</param>
         public NostifyCosmosClient(string ApiKey,
             string DbName,
             string EndpointUri = "",
+            string ConnectionString = "",
+            string EventStorePartitionKey = "/aggregateRootId",
+            string EventStoreContainer = "eventStore",
+            string UndeliverableEvents = "undeliverableEvents",
+            int DefaultContainerThroughput = -1,
+            int DefaultDbThroughput = -1,
+            bool UseGatewayConnection = false,
+            string SagaContainer = "sagaContainer",
+            string SequenceContainer = "sequenceContainer",
+            ILogger? logger = null)
+            : this(
+                ApiKey,
+                DbName,
+                EndpointUri,
+                HttpClientFactory: null,
+                ConnectionString,
+                EventStorePartitionKey,
+                EventStoreContainer,
+                UndeliverableEvents,
+                DefaultContainerThroughput,
+                DefaultDbThroughput,
+                UseGatewayConnection,
+                SagaContainer,
+                SequenceContainer,
+                logger)
+        {
+        }
+
+        /// <summary>
+        /// Creates a Cosmos client using a custom Cosmos SDK HTTP transport.
+        /// </summary>
+        /// <param name="ApiKey">The Cosmos account API key.</param>
+        /// <param name="DbName">The Cosmos database name.</param>
+        /// <param name="EndpointUri">The Cosmos account endpoint URI.</param>
+        /// <param name="HttpClientFactory">Factory for Cosmos SDK HTTP clients.</param>
+        /// <param name="ConnectionString">An optional complete Cosmos connection string.</param>
+        /// <param name="EventStorePartitionKey">The event-store partition-key path.</param>
+        /// <param name="EventStoreContainer">The event-store container name.</param>
+        /// <param name="UndeliverableEvents">The undeliverable-events container name.</param>
+        /// <param name="DefaultContainerThroughput">The default throughput used when creating containers.</param>
+        /// <param name="DefaultDbThroughput">The default throughput used when creating the database.</param>
+        /// <param name="UseGatewayConnection">Whether Cosmos clients use gateway connection mode.</param>
+        /// <param name="SagaContainer">The saga container name.</param>
+        /// <param name="SequenceContainer">The sequence container name.</param>
+        /// <param name="logger">An optional structured logger.</param>
+        public static NostifyCosmosClient CreateWithHttpClientFactory(
+            string ApiKey,
+            string DbName,
+            string EndpointUri,
+            Func<HttpClient>? HttpClientFactory,
+            string ConnectionString = "",
+            string EventStorePartitionKey = "/aggregateRootId",
+            string EventStoreContainer = "eventStore",
+            string UndeliverableEvents = "undeliverableEvents",
+            int DefaultContainerThroughput = -1,
+            int DefaultDbThroughput = -1,
+            bool UseGatewayConnection = false,
+            string SagaContainer = "sagaContainer",
+            string SequenceContainer = "sequenceContainer",
+            ILogger? logger = null)
+        {
+            return new NostifyCosmosClient(
+                ApiKey,
+                DbName,
+                EndpointUri,
+                HttpClientFactory,
+                ConnectionString,
+                EventStorePartitionKey,
+                EventStoreContainer,
+                UndeliverableEvents,
+                DefaultContainerThroughput,
+                DefaultDbThroughput,
+                UseGatewayConnection,
+                SagaContainer,
+                SequenceContainer,
+                logger);
+        }
+
+        private NostifyCosmosClient(string ApiKey,
+            string DbName,
+            string EndpointUri,
+            Func<HttpClient>? HttpClientFactory,
             string ConnectionString = "",
             string EventStorePartitionKey = "/aggregateRootId",
             string EventStoreContainer = "eventStore",
@@ -217,6 +318,7 @@ namespace nostify
             this.SagaContainer = SagaContainer;
             this.SequenceContainer = SequenceContainer;
             this._logger = logger;
+            this._httpClientFactory = HttpClientFactory;
         }
 
         /// <inheritdoc />
@@ -240,6 +342,7 @@ namespace nostify
                 {
                     AllowBulkExecution = allowBulk,
                     ConnectionMode = useGatewayConnection ? ConnectionMode.Gateway : ConnectionMode.Direct,
+                    HttpClientFactory = _httpClientFactory,
                     Serializer = new NewtonsoftJsonCosmosSerializer(),
                 };
                 var client = new CosmosClient(EndpointUri, Primarykey, options);

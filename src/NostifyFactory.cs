@@ -83,6 +83,12 @@ public class NostifyConfig
     public bool useGatewayConnection { get; set; }
 
     /// <summary>
+    /// Optional HTTP client factory used by the Cosmos SDK. This supports custom transports such as
+    /// the Docker Cosmos emulator's dynamic-port and development-certificate handler.
+    /// </summary>
+    public Func<HttpClient>? cosmosHttpClientFactory { get; set; }
+
+    /// <summary>
     /// The default retry options applied by default handlers when <c>allowRetry</c> is <c>true</c>
     /// and no explicit <see cref="RetryOptions"/> are provided. Defaults to <c>new RetryOptions()</c>
     /// (3 retries, 1 s delay, exponential backoff) when not set or when <c>null</c> is passed.
@@ -135,16 +141,80 @@ public static class NostifyFactory
     /// <summary>
     /// Creates a new instance of Nostify using Cosmos.
     /// </summary>
+    /// <param name="cosmosApiKey">The Cosmos account API key.</param>
+    /// <param name="cosmosDbName">The Cosmos database name.</param>
+    /// <param name="cosmosEndpointUri">The Cosmos account endpoint URI.</param>
+    /// <param name="createContainers">Whether to create Nostify containers during a generic build.</param>
+    /// <param name="containerThroughput">Optional throughput used when creating containers.</param>
+    /// <param name="useGatewayConnection">Whether Cosmos clients use gateway connection mode.</param>
+    /// <param name="defaultRetryOptions">Default retry behavior for supported Nostify operations.</param>
+    /// <returns>A Cosmos-configured Nostify configuration.</returns>
     public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false, RetryOptions? defaultRetryOptions = null)
+        => WithCosmos(
+            cosmosApiKey,
+            cosmosDbName,
+            cosmosEndpointUri,
+            createContainers,
+            containerThroughput,
+            useGatewayConnection,
+            defaultRetryOptions,
+            cosmosHttpClientFactory: null);
+
+    /// <summary>
+    /// Creates a new instance of Nostify using Cosmos and a custom Cosmos SDK HTTP transport.
+    /// </summary>
+    /// <param name="cosmosApiKey">The Cosmos account API key.</param>
+    /// <param name="cosmosDbName">The Cosmos database name.</param>
+    /// <param name="cosmosEndpointUri">The Cosmos account endpoint URI.</param>
+    /// <param name="cosmosHttpClientFactory">Factory for Cosmos SDK HTTP clients.</param>
+    /// <param name="createContainers">Whether to create Nostify containers during a generic build.</param>
+    /// <param name="containerThroughput">Optional throughput used when creating containers.</param>
+    /// <param name="useGatewayConnection">Whether Cosmos clients use gateway connection mode.</param>
+    /// <param name="defaultRetryOptions">Default retry behavior for supported Nostify operations.</param>
+    /// <returns>A Cosmos-configured Nostify configuration.</returns>
+    public static NostifyConfig WithCosmos(string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers, int? containerThroughput, bool useGatewayConnection, RetryOptions? defaultRetryOptions, Func<HttpClient>? cosmosHttpClientFactory)
     {
         NostifyConfig config = new NostifyConfig();
-        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers, containerThroughput, useGatewayConnection, defaultRetryOptions);
+        return config.WithCosmos(cosmosApiKey, cosmosDbName, cosmosEndpointUri, createContainers, containerThroughput, useGatewayConnection, defaultRetryOptions, cosmosHttpClientFactory);
     }
 
     /// <summary>
-    /// Creates a new instance of Nostify using Cosmos.
+    /// Adds Cosmos configuration to an existing Nostify configuration.
     /// </summary>
+    /// <param name="config">The configuration to update.</param>
+    /// <param name="cosmosApiKey">The Cosmos account API key.</param>
+    /// <param name="cosmosDbName">The Cosmos database name.</param>
+    /// <param name="cosmosEndpointUri">The Cosmos account endpoint URI.</param>
+    /// <param name="createContainers">Whether to create Nostify containers during a generic build.</param>
+    /// <param name="containerThroughput">Optional throughput used when creating containers.</param>
+    /// <param name="useGatewayConnection">Whether Cosmos clients use gateway connection mode.</param>
+    /// <param name="defaultRetryOptions">Default retry behavior for supported Nostify operations.</param>
+    /// <returns>The updated Nostify configuration.</returns>
     public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers = false, int? containerThroughput = null, bool useGatewayConnection = false, RetryOptions? defaultRetryOptions = null)
+        => config.WithCosmos(
+            cosmosApiKey,
+            cosmosDbName,
+            cosmosEndpointUri,
+            createContainers,
+            containerThroughput,
+            useGatewayConnection,
+            defaultRetryOptions,
+            cosmosHttpClientFactory: null);
+
+    /// <summary>
+    /// Adds Cosmos configuration and a custom Cosmos SDK HTTP transport to an existing configuration.
+    /// </summary>
+    /// <param name="config">The configuration to update.</param>
+    /// <param name="cosmosApiKey">The Cosmos account API key.</param>
+    /// <param name="cosmosDbName">The Cosmos database name.</param>
+    /// <param name="cosmosEndpointUri">The Cosmos account endpoint URI.</param>
+    /// <param name="cosmosHttpClientFactory">Factory for Cosmos SDK HTTP clients.</param>
+    /// <param name="createContainers">Whether to create Nostify containers during a generic build.</param>
+    /// <param name="containerThroughput">Optional throughput used when creating containers.</param>
+    /// <param name="useGatewayConnection">Whether Cosmos clients use gateway connection mode.</param>
+    /// <param name="defaultRetryOptions">Default retry behavior for supported Nostify operations.</param>
+    /// <returns>The updated Nostify configuration.</returns>
+    public static NostifyConfig WithCosmos(this NostifyConfig config, string cosmosApiKey, string cosmosDbName, string cosmosEndpointUri, bool? createContainers, int? containerThroughput, bool useGatewayConnection, RetryOptions? defaultRetryOptions, Func<HttpClient>? cosmosHttpClientFactory)
     {
         config.cosmosApiKey = cosmosApiKey;
         config.cosmosDbName = cosmosDbName;
@@ -152,6 +222,7 @@ public static class NostifyFactory
         config.createContainers = createContainers ?? false;
         config.containerThroughput = containerThroughput;
         config.useGatewayConnection = useGatewayConnection;
+        config.cosmosHttpClientFactory = cosmosHttpClientFactory;
         config.DefaultRetryOptions = defaultRetryOptions ?? new RetryOptions();
         return config;
     }
@@ -314,14 +385,15 @@ public static class NostifyFactory
         string? kafkaUrl = config.producerConfig.BootstrapServers;
         bool hasKafkaConfiguration = !string.IsNullOrWhiteSpace(kafkaUrl);
 
-        var Repository = new NostifyCosmosClient(cosmosApiKey,
+        var Repository = NostifyCosmosClient.CreateWithHttpClientFactory(
+            cosmosApiKey,
             cosmosDbName,
             cosmosEndpointUri,
+            config.cosmosHttpClientFactory,
             UseGatewayConnection: config.useGatewayConnection,
             DefaultContainerThroughput: config.containerThroughput ?? -1,
             DefaultDbThroughput: config.containerThroughput ?? -1,
-            logger: config.logger
-        );
+            logger: config.logger);
         var DefaultPartitionKeyPath = config.defaultPartitionKeyPath ?? "/tenantId";
         var DefaultTenantId = config.defaultTenantId;
         // Avoid allocating a native Kafka producer for Cosmos-only applications.
