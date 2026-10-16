@@ -150,6 +150,15 @@ public class NostifyValidationExceptionHandlerTests
     }
 
     [Fact]
+    public void ValidateObjectAndGetErrorResponse_WithNostifyObjectId_DoesNotRequireEventContext()
+    {
+        ValidationErrorResponse? response =
+            NostifyValidationExceptionHandler.ValidateObjectAndGetErrorResponse(new ValidationNostifyObject());
+
+        Assert.Null(response);
+    }
+
+    [Fact]
     public void ValidateObjectForCommand_WithNullObject_ReturnsObjectErrorAndLogs()
     {
         var logger = CreateEnabledLogger();
@@ -218,6 +227,17 @@ public class NostifyValidationExceptionHandlerTests
         VerifyWarningLogged(logger);
     }
 
+    [Fact]
+    public void ValidateObjectForCommand_WithNostifyObjectId_DoesNotRequireAggregateRootContext()
+    {
+        ValidationErrorResponse? response =
+            NostifyValidationExceptionHandler.ValidateObjectForCommandAndGetErrorResponse(
+                new ValidationNostifyObject(),
+                "Create");
+
+        Assert.Null(response);
+    }
+
     private static Mock<ILogger> CreateEnabledLogger()
     {
         var logger = new Mock<ILogger>();
@@ -247,5 +267,9 @@ public class NostifyValidationExceptionHandlerTests
     {
         [RequiredFor("Create")]
         public string? Name { get; set; }
+    }
+
+    private sealed class ValidationNostifyObject : NostifyObject
+    {
     }
 }

@@ -117,6 +117,8 @@ public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : c
 
 Validates that payload properties match the aggregate type. Payloads are intentionally allowed to be partial: validation does not require an omitted property unless it has `[Required]` or a `[RequiredFor(...)]` declaration matching this event type. Validation still rejects unknown payload properties and invalid supplied values.
 
+Supplied enum values are validated against the enum's declared members before deserialization. Named values are matched case-insensitively, and integer values are accepted only when they fit the enum's underlying type and correspond to a declared member. Unknown names, undefined integers, out-of-range integers, and `null` for non-nullable enum properties produce a `NostifyValidationException` with the qualified payload member path. Nullable enum properties accept explicit `null`, while omitted enum properties retain normal partial-update semantics. Enum properties remain compatible with `[RequiredFor]`, `[OnlyFor]`, and `[TogetherFor]`; those attributes determine presence and event applicability independently from enum value validity.
+
 **Returns:** `IEvent` - The current event for chaining; throws if validation fails
 
 ### ApplyTo
@@ -155,7 +157,7 @@ When both `eventType` and legacy `command` are present in incoming JSON, `comman
 An event payload is a **change set**, not an aggregate snapshot. UI clients, generated clients, and AI agents should include only properties the current Create or Update event intentionally sets.
 
 - A missing property means the event does not set that property.
-- A present property with `null`, `false`, `0`, an empty string, or an empty collection is an explicit update.
+- A present property with `null`, `false`, `0`, an empty string, or an empty collection is an explicit update, subject to its type and validation attributes. For enums, `0` is valid only when it is a declared member.
 - Applying a payload through `UpdateProperties<T>()` changes matching properties that are present and preserves omitted properties.
 - Create payloads may omit aggregate properties that should retain their defaults, subject to `[Required]` and matching `[RequiredFor(...)]` validation.
 - Update payloads should avoid unchanged values because stale UI state can overwrite newer aggregate state and makes the event history inaccurately describe the change.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-`RequiredForAttribute` is a custom validation attribute that marks properties as required only for specific commands. It enables command-specific validation in event-sourcing applications.
+`RequiredForAttribute` is a custom validation attribute that marks properties as required only for specific event types. It enables event-specific validation in event-sourcing applications.
 
 ## Class Definition
 
@@ -18,57 +18,65 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
 
 ## Constructors
 
-### Single Command
+### Single Event
 
 ```csharp
-public RequiredForAttribute(string command)
+public RequiredForAttribute(string eventName)
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `command` | `string` | Command name for which this property is required |
+| `eventName` | `string` | Event type name for which this property is required |
 
-### Multiple Commands
+### Multiple Events
 
 ```csharp
-public RequiredForAttribute(params string[] commands)
+public RequiredForAttribute(params string[] eventNames)
 ```
+
+The `params` overload accepts either an existing array or multiple event names directly.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `commands` | `string[]` | Command names for which this property is required |
+| `eventNames` | `string[]` | Event type names for which this property is required |
+
+### Event Definition Types
+
+```csharp
+public RequiredForAttribute(params Type[] eventTypes)
+```
+
+Attribute constructors cannot be generic, so a `params T` constructor is not valid C#. This overload accepts CLR `Type` values and validates at runtime that every supplied type is a concrete `EventType` with a parameterless constructor. It resolves each definition's configured `EventType.name`; it does not use the CLR class name.
+
+```csharp
+[RequiredFor(typeof(CreateOrder), typeof(UpdateOrder))]
+public decimal Total { get; set; }
+```
+
+The event definition classes derive from `EventType`, rather than `IEvent`. `IEvent` represents a persisted event envelope and therefore is not the appropriate type constraint for this metadata.
+
+The NuGet package includes Roslyn diagnostic `NOSTIFY_EVENTTYPE_CHECK`, an error that checks every `typeof(...)` argument at build time. A type that does not derive from `EventType` is rejected before execution. Runtime validation remains authoritative for reflection-created attributes and also rejects abstract definitions or definitions without parameterless constructors.
 
 ## Properties
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Commands` | `List<string>` | List of commands requiring this property |
+| `Events` | `List<string>` | List of event types requiring this property |
+| `Commands` | `List<string>` | Obsolete backwards-compatible alias that returns the same list as `Events`; removed in the next major version |
 
 ## Behavior
 
 The `IsValid` method:
 
-1. Gets the validation context
-2. Extracts the current `NostifyCommand` from context
-3. If command is not in the `Commands` list, returns `ValidationResult.Success` (skips validation)
-4. If command is in the list, invokes base `RequiredAttribute` validation
+1. Gets the validation context.
+2. Extracts the current `EventType` from the `eventType` context item, with legacy `command` context support.
+3. If the event type is not in the `Events` list, returns `ValidationResult.Success` (skips validation).
+4. If the event type is in the list, verifies that the property name exists in the original payload's `payloadProperties` set.
+5. For a supplied property, invokes base `RequiredAttribute` validation to reject null, empty, or whitespace string values.
 
-```csharp
-protected override ValidationResult IsValid(object value, ValidationContext context)
-{
-    // Get current command from context
-    var command = context.Items["NostifyCommand"] as NostifyCommand;
-    
-    // Skip validation if command not in list
-    if (command == null || !Commands.Contains(command.name))
-    {
-        return ValidationResult.Success;
-    }
-    
-    // Apply required validation
-    return base.IsValid(value, context);
-}
-```
+Checking original payload membership distinguishes an omitted non-nullable value type from an explicitly supplied default value after deserialization. For example, omitting a required `Guid` fails even though its deserialized value would be `Guid.Empty`; explicitly supplying `Guid.Empty` satisfies `RequiredFor` presence and can be rejected separately by a value-specific validator when needed.
+
+The legacy `Commands` property refers to the same mutable list instance as `Events`, so existing consumers remain source- and behavior-compatible. It is marked obsolete and will be removed in the next major version.
 
 ## Usage Examples
 
@@ -77,12 +85,12 @@ protected override ValidationResult IsValid(object value, ValidationContext cont
 ```csharp
 public class Order : NostifyObject, IAggregate, IApplyable
 {
-    // Required only for CreateOrder
-    [RequiredFor("CreateOrder")]
+    // Required only for CreateOrder, resolved from its EventType definition
+    [RequiredFor(typeof(CreateOrder))]
     public Guid CustomerId { get; set; }
     
     // Required for both Create and Update
-    [RequiredFor("CreateOrder", "UpdateOrder")]
+    [RequiredFor(typeof(CreateOrder), typeof(UpdateOrder))]
     public decimal Total { get; set; }
     
     // Required only for ShipOrder
@@ -195,17 +203,20 @@ Return Results
 ```csharp
 public interface INostifyValidation
 {
-    List<string> Commands { get; }
+    List<string> Events { get; }
+
+    [Obsolete("Commands is retained for backwards compatibility and will be removed in the next major version. Use Events instead.")]
+    List<string> Commands => Events;
 }
 ```
 
-This interface allows the validation system to identify command-aware validation attributes.
+`Events` is the canonical terminology. The default interface implementation preserves callers of `Commands`; custom validators must implement `Events`.
 
 ## Best Practices
 
-1. **Use Constants** - Define command names as constants
-2. **Document Requirements** - Comment which properties each command needs
-3. **Group Related Commands** - Use multiple commands in single attribute when logical
+1. **Use Constants** - Define event type names as constants
+2. **Document Requirements** - Comment which properties each event needs
+3. **Group Related Events** - Use multiple event types in one attribute when logical
 4. **Custom Messages** - Provide clear error messages for better UX
 5. **Validate Early** - Validate before processing events
 

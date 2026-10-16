@@ -81,6 +81,12 @@
  
 ### Updates
   
+- 5.3.0
+    - **Event-Aware Validation**: `RequiredFor`, `OnlyFor`, and `TogetherFor` support event-specific payload validation, including type-based event declarations.
+    - **Protected Aggregate IDs**: `AggregateRootId` prevents event payloads from changing an aggregate's identity.
+    - **Safer Client Payloads**: `RejectFromClient` blocks server-managed properties from client-originated events.
+    - **Recursive Validation**: Validation now traverses nested aggregate objects and handles enum payload values consistently.
+    - **Validation Interface Compatibility**: `INostifyValidation` retains its published `Commands` member and provides `Events` as a default alias for existing implementations.
 - 5.2.2
     - **Stable Durable Rebuild Paging**: Aggregate current-state rebuilding and destructive or rolling projection initialization page aggregate IDs with a last-seen-ID cursor (`id > lastSeenId`) instead of `Skip`/`Take` offsets, so concurrent inserts or deletes no longer shift offsets and cause IDs in later pages to be skipped or processed twice. IDs inserted behind the cursor are outside the active scan. `DurableCurrentStatePageInfo`, `DurableInitPageInfo`, and `DurablePartitionInitPageInfo` carry an optional `LastSeenId`; `GetIdsForPartition(PartitionKey, Guid?)` likewise uses the cursor directly.
 - 5.2.0
@@ -619,7 +625,7 @@ public async Task OnTestCreated(
 
 #### Payload Validation
 
-Event payloads are validated by default when using `EventFactory`. This is done by placing `ValidationAttribute` attributes on aggregate properties. It ensures required properties are present and supplied values are valid for the specified event type. Only properties present on the current payload are validated, except for `[Required]` and matching `[RequiredFor(...)]` declarations. Partial Create and Update payloads remain valid without calling `NoValidate()`.
+Event payloads are validated by default when using `EventFactory`. This is done by placing `ValidationAttribute` attributes on aggregate properties. It ensures required properties are present and supplied values are valid for the specified event type. Only properties present on the current payload are validated, except for `[Required]` and matching `[RequiredFor(...)]` declarations. `[OnlyFor(...)]` rejects a supplied property for every event type outside its allowlist while allowing the property to be omitted. Partial Create and Update payloads remain valid without calling `NoValidate()`.
 
 ```C#
 // EventFactory validates a partial payload by default.
@@ -636,18 +642,24 @@ await _nostify.PersistEventAsync(deleted);
 
 Use `NoValidate()` only for an intentionally unvalidated workflow, such as a controlled legacy import. Do not use it merely to accept a partial command payload.
 
-Most of the time, you will want to use `RequiredFor` instead of `Required` to mark a property as required for that specific command or list of commands. `Required` is still a valid validation attribute, but it will require that property to be present and not null for EVERY command:
+Most of the time, you will want to use `RequiredFor` instead of `Required` to mark a property as required for a specific event type or list of event types. `Required` is still a valid validation attribute, but it requires that property to be present and not null for every event type. Event names can be passed directly, or strongly associated with concrete `EventType` definitions through `typeof(...)`:
 
 ```C#
 public class TestAggregate : NostifyObject, IAggregate
 {
-    [RequiredFor("Create_Test")]
+    [RequiredFor(typeof(Create_Test))]
+    [OnlyFor(typeof(Create_Test))]
     public string Name { get; set; }
     
-    [RequiredFor(["Update_Test", "Create_Test"])]
+    [RequiredFor(typeof(Update_Test), typeof(Create_Test))]
+    [OnlyFor(typeof(Update_Test), typeof(Create_Test))]
     public int Value { get; set; }
 }
 ```
+
+`RequiredFor` controls when a property must be present. `OnlyFor` controls when a supplied property is permitted. Combining them creates an event-specific property that is required for the listed events and invalid for every other event.
+
+The package includes Roslyn diagnostic `NOSTIFY_EVENTTYPE_CHECK`. It reports a compile-time error when a `typeof(...)` argument passed to `RequiredFor`, `OnlyFor`, or `TogetherFor` does not derive from `EventType`. Runtime validation remains in place for reflection and dynamically constructed attributes.
 
 #### CreateNullPayloadEvent Method
 
@@ -3980,24 +3992,37 @@ The framework includes a validation system for ensuring data integrity when crea
 
 #### RequiredForAttribute
 
-Use the `RequiredForAttribute` to specify which properties are required for specific commands:
+Use the `RequiredForAttribute` to specify which properties are required for specific event types. Its `Events` property contains the configured event type names. The overload accepting `Type` values resolves names from concrete `EventType` definitions. The obsolete `Commands` property remains as an alias to the same list for backwards compatibility and will be removed in the next major version:
 
 ```C#
 public class OrderAggregate : NostifyObject, IAggregate
 {
-    // Required only for Create_Order command
-    [RequiredFor("Create_Order")]
+    // Required for Create_Order and invalid when supplied by another event type.
+    [RequiredFor(typeof(Create_Order))]
+    [OnlyFor(typeof(Create_Order))]
     public string customerName { get; set; }
     
-    // Required for multiple commands
-    [RequiredFor(new[] { "Create_Order", "Update_Order" })]
+    // The params overload accepts multiple EventType definitions.
+    [RequiredFor(typeof(Create_Order), typeof(Update_Order))]
+    [OnlyFor(typeof(Create_Order), typeof(Update_Order))]
     public decimal totalAmount { get; set; }
     
-    // Standard Required attribute - required for ALL commands
+    // Standard Required attribute - required for ALL event types
     [Required]
     public Guid customerId { get; set; }
+
+    // Optional as a pair: supplying either date requires both dates.
+    [TogetherFor("delivery-window", typeof(Update_Order))]
+    public DateTimeOffset? deliveryStartsAt { get; set; }
+
+    [TogetherFor("delivery-window", typeof(Update_Order))]
+    public DateTimeOffset? deliveryEndsAt { get; set; }
 }
 ```
+
+`OnlyForAttribute` rejects a supplied property for every event type outside its configured `Events` allowlist, but does not require the property for allowed events. Combining it with `RequiredForAttribute` both requires and restricts the property as shown above. `TogetherForAttribute` creates an optional named group for selected event types: if any property in the group is present, every property in the group must be present. Payload membership determines presence, so an explicit `null` or default value is still present. Adding matching `RequiredForAttribute` metadata to one group member activates the group and requires all of its members. These attributes expose the obsolete `Commands` compatibility alias, which delegates to `Events` and will be removed in the next major version.
+
+Roslyn diagnostic `NOSTIFY_EVENTTYPE_CHECK` makes invalid typed declarations such as `[RequiredFor(typeof(string))]`, `[OnlyFor(typeof(string))]`, and `[TogetherFor("group", typeof(string))]` build errors. Every `typeof(...)` argument must derive from `EventType`.
 
 #### EventFactory Validation
 
@@ -4020,7 +4045,7 @@ IEvent imported = new EventFactory().NoValidate().Create<OrderAggregate>(
 IEvent deleted = new EventFactory().CreateNullPayloadEvent(new Delete_Order(), aggregateId);
 ```
 
-Do not call `NoValidate()` merely because a Create or Update payload is partial. Normal validation accepts omitted optional properties while still rejecting unknown properties and enforcing `[Required]`, matching `[RequiredFor(...)]`, and constraints on supplied values.
+Do not call `NoValidate()` merely because a Create or Update payload is partial. Normal validation accepts omitted optional properties while still rejecting unknown properties and enforcing `[Required]`, matching `[RequiredFor(...)]`, `[OnlyFor(...)]`, active `[TogetherFor(...)]` groups, and constraints on supplied values.
 
 ## Performance Considerations
 

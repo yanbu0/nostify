@@ -2,14 +2,17 @@
 
 ## Overview
 
-`INostifyValidation` is a marker interface for validation attributes that support command-aware validation in the nostify framework.
+`INostifyValidation` is a marker interface for validation attributes that support event-type-aware validation in the nostify framework.
 
 ## Interface Definition
 
 ```csharp
 public interface INostifyValidation
 {
-    List<string> Commands { get; }
+    List<string> Events { get; }
+
+    [Obsolete("Commands is retained for backwards compatibility and will be removed in the next major version. Use Events instead.")]
+    List<string> Commands => Events;
 }
 ```
 
@@ -17,15 +20,18 @@ public interface INostifyValidation
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Commands` | `List<string>` | List of command names for which this validation applies |
+| `Events` | `List<string>` | List of event type names for which this validation applies |
+| `Commands` | `List<string>` | Obsolete backwards-compatible alias; scheduled for removal in the next major version |
 
 ## Purpose
 
 This interface enables the validation system to:
 
-1. Identify validation attributes that are command-specific
-2. Extract the list of relevant commands
-3. Apply validation conditionally based on current command context
+1. Identify validation attributes that are event-specific
+2. Extract the list of relevant event type names
+3. Apply validation conditionally based on the current event context
+
+`Events` is the canonical contract. The default obsolete `Commands` implementation delegates to `Events`, preserving callers of the old property while requiring implementers to adopt the new terminology. This is a source-breaking change for external custom implementations of `INostifyValidation`; those implementations must rename or add their property to `Events` when updating.
 
 ## Implementation
 
@@ -34,11 +40,14 @@ The primary implementation is [RequiredForAttribute](RequiredForAttribute.spec.m
 ```csharp
 public class RequiredForAttribute : RequiredAttribute, INostifyValidation
 {
-    public List<string> Commands { get; private set; }
-    
-    public RequiredForAttribute(params string[] commands)
+    public List<string> Events { get; }
+
+    [Obsolete("Commands is retained for backwards compatibility and will be removed in the next major version. Use Events instead.")]
+    public List<string> Commands => Events;
+
+    public RequiredForAttribute(params string[] eventNames)
     {
-        Commands = commands.ToList();
+        Events = [.. eventNames];
     }
 }
 ```
