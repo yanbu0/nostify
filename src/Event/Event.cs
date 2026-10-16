@@ -264,7 +264,10 @@ public class Event : IEvent
     /// <inheritdoc />
     public IEvent ValidatePayload<T>(bool throwErrorIfExtraProps = true) where T : class
     {
-        JObject cleanedPayload = RemoveNonExistentPayloadProperties<T>(throwErrorIfExtraProps, out List<ValidationResult> validationMessages) as JObject ?? throw new InvalidOperationException("Payload cannot be null after removing non-existent properties.");
+        JObject cleanedPayload = RemoveNonExistentPayloadProperties<T>(
+            throwErrorIfExtraProps,
+            out List<ValidationResult> validationMessages,
+            out HashSet<string> ignoredClientProperties);
         var deserializedPayload = cleanedPayload.ToObject<T>() ?? throw new InvalidOperationException("Payload cannot be null after deserialization.");
 
         ValidationContext validationContext = new ValidationContext(deserializedPayload);
@@ -286,6 +289,12 @@ public class Event : IEvent
 
         validationMessages.RemoveAll(vm =>
         {
+            // Silently rejected server-managed properties are excluded from all property validation.
+            if (vm.MemberNames.Any() && vm.MemberNames.All(ignoredClientProperties.Contains))
+            {
+                return true;
+            }
+
             int i = 0;
             vm.MemberNames.ToList().ForEach(memberName =>
             {
@@ -315,30 +324,68 @@ public class Event : IEvent
     }
 
     /// <summary>
-    /// Removes any properties from the payload that are not valid for the aggregate.
+    /// Removes payload properties that do not exist on the target or are configured to be silently rejected.
     /// </summary>
-    /// <param name="errorMessageIfFound">If true, will add an error to output if any non-existent properties are found.</param>
-    /// <param name="validationMessages">List of validation messages to populate with any errors found.</param>
-    private object RemoveNonExistentPayloadProperties<T>(bool errorMessageIfFound, out List<ValidationResult> validationMessages) where T : class
+    /// <param name="errorMessageIfFound">If true, adds an error for properties that do not exist on the target.</param>
+    /// <param name="validationMessages">The validation messages produced while inspecting payload properties.</param>
+    /// <param name="ignoredClientProperties">The server-managed properties removed without producing validation errors.</param>
+    /// <returns>A cleaned payload containing only client-writable target properties.</returns>
+    private JObject RemoveNonExistentPayloadProperties<T>(
+        bool errorMessageIfFound,
+        out List<ValidationResult> validationMessages,
+        out HashSet<string> ignoredClientProperties) where T : class
     {
         validationMessages = new List<ValidationResult>();
 
-        var validProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => p.Name).ToHashSet();
+        Dictionary<string, PropertyInfo> validProperties = typeof(T)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .ToDictionary(property => property.Name, property => property, StringComparer.Ordinal);
+        ignoredClientProperties = validProperties.Values
+            .Where(property => property.GetCustomAttribute<RejectFromClientAttribute>(inherit: false)?.throwsError == false)
+            .Select(property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
         object requiredPayload = payload ?? throw new InvalidOperationException("Payload cannot be null when removing non-existent properties.");
         var payloadObject = JObject.FromObject(requiredPayload);
-        foreach (var prop in payloadObject.Properties().Select(p => p.Name).ToList())
+        bool removedRejectedProperty = false;
+
+        foreach (string propertyName in payloadObject.Properties().Select(property => property.Name).ToList())
         {
-            if (!validProperties.Contains(prop))
+            if (!validProperties.TryGetValue(propertyName, out PropertyInfo? property))
             {
                 if (errorMessageIfFound)
                 {
-                    validationMessages.Add(new ValidationResult($"Invalid property '{prop}' found in payload."));
+                    validationMessages.Add(new ValidationResult($"Invalid property '{propertyName}' found in payload."));
                 }
-                payloadObject.Remove(prop);
+
+                payloadObject.Remove(propertyName);
+                continue;
             }
+
+            RejectFromClientAttribute? rejectAttribute = property.GetCustomAttribute<RejectFromClientAttribute>(inherit: false);
+            if (rejectAttribute is null)
+            {
+                continue;
+            }
+
+            if (rejectAttribute.throwsError)
+            {
+                validationMessages.Add(new ValidationResult(
+                    $"The property '{propertyName}' is server-managed and cannot be supplied by a client.",
+                    [propertyName]));
+                continue;
+            }
+
+            payloadObject.Remove(propertyName);
+            removedRejectedProperty = true;
+            Console.Error.WriteLine($"[nostify:validation] Ignored server-managed client payload property '{propertyName}' for '{typeof(T).Name}'.");
         }
 
-        return payloadObject.ToObject<object>() ?? throw new InvalidOperationException("Payload cannot be null after removing non-existent properties.");
+        if (removedRejectedProperty)
+        {
+            // Persist and apply only the cleaned payload so an ignored client value cannot update server state later.
+            payload = payloadObject;
+        }
 
+        return payloadObject;
     }
 }
