@@ -636,15 +636,15 @@ await _nostify.PersistEventAsync(deleted);
 
 Use `NoValidate()` only for an intentionally unvalidated workflow, such as a controlled legacy import. Do not use it merely to accept a partial command payload.
 
-Most of the time, you will want to use `RequiredFor` instead of `Required` to mark a property as required for that specific command or list of commands. `Required` is still a valid validation attribute, but it will require that property to be present and not null for EVERY command:
+Most of the time, you will want to use `RequiredFor` instead of `Required` to mark a property as required for a specific event type or list of event types. `Required` is still a valid validation attribute, but it requires that property to be present and not null for every event type. Event names can be passed directly, or strongly associated with concrete `EventType` definitions through `typeof(...)`:
 
 ```C#
 public class TestAggregate : NostifyObject, IAggregate
 {
-    [RequiredFor("Create_Test")]
+    [RequiredFor(typeof(Create_Test))]
     public string Name { get; set; }
     
-    [RequiredFor(["Update_Test", "Create_Test"])]
+    [RequiredFor(typeof(Update_Test), typeof(Create_Test))]
     public int Value { get; set; }
 }
 ```
@@ -3980,20 +3980,20 @@ The framework includes a validation system for ensuring data integrity when crea
 
 #### RequiredForAttribute
 
-Use the `RequiredForAttribute` to specify which properties are required for specific commands:
+Use the `RequiredForAttribute` to specify which properties are required for specific event types. Its `Events` property contains the configured event type names. The overload accepting `Type` values resolves names from concrete `EventType` definitions. The obsolete `Commands` property remains as an alias to the same list for backwards compatibility and will be removed in the next major version:
 
 ```C#
 public class OrderAggregate : NostifyObject, IAggregate
 {
-    // Required only for Create_Order command
-    [RequiredFor("Create_Order")]
+    // Required only for the Create_Order event type
+    [RequiredFor(typeof(Create_Order))]
     public string customerName { get; set; }
     
-    // Required for multiple commands
-    [RequiredFor(new[] { "Create_Order", "Update_Order" })]
+    // The params overload accepts multiple EventType definitions
+    [RequiredFor(typeof(Create_Order), typeof(Update_Order))]
     public decimal totalAmount { get; set; }
     
-    // Standard Required attribute - required for ALL commands
+    // Standard Required attribute - required for ALL event types
     [Required]
     public Guid customerId { get; set; }
 }

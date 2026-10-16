@@ -16,32 +16,57 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     /// <summary>
     /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class.
     /// </summary>
-    /// <param name="command">The command for which this property is required.</param>
-    public RequiredForAttribute(string command) : base()
+    /// <param name="eventName">The event type name for which this property is required.</param>
+    public RequiredForAttribute(string eventName) : base()
     {
-        Commands = new List<string> { command };
+        Events = new List<string> { eventName };
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class with multiple commands.
+    /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class with multiple event type names.
     /// </summary>
-    /// <param name="commands">The commands for which this property is required.</param>
-    public RequiredForAttribute(string[] commands) : base()
+    /// <param name="eventNames">The event type names for which this property is required.</param>
+    public RequiredForAttribute(params string[] eventNames) : base()
     {
-        Commands = [.. commands];
+        Events = [.. eventNames];
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class from concrete event type definitions.
+    /// </summary>
+    /// <param name="eventTypes">
+    /// Concrete <see cref="EventType"/> types whose parameterless constructors provide the event type names.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// A supplied type does not derive from <see cref="EventType"/>, is not concrete, or has no parameterless constructor.
+    /// </exception>
+    public RequiredForAttribute(params Type[] eventTypes) : base()
+    {
+        Events = new List<string>(eventTypes.Length);
+        foreach (Type eventType in eventTypes)
+        {
+            Events.Add(EventType.GetRequiredInstance(eventType).name);
+        }
+    }
 
     /// <summary>
-    /// Gets the list of commands for which this property requires validation.
+    /// Gets the event type names for which this property requires validation.
     /// </summary>
-    public List<string> Commands { get; }
+    public List<string> Events { get; }
 
-    // Override the isValid(object, validationcontext) method such that the Commands property is passed in validation context
-    // and the validation logic checks if the current command is in the Commands list.
+    /// <summary>
+    /// Gets the event type names for which this property requires validation.
+    /// </summary>
+    /// <remarks>
+    /// This compatibility alias refers to the same list as <see cref="Events"/> and will be removed in the next major version.
+    /// </remarks>
+    [Obsolete("Commands is retained for backwards compatibility and will be removed in the next major version. Use Events instead.")]
+    public List<string> Commands => Events;
+
+    // Apply required validation only when the current event type is included in Events.
     /// <summary>
     /// Determines whether the specified value of the object is valid for the given validation context,
-    /// considering whether the current command is in the list of required commands.
+    /// considering whether the current event type is in the list of required event types.
     /// </summary>
     /// <param name="value">The value of the object to validate.</param>
     /// <param name="validationContext">The context information about the validation operation.</param>
@@ -70,7 +95,7 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
             return new ValidationResult($"The property '{validationContext.MemberName}' requires an event type to be specified in the validation context.");
         }
 
-        if (Commands.Contains(eventTypeName))
+        if (Events.Contains(eventTypeName))
         {
             bool baseResult = base.IsValid(value);
             if (!baseResult)
@@ -82,7 +107,7 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
             }
         }
 
-        // If the command is not in the list of required commands, return success
+        // If the event type is not in the list of required event types, return success.
         return ValidationResult.Success!;
     }
 }

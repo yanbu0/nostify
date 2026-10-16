@@ -458,8 +458,8 @@ public static class DefaultEventHandlers
                 return triggerEvent?.GetEvent(eventTypeFilter) != null;
             });
 
-            Container currentStateContainer = await nostify.GetBulkProjectionContainerAsync<P>();
-            await currentStateContainer.BulkCreateFromKafkaTriggerEventsAsync<P>(events, eventTypeFilter, retryOptions);
+            Container projectionContainer = await nostify.GetBulkProjectionContainerAsync<P>();
+            await projectionContainer.BulkCreateFromKafkaTriggerEventsAsync<P>(events, eventTypeFilter, retryOptions);
             await nostify.InitAllUninitializedAsync<P>();
 
             return matchingEventCount;
