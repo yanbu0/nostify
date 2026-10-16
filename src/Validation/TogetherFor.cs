@@ -17,6 +17,8 @@ using System.Reflection;
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = true, Inherited = false)]
 public sealed class TogetherForAttribute : ValidationAttribute, INostifyValidation
 {
+    private readonly object _typeId = new();
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TogetherForAttribute"/> class.
     /// </summary>
@@ -62,6 +64,11 @@ public sealed class TogetherForAttribute : ValidationAttribute, INostifyValidati
     /// Gets the event type names for which the group constraint applies.
     /// </summary>
     public List<string> Events { get; }
+
+    /// <summary>
+    /// Gives each declaration a distinct identity so TypeDescriptor retains all group validators.
+    /// </summary>
+    public override object TypeId => _typeId;
 
     /// <summary>
     /// Gets the event type names for which the group constraint applies.
@@ -117,10 +124,13 @@ public sealed class TogetherForAttribute : ValidationAttribute, INostifyValidati
             return ValidationResult.Success!;
         }
 
-        return new ValidationResult(
+        return new PresenceValidationResult(
             ErrorMessage ?? $"The property '{validationContext.MemberName}' must be supplied together with group '{UniqueGroupName}' for event type '{eventTypeName}'.",
             [validationContext.MemberName]);
     }
+
+    internal sealed class PresenceValidationResult(string? errorMessage, IEnumerable<string>? memberNames)
+        : ValidationResult(errorMessage, memberNames);
 
     /// <summary>
     /// Resolves the current event type name from modern or legacy validation context items.

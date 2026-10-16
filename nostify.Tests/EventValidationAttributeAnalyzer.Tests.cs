@@ -197,6 +197,32 @@ public sealed class EventValidationAttributeAnalyzerTests
         Assert.Empty(diagnostics);
     }
 
+    [Fact]
+    public async Task Analyzer_WithNamedResourceTypeProperty_ReportsNoDiagnostics()
+    {
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync("""
+            using nostify;
+
+            public sealed class CreateEvent : EventType
+            {
+                public CreateEvent() : base("Create") { }
+            }
+
+            public sealed class Resources
+            {
+                public static string Required => "Required";
+            }
+
+            public sealed class Model
+            {
+                [RequiredFor(typeof(CreateEvent), ErrorMessageResourceType = typeof(Resources), ErrorMessageResourceName = "Required")]
+                public string? Value { get; set; }
+            }
+            """);
+
+        Assert.Empty(diagnostics);
+    }
+
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
     {
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);

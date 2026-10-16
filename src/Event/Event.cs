@@ -332,7 +332,7 @@ public class Event : IEvent
         List<ValidationResult> validationMessages,
         HashSet<object> activeObjects)
     {
-        if (instance is null || IsSimpleType(instance.GetType()))
+        if (instance is null || instance is JToken || IsSimpleType(instance.GetType()))
         {
             return;
         }
@@ -345,6 +345,26 @@ public class Event : IEvent
 
         try
         {
+            if (instance is IDictionary dictionary)
+            {
+                foreach (DictionaryEntry entry in dictionary)
+                {
+                    string key = entry.Key?.ToString() ?? string.Empty;
+                    JToken? entryToken = payloadToken is JObject dictionaryPayloadObject
+                        ? dictionaryPayloadObject.GetValue(key, StringComparison.Ordinal)
+                        : null;
+                    ValidateObjectGraph(
+                        entry.Value,
+                        entryToken,
+                        QualifyMemberPath(path, key),
+                        validationItems,
+                        validationMessages,
+                        activeObjects);
+                }
+
+                return;
+            }
+
             if (instance is IEnumerable enumerable)
             {
                 int index = 0;
@@ -390,7 +410,7 @@ public class Event : IEvent
                     return property != null &&
                         !suppliedProperties.Contains(memberName) &&
                         property.GetCustomAttributes(typeof(RequiredAttribute), inherit: false).Length == 0 &&
-                        property.GetCustomAttributes(typeof(TogetherForAttribute), inherit: false).Length == 0;
+                        result is not TogetherForAttribute.PresenceValidationResult;
                 });
                 if (suppressOmittedOptionalResult)
                 {
@@ -454,6 +474,11 @@ public class Event : IEvent
         Type? nullableType = Nullable.GetUnderlyingType(targetType);
         Type effectiveType = nullableType ?? targetType;
 
+        if (effectiveType == typeof(object) || typeof(JToken).IsAssignableFrom(effectiveType))
+        {
+            return;
+        }
+
         if (effectiveType.IsEnum)
         {
             if (token is null || token.Type is JTokenType.Null or JTokenType.Undefined)
@@ -486,6 +511,20 @@ public class Event : IEvent
 
         if (token is not JObject payloadObject)
         {
+            return;
+        }
+
+        if (TryGetDictionaryValueType(effectiveType, out Type? dictionaryValueType))
+        {
+            foreach (JProperty entry in payloadObject.Properties())
+            {
+                ValidateEnumTokens(
+                    dictionaryValueType,
+                    entry.Value,
+                    QualifyMemberPath(path, entry.Name),
+                    validationMessages);
+            }
+
             return;
         }
 
@@ -669,7 +708,11 @@ public class Event : IEvent
         HashSet<string> ignoredClientProperties)
     {
         Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
-        if (token is null || token.Type is JTokenType.Null or JTokenType.Undefined || IsSimpleType(effectiveType))
+        if (effectiveType == typeof(object) ||
+            typeof(JToken).IsAssignableFrom(effectiveType) ||
+            token is null ||
+            token.Type is JTokenType.Null or JTokenType.Undefined ||
+            IsSimpleType(effectiveType))
         {
             return false;
         }

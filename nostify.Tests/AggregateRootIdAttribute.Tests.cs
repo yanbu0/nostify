@@ -39,16 +39,14 @@ public sealed class AggregateRootIdAttributeTests
     }
 
     [Fact]
-    public void IsValid_WithoutAggregateRootIdContext_ShouldReturnValidationError()
+    public void IsValid_WithoutAggregateRootIdContext_ShouldReturnSuccess()
     {
         var attribute = new AggregateRootIdAttribute();
         var context = new ValidationContext(new object()) { MemberName = "id" };
 
         ValidationResult? result = attribute.GetValidationResult(Guid.NewGuid(), context);
 
-        Assert.NotNull(result);
-        Assert.Contains("aggregate root ID", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(["id"], result.MemberNames);
+        Assert.Equal(ValidationResult.Success, result);
     }
 
     [Fact]

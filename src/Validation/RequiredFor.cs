@@ -16,19 +16,19 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
     /// <summary>
     /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class.
     /// </summary>
-    /// <param name="eventName">The event type name for which this property is required.</param>
-    public RequiredForAttribute(string eventName) : base()
+    /// <param name="command">The event type name for which this property is required.</param>
+    public RequiredForAttribute(string command) : base()
     {
-        Events = new List<string> { eventName };
+        Events = new List<string> { command };
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RequiredForAttribute"/> class with multiple event type names.
     /// </summary>
-    /// <param name="eventNames">The event type names for which this property is required.</param>
-    public RequiredForAttribute(params string[] eventNames) : base()
+    /// <param name="commands">The event type names for which this property is required.</param>
+    public RequiredForAttribute(params string[] commands) : base()
     {
-        Events = [.. eventNames];
+        Events = [.. commands];
     }
 
     /// <summary>

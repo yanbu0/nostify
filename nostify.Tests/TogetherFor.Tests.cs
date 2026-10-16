@@ -102,6 +102,31 @@ public sealed class TogetherForAttributeTests
     }
 
     [Fact]
+    public void ValidatePayload_WithMultipleGroupsOnOneProperty_ValidatesEveryGroup()
+    {
+        Event evt = CreateEvent(CreateTogetherEvent.Instance, new { Shared = "present" });
+
+        NostifyValidationException exception = Assert.Throws<NostifyValidationException>(
+            () => evt.ValidatePayload<MultipleGroupsModel>());
+
+        string[] members = exception.ValidationMessages
+            .SelectMany(result => result.MemberNames)
+            .OrderBy(member => member, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal([nameof(MultipleGroupsModel.First), nameof(MultipleGroupsModel.Second)], members);
+    }
+
+    [Fact]
+    public void ValidatePayload_WithInactiveGroupAndRangeConstraint_AllowsOmittedOptionalValue()
+    {
+        Event evt = CreateEvent(CreateTogetherEvent.Instance, new { Notes = "unchanged" });
+
+        IEvent result = evt.ValidatePayload<RangedGroupedModel>();
+
+        Assert.Same(evt, result);
+    }
+
+    [Fact]
     public void ValidatePayload_WithRequiredForOnGroupMember_RequiresEntireGroup()
     {
         Event evt = CreateEvent(CreateTogetherEvent.Instance, new { });
@@ -186,6 +211,31 @@ public sealed class TogetherForAttributeTests
 
         [TogetherFor("schedule", "TogetherFor_Create")]
         public string? End { get; set; }
+    }
+
+    private sealed class MultipleGroupsModel
+    {
+        [TogetherFor("first", typeof(CreateTogetherEvent))]
+        [TogetherFor("second", typeof(CreateTogetherEvent))]
+        public string? Shared { get; set; }
+
+        [TogetherFor("first", typeof(CreateTogetherEvent))]
+        public string? First { get; set; }
+
+        [TogetherFor("second", typeof(CreateTogetherEvent))]
+        public string? Second { get; set; }
+    }
+
+    private sealed class RangedGroupedModel
+    {
+        [Range(1, 10)]
+        [TogetherFor("schedule", typeof(CreateTogetherEvent))]
+        public int Start { get; set; }
+
+        [TogetherFor("schedule", typeof(CreateTogetherEvent))]
+        public int End { get; set; }
+
+        public string? Notes { get; set; }
     }
 
     private sealed class NestedGroupedModel

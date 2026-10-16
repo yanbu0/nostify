@@ -46,6 +46,16 @@ public class RequiredForAttributeTests
     }
 
     [Fact]
+    public void Constructor_PreservesPublishedNamedArguments()
+    {
+        var single = new RequiredForAttribute(command: "Test_Create");
+        var multiple = new RequiredForAttribute(commands: ["Test_Create", "Test_Update"]);
+
+        Assert.Equal(["Test_Create"], single.Events);
+        Assert.Equal(["Test_Create", "Test_Update"], multiple.Events);
+    }
+
+    [Fact]
     public void Constructor_WithEventTypes_ShouldResolveEventNames()
     {
         // Act
@@ -343,15 +353,11 @@ public class RequiredForAttributeTests
     }
 
     [Fact]
-    public void INostifyValidation_Commands_DefaultAlias_ShouldDelegateToEvents()
+    public void INostifyValidation_Events_DefaultAlias_ShouldDelegateToCommands()
     {
-        // Arrange
-        INostifyValidation validation = new EventsOnlyValidation("Test_Create", "Test_Update");
+        INostifyValidation validation = new CommandsOnlyValidation("Test_Create", "Test_Update");
 
-        // Assert
-#pragma warning disable CS0618 // Verify the interface compatibility alias before its removal.
-        Assert.Same(validation.Events, validation.Commands);
-#pragma warning restore CS0618
+        Assert.Same(validation.Commands, validation.Events);
     }
 
     [Fact]
@@ -491,11 +497,11 @@ public class RequiredForAttributeTests
     }
 
     /// <summary>
-    /// Test implementation that relies on the interface's default compatibility alias.
+    /// Test implementation that relies on the interface's default Events alias.
     /// </summary>
-    private sealed class EventsOnlyValidation(params string[] eventNames) : INostifyValidation
+    private sealed class CommandsOnlyValidation(params string[] commandNames) : INostifyValidation
     {
-        public List<string> Events { get; } = [.. eventNames];
+        public List<string> Commands { get; } = [.. commandNames];
     }
 
     private sealed class CreateTestEvent : EventType

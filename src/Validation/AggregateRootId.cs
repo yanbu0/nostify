@@ -19,14 +19,12 @@ public sealed class AggregateRootIdAttribute : ValidationAttribute
     /// </summary>
     /// <param name="value">The value of the decorated property.</param>
     /// <param name="validationContext">The context for the current event payload validation.</param>
-    /// <returns>A validation error when the values differ or the aggregate root identifier is unavailable.</returns>
+    /// <returns>A validation error when the values differ in an event payload validation context.</returns>
     protected override ValidationResult IsValid(object? value, ValidationContext validationContext)
     {
         if (!validationContext.Items.TryGetValue("aggregateRootId", out object? aggregateRootId))
         {
-            return new ValidationResult(
-                $"The property '{validationContext.MemberName}' requires an aggregate root ID to be specified in the validation context.",
-                [validationContext.MemberName ?? "Unknown"]);
+            return ValidationResult.Success!;
         }
 
         if (!Equals(value, aggregateRootId))

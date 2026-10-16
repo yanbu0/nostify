@@ -88,6 +88,11 @@ public sealed class EventValidationAttributeAnalyzer : DiagnosticAnalyzer
         // every typeof expression in a typed overload is checked, including explicit arrays.
         foreach (AttributeArgumentSyntax argument in attribute.ArgumentList.Arguments)
         {
+            if (argument.NameEquals is not null)
+            {
+                continue;
+            }
+
             AnalyzeArgument(context, argument, eventType, constructor.ContainingType.Name);
         }
     }
