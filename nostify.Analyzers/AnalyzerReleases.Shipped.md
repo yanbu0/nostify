@@ -4,4 +4,4 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------
-NOSTIFY001 | Usage | Error | RequiredFor and OnlyFor type arguments must derive from EventType
+NOSTIFY_EVENTTYPE_CHECK | Usage | Error | RequiredFor, OnlyFor, and TogetherFor type arguments must derive from EventType

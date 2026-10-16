@@ -97,8 +97,14 @@ public class RequiredForAttribute : RequiredAttribute, INostifyValidation
 
         if (Events.Contains(eventTypeName))
         {
+            // Validate membership against the original payload before relying on the deserialized value.
+            // This distinguishes an omitted non-nullable value type from an explicitly supplied default value.
+            bool propertyWasOmitted =
+                validationContext.Items.TryGetValue("payloadProperties", out object? payloadPropertiesValue) &&
+                payloadPropertiesValue is ISet<string> payloadProperties &&
+                (validationContext.MemberName is null || !payloadProperties.Contains(validationContext.MemberName));
             bool baseResult = base.IsValid(value);
-            if (!baseResult)
+            if (propertyWasOmitted || !baseResult)
             {
                 // Preserve the member name so structured validation responses do not discard this error.
                 return new ValidationResult(

@@ -653,7 +653,7 @@ public class TestAggregate : NostifyObject, IAggregate
 
 `RequiredFor` controls when a property must be present. `OnlyFor` controls when a supplied property is permitted. Combining them creates an event-specific property that is required for the listed events and invalid for every other event.
 
-The package includes Roslyn diagnostic `NOSTIFY001`. It reports a compile-time error when a `typeof(...)` argument passed to `RequiredFor` or `OnlyFor` does not derive from `EventType`. Runtime validation remains in place for reflection and dynamically constructed attributes.
+The package includes Roslyn diagnostic `NOSTIFY_EVENTTYPE_CHECK`. It reports a compile-time error when a `typeof(...)` argument passed to `RequiredFor`, `OnlyFor`, or `TogetherFor` does not derive from `EventType`. Runtime validation remains in place for reflection and dynamically constructed attributes.
 
 #### CreateNullPayloadEvent Method
 
@@ -4004,12 +4004,19 @@ public class OrderAggregate : NostifyObject, IAggregate
     // Standard Required attribute - required for ALL event types
     [Required]
     public Guid customerId { get; set; }
+
+    // Optional as a pair: supplying either date requires both dates.
+    [TogetherFor("delivery-window", typeof(Update_Order))]
+    public DateTimeOffset? deliveryStartsAt { get; set; }
+
+    [TogetherFor("delivery-window", typeof(Update_Order))]
+    public DateTimeOffset? deliveryEndsAt { get; set; }
 }
 ```
 
-`OnlyForAttribute` rejects a supplied property for every event type outside its configured `Events` allowlist, but does not require the property for allowed events. Combining it with `RequiredForAttribute` both requires and restricts the property as shown above. Both attributes expose the obsolete `Commands` compatibility alias, which delegates to `Events` and will be removed in the next major version.
+`OnlyForAttribute` rejects a supplied property for every event type outside its configured `Events` allowlist, but does not require the property for allowed events. Combining it with `RequiredForAttribute` both requires and restricts the property as shown above. `TogetherForAttribute` creates an optional named group for selected event types: if any property in the group is present, every property in the group must be present. Payload membership determines presence, so an explicit `null` or default value is still present. Adding matching `RequiredForAttribute` metadata to one group member activates the group and requires all of its members. These attributes expose the obsolete `Commands` compatibility alias, which delegates to `Events` and will be removed in the next major version.
 
-Roslyn diagnostic `NOSTIFY001` makes invalid typed declarations such as `[RequiredFor(typeof(string))]` and `[OnlyFor(typeof(string))]` build errors. Every `typeof(...)` argument must derive from `EventType`.
+Roslyn diagnostic `NOSTIFY_EVENTTYPE_CHECK` makes invalid typed declarations such as `[RequiredFor(typeof(string))]`, `[OnlyFor(typeof(string))]`, and `[TogetherFor("group", typeof(string))]` build errors. Every `typeof(...)` argument must derive from `EventType`.
 
 #### EventFactory Validation
 
@@ -4032,7 +4039,7 @@ IEvent imported = new EventFactory().NoValidate().Create<OrderAggregate>(
 IEvent deleted = new EventFactory().CreateNullPayloadEvent(new Delete_Order(), aggregateId);
 ```
 
-Do not call `NoValidate()` merely because a Create or Update payload is partial. Normal validation accepts omitted optional properties while still rejecting unknown properties and enforcing `[Required]`, matching `[RequiredFor(...)]`, `[OnlyFor(...)]` restrictions, and constraints on supplied values.
+Do not call `NoValidate()` merely because a Create or Update payload is partial. Normal validation accepts omitted optional properties while still rejecting unknown properties and enforcing `[Required]`, matching `[RequiredFor(...)]`, `[OnlyFor(...)]`, active `[TogetherFor(...)]` groups, and constraints on supplied values.
 
 ## Performance Considerations
 

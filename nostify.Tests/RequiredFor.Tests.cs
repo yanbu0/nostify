@@ -412,6 +412,61 @@ public class RequiredForAttributeTests
         Assert.IsType<List<string>>(events);
     }
 
+    [Fact]
+    public void ValidatePayload_WithOmittedRequiredNonNullableGuid_ShouldReturnValidationError()
+    {
+        // Arrange: deserialization assigns Guid.Empty, but the original payload did not contain the property.
+        var evt = new Event(new CreateTestEvent(), Guid.NewGuid(), new { OptionalValue = "present" });
+
+        // Act
+        NostifyValidationException exception = Assert.Throws<NostifyValidationException>(
+            () => evt.ValidatePayload<NonNullableRequiredForModel>());
+
+        // Assert
+        ValidationResult result = Assert.Single(exception.ValidationMessages);
+        Assert.Equal(nameof(NonNullableRequiredForModel.RequiredId), Assert.Single(result.MemberNames));
+    }
+
+    [Fact]
+    public void ValidatePayload_WithExplicitEmptyRequiredGuid_ShouldSucceed()
+    {
+        // Arrange: RequiredFor enforces payload presence; separate validators may reject Guid.Empty.
+        var evt = new Event(new CreateTestEvent(), Guid.NewGuid(), new { RequiredId = Guid.Empty });
+
+        // Act
+        IEvent result = evt.ValidatePayload<NonNullableRequiredForModel>();
+
+        // Assert
+        Assert.Same(evt, result);
+    }
+
+    [Fact]
+    public void ValidatePayload_WithOmittedRequiredNonNullableInteger_ShouldReturnValidationError()
+    {
+        // Arrange: verify presence checking is not specific to Guid values.
+        var evt = new Event(new CreateTestEvent(), Guid.NewGuid(), new { OptionalValue = "present" });
+
+        // Act
+        NostifyValidationException exception = Assert.Throws<NostifyValidationException>(
+            () => evt.ValidatePayload<NonNullableIntegerRequiredForModel>());
+
+        // Assert
+        Assert.Contains(nameof(NonNullableIntegerRequiredForModel.RequiredCount), exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePayload_WithExplicitZeroRequiredInteger_ShouldSucceed()
+    {
+        // Arrange
+        var evt = new Event(new CreateTestEvent(), Guid.NewGuid(), new { RequiredCount = 0 });
+
+        // Act
+        IEvent result = evt.ValidatePayload<NonNullableIntegerRequiredForModel>();
+
+        // Assert
+        Assert.Same(evt, result);
+    }
+
     // Test for edge cases with various data types
     [Theory]
     [InlineData(0)] // int
@@ -459,5 +514,21 @@ public class RequiredForAttributeTests
     {
         [RequiredFor(typeof(CreateTestEvent), typeof(UpdateTestEvent))]
         public string? Value { get; set; }
+    }
+
+    private sealed class NonNullableRequiredForModel
+    {
+        [RequiredFor(typeof(CreateTestEvent))]
+        public Guid RequiredId { get; set; }
+
+        public string? OptionalValue { get; set; }
+    }
+
+    private sealed class NonNullableIntegerRequiredForModel
+    {
+        [RequiredFor(typeof(CreateTestEvent))]
+        public int RequiredCount { get; set; }
+
+        public string? OptionalValue { get; set; }
     }
 }

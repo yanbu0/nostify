@@ -12,6 +12,12 @@ namespace nostify.Tests;
 public sealed class EventValidationAttributeAnalyzerTests
 {
     [Fact]
+    public void DiagnosticId_UsesDescriptiveEventTypeCheckName()
+    {
+        Assert.Equal("NOSTIFY_EVENTTYPE_CHECK", EventValidationAttributeAnalyzer.DiagnosticId);
+    }
+
+    [Fact]
     public async Task Analyzer_WithNonEventType_ReportsError()
     {
         // Arrange and act
@@ -139,6 +145,50 @@ public sealed class EventValidationAttributeAnalyzerTests
             public sealed class Model
             {
                 [OnlyFor(typeof(CreateEvent))]
+                public string? Value { get; set; }
+            }
+            """);
+
+        // Assert
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task Analyzer_WithTogetherForNonEventType_ReportsError()
+    {
+        // Arrange and act
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync("""
+            using nostify;
+
+            public sealed class Model
+            {
+                [TogetherFor("group", typeof(string))]
+                public string? Value { get; set; }
+            }
+            """);
+
+        // Assert
+        Diagnostic diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(EventValidationAttributeAnalyzer.DiagnosticId, diagnostic.Id);
+        Assert.Contains(nameof(TogetherForAttribute), diagnostic.GetMessage());
+        Assert.Contains("string", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task Analyzer_WithTogetherForEventTypes_ReportsNoDiagnostics()
+    {
+        // Arrange and act
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeAsync("""
+            using nostify;
+
+            public sealed class CreateEvent : EventType
+            {
+                public CreateEvent() : base("Create") { }
+            }
+
+            public sealed class Model
+            {
+                [TogetherFor("group", typeof(CreateEvent))]
                 public string? Value { get; set; }
             }
             """);

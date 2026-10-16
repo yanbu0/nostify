@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -14,7 +15,7 @@ public sealed class EventValidationAttributeAnalyzer : DiagnosticAnalyzer
     /// <summary>
     /// Diagnostic ID reported when a validation attribute type argument is not an EventType.
     /// </summary>
-    public const string DiagnosticId = "NOSTIFY001";
+    public const string DiagnosticId = "NOSTIFY_EVENTTYPE_CHECK";
 
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
@@ -40,9 +41,12 @@ public sealed class EventValidationAttributeAnalyzer : DiagnosticAnalyzer
     {
         INamedTypeSymbol? requiredForAttribute = context.Compilation.GetTypeByMetadataName("nostify.RequiredForAttribute");
         INamedTypeSymbol? onlyForAttribute = context.Compilation.GetTypeByMetadataName("nostify.OnlyForAttribute");
+        INamedTypeSymbol? togetherForAttribute = context.Compilation.GetTypeByMetadataName("nostify.TogetherForAttribute");
         INamedTypeSymbol? eventType = context.Compilation.GetTypeByMetadataName("nostify.EventType");
         INamedTypeSymbol? systemType = context.Compilation.GetTypeByMetadataName("System.Type");
-        if ((requiredForAttribute is null && onlyForAttribute is null) || eventType is null || systemType is null)
+        if ((requiredForAttribute is null && onlyForAttribute is null && togetherForAttribute is null) ||
+            eventType is null ||
+            systemType is null)
         {
             return;
         }
@@ -52,6 +56,7 @@ public sealed class EventValidationAttributeAnalyzer : DiagnosticAnalyzer
                 syntaxContext,
                 requiredForAttribute,
                 onlyForAttribute,
+                togetherForAttribute,
                 eventType,
                 systemType),
             Microsoft.CodeAnalysis.CSharp.SyntaxKind.Attribute);
@@ -61,21 +66,26 @@ public sealed class EventValidationAttributeAnalyzer : DiagnosticAnalyzer
         SyntaxNodeAnalysisContext context,
         INamedTypeSymbol? requiredForAttribute,
         INamedTypeSymbol? onlyForAttribute,
+        INamedTypeSymbol? togetherForAttribute,
         INamedTypeSymbol eventType,
         INamedTypeSymbol systemType)
     {
         var attribute = (AttributeSyntax)context.Node;
         if (context.SemanticModel.GetSymbolInfo(attribute, context.CancellationToken).Symbol is not IMethodSymbol constructor ||
             (!SymbolEqualityComparer.Default.Equals(constructor.ContainingType, requiredForAttribute) &&
-             !SymbolEqualityComparer.Default.Equals(constructor.ContainingType, onlyForAttribute)) ||
-            constructor.Parameters.Length != 1 ||
-            constructor.Parameters[0].Type is not IArrayTypeSymbol arrayType ||
-            !SymbolEqualityComparer.Default.Equals(arrayType.ElementType, systemType) ||
+             !SymbolEqualityComparer.Default.Equals(constructor.ContainingType, onlyForAttribute) &&
+             !SymbolEqualityComparer.Default.Equals(constructor.ContainingType, togetherForAttribute)) ||
+            !constructor.Parameters.Any(parameter =>
+                SymbolEqualityComparer.Default.Equals(parameter.Type, systemType) ||
+                (parameter.Type is IArrayTypeSymbol arrayType &&
+                 SymbolEqualityComparer.Default.Equals(arrayType.ElementType, systemType))) ||
             attribute.ArgumentList is null)
         {
             return;
         }
 
+        // String arguments such as TogetherFor's group name are ignored by AnalyzeArgument;
+        // every typeof expression in a typed overload is checked, including explicit arrays.
         foreach (AttributeArgumentSyntax argument in attribute.ArgumentList.Arguments)
         {
             AnalyzeArgument(context, argument, eventType, constructor.ContainingType.Name);

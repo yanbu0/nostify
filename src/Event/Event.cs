@@ -269,6 +269,15 @@ public class Event : IEvent
             throwErrorIfExtraProps,
             out List<ValidationResult> validationMessages,
             out HashSet<string> ignoredClientProperties);
+
+        // Validate enum tokens before materialization. Newtonsoft.Json accepts undefined numeric enum
+        // values and otherwise throws serialization exceptions that do not identify validation members.
+        ValidateEnumTokens(typeof(T), cleanedPayload, string.Empty, validationMessages);
+        if (validationMessages.Count != 0)
+        {
+            throw new NostifyValidationException(validationMessages);
+        }
+
         var deserializedPayload = cleanedPayload.ToObject<T>() ?? throw new InvalidOperationException("Payload cannot be null after deserialization.");
 
         var validationItems = new Dictionary<object, object?>
@@ -380,7 +389,8 @@ public class Event : IEvent
                     PropertyInfo? property = instance.GetType().GetProperty(memberName);
                     return property != null &&
                         !suppliedProperties.Contains(memberName) &&
-                        property.GetCustomAttributes(typeof(RequiredAttribute), inherit: false).Length == 0;
+                        property.GetCustomAttributes(typeof(RequiredAttribute), inherit: false).Length == 0 &&
+                        property.GetCustomAttributes(typeof(TogetherForAttribute), inherit: false).Length == 0;
                 });
                 if (suppressOmittedOptionalResult)
                 {
@@ -429,6 +439,162 @@ public class Event : IEvent
                 activeObjects.Remove(instance);
             }
         }
+    }
+
+    /// <summary>
+    /// Recursively validates raw enum tokens before JSON deserialization can accept an undefined
+    /// numeric value or throw an unstructured conversion exception for an invalid value.
+    /// </summary>
+    private static void ValidateEnumTokens(
+        Type targetType,
+        JToken? token,
+        string path,
+        List<ValidationResult> validationMessages)
+    {
+        Type? nullableType = Nullable.GetUnderlyingType(targetType);
+        Type effectiveType = nullableType ?? targetType;
+
+        if (effectiveType.IsEnum)
+        {
+            if (token is null || token.Type is JTokenType.Null or JTokenType.Undefined)
+            {
+                if (nullableType is null)
+                {
+                    AddInvalidEnumResult(effectiveType, token, path, validationMessages);
+                }
+
+                return;
+            }
+
+            if (!IsDefinedEnumToken(effectiveType, token))
+            {
+                AddInvalidEnumResult(effectiveType, token, path, validationMessages);
+            }
+
+            return;
+        }
+
+        if (token is JArray array && TryGetCollectionElementType(effectiveType, out Type? elementType))
+        {
+            for (int index = 0; index < array.Count; index++)
+            {
+                ValidateEnumTokens(elementType, array[index], $"{path}[{index}]", validationMessages);
+            }
+
+            return;
+        }
+
+        if (token is not JObject payloadObject)
+        {
+            return;
+        }
+
+        foreach (PropertyInfo property in effectiveType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+        {
+            // Public payload properties can belong to non-public nested model types used by consumers
+            // and tests; include them while still excluding private implementation properties.
+            if (!property.CanRead ||
+                property.GetMethod?.IsPublic != true ||
+                property.GetIndexParameters().Length != 0)
+            {
+                continue;
+            }
+
+            JToken? propertyToken = payloadObject.GetValue(property.Name, StringComparison.Ordinal);
+            if (propertyToken is null)
+            {
+                // Omission is handled by Required/RequiredFor; optional enum properties remain valid.
+                continue;
+            }
+
+            ValidateEnumTokens(
+                property.PropertyType,
+                propertyToken,
+                QualifyMemberPath(path, property.Name),
+                validationMessages);
+        }
+    }
+
+    /// <summary>
+    /// Returns whether a string or integer token maps to a declared member of an enum.
+    /// Composite flags are accepted only when explicitly declared as enum members.
+    /// </summary>
+    private static bool IsDefinedEnumToken(Type enumType, JToken token)
+    {
+        try
+        {
+            object? enumValue;
+            if (token.Type == JTokenType.String)
+            {
+                string? text = token.Value<string>();
+                enumValue = !string.IsNullOrWhiteSpace(text) &&
+                    Enum.TryParse(enumType, text, ignoreCase: true, out object? parsedValue)
+                        ? parsedValue
+                        : null;
+            }
+            else if (token.Type == JTokenType.Integer)
+            {
+                Type underlyingType = Enum.GetUnderlyingType(enumType);
+                object numericValue = token.ToObject(underlyingType)
+                    ?? throw new JsonSerializationException("Enum numeric value cannot be null.");
+                enumValue = Enum.ToObject(enumType, numericValue);
+            }
+            else
+            {
+                return false;
+            }
+
+            return enumValue is not null && Enum.IsDefined(enumType, enumValue);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or OverflowException or FormatException or JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Adds a structured validation error for an invalid enum payload value.
+    /// </summary>
+    private static void AddInvalidEnumResult(
+        Type enumType,
+        JToken? token,
+        string path,
+        List<ValidationResult> validationMessages)
+    {
+        string suppliedValue = token is null || token.Type is JTokenType.Null or JTokenType.Undefined
+            ? "null"
+            : token.ToString(Formatting.None);
+        validationMessages.Add(new ValidationResult(
+            $"The value {suppliedValue} is not a valid declared value for enum '{enumType.Name}'.",
+            string.IsNullOrEmpty(path) ? [] : [path]));
+    }
+
+    /// <summary>
+    /// Resolves the item type for arrays and generic enumerable payload properties.
+    /// </summary>
+    private static bool TryGetCollectionElementType(Type type, out Type elementType)
+    {
+        if (type.IsArray)
+        {
+            elementType = type.GetElementType()!;
+            return true;
+        }
+
+        Type? enumerableType = type
+            .GetInterfaces()
+            .Append(type)
+            .FirstOrDefault(candidate =>
+                candidate.IsGenericType &&
+                candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+        if (enumerableType is not null)
+        {
+            elementType = enumerableType.GetGenericArguments()[0];
+            return true;
+        }
+
+        elementType = null!;
+        return false;
     }
 
     /// <summary>

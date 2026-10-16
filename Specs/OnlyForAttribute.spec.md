@@ -26,7 +26,7 @@ The string overloads use logical event type names directly. The typed overload a
 public decimal Total { get; set; }
 ```
 
-The package's Roslyn diagnostic `NOSTIFY001` checks each `typeof(...)` argument at build time and reports an error when it does not derive from `EventType`. Runtime validation remains authoritative for reflection-created attributes and rejects abstract definitions or definitions without parameterless constructors.
+The package's Roslyn diagnostic `NOSTIFY_EVENTTYPE_CHECK` checks each `typeof(...)` argument at build time and reports an error when it does not derive from `EventType`. Runtime validation remains authoritative for reflection-created attributes and rejects abstract definitions or definitions without parameterless constructors.
 
 ## Properties
 

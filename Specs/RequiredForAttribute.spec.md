@@ -55,7 +55,7 @@ public decimal Total { get; set; }
 
 The event definition classes derive from `EventType`, rather than `IEvent`. `IEvent` represents a persisted event envelope and therefore is not the appropriate type constraint for this metadata.
 
-The NuGet package includes Roslyn diagnostic `NOSTIFY001`, an error that checks every `typeof(...)` argument at build time. A type that does not derive from `EventType` is rejected before execution. Runtime validation remains authoritative for reflection-created attributes and also rejects abstract definitions or definitions without parameterless constructors.
+The NuGet package includes Roslyn diagnostic `NOSTIFY_EVENTTYPE_CHECK`, an error that checks every `typeof(...)` argument at build time. A type that does not derive from `EventType` is rejected before execution. Runtime validation remains authoritative for reflection-created attributes and also rejects abstract definitions or definitions without parameterless constructors.
 
 ## Properties
 
@@ -71,7 +71,10 @@ The `IsValid` method:
 1. Gets the validation context.
 2. Extracts the current `EventType` from the `eventType` context item, with legacy `command` context support.
 3. If the event type is not in the `Events` list, returns `ValidationResult.Success` (skips validation).
-4. If the event type is in the list, invokes base `RequiredAttribute` validation.
+4. If the event type is in the list, verifies that the property name exists in the original payload's `payloadProperties` set.
+5. For a supplied property, invokes base `RequiredAttribute` validation to reject null, empty, or whitespace string values.
+
+Checking original payload membership distinguishes an omitted non-nullable value type from an explicitly supplied default value after deserialization. For example, omitting a required `Guid` fails even though its deserialized value would be `Guid.Empty`; explicitly supplying `Guid.Empty` satisfies `RequiredFor` presence and can be rejected separately by a value-specific validator when needed.
 
 The legacy `Commands` property refers to the same mutable list instance as `Events`, so existing consumers remain source- and behavior-compatible. It is marked obsolete and will be removed in the next major version.
 
