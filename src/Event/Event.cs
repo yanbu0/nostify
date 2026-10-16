@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
@@ -270,50 +271,32 @@ public class Event : IEvent
             out HashSet<string> ignoredClientProperties);
         var deserializedPayload = cleanedPayload.ToObject<T>() ?? throw new InvalidOperationException("Payload cannot be null after deserialization.");
 
-        ValidationContext validationContext = new ValidationContext(deserializedPayload);
-        validationContext.Items["eventType"] = eventType;
-        // Identity validators compare payload identifiers against the immutable event target.
-        validationContext.Items["aggregateRootId"] = aggregateRootId;
-        // Event-aware validators use the original payload members to distinguish an omitted
-        // property from a deserialized null/default value.
-        validationContext.Items["payloadProperties"] = cleanedPayload.Properties()
-            .Select(property => property.Name)
-            .ToHashSet(StringComparer.Ordinal);
+        var validationItems = new Dictionary<object, object?>
+        {
+            ["eventType"] = eventType,
+            // Identity validators compare payload identifiers against the immutable event target.
+            ["aggregateRootId"] = aggregateRootId
+        };
 #pragma warning disable CS0618
         if (_legacyCommand != null)
         {
-            validationContext.Items["command"] = _legacyCommand;
+            validationItems["command"] = _legacyCommand;
         }
 #pragma warning restore CS0618
-        Validator.TryValidateObject(deserializedPayload, validationContext, validationMessages, true);
+
+        // Validate every reachable payload model and collection element. The active-object set
+        // prevents reference cycles while still validating shared objects at each distinct path.
+        ValidateObjectGraph(
+            deserializedPayload,
+            cleanedPayload,
+            string.Empty,
+            validationItems,
+            validationMessages,
+            new HashSet<object>(ReferenceEqualityComparer.Instance));
 
         validationMessages.RemoveAll(vm =>
-        {
-            // Silently rejected server-managed properties are excluded from all property validation.
-            if (vm.MemberNames.Any() && vm.MemberNames.All(ignoredClientProperties.Contains))
-            {
-                return true;
-            }
-
-            int i = 0;
-            vm.MemberNames.ToList().ForEach(memberName =>
-            {
-                var property = typeof(T).GetProperty(memberName);
-                if (property != null && !cleanedPayload.ContainsKey(memberName))
-                {
-                    var requiredAttributes = property.GetCustomAttributes(typeof(RequiredAttribute), false);
-                    if (requiredAttributes.Length == 0)
-                    {
-                        i++;
-                    }
-                }
-            });
-            if (i > 0 && i == vm.MemberNames.Count())
-            {
-                return true;
-            }
-            return false;
-        });
+            // Silently rejected top-level server-managed properties are excluded from validation.
+            vm.MemberNames.Any() && vm.MemberNames.All(ignoredClientProperties.Contains));
 
         if (validationMessages.Count != 0)
         {
@@ -322,6 +305,156 @@ public class Event : IEvent
 
         return this;
     }
+
+    /// <summary>
+    /// Recursively validates an object graph and qualifies validation member names with their payload paths.
+    /// </summary>
+    /// <param name="instance">The object or collection at the current graph node.</param>
+    /// <param name="payloadToken">The JSON token corresponding to <paramref name="instance"/>.</param>
+    /// <param name="path">The path from the payload root to the current node.</param>
+    /// <param name="validationItems">Event-scoped values exposed to validation attributes.</param>
+    /// <param name="validationMessages">The collection that receives validation failures.</param>
+    /// <param name="activeObjects">Reference objects currently being traversed, used to break cycles.</param>
+    private static void ValidateObjectGraph(
+        object? instance,
+        JToken? payloadToken,
+        string path,
+        IReadOnlyDictionary<object, object?> validationItems,
+        List<ValidationResult> validationMessages,
+        HashSet<object> activeObjects)
+    {
+        if (instance is null || IsSimpleType(instance.GetType()))
+        {
+            return;
+        }
+
+        bool tracksReference = !instance.GetType().IsValueType;
+        if (tracksReference && !activeObjects.Add(instance))
+        {
+            return;
+        }
+
+        try
+        {
+            if (instance is IEnumerable enumerable)
+            {
+                int index = 0;
+                foreach (object? item in enumerable)
+                {
+                    JToken? itemToken = payloadToken is JArray payloadArray && index < payloadArray.Count
+                        ? payloadArray[index]
+                        : null;
+                    ValidateObjectGraph(
+                        item,
+                        itemToken,
+                        $"{path}[{index}]",
+                        validationItems,
+                        validationMessages,
+                        activeObjects);
+                    index++;
+                }
+
+                return;
+            }
+
+            var suppliedProperties = payloadToken is JObject payloadObject
+                ? payloadObject.Properties().Select(property => property.Name).ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal);
+            var context = new ValidationContext(instance);
+            foreach ((object key, object? value) in validationItems)
+            {
+                context.Items[key] = value;
+            }
+
+            // Event-aware validators must distinguish omitted properties from null/default values
+            // independently at each nesting level.
+            context.Items["payloadProperties"] = suppliedProperties;
+
+            var currentResults = new List<ValidationResult>();
+            Validator.TryValidateObject(instance, context, currentResults, validateAllProperties: true);
+            foreach (ValidationResult result in currentResults)
+            {
+                List<string> memberNames = result.MemberNames.ToList();
+                bool suppressOmittedOptionalResult = memberNames.Count > 0 && memberNames.All(memberName =>
+                {
+                    PropertyInfo? property = instance.GetType().GetProperty(memberName);
+                    return property != null &&
+                        !suppliedProperties.Contains(memberName) &&
+                        property.GetCustomAttributes(typeof(RequiredAttribute), inherit: false).Length == 0;
+                });
+                if (suppressOmittedOptionalResult)
+                {
+                    continue;
+                }
+
+                IEnumerable<string> qualifiedMembers = memberNames.Count == 0
+                    ? (string.IsNullOrEmpty(path) ? [] : [path])
+                    : memberNames.Select(memberName => QualifyMemberPath(path, memberName));
+                validationMessages.Add(new ValidationResult(result.ErrorMessage, qualifiedMembers));
+            }
+
+            foreach (PropertyInfo property in instance.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                // An omitted nested object is not part of a partial-update payload, even when its
+                // model property has a non-null default initializer.
+                if (!property.CanRead ||
+                    property.GetIndexParameters().Length != 0 ||
+                    !suppliedProperties.Contains(property.Name))
+                {
+                    continue;
+                }
+
+                object? child = property.GetValue(instance);
+                if (child is null || IsSimpleType(child.GetType()))
+                {
+                    continue;
+                }
+
+                JToken? childToken = payloadToken is JObject currentPayload
+                    ? currentPayload.GetValue(property.Name, StringComparison.Ordinal)
+                    : null;
+                ValidateObjectGraph(
+                    child,
+                    childToken,
+                    QualifyMemberPath(path, property.Name),
+                    validationItems,
+                    validationMessages,
+                    activeObjects);
+            }
+        }
+        finally
+        {
+            if (tracksReference)
+            {
+                activeObjects.Remove(instance);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines whether a value is a leaf that cannot contain payload validation targets.
+    /// </summary>
+    private static bool IsSimpleType(Type type)
+    {
+        Type effectiveType = Nullable.GetUnderlyingType(type) ?? type;
+        return effectiveType.IsPrimitive ||
+            effectiveType.IsEnum ||
+            effectiveType == typeof(string) ||
+            effectiveType == typeof(decimal) ||
+            effectiveType == typeof(DateTime) ||
+            effectiveType == typeof(DateTimeOffset) ||
+            effectiveType == typeof(DateOnly) ||
+            effectiveType == typeof(TimeOnly) ||
+            effectiveType == typeof(TimeSpan) ||
+            effectiveType == typeof(Guid) ||
+            effectiveType == typeof(Uri);
+    }
+
+    /// <summary>
+    /// Combines a parent payload path with a validation member name.
+    /// </summary>
+    private static string QualifyMemberPath(string path, string memberName)
+        => string.IsNullOrEmpty(path) ? memberName : $"{path}.{memberName}";
 
     /// <summary>
     /// Removes payload properties that do not exist on the target or are configured to be silently rejected.
