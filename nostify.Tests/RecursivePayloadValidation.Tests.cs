@@ -101,6 +101,67 @@ public sealed class RecursivePayloadValidationTests
         Assert.Same(evt, result);
     }
 
+    [Fact]
+    public void ValidatePayload_WithUnknownNestedProperty_ShouldReturnQualifiedMemberPath()
+    {
+        var evt = CreateEvent(new
+        {
+            profile = new
+            {
+                address = new { postalCode = "12345", unknownValue = "invalid" }
+            }
+        });
+
+        NostifyValidationException exception = Assert.Throws<NostifyValidationException>(
+            () => evt.ValidatePayload<RootPayload>());
+
+        ValidationResult result = Assert.Single(exception.ValidationMessages);
+        Assert.Equal("profile.address.unknownValue", Assert.Single(result.MemberNames));
+        Assert.Contains("profile.address.unknownValue", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ValidatePayload_WithUnknownCollectionElementProperty_ShouldReturnIndexedMemberPath()
+    {
+        var evt = CreateEvent(new
+        {
+            payloadListThingy = new[]
+            {
+                new { name = "first", eventValue = "present", unknownValue = "invalid" }
+            }
+        });
+
+        NostifyValidationException exception = Assert.Throws<NostifyValidationException>(
+            () => evt.ValidatePayload<RootPayload>());
+
+        ValidationResult result = Assert.Single(exception.ValidationMessages);
+        Assert.Equal("payloadListThingy[0].unknownValue", Assert.Single(result.MemberNames));
+    }
+
+    [Fact]
+    public void ValidatePayload_WithUnknownNestedPropertiesAndErrorsDisabled_ShouldCleanPersistedPayload()
+    {
+        var evt = CreateEvent(new
+        {
+            profile = new
+            {
+                address = new { postalCode = "12345", unknownValue = "ignored" }
+            },
+            payloadListThingy = new[]
+            {
+                new { name = "first", eventValue = "present", extraValue = "ignored" }
+            }
+        });
+
+        IEvent result = evt.ValidatePayload<RootPayload>(throwErrorIfExtraProps: false);
+        Newtonsoft.Json.Linq.JObject cleanedPayload = Newtonsoft.Json.Linq.JObject.FromObject(evt.payload!);
+
+        Assert.Same(evt, result);
+        Assert.Null(cleanedPayload.SelectToken("profile.address.unknownValue"));
+        Assert.Null(cleanedPayload.SelectToken("payloadListThingy[0].extraValue"));
+        Assert.Equal("12345", cleanedPayload.SelectToken("profile.address.postalCode")?.ToObject<string>());
+    }
+
     private static Event CreateEvent(object payload)
         => new(RecursiveValidationEventType.Instance, Guid.NewGuid(), payload);
 

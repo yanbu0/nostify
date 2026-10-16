@@ -304,7 +304,7 @@ public class Event : IEvent
             new HashSet<object>(ReferenceEqualityComparer.Instance));
 
         validationMessages.RemoveAll(vm =>
-            // Silently rejected top-level server-managed properties are excluded from validation.
+            // Silently rejected server-managed properties are excluded from validation at every payload depth.
             vm.MemberNames.Any() && vm.MemberNames.All(ignoredClientProperties.Contains));
 
         if (validationMessages.Count != 0)
@@ -623,11 +623,12 @@ public class Event : IEvent
         => string.IsNullOrEmpty(path) ? memberName : $"{path}.{memberName}";
 
     /// <summary>
-    /// Removes payload properties that do not exist on the target or are configured to be silently rejected.
+    /// Recursively removes payload properties that do not exist on the corresponding target type or are
+    /// configured to be silently rejected.
     /// </summary>
     /// <param name="errorMessageIfFound">If true, adds an error for properties that do not exist on the target.</param>
     /// <param name="validationMessages">The validation messages produced while inspecting payload properties.</param>
-    /// <param name="ignoredClientProperties">The server-managed properties removed without producing validation errors.</param>
+    /// <param name="ignoredClientProperties">The qualified paths of server-managed properties removed without errors.</param>
     /// <returns>A cleaned payload containing only client-writable target properties.</returns>
     private JObject RemoveNonExistentPayloadProperties<T>(
         bool errorMessageIfFound,
@@ -635,56 +636,164 @@ public class Event : IEvent
         out HashSet<string> ignoredClientProperties) where T : class
     {
         validationMessages = new List<ValidationResult>();
-
-        Dictionary<string, PropertyInfo> validProperties = typeof(T)
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .ToDictionary(property => property.Name, property => property, StringComparer.Ordinal);
-        ignoredClientProperties = validProperties.Values
-            .Where(property => property.GetCustomAttribute<RejectFromClientAttribute>(inherit: false)?.throwsError == false)
-            .Select(property => property.Name)
-            .ToHashSet(StringComparer.Ordinal);
+        ignoredClientProperties = new HashSet<string>(StringComparer.Ordinal);
         object requiredPayload = payload ?? throw new InvalidOperationException("Payload cannot be null when removing non-existent properties.");
         var payloadObject = JObject.FromObject(requiredPayload);
-        bool removedRejectedProperty = false;
 
-        foreach (string propertyName in payloadObject.Properties().Select(property => property.Name).ToList())
+        bool removedProperty = CleanPayloadToken(
+            typeof(T),
+            payloadObject,
+            string.Empty,
+            errorMessageIfFound,
+            validationMessages,
+            ignoredClientProperties);
+
+        if (removedProperty)
         {
-            if (!validProperties.TryGetValue(propertyName, out PropertyInfo? property))
-            {
-                if (errorMessageIfFound)
-                {
-                    validationMessages.Add(new ValidationResult($"Invalid property '{propertyName}' found in payload."));
-                }
-
-                payloadObject.Remove(propertyName);
-                continue;
-            }
-
-            RejectFromClientAttribute? rejectAttribute = property.GetCustomAttribute<RejectFromClientAttribute>(inherit: false);
-            if (rejectAttribute is null)
-            {
-                continue;
-            }
-
-            if (rejectAttribute.throwsError)
-            {
-                validationMessages.Add(new ValidationResult(
-                    $"The property '{propertyName}' is server-managed and cannot be supplied by a client.",
-                    [propertyName]));
-                continue;
-            }
-
-            payloadObject.Remove(propertyName);
-            removedRejectedProperty = true;
-            Console.Error.WriteLine($"[nostify:validation] Ignored server-managed client payload property '{propertyName}' for '{typeof(T).Name}'.");
-        }
-
-        if (removedRejectedProperty)
-        {
-            // Persist and apply only the cleaned payload so an ignored client value cannot update server state later.
+            // Persist and apply only the cleaned payload so ignored values cannot update server state later.
             payload = payloadObject;
         }
 
         return payloadObject;
+    }
+
+    /// <summary>
+    /// Cleans one JSON token according to its corresponding model type, including collection elements.
+    /// </summary>
+    private static bool CleanPayloadToken(
+        Type targetType,
+        JToken? token,
+        string path,
+        bool errorMessageIfFound,
+        List<ValidationResult> validationMessages,
+        HashSet<string> ignoredClientProperties)
+    {
+        Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if (token is null || token.Type is JTokenType.Null or JTokenType.Undefined || IsSimpleType(effectiveType))
+        {
+            return false;
+        }
+
+        if (token is JArray array && TryGetCollectionElementType(effectiveType, out Type? elementType))
+        {
+            bool removedFromCollection = false;
+            for (int index = 0; index < array.Count; index++)
+            {
+                removedFromCollection |= CleanPayloadToken(
+                    elementType,
+                    array[index],
+                    $"{path}[{index}]",
+                    errorMessageIfFound,
+                    validationMessages,
+                    ignoredClientProperties);
+            }
+
+            return removedFromCollection;
+        }
+
+        if (token is not JObject payloadObject)
+        {
+            return false;
+        }
+
+        // Dictionary keys are payload data rather than model property names; inspect each value instead.
+        if (TryGetDictionaryValueType(effectiveType, out Type? valueType))
+        {
+            bool removedFromDictionary = false;
+            foreach (JProperty entry in payloadObject.Properties())
+            {
+                removedFromDictionary |= CleanPayloadToken(
+                    valueType,
+                    entry.Value,
+                    QualifyMemberPath(path, entry.Name),
+                    errorMessageIfFound,
+                    validationMessages,
+                    ignoredClientProperties);
+            }
+
+            return removedFromDictionary;
+        }
+
+        Dictionary<string, PropertyInfo> validProperties = effectiveType
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .ToDictionary(property => property.Name, property => property, StringComparer.Ordinal);
+
+        // Required-style validation must remain suppressed for every silently rejected property,
+        // including when the client correctly omits that server-managed member.
+        foreach (PropertyInfo ignoredProperty in validProperties.Values.Where(property =>
+                     property.GetCustomAttribute<RejectFromClientAttribute>(inherit: false)?.throwsError == false))
+        {
+            ignoredClientProperties.Add(QualifyMemberPath(path, ignoredProperty.Name));
+        }
+
+        bool removedProperty = false;
+
+        foreach (JProperty payloadProperty in payloadObject.Properties().ToList())
+        {
+            string propertyPath = QualifyMemberPath(path, payloadProperty.Name);
+            if (!validProperties.TryGetValue(payloadProperty.Name, out PropertyInfo? property))
+            {
+                if (errorMessageIfFound)
+                {
+                    validationMessages.Add(new ValidationResult(
+                        $"Invalid property '{propertyPath}' found in payload.",
+                        [propertyPath]));
+                }
+
+                payloadProperty.Remove();
+                removedProperty = true;
+                continue;
+            }
+
+            RejectFromClientAttribute? rejectAttribute = property.GetCustomAttribute<RejectFromClientAttribute>(inherit: false);
+            if (rejectAttribute?.throwsError == true)
+            {
+                validationMessages.Add(new ValidationResult(
+                    $"The property '{propertyPath}' is server-managed and cannot be supplied by a client.",
+                    [propertyPath]));
+                continue;
+            }
+
+            if (rejectAttribute is not null)
+            {
+                payloadProperty.Remove();
+                removedProperty = true;
+                ignoredClientProperties.Add(propertyPath);
+                Console.Error.WriteLine(
+                    $"[nostify:validation] Ignored server-managed client payload property '{propertyPath}' for '{effectiveType.Name}'.");
+                continue;
+            }
+
+            removedProperty |= CleanPayloadToken(
+                property.PropertyType,
+                payloadProperty.Value,
+                propertyPath,
+                errorMessageIfFound,
+                validationMessages,
+                ignoredClientProperties);
+        }
+
+        return removedProperty;
+    }
+
+    /// <summary>
+    /// Resolves the value type for generic dictionary implementations.
+    /// </summary>
+    private static bool TryGetDictionaryValueType(Type type, out Type valueType)
+    {
+        Type? dictionaryType = type
+            .GetInterfaces()
+            .Append(type)
+            .FirstOrDefault(candidate =>
+                candidate.IsGenericType &&
+                candidate.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+        if (dictionaryType is not null)
+        {
+            valueType = dictionaryType.GetGenericArguments()[1];
+            return true;
+        }
+
+        valueType = null!;
+        return false;
     }
 }
