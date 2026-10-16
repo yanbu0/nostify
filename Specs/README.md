@@ -6,7 +6,7 @@ Nostify is an event-sourcing microservices framework for .NET 10 with Azure Cosm
 
 ### Command Payload Contract for Consumers and AI Agents
 
-Create and Update payloads are event-specific change sets, not complete aggregate snapshots. Clients **should send only properties intentionally set by the current event**. Omitted properties remain unchanged on Update and retain defaults on Create; present `null`, `false`, `0`, and empty values are explicit updates. Normal validation supports partial payloads while still enforcing `[Required]`, matching `[RequiredFor(...)]`, supplied-value constraints, and rejection of unknown properties. Do not disable validation merely to submit a partial payload. See [DefaultCommandHandler](DefaultCommandHandlers.spec.md), [Event](Event.spec.md), [EventFactory](EventFactory.spec.md), and [NostifyObject](NostifyObject.spec.md).
+Create and Update payloads are event-specific change sets, not complete aggregate snapshots. Clients **should send only properties intentionally set by the current event**. Omitted properties remain unchanged on Update and retain defaults on Create; present `null`, `false`, `0`, and empty values are explicit updates. Normal validation supports partial payloads while still enforcing `[Required]`, matching `[RequiredFor(...)]`, `[OnlyFor(...)]` restrictions, supplied-value constraints, and rejection of unknown properties. Do not disable validation merely to submit a partial payload. See [DefaultCommandHandler](DefaultCommandHandlers.spec.md), [Event](Event.spec.md), [EventFactory](EventFactory.spec.md), and [NostifyObject](NostifyObject.spec.md).
 
 ### 5.2.0 Rolling Durable Projection Initialization
 
@@ -86,7 +86,8 @@ Create and Update payloads are event-specific change sets, not complete aggregat
 
 | Spec | Description |
 |------|-------------|
-| [RequiredForAttribute](RequiredForAttribute.spec.md) | Command-specific validation |
+| [RequiredForAttribute](RequiredForAttribute.spec.md) | Event-specific required-property validation |
+| [OnlyForAttribute](OnlyForAttribute.spec.md) | Event-specific property allowlist validation |
 | [INostifyValidation](INostifyValidation.spec.md) | Validation interface |
 | [NostifyValidation](NostifyValidation.spec.md) | Validation utilities |
 

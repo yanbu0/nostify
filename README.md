@@ -619,7 +619,7 @@ public async Task OnTestCreated(
 
 #### Payload Validation
 
-Event payloads are validated by default when using `EventFactory`. This is done by placing `ValidationAttribute` attributes on aggregate properties. It ensures required properties are present and supplied values are valid for the specified event type. Only properties present on the current payload are validated, except for `[Required]` and matching `[RequiredFor(...)]` declarations. Partial Create and Update payloads remain valid without calling `NoValidate()`.
+Event payloads are validated by default when using `EventFactory`. This is done by placing `ValidationAttribute` attributes on aggregate properties. It ensures required properties are present and supplied values are valid for the specified event type. Only properties present on the current payload are validated, except for `[Required]` and matching `[RequiredFor(...)]` declarations. `[OnlyFor(...)]` rejects a supplied property for every event type outside its allowlist while allowing the property to be omitted. Partial Create and Update payloads remain valid without calling `NoValidate()`.
 
 ```C#
 // EventFactory validates a partial payload by default.
@@ -642,12 +642,18 @@ Most of the time, you will want to use `RequiredFor` instead of `Required` to ma
 public class TestAggregate : NostifyObject, IAggregate
 {
     [RequiredFor(typeof(Create_Test))]
+    [OnlyFor(typeof(Create_Test))]
     public string Name { get; set; }
     
     [RequiredFor(typeof(Update_Test), typeof(Create_Test))]
+    [OnlyFor(typeof(Update_Test), typeof(Create_Test))]
     public int Value { get; set; }
 }
 ```
+
+`RequiredFor` controls when a property must be present. `OnlyFor` controls when a supplied property is permitted. Combining them creates an event-specific property that is required for the listed events and invalid for every other event.
+
+The package includes Roslyn diagnostic `NOSTIFY001`. It reports a compile-time error when a `typeof(...)` argument passed to `RequiredFor` or `OnlyFor` does not derive from `EventType`. Runtime validation remains in place for reflection and dynamically constructed attributes.
 
 #### CreateNullPayloadEvent Method
 
@@ -3985,12 +3991,14 @@ Use the `RequiredForAttribute` to specify which properties are required for spec
 ```C#
 public class OrderAggregate : NostifyObject, IAggregate
 {
-    // Required only for the Create_Order event type
+    // Required for Create_Order and invalid when supplied by another event type.
     [RequiredFor(typeof(Create_Order))]
+    [OnlyFor(typeof(Create_Order))]
     public string customerName { get; set; }
     
-    // The params overload accepts multiple EventType definitions
+    // The params overload accepts multiple EventType definitions.
     [RequiredFor(typeof(Create_Order), typeof(Update_Order))]
+    [OnlyFor(typeof(Create_Order), typeof(Update_Order))]
     public decimal totalAmount { get; set; }
     
     // Standard Required attribute - required for ALL event types
@@ -3998,6 +4006,10 @@ public class OrderAggregate : NostifyObject, IAggregate
     public Guid customerId { get; set; }
 }
 ```
+
+`OnlyForAttribute` rejects a supplied property for every event type outside its configured `Events` allowlist, but does not require the property for allowed events. Combining it with `RequiredForAttribute` both requires and restricts the property as shown above. Both attributes expose the obsolete `Commands` compatibility alias, which delegates to `Events` and will be removed in the next major version.
+
+Roslyn diagnostic `NOSTIFY001` makes invalid typed declarations such as `[RequiredFor(typeof(string))]` and `[OnlyFor(typeof(string))]` build errors. Every `typeof(...)` argument must derive from `EventType`.
 
 #### EventFactory Validation
 
@@ -4020,7 +4032,7 @@ IEvent imported = new EventFactory().NoValidate().Create<OrderAggregate>(
 IEvent deleted = new EventFactory().CreateNullPayloadEvent(new Delete_Order(), aggregateId);
 ```
 
-Do not call `NoValidate()` merely because a Create or Update payload is partial. Normal validation accepts omitted optional properties while still rejecting unknown properties and enforcing `[Required]`, matching `[RequiredFor(...)]`, and constraints on supplied values.
+Do not call `NoValidate()` merely because a Create or Update payload is partial. Normal validation accepts omitted optional properties while still rejecting unknown properties and enforcing `[Required]`, matching `[RequiredFor(...)]`, `[OnlyFor(...)]` restrictions, and constraints on supplied values.
 
 ## Performance Considerations
 

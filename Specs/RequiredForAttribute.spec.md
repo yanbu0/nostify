@@ -55,6 +55,8 @@ public decimal Total { get; set; }
 
 The event definition classes derive from `EventType`, rather than `IEvent`. `IEvent` represents a persisted event envelope and therefore is not the appropriate type constraint for this metadata.
 
+The NuGet package includes Roslyn diagnostic `NOSTIFY001`, an error that checks every `typeof(...)` argument at build time. A type that does not derive from `EventType` is rejected before execution. Runtime validation remains authoritative for reflection-created attributes and also rejects abstract definitions or definitions without parameterless constructors.
+
 ## Properties
 
 | Property | Type | Description |

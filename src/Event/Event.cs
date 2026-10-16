@@ -269,6 +269,11 @@ public class Event : IEvent
 
         ValidationContext validationContext = new ValidationContext(deserializedPayload);
         validationContext.Items["eventType"] = eventType;
+        // Event-aware validators use the original payload members to distinguish an omitted
+        // property from a deserialized null/default value.
+        validationContext.Items["payloadProperties"] = cleanedPayload.Properties()
+            .Select(property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
 #pragma warning disable CS0618
         if (_legacyCommand != null)
         {
