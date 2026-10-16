@@ -269,6 +269,8 @@ public class Event : IEvent
 
         ValidationContext validationContext = new ValidationContext(deserializedPayload);
         validationContext.Items["eventType"] = eventType;
+        // Identity validators compare payload identifiers against the immutable event target.
+        validationContext.Items["aggregateRootId"] = aggregateRootId;
         // Event-aware validators use the original payload members to distinguish an omitted
         // property from a deserialized null/default value.
         validationContext.Items["payloadProperties"] = cleanedPayload.Properties()

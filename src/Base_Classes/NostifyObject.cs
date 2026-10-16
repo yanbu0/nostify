@@ -97,6 +97,7 @@ public abstract class NostifyObject : ITenantFilterable, IUniquelyIdentifiable, 
     ///<summary>
     ///Unique value for Aggregate
     ///</summary>
+    [AggregateRootId]
     public Guid id { get; set; }
 
 
