@@ -4,6 +4,7 @@ using Confluent.Kafka;
 using System.Reflection;
 using Confluent.Kafka.Admin;
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Collections.Generic;
@@ -521,64 +522,244 @@ public class Nostify : INostify, IDisposable
     /// Backwards-compatible overload that converts bool allowRetry to RetryOptions.
     /// </summary>
     ///<inheritdoc />
-    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)
+    public Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventAsync(
+        List<IEvent> events,
+        int? batchSize = null,
+        bool allowRetry = false,
+        bool publishErrorEvents = false)
     {
         RetryOptions? retryOptions = allowRetry
             ? new RetryOptions()
             : null;
-        await BulkPersistEventAsync(events, batchSize, retryOptions, publishErrorEvents);
+        return BulkPersistEventAsync(events, batchSize, retryOptions, publishErrorEvents);
     }
 
     ///<inheritdoc />
-    public async Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false)
+    public async Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventAsync(
+        List<IEvent> events,
+        int? batchSize,
+        RetryOptions? retryOptions,
+        bool publishErrorEvents = false)
     {
-        var eventContainer = await GetEventStoreContainerAsync(true);
-
-        //If batchSize is not null, set loopSize to batchSize, otherwise loop through all events
-        int loopSize = batchSize.HasValue ? batchSize.Value : events.Count;
-
-        //Loop through in batches of batchSize
-        for (int i = 0; i < events.Count; i += loopSize)
+        ArgumentNullException.ThrowIfNull(events);
+        if (batchSize <= 0)
         {
-            var eventBatch = events.Skip(i).Take(loopSize).ToList();
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be greater than zero.");
+        }
 
-            if (retryOptions != null)
+        // Avoid container setup for an empty operation and preserve the exact one-result-per-input invariant.
+        if (events.Count == 0)
+        {
+            return Array.Empty<BulkPersistEventResult>();
+        }
+
+        int loopSize = batchSize ?? events.Count;
+        var indexedEvents = events.Select((eventToPersist, index) => (Event: eventToPersist, Index: index)).ToList();
+        Container eventContainer;
+
+        try
+        {
+            eventContainer = await GetEventStoreContainerAsync(true);
+        }
+        catch (Exception ex)
+        {
+            // An operation-wide setup failure still produces a result for every input.
+            Task<BulkPersistEventResult>[] setupFailureTasks = indexedEvents
+                .Select(item => CreateBulkPersistFailureResultAsync(item.Event, item.Index, ex, 0, false, null, null, publishErrorEvents))
+                .ToArray();
+            return await Task.WhenAll(setupFailureTasks);
+        }
+
+        var results = new BulkPersistEventResult[events.Count];
+        for (int i = 0; i < indexedEvents.Count; i += loopSize)
+        {
+            Task<BulkPersistEventResult>[] persistenceTasks = indexedEvents
+                .Skip(i)
+                .Take(loopSize)
+                .Select(item => PersistBulkEventAsync(
+                    eventContainer,
+                    item.Event,
+                    item.Index,
+                    retryOptions,
+                    publishErrorEvents))
+                .ToArray();
+
+            BulkPersistEventResult[] batchResults = await Task.WhenAll(persistenceTasks);
+            foreach (BulkPersistEventResult result in batchResults)
             {
-                var retryable = eventContainer.WithRetry(retryOptions);
-                await retryable.DoBulkCreateEventAsync(
-                    eventBatch,
-                    onException: async (pe, ex) =>
-                    {
-                        if (Logger?.IsEnabled(LogLevel.Error) == true)
-                        {
-                            LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(pe), ex);
-                        }
-
-                        await HandleBulkPersistenceFailureAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents);
-                    }
-                );
-            }
-            else
-            {
-                IEnumerable<Task> persistenceTasks = eventBatch.Select(async pe =>
-                {
-                    try
-                    {
-                        await eventContainer.CreateItemAsync(pe, pe.aggregateRootId.ToPartitionKey());
-                    }
-                    catch (Exception ex)
-                    {
-                        if (Logger?.IsEnabled(LogLevel.Error) == true)
-                        {
-                            LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(pe), ex);
-                        }
-
-                        await HandleBulkPersistenceFailureAsync(nameof(BulkPersistEventAsync), ex.Message, pe, publishErrorEvents);
-                    }
-                });
-                await Task.WhenAll(persistenceTasks);
+                results[result.InputIndex] = result;
             }
         }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Persists one event and converts every terminal condition into a structured result.
+    /// </summary>
+    private async Task<BulkPersistEventResult> PersistBulkEventAsync(
+        Container eventContainer,
+        IEvent eventToPersist,
+        int inputIndex,
+        RetryOptions? retryOptions,
+        bool publishErrorEvents)
+    {
+        int attemptCount = 0;
+        TimeSpan? lastRetryAfter = null;
+        TimeSpan? lastDelay = null;
+
+        while (true)
+        {
+            attemptCount++;
+            try
+            {
+                ItemResponse<IEvent> response = await eventContainer.CreateItemAsync(
+                    eventToPersist,
+                    eventToPersist.aggregateRootId.ToPartitionKey());
+
+                return new BulkPersistEventResult
+                {
+                    InputIndex = inputIndex,
+                    EventId = eventToPersist.id,
+                    Outcome = BulkPersistEventOutcome.Created,
+                    StatusCode = response.StatusCode,
+                    ActivityId = response.ActivityId,
+                    RequestCharge = response.RequestCharge,
+                    Diagnostics = response.Diagnostics?.ToString(),
+                    Retry = new BulkPersistRetryDetails
+                    {
+                        AttemptCount = attemptCount,
+                        RetryAfter = lastRetryAfter,
+                        LastDelay = lastDelay
+                    }
+                };
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+            {
+                // Create is idempotent for events: retain all conflict details while reporting presence as success.
+                return new BulkPersistEventResult
+                {
+                    InputIndex = inputIndex,
+                    EventId = eventToPersist.id,
+                    Outcome = BulkPersistEventOutcome.AlreadyExists,
+                    StatusCode = ex.StatusCode,
+                    SubStatusCode = ex.SubStatusCode,
+                    ActivityId = ex.ActivityId,
+                    RequestCharge = ex.RequestCharge,
+                    Conflict = new BulkPersistConflictDetails
+                    {
+                        Message = ex.Message,
+                        TreatedAsIdempotentSuccess = true,
+                        SubStatusCode = ex.SubStatusCode,
+                        ActivityId = ex.ActivityId
+                    },
+                    Retry = new BulkPersistRetryDetails
+                    {
+                        AttemptCount = attemptCount,
+                        RetryAfter = lastRetryAfter,
+                        LastDelay = lastDelay
+                    }
+                };
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests && retryOptions != null)
+            {
+                lastRetryAfter = ex.RetryAfter;
+                int retriesPerformed = attemptCount - 1;
+                if (retriesPerformed >= retryOptions.MaxRetries)
+                {
+                    retryOptions.LogRetry($"BulkPersistEventAsync for event '{eventToPersist.id}': 429 TooManyRequests, exhausted {retryOptions.MaxRetries} retries.");
+                    return await CreateBulkPersistFailureResultAsync(
+                        eventToPersist,
+                        inputIndex,
+                        ex,
+                        attemptCount,
+                        true,
+                        lastRetryAfter,
+                        lastDelay,
+                        publishErrorEvents);
+                }
+
+                double retryAfterMs = ex.RetryAfter.HasValue && ex.RetryAfter.Value.TotalMilliseconds > 0
+                    ? ex.RetryAfter.Value.TotalMilliseconds
+                    : Math.Max(retryOptions.Delay.TotalMilliseconds, 100);
+                double baseDelayMs = Math.Max(retryAfterMs, retryOptions.Delay.TotalMilliseconds);
+                lastDelay = retryOptions.GetDelayForAttempt(retriesPerformed, baseDelayMs, 3);
+                retryOptions.LogRetry($"BulkPersistEventAsync for event '{eventToPersist.id}': retry {retriesPerformed + 1}/{retryOptions.MaxRetries} in {lastDelay.Value.TotalMilliseconds}ms.");
+                await Task.Delay(lastDelay.Value);
+            }
+            catch (Exception ex)
+            {
+                return await CreateBulkPersistFailureResultAsync(
+                    eventToPersist,
+                    inputIndex,
+                    ex,
+                    attemptCount,
+                    false,
+                    lastRetryAfter,
+                    lastDelay,
+                    publishErrorEvents);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates a primary failure result and captures secondary reporting without allowing it to hide the write failure.
+    /// </summary>
+    private async Task<BulkPersistEventResult> CreateBulkPersistFailureResultAsync(
+        IEvent eventToPersist,
+        int inputIndex,
+        Exception exception,
+        int attemptCount,
+        bool retryExhausted,
+        TimeSpan? retryAfter,
+        TimeSpan? lastDelay,
+        bool publishErrorEvents)
+    {
+        if (Logger?.IsEnabled(LogLevel.Error) == true)
+        {
+            LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(eventToPersist), exception);
+        }
+
+        BulkPersistFailureReportingDetails reporting;
+        try
+        {
+            await HandleBulkPersistenceFailureAsync(nameof(BulkPersistEventAsync), exception.Message, eventToPersist, publishErrorEvents);
+            reporting = new BulkPersistFailureReportingDetails { Attempted = true, Succeeded = true };
+        }
+        catch (Exception reportingException)
+        {
+            reporting = new BulkPersistFailureReportingDetails
+            {
+                Attempted = true,
+                Succeeded = false,
+                ExceptionType = reportingException.GetType().FullName,
+                ErrorMessage = reportingException.Message,
+                Exception = reportingException
+            };
+        }
+
+        CosmosException? cosmosException = exception as CosmosException;
+        return new BulkPersistEventResult
+        {
+            InputIndex = inputIndex,
+            EventId = eventToPersist.id,
+            Outcome = retryExhausted ? BulkPersistEventOutcome.RetryExhausted : BulkPersistEventOutcome.Failed,
+            StatusCode = cosmosException?.StatusCode,
+            SubStatusCode = cosmosException?.SubStatusCode,
+            ActivityId = cosmosException?.ActivityId,
+            RequestCharge = cosmosException?.RequestCharge,
+            ExceptionType = exception.GetType().FullName,
+            ErrorMessage = exception.Message,
+            Exception = exception,
+            Reporting = reporting,
+            Retry = new BulkPersistRetryDetails
+            {
+                AttemptCount = attemptCount,
+                Exhausted = retryExhausted,
+                RetryAfter = retryAfter,
+                LastDelay = lastDelay
+            }
+        };
     }
 
     private Task HandleBulkPersistenceFailureAsync(string functionName, string errorMessage, IEvent eventToHandle, bool publishErrorEvents) =>

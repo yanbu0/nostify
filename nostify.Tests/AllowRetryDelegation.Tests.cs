@@ -38,13 +38,13 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         // Also set up the bool overload so it's callable on the mock
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = new List<IEvent>
         {
@@ -66,7 +66,7 @@ public class AllowRetryDelegationTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = new List<IEvent>
         {
@@ -145,7 +145,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var objects = new List<dynamic> { new { name = "Item1" }, new { name = "Item2" } };
@@ -177,7 +177,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var objects = new List<dynamic> { new { name = "Item1" } };
@@ -212,7 +212,7 @@ public class AllowRetryDelegationTests
                     batchCounts.Add(Math.Min(loopSize, evts.Count - i));
                 }
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var newObjects = new List<TestAggregate>
@@ -260,7 +260,7 @@ public class AllowRetryDelegationTests
                     batchCounts.Add(Math.Min(loopSize, evts.Count - i));
                 }
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var newObjects = new List<TestAggregate>
@@ -305,7 +305,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("UpdateTestAggregate");
         var id1 = Guid.NewGuid();
@@ -343,7 +343,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("UpdateTestAggregate");
         var id1 = Guid.NewGuid();
@@ -376,7 +376,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var idStrings = new List<string> { Guid.NewGuid().ToString(), Guid.NewGuid().ToString() };
@@ -408,7 +408,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var idStrings = new List<string> { Guid.NewGuid().ToString() };
@@ -440,7 +440,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
@@ -471,7 +471,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid() };
@@ -504,7 +504,7 @@ public class AllowRetryDelegationTests
                 capturedRetryOptions = ro;
                 capturedPublishErrorEvents = pe;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var objects = new List<dynamic> { new { name = "Item1" } };
@@ -537,7 +537,7 @@ public class AllowRetryDelegationTests
                 capturedRetryOptions = ro;
                 capturedPublishErrorEvents = pe;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
@@ -570,7 +570,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var expected = new RetryOptions(); // Reference defaults
         var command = new NostifyCommand("UpdateTestAggregate");
@@ -605,7 +605,7 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var expected = new RetryOptions();
         var command = new NostifyCommand("DeleteTestAggregate");

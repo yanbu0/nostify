@@ -9,7 +9,7 @@
 ## Key Design Principles
 
 1. **Payloads are change sets** — Create and Update payloads should contain only properties intentionally set by the current event. Omitted properties are not changes. Explicit `null`, `false`, `0`, empty strings, and empty collections are changes.
-2. **All handlers return meaningful values** — Single-event handlers return the `Guid` of the affected aggregate root; bulk handlers return `int` (count of events processed).
+2. **All handlers return meaningful values** — Single-event handlers return the `Guid` of the affected aggregate root; bulk handlers return `int` only when every event reached a successful terminal persistence outcome. Any item failure throws `NostifyException` instead of returning a misleading requested count.
 3. **Single-event handlers use direct persistence** — `HandlePostAsync`, `HandlePatchAsync`, and `HandleDeleteAsync` call `INostify.PersistEventAsync(IEvent)` with no retry configuration because they persist single items through the standard Cosmos SDK path.
 4. **Dual overloads for bulk retry** — Each bulk handler has two overloads: one accepting `bool allowRetry` (simple, defaults to `true`) and one accepting `RetryOptions?` (configurable retry, requires explicit `userId`, `partitionKey`, `batchSize` to avoid ambiguity). The `bool` overload delegates to the `RetryOptions?` overload passing `nostify.DefaultRetryOptions` when true or `null` when false.
 5. **Static methods** — All handlers are `public async static`, designed to be called directly without instantiation.
@@ -39,8 +39,8 @@ This rule prevents stale UI state and serializer-generated default values from o
 
 | Method | Overload | Description |
 |--------|----------|-------------|
-| `HandleBulkCreateAsync<T>` | `bool allowRetry` | Bulk creates aggregates from request data. Passes `allowRetry` to `BulkPersistEventAsync`. |
-| `HandleBulkCreateAsync<T>` | `RetryOptions? retryOptions` | Bulk creates aggregates with configurable retry. Passes `retryOptions` to `BulkPersistEventAsync`. |
+| `HandleBulkCreateAsync<T>` | `bool allowRetry` | Bulk creates aggregates from request data and validates all returned persistence results. |
+| `HandleBulkCreateAsync<T>` | `RetryOptions? retryOptions` | Bulk creates aggregates with configurable retry and validates all returned persistence results. |
 
 Both overloads accept `partitionKeyName` (default: `"tenantId"`) to set the partition key property on each dynamic object.
 
@@ -96,7 +96,7 @@ The following non-`Async` method names are preserved as `[Obsolete]` wrappers th
 - **`INostify`** — Used for event persistence via `PersistEventAsync(IEvent)` (single) and `BulkPersistEventAsync` (bulk). Retry controls are exposed only on the bulk handler surface.
 - **`EventFactory`** — Used to create events from dynamic payloads (`Create<T>`) or null-payload events for deletes (`CreateNullPayloadEvent`).
 - **`HttpRequestData`** — Request body deserialized as `List<dynamic>` (create/update) or `List<string>` (delete by ID strings).
-- **`RetryOptions`** — When provided to a bulk handler, passed directly to `INostify.BulkPersistEventAsync(RetryOptions?)` for per-item retry via `RetryableContainer`.
+- **`RetryOptions`** — When provided to a bulk handler, passed directly to `INostify.BulkPersistEventAsync(RetryOptions?)` for direct per-item 429 retry and result telemetry.
 
 ## Partial Payload Example
 
@@ -114,6 +114,6 @@ The payload intentionally omits fields such as `customerId`, `total`, and `isDel
 ## Error Handling
 
 - **Single handlers**: Exceptions propagate to the caller. `PersistEventAsync(IEvent)` on the underlying `Nostify` implementation logs the error and writes the event to the undeliverable container via `HandleUndeliverableAsync` before re-throwing.
-- **Bulk handlers**: Error handling is delegated to `BulkPersistEventAsync`, which writes failed events to the undeliverable events container and optionally publishes error events to Kafka.
+- **Bulk handlers**: `BulkPersistEventAsync` writes failed events to the undeliverable container, optionally publishes error events, and returns one result per input. The count-based handlers inspect those results and throw `NostifyException` if any result is unsuccessful. Consumers that need partial-success handling should call `INostify.BulkPersistEventAsync` directly.
 - **Validation**: `HandleBulkUpdate` throws `ArgumentException` if any object lacks a valid `id`. `HandleBulkDelete` (from request) throws `ArgumentException` for unparseable GUIDs.
 - **Null body after deserialization**: `HandleBulkUpdateAsync` and `HandleBulkDeleteAsync` (HttpRequestData overloads) throw `NostifyException` when the request body deserializes to null (for example, a literal JSON `null` body), preventing silent no-op responses. Malformed JSON fails earlier during deserialization and is not converted into `NostifyException` by these handlers.

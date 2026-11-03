@@ -81,6 +81,11 @@
  
 ### Updates
   
+- 5.4.0
+    - **Complete Bulk Persistence Results**: `BulkPersistEventAsync` now returns one ordered `BulkPersistEventResult` for every input, including the event ID and input index for reliable correlation even when IDs repeat.
+    - **Observable Cosmos Outcomes**: Results expose Cosmos status, substatus, activity ID, request charge, diagnostics, and explicit 409 conflict details. Existing events are reported as the idempotent `AlreadyExists` success outcome.
+    - **Retry Exhaustion Telemetry**: Throttled writes expose attempt and retry counts, server retry-after information, last delay, and a distinct `RetryExhausted` outcome when 429 retries are exhausted.
+    - **No Swallowed Bulk Failures**: Primary persistence failures remain authoritative and are returned separately from best-effort undeliverable/error-event reporting failures. Count-based default command handlers throw when any returned item failed instead of returning a misleading requested count.
 - 5.3.0
     - **Event-Aware Validation**: `RequiredFor`, `OnlyFor`, and `TogetherFor` support event-specific payload validation, including type-based event declarations.
     - **Protected Aggregate IDs**: `AggregateRootId` prevents event payloads from changing an aggregate's identity.
@@ -2378,29 +2383,44 @@ await _nostify.MultiApplyAndPersistAsync<TestProjection>(
 
 #### Bulk Event Processing
 
-Process multiple events in batches:
+Process multiple events in batches. The returned collection has exactly one result per input in the same order; use `InputIndex` when event IDs may repeat:
 
 ```C#
-// Using boolean allowRetry (backwards-compatible)
-await _nostify.BulkPersistEventAsync(
-    events, 
-    batchSize: 100, 
-    allowRetry: true, 
+// Using boolean allowRetry (delegates to the configurable overload).
+IReadOnlyList<BulkPersistEventResult> results = await _nostify.BulkPersistEventAsync(
+    events,
+    batchSize: 100,
+    allowRetry: true,
     publishErrorEvents: false
 );
 
-// Using configurable RetryOptions for fine-grained control
+foreach (BulkPersistEventResult result in results)
+{
+    if (result.IsSuccess)
+    {
+        // Created and AlreadyExists (409) are successful terminal outcomes.
+        Console.WriteLine($"{result.InputIndex}: {result.EventId} -> {result.Outcome} ({result.StatusCode})");
+        continue;
+    }
+
+    Console.WriteLine(
+        $"{result.InputIndex}: {result.EventId} -> {result.Outcome}; " +
+        $"attempts={result.Retry.AttemptCount}; error={result.ErrorMessage}; " +
+        $"failureReported={result.Reporting.Succeeded}");
+}
+
+// Using configurable RetryOptions for fine-grained 429 handling.
 var retryOptions = new RetryOptions(
-    maxRetries: 3, 
-    delay: TimeSpan.FromMilliseconds(500), 
+    maxRetries: 3,
+    delay: TimeSpan.FromMilliseconds(500),
     retryWhenNotFound: false,
     delayMultiplier: 2.0
 );
-await _nostify.BulkPersistEventAsync(
-    events, 
-    batchSize: 100, 
-    retryOptions: retryOptions, 
-    publishErrorEvents: false
+IReadOnlyList<BulkPersistEventResult> configuredResults = await _nostify.BulkPersistEventAsync(
+    events,
+    batchSize: 100,
+    retryOptions: retryOptions,
+    publishErrorEvents: true
 );
 
 // Using bool allowRetry (delegates to RetryOptions overload with defaults)

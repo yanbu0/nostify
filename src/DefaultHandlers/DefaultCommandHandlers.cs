@@ -163,7 +163,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), retries throttled writes using <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
@@ -186,7 +186,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic.</param>
+    /// <param name="retryOptions">Optional retry options for throttled event writes.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
@@ -208,7 +208,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), retries throttled writes using <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
@@ -236,7 +236,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic.</param>
+    /// <param name="retryOptions">Optional retry options for throttled event writes.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
@@ -271,7 +271,9 @@ public static class DefaultCommandHandler
             peList.Add(pe);
         });
 
-        await nostify.BulkPersistEventAsync(peList, batchSize, retryOptions, publishErrorEvents);
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+            peList, batchSize, retryOptions, publishErrorEvents);
+        ThrowIfBulkPersistenceFailed(results);
 
         return newObjects.Count;
     }
@@ -286,7 +288,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), retries throttled writes using <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were updated</returns>
     public async static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
@@ -308,7 +310,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic.</param>
+    /// <param name="retryOptions">Optional retry options for throttled event writes.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were updated</returns>
     public async static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
@@ -328,7 +330,9 @@ public static class DefaultCommandHandler
             peList.Add(pe);
         });
 
-        await nostify.BulkPersistEventAsync(peList, batchSize, retryOptions, publishErrorEvents);
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+            peList, batchSize, retryOptions, publishErrorEvents);
+        ThrowIfBulkPersistenceFailed(results);
 
         return updateObjects.Count;
     }
@@ -343,7 +347,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), retries throttled writes using <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
     public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
@@ -365,7 +369,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic.</param>
+    /// <param name="retryOptions">Optional retry options for throttled event writes.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
     public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
@@ -401,7 +405,9 @@ public static class DefaultCommandHandler
             peList.Add(pe);
         });
 
-        await nostify.BulkPersistEventAsync(peList, batchSize, retryOptions, publishErrorEvents);
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+            peList, batchSize, retryOptions, publishErrorEvents);
+        ThrowIfBulkPersistenceFailed(results);
 
         return idStrings.Count;
     }
@@ -416,7 +422,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="allowRetry">When <c>true</c> (default), uses the retryable container with <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
+    /// <param name="allowRetry">When <c>true</c> (default), retries throttled writes using <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
     public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, List<Guid> aggregateRootIds, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
@@ -438,7 +444,7 @@ public static class DefaultCommandHandler
     /// <param name="userId">Optional user identifier for the operations</param>
     /// <param name="partitionKey">Optional tenant identifier for the operations</param>
     /// <param name="batchSize">The size of batches for bulk operations (default: 100)</param>
-    /// <param name="retryOptions">Optional. Retry options for configuring per-item retry behavior. When provided, each event is persisted using RetryableContainer with retry logic.</param>
+    /// <param name="retryOptions">Optional retry options for throttled event writes.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
     public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, List<Guid> aggregateRootIds, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
@@ -451,9 +457,28 @@ public static class DefaultCommandHandler
             peList.Add(pe);
         });
 
-        await nostify.BulkPersistEventAsync(peList, batchSize, retryOptions, publishErrorEvents);
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+            peList, batchSize, retryOptions, publishErrorEvents);
+        ThrowIfBulkPersistenceFailed(results);
 
         return aggregateRootIds.Count;
+    }
+
+    /// <summary>
+    /// Prevents the count-based command-handler API from hiding item-level persistence failures.
+    /// Callers that need every item result should call <see cref="INostify.BulkPersistEventAsync(List{IEvent}, int?, RetryOptions?, bool)"/> directly.
+    /// </summary>
+    private static void ThrowIfBulkPersistenceFailed(IReadOnlyList<BulkPersistEventResult> results)
+    {
+        BulkPersistEventResult[] failures = results.Where(result => !result.IsSuccess).ToArray();
+        if (failures.Length == 0)
+        {
+            return;
+        }
+
+        string details = string.Join(", ", failures.Select(result =>
+            $"index {result.InputIndex}, event {result.EventId}, outcome {result.Outcome}, status {(int?)result.StatusCode ?? 0}: {result.ErrorMessage ?? "no error message"}"));
+        throw new NostifyException($"Bulk event persistence failed for {failures.Length} item(s): {details}");
     }
 
 }

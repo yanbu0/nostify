@@ -91,8 +91,10 @@ public interface INostify
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `BulkPersistEventAsync` | `Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)` | Persists all events in bulk. The `bool allowRetry` overload converts to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions` overload. |
-| `BulkPersistEventAsync` | `Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false)` | Persists all events in bulk with configurable retry. `retryOptions` and `batchSize` are required (no defaults) to avoid ambiguity with the `bool allowRetry` overload. |
+| `BulkPersistEventAsync` | `Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false)` | Returns exactly one terminal result per input, in input order. The `bool allowRetry` overload converts `true` to default `RetryOptions` and delegates to the configurable overload. |
+| `BulkPersistEventAsync` | `Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false)` | Persists events in configurable batches and exposes each event ID, input index, outcome, Cosmos status and diagnostics, conflict details, retry telemetry, primary failure, and secondary failure-reporting status. |
+
+`BulkPersistEventResult.IsSuccess` is true for `Created` and `AlreadyExists`. A Cosmos 409 is therefore an observable idempotent success rather than a discarded exception. A terminal 429 is `RetryExhausted` and includes the actual attempt count, retry count, server retry-after value, and last applied delay. Other item failures are returned as `Failed`. Container-resolution failures produce one failed result for every input; empty input returns an empty collection without resolving Cosmos. Undeliverable/error-event reporting is best effort and recorded separately, so it cannot hide or replace the primary persistence failure.
 
 ### Single Event Persistence
 

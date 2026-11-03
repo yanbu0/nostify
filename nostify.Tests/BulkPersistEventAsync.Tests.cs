@@ -41,7 +41,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(3);
 
@@ -59,7 +59,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(3);
         var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
@@ -78,7 +78,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(2);
 
@@ -96,7 +96,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(1);
 
@@ -114,7 +114,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(1);
         var retryOptions = new RetryOptions(maxRetries: 2, delay: TimeSpan.FromMilliseconds(100), retryWhenNotFound: false);
@@ -137,13 +137,13 @@ public class BulkPersistEventAsyncTests
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
             .Callback(() => boolOverloadCount++)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback(() => retryOptionsOverloadCount++)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(1);
         var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
@@ -168,7 +168,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), true, It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(2);
 
@@ -186,7 +186,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), false, It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(2);
 
@@ -208,7 +208,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(5);
         var retryOptions = new RetryOptions(maxRetries: 2, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
@@ -227,7 +227,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), true))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(1);
         var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
@@ -248,7 +248,7 @@ public class BulkPersistEventAsyncTests
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) => capturedOptions = ro)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(1);
         var retryOptions = new RetryOptions(maxRetries: 5, delay: TimeSpan.FromMilliseconds(500), retryWhenNotFound: true, delayMultiplier: 3.0);
@@ -276,7 +276,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         // Act - empty list should complete without error
         await _mockNostify.Object.BulkPersistEventAsync(new List<IEvent>(), null, false, false);
@@ -293,7 +293,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
 
@@ -323,7 +323,7 @@ public class BulkPersistEventAsyncTests
                 capturedEvents = evts;
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(100), retryWhenNotFound: false);
         var command = new NostifyCommand("DeleteTestAggregate");
@@ -350,7 +350,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
@@ -373,7 +373,7 @@ public class BulkPersistEventAsyncTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid() };

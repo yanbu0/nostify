@@ -36,7 +36,7 @@ public class DefaultCommandHandlersTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
         _mockNostify
             .Setup(n => n.PersistEventAsync(
                 It.IsAny<IEvent>()))
@@ -500,6 +500,42 @@ public class DefaultCommandHandlersTests
         Assert.Equal(nameof(Nostify.PersistEventAsync), call.FunctionName);
         Assert.Equal(failure.Message, call.ErrorMessage);
         Assert.Same(testEvent, call.Event);
+    }
+
+    [Fact]
+    public async Task HandleBulkDeleteAsync_WhenPersistenceResultFails_ThrowsInsteadOfReturningRequestedCount()
+    {
+        Guid aggregateRootId = Guid.NewGuid();
+        _mockNostify
+            .Setup(n => n.BulkPersistEventAsync(
+                It.IsAny<List<IEvent>>(),
+                It.IsAny<int?>(),
+                It.IsAny<RetryOptions?>(),
+                It.IsAny<bool>()))
+            .ReturnsAsync(
+            [
+                new BulkPersistEventResult
+                {
+                    InputIndex = 0,
+                    EventId = Guid.NewGuid(),
+                    Outcome = BulkPersistEventOutcome.RetryExhausted,
+                    StatusCode = HttpStatusCode.TooManyRequests,
+                    ErrorMessage = "throttled"
+                }
+            ]);
+
+        NostifyException exception = await Assert.ThrowsAsync<NostifyException>(() =>
+            DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
+                _mockNostify.Object,
+                new NostifyCommand("BulkDelete"),
+                [aggregateRootId],
+                default,
+                default,
+                100,
+                retryOptions: null));
+
+        Assert.Contains("RetryExhausted", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("throttled", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
