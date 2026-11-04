@@ -80,6 +80,7 @@ public sealed class BulkPersistFailureReportingDetails
 
     /// <summary>Gets the original reporting exception for in-process inspection.</summary>
     [JsonIgnore]
+    [System.Text.Json.Serialization.JsonIgnore]
     public Exception? Exception { get; init; }
 }
 
@@ -134,6 +135,7 @@ public sealed class BulkPersistEventResult
 
     /// <summary>Gets the original persistence exception for in-process inspection.</summary>
     [JsonIgnore]
+    [System.Text.Json.Serialization.JsonIgnore]
     public Exception? Exception { get; init; }
 
     /// <summary>Gets details of secondary undeliverable and optional error-event reporting.</summary>
