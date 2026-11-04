@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -24,14 +25,15 @@ public class BulkUpdate_ReplaceMe_
     }
 
     [Function(nameof(BulkUpdate_ReplaceMe_))]
-    public async Task<int> Run(
+    public async Task<IReadOnlyList<BulkPersistEventResult>> Run(
         [HttpTrigger("patch", Route = "_ReplaceMe_/BulkUpdate")] HttpRequestData req,
         FunctionContext context)
     {
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
 
-        return await DefaultCommandHandler.CountBulkUpdateResultsAsync<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Update, req, userId, tenantId);
+        // Return every item outcome so callers can inspect conflicts, failures, and retry exhaustion.
+        return await DefaultCommandHandler.GetBulkUpdateResultsAsync<_ReplaceMe_>(_nostify, _ReplaceMe_Command.Update, req, userId, tenantId);
     }
 }
 
