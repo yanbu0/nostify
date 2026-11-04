@@ -254,16 +254,23 @@ Applies and persists a bulk array of Kafka events to projections:
 - **`RetryOptions?` overload** — Primary implementation. Deserializes events, groups by partition key, resolves target projection IDs from `idPropertyName` (supports both single `Guid` and `List<Guid>` properties), and uses `CreateApplyAndPersistTask` for each item.
 - Returns up to 1000 successfully applied projections.
 
-### BulkPersistEventAsync
+### BulkPersistEventAsync and BulkPersistEventsAsync
 
-Persists a list of events to the event store in configurable batches:
+`BulkPersistEventAsync` is the obsolete, Task-returning compatibility API scheduled for removal in v6. It delegates to `BulkPersistEventsAsync` and discards the detailed results.
 
-- **`bool allowRetry` overload** — Backwards-compatible. Converts `allowRetry = true` to `new RetryOptions()` (defaults: maxRetries: 3, delay: 1s, exponential backoff 2x) and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
-- **`RetryOptions?` overload** — Primary implementation. When `retryOptions` is provided, wraps the event store container with `RetryableContainer` via `container.WithRetry(retryOptions)` and uses `retryable.DoBulkCreateEventAsync` for batched event persistence. When `null`, falls through to direct `CreateItemAsync` with try/catch error handling.
-- Both overloads write failed events to the undeliverable events container via `await HandleUndeliverableAsync` (awaited, not fire-and-forget, so errors in undeliverable handling are propagated to the caller).
-- When `publishErrorEvents = true`, error commands (`ErrorCommand.BulkPersistEvent`) are also published to Kafka.
+`BulkPersistEventsAsync` persists a list of events to the event store in configurable batches and returns `IReadOnlyList<BulkPersistEventResult>`:
 
-Both `BulkApplyAndPersistAsync` and `BulkPersistEventAsync` follow the same delegation pattern: `bool` overloads create default `RetryOptions` and delegate to the `RetryOptions?` overload.
+- The result collection always contains one terminal result per input and preserves input order. `InputIndex` keeps duplicate event IDs unambiguous.
+- **`bool allowRetry` overload** — Converts `allowRetry = true` to default `RetryOptions` and delegates to the `RetryOptions?` overload. When `false`, passes `null`.
+- **`RetryOptions?` overload** — Writes each item directly through Cosmos `CreateItemAsync`. A 429 is retried according to `RetryOptions`; retry telemetry records attempts, retries, server `RetryAfter`, the last delay, and exhaustion.
+- A successful create returns `Created` with Cosmos status, activity ID, request charge, and diagnostics.
+- A 409 returns `AlreadyExists`, remains visible as status 409 with conflict metadata, and is considered an idempotent success.
+- A terminal 429 returns `RetryExhausted`; other Cosmos and non-Cosmos failures return `Failed`. Expected item failures do not stop siblings or later batches.
+- Container-resolution failure returns one failed result for every input. Null input and invalid batch size remain argument errors; empty input returns immediately without container resolution.
+- Failed writes are reported to the undeliverable container and, when `publishErrorEvents = true`, through `BulkPersistErrorEventType`. This reporting is best effort: its outcome and exception are attached under `Reporting`, while the original persistence exception remains authoritative.
+- Result-aware default command handlers (`GetBulkCreateResultsAsync`, `GetBulkUpdateResultsAsync`, and `GetBulkDeleteResultsAsync`) expose the ordered results unchanged. Their `CountBulk*ResultsAsync` counterparts return `results.Count`, including failed results; callers that need outcome-aware behavior must inspect the result list. Legacy `HandleBulk*Async` count methods are obsolete and scheduled for removal in v6.
+
+`BulkApplyAndPersistAsync` retains its separate projection-oriented retry implementation.
 
 ### PersistEventAsync
 

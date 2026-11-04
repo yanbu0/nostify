@@ -7,7 +7,7 @@ namespace nostify.Tests;
 /// </summary>
 public sealed class ReleaseVersionTests
 {
-    private const string ExpectedVersion = "5.3.0";
+    private const string ExpectedVersion = "5.4.0";
     private static readonly string RepositoryRoot = FindRepositoryRoot();
 
     public static TheoryData<string> TemplateProjectPaths => new()
@@ -16,6 +16,16 @@ public sealed class ReleaseVersionTests
         Path.Combine("templates", "nostifyAggregate", "_ReplaceMe_.csproj"),
         Path.Combine("templates", "nostifyProjection", "_ProjectionName_.csproj"),
         Path.Combine("templates", "nostifyGrpc", "_GrpcServerName_", "_GrpcServerName_.csproj")
+    };
+
+    public static TheoryData<string, string> BulkCommandTemplatePaths => new()
+    {
+        { Path.Combine("templates", "nostify", "_ReplaceMe_", "Aggregates", "_ReplaceMe_", "CommandHandlers", "BulkCreate_ReplaceMe_.cs"), "GetBulkCreateResultsAsync" },
+        { Path.Combine("templates", "nostify", "_ReplaceMe_", "Aggregates", "_ReplaceMe_", "CommandHandlers", "BulkUpdate_ReplaceMe_.cs"), "GetBulkUpdateResultsAsync" },
+        { Path.Combine("templates", "nostify", "_ReplaceMe_", "Aggregates", "_ReplaceMe_", "CommandHandlers", "BulkDelete_ReplaceMe_.cs"), "GetBulkDeleteResultsAsync" },
+        { Path.Combine("templates", "nostifyAggregate", "_ReplaceMe_", "CommandHandlers", "BulkCreate_ReplaceMe_.cs"), "GetBulkCreateResultsAsync" },
+        { Path.Combine("templates", "nostifyAggregate", "_ReplaceMe_", "CommandHandlers", "BulkUpdate_ReplaceMe_.cs"), "GetBulkUpdateResultsAsync" },
+        { Path.Combine("templates", "nostifyAggregate", "_ReplaceMe_", "CommandHandlers", "BulkDelete_ReplaceMe_.cs"), "GetBulkDeleteResultsAsync" }
     };
 
     [Fact]
@@ -52,6 +62,17 @@ public sealed class ReleaseVersionTests
 
         // Assert
         Assert.Equal(ExpectedVersion, (string?)packageReference.Attribute("Version"));
+    }
+
+    [Theory]
+    [MemberData(nameof(BulkCommandTemplatePaths))]
+    public void BulkCommandTemplate_ReturnsDetailedResults(string relativePath, string expectedMethod)
+    {
+        string template = File.ReadAllText(Path.Combine(RepositoryRoot, relativePath));
+
+        Assert.Contains("Task<IReadOnlyList<BulkPersistEventResult>> Run(", template, StringComparison.Ordinal);
+        Assert.Contains($"DefaultCommandHandler.{expectedMethod}", template, StringComparison.Ordinal);
+        Assert.DoesNotContain("CountBulk", template, StringComparison.Ordinal);
     }
 
     private static XDocument LoadProject(string relativePath)

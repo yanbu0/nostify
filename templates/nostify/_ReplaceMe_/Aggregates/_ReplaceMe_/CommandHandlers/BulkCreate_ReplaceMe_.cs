@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -24,14 +25,15 @@ public class BulkCreate_ReplaceMe_
     }
 
     [Function(nameof(BulkCreate_ReplaceMe_))]
-    public async Task<int> Run(
+    public async Task<IReadOnlyList<BulkPersistEventResult>> Run(
         [HttpTrigger("post", Route = "_ReplaceMe_/BulkCreate")] HttpRequestData req,
         FunctionContext context)
     {
         Guid userId = Guid.Empty; // You can replace this with actual user ID retrieval logic
         Guid tenantId = Guid.Empty; // You can replace this with actual partition key retrieval logic
 
-        return await DefaultCommandHandler.HandleBulkCreateAsync<_ReplaceMe_>(_nostify, _ReplaceMe_Command.BulkCreate, req, userId, tenantId);
+        // Return every item outcome so callers can inspect conflicts, failures, and retry exhaustion.
+        return await DefaultCommandHandler.GetBulkCreateResultsAsync<_ReplaceMe_>(_nostify, _ReplaceMe_Command.BulkCreate, req, userId, tenantId);
     }
 }
 

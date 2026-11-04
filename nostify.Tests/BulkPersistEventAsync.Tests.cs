@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
@@ -10,18 +12,18 @@ using Xunit;
 namespace nostify.Tests;
 
 /// <summary>
-/// Tests for BulkPersistEventAsync on INostify, verifying:
+/// Tests for BulkPersistEventsAsync on INostify, verifying:
 /// - The RetryOptions? overload exists on the INostify interface and is callable
 /// - The bool allowRetry overload exists on the INostify interface and is callable
 /// - Both overloads can be invoked through a mock with proper parameter matching
 /// - DefaultCommandHandlers correctly invoke both overloads
 /// - Batching, retry, and error handling behavior through mock verification
 /// </summary>
-public class BulkPersistEventAsyncTests
+public class BulkPersistEventsAsyncTests
 {
     private readonly Mock<INostify> _mockNostify;
 
-    public BulkPersistEventAsyncTests()
+    public BulkPersistEventsAsyncTests()
     {
         _mockNostify = new Mock<INostify>();
         _mockNostify
@@ -32,125 +34,150 @@ public class BulkPersistEventAsyncTests
             .Returns(new RetryOptions());
     }
 
+    [Fact]
+    public void BulkPersistenceApi_ExposesObsoleteTaskCompatibilityAndResultAwareOverloads()
+    {
+        MethodInfo[] singularMethods = typeof(INostify).GetMethods()
+            .Where(method => method.Name == nameof(INostify.BulkPersistEventAsync))
+            .ToArray();
+        MethodInfo[] pluralMethods = typeof(INostify).GetMethods()
+            .Where(method => method.Name == nameof(INostify.BulkPersistEventsAsync))
+            .ToArray();
+
+        Assert.Equal(2, singularMethods.Length);
+        Assert.All(singularMethods, method =>
+        {
+            Assert.Equal(typeof(Task), method.ReturnType);
+            ObsoleteAttribute obsolete = Assert.IsType<ObsoleteAttribute>(
+                method.GetCustomAttribute<ObsoleteAttribute>());
+            Assert.Contains("v6", obsolete.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(obsolete.IsError);
+        });
+
+        Assert.Equal(2, pluralMethods.Length);
+        Assert.All(pluralMethods, method =>
+            Assert.Equal(typeof(Task<IReadOnlyList<BulkPersistEventResult>>), method.ReturnType));
+    }
+
     #region INostify Interface Contract - Both Overloads
 
     [Fact]
-    public async Task BulkPersistEventAsync_BoolOverload_CanBeCalledOnInterface()
+    public async Task BulkPersistEventsAsync_BoolOverload_CanBeCalledOnInterface()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(3);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(events, 100, true, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, 100, true, false);
 
         // Assert
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, 100, true, false), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, 100, true, false), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_RetryOptionsOverload_CanBeCalledOnInterface()
+    public async Task BulkPersistEventsAsync_RetryOptionsOverload_CanBeCalledOnInterface()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var events = CreateTestEvents(3);
         var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(events, 100, retryOptions, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, 100, retryOptions, false);
 
         // Assert
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, 100, retryOptions, false), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, 100, retryOptions, false), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_RetryOptionsOverload_NullRetryOptions_CanBeCalled()
+    public async Task BulkPersistEventsAsync_RetryOptionsOverload_NullRetryOptions_CanBeCalled()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var events = CreateTestEvents(2);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(events, null, (RetryOptions?)null, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, null, (RetryOptions?)null, false);
 
         // Assert
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, null, (RetryOptions?)null, false), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, null, (RetryOptions?)null, false), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_BoolOverload_DefaultParameters()
+    public async Task BulkPersistEventsAsync_BoolOverload_DefaultParameters()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(1);
 
         // Act - call with defaults (must explicitly specify bool to disambiguate overloads)
-        await _mockNostify.Object.BulkPersistEventAsync(events, null, false, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, null, false, false);
 
         // Assert - defaults are batchSize=null, allowRetry=false, publishErrorEvents=false
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, null, false, false), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, null, false, false), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_RetryOptionsOverload_DefaultParameters()
+    public async Task BulkPersistEventsAsync_RetryOptionsOverload_DefaultParameters()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var events = CreateTestEvents(1);
         var retryOptions = new RetryOptions(maxRetries: 2, delay: TimeSpan.FromMilliseconds(100), retryWhenNotFound: false);
 
         // Act - call with events, batchSize, and retryOptions (batchSize is required)
-        await _mockNostify.Object.BulkPersistEventAsync(events, null, retryOptions);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, null, retryOptions);
 
         // Assert - defaults are batchSize=null, publishErrorEvents=false
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, null, retryOptions, false), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, null, retryOptions, false), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_BothOverloads_DistinctOnInterface()
+    public async Task BulkPersistEventsAsync_BothOverloads_DistinctOnInterface()
     {
         // Arrange - set up both overloads
         int boolOverloadCount = 0;
         int retryOptionsOverloadCount = 0;
 
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
             .Callback(() => boolOverloadCount++)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback(() => retryOptionsOverloadCount++)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var events = CreateTestEvents(1);
         var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
 
         // Act - call both overloads
-        await _mockNostify.Object.BulkPersistEventAsync(events, 100, true, false);
-        await _mockNostify.Object.BulkPersistEventAsync(events, 100, retryOptions, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, 100, true, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, 100, retryOptions, false);
 
         // Assert - each overload was called exactly once
         Assert.Equal(1, boolOverloadCount);
@@ -162,39 +189,39 @@ public class BulkPersistEventAsyncTests
     #region Bool AllowRetry Overload Parameters
 
     [Fact]
-    public async Task BulkPersistEventAsync_AllowRetryTrue_PassesTrueToInterface()
+    public async Task BulkPersistEventsAsync_AllowRetryTrue_PassesTrueToInterface()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), true, It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(2);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(events, 50, true, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, 50, true, false);
 
         // Assert
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, 50, true, false), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, 50, true, false), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_AllowRetryFalse_PassesFalseToInterface()
+    public async Task BulkPersistEventsAsync_AllowRetryFalse_PassesFalseToInterface()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), false, It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(2);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(events, null, false, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, null, false, false);
 
         // Assert
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, null, false, false), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, null, false, false), Times.Once);
     }
 
     #endregion
@@ -202,59 +229,59 @@ public class BulkPersistEventAsyncTests
     #region RetryOptions Overload Parameters
 
     [Fact]
-    public async Task BulkPersistEventAsync_RetryOptions_PassesBatchSizeThrough()
+    public async Task BulkPersistEventsAsync_RetryOptions_PassesBatchSizeThrough()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var events = CreateTestEvents(5);
         var retryOptions = new RetryOptions(maxRetries: 2, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(events, 50, retryOptions, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, 50, retryOptions, false);
 
         // Assert - batchSize is passed through
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, 50, retryOptions, false), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, 50, retryOptions, false), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_RetryOptions_PublishErrorEventsTrue()
+    public async Task BulkPersistEventsAsync_RetryOptions_PublishErrorEventsTrue()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), true))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         var events = CreateTestEvents(1);
         var retryOptions = new RetryOptions(maxRetries: 1, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(events, null, retryOptions, true);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, null, retryOptions, true);
 
         // Assert
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(events, null, retryOptions, true), Times.Once);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(events, null, retryOptions, true), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_RetryOptions_CustomConfiguration_PassedThrough()
+    public async Task BulkPersistEventsAsync_RetryOptions_CustomConfiguration_PassedThrough()
     {
         // Arrange
         RetryOptions? capturedOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) => capturedOptions = ro)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var events = CreateTestEvents(1);
         var retryOptions = new RetryOptions(maxRetries: 5, delay: TimeSpan.FromMilliseconds(500), retryWhenNotFound: true, delayMultiplier: 3.0);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(events, null, retryOptions, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(events, null, retryOptions, false);
 
         // Assert - the exact RetryOptions instance is passed through
         Assert.NotNull(capturedOptions);
@@ -270,38 +297,38 @@ public class BulkPersistEventAsyncTests
     #region Empty Events List
 
     [Fact]
-    public async Task BulkPersistEventAsync_EmptyList_BoolOverload_Completes()
+    public async Task BulkPersistEventsAsync_EmptyList_BoolOverload_Completes()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
 
         // Act - empty list should complete without error
-        await _mockNostify.Object.BulkPersistEventAsync(new List<IEvent>(), null, false, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(new List<IEvent>(), null, false, false);
 
         // Assert
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(
             It.Is<List<IEvent>>(e => e.Count == 0), null, false, false), Times.Once);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_EmptyList_RetryOptionsOverload_Completes()
+    public async Task BulkPersistEventsAsync_EmptyList_RetryOptionsOverload_Completes()
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(10), retryWhenNotFound: false);
 
         // Act
-        await _mockNostify.Object.BulkPersistEventAsync(new List<IEvent>(), null, retryOptions, false);
+        await _mockNostify.Object.BulkPersistEventsAsync(new List<IEvent>(), null, retryOptions, false);
 
         // Assert
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(
             It.Is<List<IEvent>>(e => e.Count == 0), null, retryOptions, false), Times.Once);
     }
 
@@ -310,20 +337,20 @@ public class BulkPersistEventAsyncTests
     #region DefaultCommandHandlers Integration - RetryOptions Overloads
 
     [Fact]
-    public async Task DefaultCommandHandlers_HandleBulkDelete_RetryOptionsOverload_CallsBulkPersistEventAsync()
+    public async Task DefaultCommandHandlers_HandleBulkDelete_RetryOptionsOverload_CallsBulkPersistEventsAsync()
     {
         // Arrange
         List<IEvent>? capturedEvents = null;
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedEvents = evts;
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var retryOptions = new RetryOptions(maxRetries: 3, delay: TimeSpan.FromMilliseconds(100), retryWhenNotFound: false);
         var command = new NostifyCommand("DeleteTestAggregate");
@@ -339,7 +366,7 @@ public class BulkPersistEventAsyncTests
         Assert.NotNull(capturedEvents);
         Assert.Equal(3, capturedEvents!.Count);
         Assert.Same(retryOptions, capturedRetryOptions);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(
             It.IsAny<List<IEvent>>(), 50, retryOptions, true), Times.Once);
     }
 
@@ -348,9 +375,9 @@ public class BulkPersistEventAsyncTests
     {
         // Arrange - the bool overload now delegates to the RetryOptions overload
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
@@ -362,7 +389,7 @@ public class BulkPersistEventAsyncTests
 
         // Assert - calls RetryOptions overload with non-null RetryOptions
         Assert.Equal(2, count);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(
             It.IsAny<List<IEvent>>(), 100, It.Is<RetryOptions?>(r => r != null), false), Times.Once);
     }
 
@@ -371,9 +398,9 @@ public class BulkPersistEventAsyncTests
     {
         // Arrange
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid() };
@@ -385,7 +412,7 @@ public class BulkPersistEventAsyncTests
 
         // Assert
         Assert.Equal(1, count);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(
             It.IsAny<List<IEvent>>(), 100, (RetryOptions?)null, false), Times.Once);
     }
 
@@ -416,4 +443,22 @@ public class BulkPersistEventAsyncTests
     }
 
     #endregion
+
+    /// <summary>Creates one successful persistence result per mocked input event.</summary>
+    private static IReadOnlyList<BulkPersistEventResult> CreateSuccessfulResults(List<IEvent> events)
+    {
+        var results = new List<BulkPersistEventResult>(events.Count);
+        for (int index = 0; index < events.Count; index++)
+        {
+            results.Add(new BulkPersistEventResult
+            {
+                InputIndex = index,
+                EventId = events[index].id,
+                Outcome = BulkPersistEventOutcome.Created,
+                StatusCode = System.Net.HttpStatusCode.Created
+            });
+        }
+
+        return results;
+    }
 }

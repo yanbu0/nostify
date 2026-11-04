@@ -34,9 +34,9 @@ public class DefaultCommandHandlersTests
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()))
             .Returns(Task.CompletedTask);
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
         _mockNostify
             .Setup(n => n.PersistEventAsync(
                 It.IsAny<IEvent>()))
@@ -133,7 +133,7 @@ public class DefaultCommandHandlersTests
                 retryOptions: null));
 
         Assert.Contains("valid 'id'", exception.Message, StringComparison.Ordinal);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(
             It.IsAny<List<IEvent>>(),
             It.IsAny<int?>(),
             It.IsAny<RetryOptions?>(),
@@ -280,7 +280,7 @@ public class DefaultCommandHandlersTests
         Assert.True(aggregate.isDeleted);
 
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public class DefaultCommandHandlersTests
         Assert.Equal(3, payload.Properties().Count());
 
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -331,7 +331,7 @@ public class DefaultCommandHandlersTests
 
         Assert.Equal(aggregateId, result);
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -503,6 +503,68 @@ public class DefaultCommandHandlersTests
     }
 
     [Fact]
+    public async Task GetBulkDeleteResultsAsync_WhenPersistenceResultFails_ReturnsFailureAndCountIncludesIt()
+    {
+        Guid aggregateRootId = Guid.NewGuid();
+        var failure = new BulkPersistEventResult
+        {
+            InputIndex = 0,
+            EventId = Guid.NewGuid(),
+            Outcome = BulkPersistEventOutcome.RetryExhausted,
+            StatusCode = HttpStatusCode.TooManyRequests,
+            ErrorMessage = "throttled"
+        };
+        _mockNostify
+            .Setup(n => n.BulkPersistEventsAsync(
+                It.IsAny<List<IEvent>>(),
+                It.IsAny<int?>(),
+                It.IsAny<RetryOptions?>(),
+                It.IsAny<bool>()))
+            .ReturnsAsync([failure]);
+
+        IReadOnlyList<BulkPersistEventResult> results = await DefaultCommandHandler.GetBulkDeleteResultsAsync<TestAggregate>(
+            _mockNostify.Object,
+            new NostifyCommand("BulkDelete"),
+            [aggregateRootId],
+            default,
+            default,
+            100,
+            retryOptions: null);
+        int count = await DefaultCommandHandler.CountBulkDeleteResultsAsync<TestAggregate>(
+            _mockNostify.Object,
+            new NostifyCommand("BulkDelete"),
+            [aggregateRootId],
+            default,
+            default,
+            100,
+            retryOptions: null);
+
+        Assert.Single(results);
+        Assert.Same(failure, results[0]);
+        Assert.Equal(1, count);
+    }
+
+    [Theory]
+    [InlineData(nameof(DefaultCommandHandler.HandleBulkCreateAsync))]
+    [InlineData(nameof(DefaultCommandHandler.HandleBulkUpdateAsync))]
+    [InlineData(nameof(DefaultCommandHandler.HandleBulkDeleteAsync))]
+    public void LegacyBulkCountMethods_AreObsoleteAndScheduledForV6Removal(string methodName)
+    {
+        System.Reflection.MethodInfo[] methods = typeof(DefaultCommandHandler).GetMethods()
+            .Where(method => method.Name == methodName && method.ReturnType == typeof(Task<int>))
+            .ToArray();
+
+        Assert.NotEmpty(methods);
+        Assert.All(methods, method =>
+        {
+            ObsoleteAttribute obsolete = Assert.IsType<ObsoleteAttribute>(
+                method.GetCustomAttributes(typeof(ObsoleteAttribute), inherit: false).Single());
+            Assert.Contains("v6", obsolete.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(obsolete.IsError);
+        });
+    }
+
+    [Fact]
     public async Task PersistEventAsync_DoesNotUseCustomRetryContainer()
     {
         var failure = new CosmosException("Too many requests", HttpStatusCode.TooManyRequests, 0, string.Empty, 0);
@@ -536,4 +598,22 @@ public class DefaultCommandHandlersTests
     }
 
     #endregion
+
+    /// <summary>Creates one successful persistence result per mocked input event.</summary>
+    private static IReadOnlyList<BulkPersistEventResult> CreateSuccessfulResults(List<IEvent> events)
+    {
+        var results = new List<BulkPersistEventResult>(events.Count);
+        for (int index = 0; index < events.Count; index++)
+        {
+            results.Add(new BulkPersistEventResult
+            {
+                InputIndex = index,
+                EventId = events[index].id,
+                Outcome = BulkPersistEventOutcome.Created,
+                StatusCode = System.Net.HttpStatusCode.Created
+            });
+        }
+
+        return results;
+    }
 }

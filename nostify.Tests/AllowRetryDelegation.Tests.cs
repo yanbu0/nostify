@@ -139,13 +139,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var objects = new List<dynamic> { new { name = "Item1" }, new { name = "Item2" } };
@@ -171,13 +171,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = new RetryOptions(); // set to non-null to verify it becomes null
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var objects = new List<dynamic> { new { name = "Item1" } };
@@ -201,7 +201,7 @@ public class AllowRetryDelegationTests
         RetryOptions? capturedRetryOptions = null;
 
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -212,7 +212,7 @@ public class AllowRetryDelegationTests
                     batchCounts.Add(Math.Min(loopSize, evts.Count - i));
                 }
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var newObjects = new List<TestAggregate>
@@ -249,7 +249,7 @@ public class AllowRetryDelegationTests
         RetryOptions? capturedRetryOptions = new RetryOptions();
 
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -260,7 +260,7 @@ public class AllowRetryDelegationTests
                     batchCounts.Add(Math.Min(loopSize, evts.Count - i));
                 }
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var newObjects = new List<TestAggregate>
@@ -299,13 +299,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("UpdateTestAggregate");
         var id1 = Guid.NewGuid();
@@ -337,13 +337,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = new RetryOptions();
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("UpdateTestAggregate");
         var id1 = Guid.NewGuid();
@@ -370,13 +370,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var idStrings = new List<string> { Guid.NewGuid().ToString(), Guid.NewGuid().ToString() };
@@ -402,13 +402,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = new RetryOptions();
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var idStrings = new List<string> { Guid.NewGuid().ToString() };
@@ -434,13 +434,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
@@ -465,13 +465,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = new RetryOptions();
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid() };
@@ -497,14 +497,14 @@ public class AllowRetryDelegationTests
         RetryOptions? capturedRetryOptions = null;
         bool capturedPublishErrorEvents = false;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
                 capturedPublishErrorEvents = pe;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("CreateTestAggregate", isNew: true);
         var objects = new List<dynamic> { new { name = "Item1" } };
@@ -529,7 +529,7 @@ public class AllowRetryDelegationTests
         bool capturedPublishErrorEvents = false;
         int? capturedBatchSize = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -537,7 +537,7 @@ public class AllowRetryDelegationTests
                 capturedRetryOptions = ro;
                 capturedPublishErrorEvents = pe;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var command = new NostifyCommand("DeleteTestAggregate");
         var ids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
@@ -564,13 +564,13 @@ public class AllowRetryDelegationTests
         // Arrange - verify the captured RetryOptions exactly matches new RetryOptions()
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var expected = new RetryOptions(); // Reference defaults
         var command = new NostifyCommand("UpdateTestAggregate");
@@ -599,13 +599,13 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
                 capturedRetryOptions = ro;
             })
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
 
         var expected = new RetryOptions();
         var command = new NostifyCommand("DeleteTestAggregate");
@@ -628,4 +628,22 @@ public class AllowRetryDelegationTests
     }
 
     #endregion
+
+    /// <summary>Creates one successful persistence result per mocked input event.</summary>
+    private static IReadOnlyList<BulkPersistEventResult> CreateSuccessfulResults(List<IEvent> events)
+    {
+        var results = new List<BulkPersistEventResult>(events.Count);
+        for (int index = 0; index < events.Count; index++)
+        {
+            results.Add(new BulkPersistEventResult
+            {
+                InputIndex = index,
+                EventId = events[index].id,
+                Outcome = BulkPersistEventOutcome.Created,
+                StatusCode = System.Net.HttpStatusCode.Created
+            });
+        }
+
+        return results;
+    }
 }
