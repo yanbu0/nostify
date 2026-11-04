@@ -266,7 +266,7 @@ Persists a list of events to the event store in configurable batches and returns
 - A terminal 429 returns `RetryExhausted`; other Cosmos and non-Cosmos failures return `Failed`. Expected item failures do not stop siblings or later batches.
 - Container-resolution failure returns one failed result for every input. Null input and invalid batch size remain argument errors; empty input returns immediately without container resolution.
 - Failed writes are reported to the undeliverable container and, when `publishErrorEvents = true`, through `BulkPersistErrorEventType`. This reporting is best effort: its outcome and exception are attached under `Reporting`, while the original persistence exception remains authoritative.
-- Count-based default command handlers inspect the results and throw `NostifyException` if any item failed rather than returning a misleading requested count. Call `INostify.BulkPersistEventAsync` directly when per-item handling is required.
+- Result-aware default command handlers (`GetBulkCreateResultsAsync`, `GetBulkUpdateResultsAsync`, and `GetBulkDeleteResultsAsync`) expose the ordered results unchanged. Their `CountBulk*ResultsAsync` counterparts return `results.Count`, including failed results; callers that need outcome-aware behavior must inspect the result list. Legacy `HandleBulk*Async` count methods are obsolete and scheduled for removal in v6.
 
 `BulkApplyAndPersistAsync` retains its separate projection-oriented retry implementation.
 

@@ -36,7 +36,7 @@ public class DefaultCommandHandlersTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
-            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
+            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
         _mockNostify
             .Setup(n => n.PersistEventAsync(
                 It.IsAny<IEvent>()))
@@ -503,39 +503,65 @@ public class DefaultCommandHandlersTests
     }
 
     [Fact]
-    public async Task HandleBulkDeleteAsync_WhenPersistenceResultFails_ThrowsInsteadOfReturningRequestedCount()
+    public async Task GetBulkDeleteResultsAsync_WhenPersistenceResultFails_ReturnsFailureAndCountIncludesIt()
     {
         Guid aggregateRootId = Guid.NewGuid();
+        var failure = new BulkPersistEventResult
+        {
+            InputIndex = 0,
+            EventId = Guid.NewGuid(),
+            Outcome = BulkPersistEventOutcome.RetryExhausted,
+            StatusCode = HttpStatusCode.TooManyRequests,
+            ErrorMessage = "throttled"
+        };
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(),
                 It.IsAny<int?>(),
                 It.IsAny<RetryOptions?>(),
                 It.IsAny<bool>()))
-            .ReturnsAsync(
-            [
-                new BulkPersistEventResult
-                {
-                    InputIndex = 0,
-                    EventId = Guid.NewGuid(),
-                    Outcome = BulkPersistEventOutcome.RetryExhausted,
-                    StatusCode = HttpStatusCode.TooManyRequests,
-                    ErrorMessage = "throttled"
-                }
-            ]);
+            .ReturnsAsync([failure]);
 
-        NostifyException exception = await Assert.ThrowsAsync<NostifyException>(() =>
-            DefaultCommandHandler.HandleBulkDeleteAsync<TestAggregate>(
-                _mockNostify.Object,
-                new NostifyCommand("BulkDelete"),
-                [aggregateRootId],
-                default,
-                default,
-                100,
-                retryOptions: null));
+        IReadOnlyList<BulkPersistEventResult> results = await DefaultCommandHandler.GetBulkDeleteResultsAsync<TestAggregate>(
+            _mockNostify.Object,
+            new NostifyCommand("BulkDelete"),
+            [aggregateRootId],
+            default,
+            default,
+            100,
+            retryOptions: null);
+        int count = await DefaultCommandHandler.CountBulkDeleteResultsAsync<TestAggregate>(
+            _mockNostify.Object,
+            new NostifyCommand("BulkDelete"),
+            [aggregateRootId],
+            default,
+            default,
+            100,
+            retryOptions: null);
 
-        Assert.Contains("RetryExhausted", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("throttled", exception.Message, StringComparison.Ordinal);
+        Assert.Single(results);
+        Assert.Same(failure, results[0]);
+        Assert.Equal(1, count);
+    }
+
+    [Theory]
+    [InlineData(nameof(DefaultCommandHandler.HandleBulkCreateAsync))]
+    [InlineData(nameof(DefaultCommandHandler.HandleBulkUpdateAsync))]
+    [InlineData(nameof(DefaultCommandHandler.HandleBulkDeleteAsync))]
+    public void LegacyBulkCountMethods_AreObsoleteAndScheduledForV6Removal(string methodName)
+    {
+        System.Reflection.MethodInfo[] methods = typeof(DefaultCommandHandler).GetMethods()
+            .Where(method => method.Name == methodName && method.ReturnType == typeof(Task<int>))
+            .ToArray();
+
+        Assert.NotEmpty(methods);
+        Assert.All(methods, method =>
+        {
+            ObsoleteAttribute obsolete = Assert.IsType<ObsoleteAttribute>(
+                method.GetCustomAttributes(typeof(ObsoleteAttribute), inherit: false).Single());
+            Assert.Contains("v6", obsolete.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(obsolete.IsError);
+        });
     }
 
     [Fact]
@@ -572,4 +598,22 @@ public class DefaultCommandHandlersTests
     }
 
     #endregion
+
+    /// <summary>Creates one successful persistence result per mocked input event.</summary>
+    private static IReadOnlyList<BulkPersistEventResult> CreateSuccessfulResults(List<IEvent> events)
+    {
+        var results = new List<BulkPersistEventResult>(events.Count);
+        for (int index = 0; index < events.Count; index++)
+        {
+            results.Add(new BulkPersistEventResult
+            {
+                InputIndex = index,
+                EventId = events[index].id,
+                Outcome = BulkPersistEventOutcome.Created,
+                StatusCode = System.Net.HttpStatusCode.Created
+            });
+        }
+
+        return results;
+    }
 }

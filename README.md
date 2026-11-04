@@ -85,7 +85,8 @@
     - **Complete Bulk Persistence Results**: `BulkPersistEventAsync` now returns one ordered `BulkPersistEventResult` for every input, including the event ID and input index for reliable correlation even when IDs repeat.
     - **Observable Cosmos Outcomes**: Results expose Cosmos status, substatus, activity ID, request charge, diagnostics, and explicit 409 conflict details. Existing events are reported as the idempotent `AlreadyExists` success outcome.
     - **Retry Exhaustion Telemetry**: Throttled writes expose attempt and retry counts, server retry-after information, last delay, and a distinct `RetryExhausted` outcome when 429 retries are exhausted.
-    - **No Swallowed Bulk Failures**: Primary persistence failures remain authoritative and are returned separately from best-effort undeliverable/error-event reporting failures. Count-based default command handlers throw when any returned item failed instead of returning a misleading requested count.
+    - **No Swallowed Bulk Failures**: Primary persistence failures remain authoritative and are returned separately from best-effort undeliverable/error-event reporting failures.
+    - **Result-First Bulk Command Handlers**: `GetBulkCreateResultsAsync`, `GetBulkUpdateResultsAsync`, and `GetBulkDeleteResultsAsync` expose every persistence result. `CountBulk*ResultsAsync` returns the result count, while legacy `HandleBulk*Async` count methods are obsolete and will be removed in v6.
 - 5.3.0
     - **Event-Aware Validation**: `RequiredFor`, `OnlyFor`, and `TogetherFor` support event-specific payload validation, including type-based event declarations.
     - **Protected Aggregate IDs**: `AggregateRootId` prevents event payloads from changing an aggregate's identity.
@@ -1991,7 +1992,7 @@ await DefaultEventHandlers.HandleProjectionBulkDeleteEventAsync<TestProjection>(
 
 #### Default Bulk Command Handlers
 
-The `DefaultCommandHandler` class provides static methods for HTTP-triggered bulk operations:
+The `DefaultCommandHandler` class provides result-first methods for HTTP-triggered bulk operations. Prefer `GetBulk*ResultsAsync` whenever individual outcomes matter. Use `CountBulk*ResultsAsync` only when the number of returned results is sufficient; this count includes failed results. The older `HandleBulk*Async` count methods are obsolete and will be removed in v6.
 
 **Bulk Create:**
 ```C#
@@ -2000,7 +2001,7 @@ public async Task<int> Run(
     [HttpTrigger("post", Route = "Test/BulkCreate")] HttpRequestData req,
     ILogger log)
 {
-    return await DefaultCommandHandler.HandleBulkCreateAsync<Test>(
+    return await DefaultCommandHandler.CountBulkCreateResultsAsync<Test>(
         _nostify,
         new BulkCreate_Test(),
         req,
@@ -2021,7 +2022,7 @@ public async Task<int> Run(
     ILogger log)
 {
     // Request body must contain array of objects with 'id' property
-    return await DefaultCommandHandler.HandleBulkUpdateAsync<Test>(
+    return await DefaultCommandHandler.CountBulkUpdateResultsAsync<Test>(
         _nostify,
         new BulkUpdate_Test(),
         req,
@@ -2042,7 +2043,7 @@ public async Task<int> Run(
     ILogger log)
 {
     // Request body must contain array of ID strings
-    return await DefaultCommandHandler.HandleBulkDeleteAsync<Test>(
+    return await DefaultCommandHandler.CountBulkDeleteResultsAsync<Test>(
         _nostify,
         new BulkDelete_Test(),
         req,
@@ -2056,7 +2057,7 @@ public async Task<int> Run(
 
 // Alternative: Delete by list of GUIDs (no HTTP request)
 List<Guid> idsToDelete = GetIdsToDelete();
-int count = await DefaultCommandHandler.HandleBulkDeleteAsync<Test>(
+int count = await DefaultCommandHandler.CountBulkDeleteResultsAsync<Test>(
     _nostify,
     new BulkDelete_Test(),
     idsToDelete,

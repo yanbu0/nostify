@@ -12,7 +12,7 @@ using nostify;
 /// <summary>
 /// Provides extension methods for handling common CRUD operations in Azure Functions with event sourcing.
 /// </summary>
-public static class DefaultCommandHandler
+public static partial class DefaultCommandHandler
 {
     /// <summary>
     /// Handles PATCH operations for aggregate roots by creating and persisting events from request data.
@@ -167,13 +167,9 @@ public static class DefaultCommandHandler
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
-    public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
-    {
-        RetryOptions? retryOptions = allowRetry
-            ? nostify.DefaultRetryOptions
-            : null;
-        return await HandleBulkCreateAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
-    }
+    [Obsolete("Use CountBulkCreateResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate =>
+        CountBulkCreateResultsAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, allowRetry, publishErrorEvents, partitionKeyName);
 
     /// <summary>
     /// Handles bulk POST operations for aggregate roots by creating and persisting multiple events from request data.
@@ -190,12 +186,9 @@ public static class DefaultCommandHandler
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
-    public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
-    {
-        List<T> newObjects = JsonConvert.DeserializeObject<List<T>>(await new StreamReader(req.Body).ReadToEndAsync())
-            ?? throw new NostifyException($"Failed to deserialize request body to list of objects of type {typeof(T).Name}.");
-        return await HandleBulkCreateAsync<T>(nostify, eventType, newObjects, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
-    }
+    [Obsolete("Use CountBulkCreateResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate =>
+        CountBulkCreateResultsAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
 
     /// <summary>
     /// Handles bulk POST operations for aggregate roots by creating and persisting multiple events from request data.
@@ -212,18 +205,9 @@ public static class DefaultCommandHandler
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
-    public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, bool allowRetry = true, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
-    {
-        return await HandleBulkCreateAsync<T>(nostify,
-                        eventType,
-                        newObjects,
-                        userId,
-                        partitionKey,
-                        batchSize,
-                        allowRetry ? nostify.DefaultRetryOptions : null,
-                        publishErrorEvents,
-                        partitionKeyName);
-    }
+    [Obsolete("Use CountBulkCreateResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, bool allowRetry = true, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate =>
+        CountBulkCreateResultsAsync<T>(nostify, eventType, newObjects, userId, partitionKey, batchSize, allowRetry, publishErrorEvents, partitionKeyName);
 
     /// <summary>
     /// Handles bulk POST operations for aggregate roots by creating and persisting multiple events from request data.
@@ -240,43 +224,9 @@ public static class DefaultCommandHandler
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <param name="partitionKeyName">The property name to use for the partition key in the dynamic object (default: "tenantId")</param>
     /// <returns>The count of aggregate roots that were created</returns>
-    public async static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate
-    {
-        List<IEvent> peList = new List<IEvent>();
-
-        newObjects.ForEach(e =>
-        {
-            Guid newId = Guid.NewGuid();
-            e.id = newId;
-
-            var propertyInfo = e.GetType().GetProperty(partitionKeyName);
-            if (propertyInfo == null)
-            {
-                throw new NostifyException($"Property '{partitionKeyName}' was not found on type '{e.GetType().Name}'. Ensure the aggregate defines a public partition key property with that name.");
-            }
-
-            if (!propertyInfo.CanWrite)
-            {
-                throw new NostifyException($"Property '{partitionKeyName}' on type '{e.GetType().Name}' is read-only. Ensure the partition key property has a public setter.");
-            }
-
-            var propertyType = Nullable.GetUnderlyingType(propertyInfo.PropertyType) ?? propertyInfo.PropertyType;
-            if (propertyType != typeof(Guid))
-            {
-                throw new NostifyException($"Property '{partitionKeyName}' on type '{e.GetType().Name}' must be of type '{typeof(Guid).Name}' to receive the partition key value.");
-            }
-
-            propertyInfo.SetValue(e, partitionKey);
-            IEvent pe = new EventFactory().Create<T>(eventType, newId, e, userId, partitionKey);
-            peList.Add(pe);
-        });
-
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
-            peList, batchSize, retryOptions, publishErrorEvents);
-        ThrowIfBulkPersistenceFailed(results);
-
-        return newObjects.Count;
-    }
+    [Obsolete("Use CountBulkCreateResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkCreateAsync<T>(INostify nostify, EventType eventType, List<T> newObjects, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false, string partitionKeyName = "tenantId") where T : class, IAggregate =>
+        CountBulkCreateResultsAsync<T>(nostify, eventType, newObjects, userId, partitionKey, batchSize, retryOptions, publishErrorEvents, partitionKeyName);
 
     /// <summary>
     /// Handles bulk PATCH operations for aggregate roots by creating and persisting multiple update events from request data.
@@ -291,13 +241,9 @@ public static class DefaultCommandHandler
     /// <param name="allowRetry">When <c>true</c> (default), retries throttled writes using <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were updated</returns>
-    public async static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
-    {
-        RetryOptions? retryOptions = allowRetry
-            ? nostify.DefaultRetryOptions
-            : null;
-        return await HandleBulkUpdateAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
-    }
+    [Obsolete("Use CountBulkUpdateResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate =>
+        CountBulkUpdateResultsAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, allowRetry, publishErrorEvents);
 
     /// <summary>
     /// Handles bulk PATCH operations for aggregate roots by creating and persisting multiple update events from request data.
@@ -313,29 +259,9 @@ public static class DefaultCommandHandler
     /// <param name="retryOptions">Optional retry options for throttled event writes.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were updated</returns>
-    public async static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
-    {
-        List<dynamic> updateObjects = JsonConvert.DeserializeObject<List<dynamic>>(await new StreamReader(req.Body).ReadToEndAsync())
-            ?? throw new NostifyException($"Failed to deserialize request body to list of objects.");
-        List<IEvent> peList = new List<IEvent>();
-
-        updateObjects.ForEach(e =>
-        {
-            if (e.id == null || !Guid.TryParse(e.id.ToString(), out Guid aggRootId))
-            {
-                throw new ArgumentException($"Each object must have a valid 'id' property");
-            }
-
-            IEvent pe = new EventFactory().Create<T>(eventType, Guid.Parse(e.id.ToString()), e, userId, partitionKey);
-            peList.Add(pe);
-        });
-
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
-            peList, batchSize, retryOptions, publishErrorEvents);
-        ThrowIfBulkPersistenceFailed(results);
-
-        return updateObjects.Count;
-    }
+    [Obsolete("Use CountBulkUpdateResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkUpdateAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate =>
+        CountBulkUpdateResultsAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
 
     /// <summary>
     /// Handles bulk DELETE operations for aggregate roots by creating and persisting multiple delete events from request data.
@@ -350,13 +276,9 @@ public static class DefaultCommandHandler
     /// <param name="allowRetry">When <c>true</c> (default), retries throttled writes using <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
-    public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
-    {
-        RetryOptions? retryOptions = allowRetry
-            ? nostify.DefaultRetryOptions
-            : null;
-        return await HandleBulkDeleteAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
-    }
+    [Obsolete("Use CountBulkDeleteResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate =>
+        CountBulkDeleteResultsAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, allowRetry, publishErrorEvents);
 
     /// <summary>
     /// Handles bulk DELETE operations for aggregate roots by creating and persisting multiple delete events from request data.
@@ -372,45 +294,9 @@ public static class DefaultCommandHandler
     /// <param name="retryOptions">Optional retry options for throttled event writes.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
-    public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
-    {
-        string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-        if (string.IsNullOrWhiteSpace(requestBody))
-        {
-            throw new NostifyException("Request body cannot be null or empty.");
-        }
-
-        List<string>? idStrings;
-        try
-        {
-            idStrings = JsonConvert.DeserializeObject<List<string>>(requestBody);
-        }
-        catch (JsonException ex)
-        {
-            throw new NostifyException($"Failed to deserialize request body to list of IDs. {ex.Message}");
-        }
-
-        if (idStrings == null) throw new NostifyException("Failed to deserialize request body to list of IDs.");
-
-        List<IEvent> peList = new List<IEvent>();
-
-        idStrings.ForEach(idStr =>
-        {
-            if (!Guid.TryParse(idStr, out Guid aggRootId))
-            {
-                throw new ArgumentException($"Invalid id: {idStr}");
-            }
-
-            IEvent pe = new EventFactory().CreateNullPayloadEvent(eventType, aggRootId, userId, partitionKey);
-            peList.Add(pe);
-        });
-
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
-            peList, batchSize, retryOptions, publishErrorEvents);
-        ThrowIfBulkPersistenceFailed(results);
-
-        return idStrings.Count;
-    }
+    [Obsolete("Use CountBulkDeleteResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, HttpRequestData req, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate =>
+        CountBulkDeleteResultsAsync<T>(nostify, eventType, req, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
 
     /// <summary>
     /// Handles bulk DELETE operations for aggregate roots by creating and persisting multiple delete events from a list of GUIDs.
@@ -425,13 +311,9 @@ public static class DefaultCommandHandler
     /// <param name="allowRetry">When <c>true</c> (default), retries throttled writes using <see cref="INostify.DefaultRetryOptions"/>. Set to <c>false</c> to disable retry.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
-    public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, List<Guid> aggregateRootIds, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate
-    {
-        RetryOptions? retryOptions = allowRetry
-            ? nostify.DefaultRetryOptions
-            : null;
-        return await HandleBulkDeleteAsync<T>(nostify, eventType, aggregateRootIds, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
-    }
+    [Obsolete("Use CountBulkDeleteResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, List<Guid> aggregateRootIds, Guid userId = default, Guid partitionKey = default, int batchSize = 100, bool allowRetry = true, bool publishErrorEvents = false) where T : class, IAggregate =>
+        CountBulkDeleteResultsAsync<T>(nostify, eventType, aggregateRootIds, userId, partitionKey, batchSize, allowRetry, publishErrorEvents);
 
     /// <summary>
     /// Handles bulk DELETE operations for aggregate roots by creating and persisting multiple delete events from a list of GUIDs.
@@ -447,38 +329,8 @@ public static class DefaultCommandHandler
     /// <param name="retryOptions">Optional retry options for throttled event writes.</param>
     /// <param name="publishErrorEvents">Whether to publish error events for failed operations (default: false)</param>
     /// <returns>The count of aggregate roots that were deleted</returns>
-    public async static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, List<Guid> aggregateRootIds, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate
-    {
-        List<IEvent> peList = new List<IEvent>();
-
-        aggregateRootIds.ForEach(aggRootId =>
-        {
-            IEvent pe = new EventFactory().CreateNullPayloadEvent(eventType, aggRootId, userId, partitionKey);
-            peList.Add(pe);
-        });
-
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
-            peList, batchSize, retryOptions, publishErrorEvents);
-        ThrowIfBulkPersistenceFailed(results);
-
-        return aggregateRootIds.Count;
-    }
-
-    /// <summary>
-    /// Prevents the count-based command-handler API from hiding item-level persistence failures.
-    /// Callers that need every item result should call <see cref="INostify.BulkPersistEventAsync(List{IEvent}, int?, RetryOptions?, bool)"/> directly.
-    /// </summary>
-    private static void ThrowIfBulkPersistenceFailed(IReadOnlyList<BulkPersistEventResult> results)
-    {
-        BulkPersistEventResult[] failures = results.Where(result => !result.IsSuccess).ToArray();
-        if (failures.Length == 0)
-        {
-            return;
-        }
-
-        string details = string.Join(", ", failures.Select(result =>
-            $"index {result.InputIndex}, event {result.EventId}, outcome {result.Outcome}, status {(int?)result.StatusCode ?? 0}: {result.ErrorMessage ?? "no error message"}"));
-        throw new NostifyException($"Bulk event persistence failed for {failures.Length} item(s): {details}");
-    }
+    [Obsolete("Use CountBulkDeleteResultsAsync<T>(...) instead. This method will be removed in v6.", false)]
+    public static Task<int> HandleBulkDeleteAsync<T>(INostify nostify, EventType eventType, List<Guid> aggregateRootIds, Guid userId, Guid partitionKey, int batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false) where T : class, IAggregate =>
+        CountBulkDeleteResultsAsync<T>(nostify, eventType, aggregateRootIds, userId, partitionKey, batchSize, retryOptions, publishErrorEvents);
 
 }
