@@ -785,7 +785,7 @@ public class Nostify : INostify, IDisposable
             {
                 AttemptCount = attemptCount,
                 Exhausted = retryExhausted,
-                RetryAfter = retryAfter,
+                RetryAfter = retryAfter ?? cosmosException?.RetryAfter,
                 LastDelay = lastDelay
             }
         };
