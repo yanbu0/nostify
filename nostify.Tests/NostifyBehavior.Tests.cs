@@ -477,6 +477,49 @@ public sealed class NostifyBehaviorTests
         Assert.False(result.Reporting.Attempted);
     }
 
+    [Theory]
+    [InlineData(2.5, 250)]
+    [InlineData(null, 100)]
+    public async Task BulkPersistEventAsync_RetryDelay_UsesConfiguredDelayMultiplier(
+        double? delayMultiplier,
+        double expectedLastDelayMilliseconds)
+    {
+        // Two throttled attempts make the second retry distinguish exponential from constant delay.
+        Event throttledTwice = CreateEvent(new PublishEventType("Persisted"), new { });
+        var throttle = new CosmosException("throttled", HttpStatusCode.TooManyRequests, 0, "activity-throttle", 1.0);
+        var response = new Mock<ItemResponse<IEvent>>();
+        response.SetupGet(item => item.StatusCode).Returns(HttpStatusCode.Created);
+        var container = new Mock<Container>();
+        container
+            .SetupSequence(c => c.CreateItemAsync<IEvent>(
+                throttledTwice,
+                It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(throttle)
+            .ThrowsAsync(throttle)
+            .ReturnsAsync(response.Object);
+        var nostify = new BulkPersistTestNostify(container.Object);
+        var retryOptions = new RetryOptions(
+            maxRetries: 2,
+            delay: TimeSpan.FromMilliseconds(100),
+            retryWhenNotFound: false,
+            delayMultiplier: delayMultiplier);
+
+        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventAsync(
+            [throttledTwice], batchSize: 1, retryOptions));
+
+        Assert.Equal(BulkPersistEventOutcome.Created, result.Outcome);
+        Assert.Equal(3, result.Retry.AttemptCount);
+        Assert.Equal(2, result.Retry.RetryCount);
+        Assert.Equal(expectedLastDelayMilliseconds, result.Retry.LastDelay?.TotalMilliseconds);
+        container.Verify(c => c.CreateItemAsync<IEvent>(
+            throttledTwice,
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
     [Fact]
     public async Task BulkPersistEventAsync_NonRetryableCosmosFailure_ReturnsCosmosMetadata()
     {

@@ -683,7 +683,8 @@ public class Nostify : INostify, IDisposable
                     ? ex.RetryAfter.Value.TotalMilliseconds
                     : Math.Max(retryOptions.Delay.TotalMilliseconds, 100);
                 double baseDelayMs = Math.Max(retryAfterMs, retryOptions.Delay.TotalMilliseconds);
-                lastDelay = retryOptions.GetDelayForAttempt(retriesPerformed, baseDelayMs, 3);
+                // Let RetryOptions apply its configured multiplier, including null for constant delays.
+                lastDelay = retryOptions.GetDelayForAttempt(retriesPerformed, baseDelayMs);
                 retryOptions.LogRetry($"BulkPersistEventAsync for event '{eventToPersist.id}': retry {retriesPerformed + 1}/{retryOptions.MaxRetries} in {lastDelay.Value.TotalMilliseconds}ms.");
                 await Task.Delay(lastDelay.Value);
             }
