@@ -744,14 +744,14 @@ public class Nostify : INostify, IDisposable
         TimeSpan? lastDelay,
         bool publishErrorEvents)
     {
-        if (Logger?.IsEnabled(LogLevel.Error) == true)
-        {
-            LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(eventToPersist), exception);
-        }
-
         BulkPersistFailureReportingDetails reporting;
         try
         {
+            if (Logger?.IsEnabled(LogLevel.Error) == true)
+            {
+                LogBulkEventPersistenceFailure(Logger, JsonConvert.SerializeObject(eventToPersist), exception);
+            }
+
             await HandleBulkPersistenceFailureAsync(nameof(BulkPersistEventsAsync), exception.Message, eventToPersist, publishErrorEvents);
             reporting = new BulkPersistFailureReportingDetails { Attempted = true, Succeeded = true };
         }
