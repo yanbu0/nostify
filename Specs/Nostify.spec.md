@@ -254,9 +254,11 @@ Applies and persists a bulk array of Kafka events to projections:
 - **`RetryOptions?` overload** — Primary implementation. Deserializes events, groups by partition key, resolves target projection IDs from `idPropertyName` (supports both single `Guid` and `List<Guid>` properties), and uses `CreateApplyAndPersistTask` for each item.
 - Returns up to 1000 successfully applied projections.
 
-### BulkPersistEventAsync
+### BulkPersistEventAsync and BulkPersistEventsAsync
 
-Persists a list of events to the event store in configurable batches and returns `IReadOnlyList<BulkPersistEventResult>`:
+`BulkPersistEventAsync` is the obsolete, Task-returning compatibility API scheduled for removal in v6. It delegates to `BulkPersistEventsAsync` and discards the detailed results.
+
+`BulkPersistEventsAsync` persists a list of events to the event store in configurable batches and returns `IReadOnlyList<BulkPersistEventResult>`:
 
 - The result collection always contains one terminal result per input and preserves input order. `InputIndex` keeps duplicate event IDs unambiguous.
 - **`bool allowRetry` overload** — Converts `allowRetry = true` to default `RetryOptions` and delegates to the `RetryOptions?` overload. When `false`, passes `null`.

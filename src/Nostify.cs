@@ -72,7 +72,7 @@ public class Nostify : INostify, IDisposable
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(8, nameof(LogEventPublishFailure)), "Failed to publish event to topic(s) {Topics}");
 
     private static readonly Action<ILogger, string, Exception?> LogBulkEventPersistenceFailure =
-        LoggerMessage.Define<string>(LogLevel.Error, new EventId(9, nameof(LogBulkEventPersistenceFailure)), "Failed to persist event in BulkPersistEventAsync. Event: {Event}");
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(9, nameof(LogBulkEventPersistenceFailure)), "Failed to persist event in BulkPersistEventsAsync. Event: {Event}");
 
     private static readonly Action<ILogger, string, string, string, Exception?> LogUndeliverableEvent =
         LoggerMessage.Define<string, string, string>(LogLevel.Error, new EventId(10, nameof(LogUndeliverableEvent)), "Undeliverable event in function {FunctionName}. Error: {ErrorMessage}. Event: {Event}");
@@ -519,10 +519,38 @@ public class Nostify : INostify, IDisposable
     }
 
     /// <summary>
-    /// Backwards-compatible overload that converts bool allowRetry to RetryOptions.
+    /// Preserves the original Task-returning API while delegating persistence to the result-aware API.
     /// </summary>
     ///<inheritdoc />
-    public Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventAsync(
+    [Obsolete("Use BulkPersistEventsAsync(...) to receive per-event results. BulkPersistEventAsync(...) will be removed in v6.")]
+    public async Task BulkPersistEventAsync(
+        List<IEvent> events,
+        int? batchSize = null,
+        bool allowRetry = false,
+        bool publishErrorEvents = false)
+    {
+        await BulkPersistEventsAsync(events, batchSize, allowRetry, publishErrorEvents);
+    }
+
+    /// <summary>
+    /// Preserves the original Task-returning RetryOptions overload while delegating persistence to the result-aware API.
+    /// </summary>
+    ///<inheritdoc />
+    [Obsolete("Use BulkPersistEventsAsync(...) to receive per-event results. BulkPersistEventAsync(...) will be removed in v6.")]
+    public async Task BulkPersistEventAsync(
+        List<IEvent> events,
+        int? batchSize,
+        RetryOptions? retryOptions,
+        bool publishErrorEvents = false)
+    {
+        await BulkPersistEventsAsync(events, batchSize, retryOptions, publishErrorEvents);
+    }
+
+    /// <summary>
+    /// Converts bool allowRetry to RetryOptions for the result-aware bulk persistence API.
+    /// </summary>
+    ///<inheritdoc />
+    public Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventsAsync(
         List<IEvent> events,
         int? batchSize = null,
         bool allowRetry = false,
@@ -531,11 +559,11 @@ public class Nostify : INostify, IDisposable
         RetryOptions? retryOptions = allowRetry
             ? new RetryOptions()
             : null;
-        return BulkPersistEventAsync(events, batchSize, retryOptions, publishErrorEvents);
+        return BulkPersistEventsAsync(events, batchSize, retryOptions, publishErrorEvents);
     }
 
     ///<inheritdoc />
-    public async Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventAsync(
+    public async Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventsAsync(
         List<IEvent> events,
         int? batchSize,
         RetryOptions? retryOptions,
@@ -667,7 +695,7 @@ public class Nostify : INostify, IDisposable
                 int retriesPerformed = attemptCount - 1;
                 if (retriesPerformed >= retryOptions.MaxRetries)
                 {
-                    retryOptions.LogRetry($"BulkPersistEventAsync for event '{eventToPersist.id}': 429 TooManyRequests, exhausted {retryOptions.MaxRetries} retries.");
+                    retryOptions.LogRetry($"BulkPersistEventsAsync for event '{eventToPersist.id}': 429 TooManyRequests, exhausted {retryOptions.MaxRetries} retries.");
                     return await CreateBulkPersistFailureResultAsync(
                         eventToPersist,
                         inputIndex,
@@ -685,7 +713,7 @@ public class Nostify : INostify, IDisposable
                 double baseDelayMs = Math.Max(retryAfterMs, retryOptions.Delay.TotalMilliseconds);
                 // Let RetryOptions apply its configured multiplier, including null for constant delays.
                 lastDelay = retryOptions.GetDelayForAttempt(retriesPerformed, baseDelayMs);
-                retryOptions.LogRetry($"BulkPersistEventAsync for event '{eventToPersist.id}': retry {retriesPerformed + 1}/{retryOptions.MaxRetries} in {lastDelay.Value.TotalMilliseconds}ms.");
+                retryOptions.LogRetry($"BulkPersistEventsAsync for event '{eventToPersist.id}': retry {retriesPerformed + 1}/{retryOptions.MaxRetries} in {lastDelay.Value.TotalMilliseconds}ms.");
                 await Task.Delay(lastDelay.Value);
             }
             catch (Exception ex)
@@ -724,7 +752,7 @@ public class Nostify : INostify, IDisposable
         BulkPersistFailureReportingDetails reporting;
         try
         {
-            await HandleBulkPersistenceFailureAsync(nameof(BulkPersistEventAsync), exception.Message, eventToPersist, publishErrorEvents);
+            await HandleBulkPersistenceFailureAsync(nameof(BulkPersistEventsAsync), exception.Message, eventToPersist, publishErrorEvents);
             reporting = new BulkPersistFailureReportingDetails { Attempted = true, Succeeded = true };
         }
         catch (Exception reportingException)

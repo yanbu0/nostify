@@ -43,7 +43,7 @@ This rule prevents stale UI state and serializer-generated default values from o
 | Update | `GetBulkUpdateResultsAsync<T>` | `CountBulkUpdateResultsAsync<T>` | `HttpRequestData` |
 | Delete | `GetBulkDeleteResultsAsync<T>` | `CountBulkDeleteResultsAsync<T>` | `HttpRequestData` or `List<Guid>` |
 
-Every API has a simple `bool allowRetry` overload and an explicit `RetryOptions?` overload. Result APIs are the primary implementations and return the exact ordered list from `INostify.BulkPersistEventAsync`. Count APIs delegate to the corresponding result API and return `results.Count`; this is the number of processed inputs, not the number of successful results. Callers that need to distinguish created, conflict/idempotent success, failed, or retry-exhausted outcomes must use the result API.
+Every API has a simple `bool allowRetry` overload and an explicit `RetryOptions?` overload. Result APIs are the primary implementations and return the exact ordered list from `INostify.BulkPersistEventsAsync`. Count APIs delegate to the corresponding result API and return `results.Count`; this is the number of processed inputs, not the number of successful results. Callers that need to distinguish created, conflict/idempotent success, failed, or retry-exhausted outcomes must use the result API.
 
 Create overloads accept `partitionKeyName` (default: `"tenantId"`) to set the partition key property on each aggregate object.
 
@@ -77,10 +77,10 @@ The following older non-`Async` method names are also preserved as `[Obsolete]` 
 
 ## Key Relationships
 
-- **`INostify`** — Used for event persistence via `PersistEventAsync(IEvent)` (single) and `BulkPersistEventAsync` (bulk). Retry controls are exposed only on the bulk handler surface.
+- **`INostify`** — Used for event persistence via `PersistEventAsync(IEvent)` (single) and `BulkPersistEventsAsync` (result-aware bulk; obsolete `BulkPersistEventAsync` remains for Task compatibility). Retry controls are exposed only on the bulk handler surface.
 - **`EventFactory`** — Used to create events from dynamic payloads (`Create<T>`) or null-payload events for deletes (`CreateNullPayloadEvent`).
 - **`HttpRequestData`** — Request body deserialized as `List<dynamic>` (create/update) or `List<string>` (delete by ID strings).
-- **`RetryOptions`** — When provided to a bulk handler, passed directly to `INostify.BulkPersistEventAsync(RetryOptions?)` for direct per-item 429 retry and result telemetry.
+- **`RetryOptions`** — When provided to a bulk handler, passed directly to `INostify.BulkPersistEventsAsync(RetryOptions?)` for direct per-item 429 retry and result telemetry.
 
 ## Partial Payload Example
 
@@ -98,6 +98,6 @@ The payload intentionally omits fields such as `customerId`, `total`, and `isDel
 ## Error Handling
 
 - **Single handlers**: Exceptions propagate to the caller. `PersistEventAsync(IEvent)` on the underlying `Nostify` implementation logs the error and writes the event to the undeliverable container via `HandleUndeliverableAsync` before re-throwing.
-- **Bulk handlers**: `BulkPersistEventAsync` writes failed events to the undeliverable container, optionally publishes error events, and returns one result per input. `GetBulk*ResultsAsync<T>` exposes those results unchanged. `CountBulk*ResultsAsync<T>` and obsolete `HandleBulk*Async<T>` wrappers return the result count without discarding or reclassifying outcomes; use the result APIs whenever item status matters.
+- **Bulk handlers**: `BulkPersistEventsAsync` writes failed events to the undeliverable container, optionally publishes error events, and returns one result per input. `GetBulk*ResultsAsync<T>` exposes those results unchanged. `CountBulk*ResultsAsync<T>` and obsolete `HandleBulk*Async<T>` wrappers return the result count without discarding or reclassifying outcomes; use the result APIs whenever item status matters.
 - **Validation**: `HandleBulkUpdate` throws `ArgumentException` if any object lacks a valid `id`. `HandleBulkDelete` (from request) throws `ArgumentException` for unparseable GUIDs.
 - **Null body after deserialization**: `HandleBulkUpdateAsync` and `HandleBulkDeleteAsync` (HttpRequestData overloads) throw `NostifyException` when the request body deserializes to null (for example, a literal JSON `null` body), preventing silent no-op responses. Malformed JSON fails earlier during deserialization and is not converted into `NostifyException` by these handlers.

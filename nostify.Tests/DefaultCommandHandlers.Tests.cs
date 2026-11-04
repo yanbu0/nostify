@@ -34,7 +34,7 @@ public class DefaultCommandHandlersTests
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IEvent>()))
             .Returns(Task.CompletedTask);
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
         _mockNostify
@@ -133,7 +133,7 @@ public class DefaultCommandHandlersTests
                 retryOptions: null));
 
         Assert.Contains("valid 'id'", exception.Message, StringComparison.Ordinal);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(
             It.IsAny<List<IEvent>>(),
             It.IsAny<int?>(),
             It.IsAny<RetryOptions?>(),
@@ -280,7 +280,7 @@ public class DefaultCommandHandlersTests
         Assert.True(aggregate.isDeleted);
 
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public class DefaultCommandHandlersTests
         Assert.Equal(3, payload.Properties().Count());
 
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -331,7 +331,7 @@ public class DefaultCommandHandlersTests
 
         Assert.Equal(aggregateId, result);
         _mockNostify.Verify(n => n.PersistEventAsync(It.IsAny<IEvent>()), Times.Once);
-        _mockNostify.Verify(n => n.BulkPersistEventAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
+        _mockNostify.Verify(n => n.BulkPersistEventsAsync(It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -515,7 +515,7 @@ public class DefaultCommandHandlersTests
             ErrorMessage = "throttled"
         };
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(),
                 It.IsAny<int?>(),
                 It.IsAny<RetryOptions?>(),

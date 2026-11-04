@@ -96,7 +96,7 @@ public static partial class DefaultCommandHandler
             events.Add(new EventFactory().Create<T>(eventType, newId, item, userId, partitionKey));
         }
 
-        return await nostify.BulkPersistEventAsync(events, batchSize, retryOptions, publishErrorEvents);
+        return await nostify.BulkPersistEventsAsync(events, batchSize, retryOptions, publishErrorEvents);
     }
 
     /// <summary>Returns the number of persistence results produced for create request items.</summary>
@@ -150,7 +150,7 @@ public static partial class DefaultCommandHandler
             events.Add(new EventFactory().Create<T>(eventType, aggregateRootId, item, userId, partitionKey));
         }
 
-        return await nostify.BulkPersistEventAsync(events, batchSize, retryOptions, publishErrorEvents);
+        return await nostify.BulkPersistEventsAsync(events, batchSize, retryOptions, publishErrorEvents);
     }
 
     /// <summary>Returns the number of persistence results produced for update request items.</summary>
@@ -238,7 +238,7 @@ public static partial class DefaultCommandHandler
             events.Add(new EventFactory().CreateNullPayloadEvent(eventType, aggregateRootId, userId, partitionKey));
         }
 
-        return await nostify.BulkPersistEventAsync(events, batchSize, retryOptions, publishErrorEvents);
+        return await nostify.BulkPersistEventsAsync(events, batchSize, retryOptions, publishErrorEvents);
     }
 
     /// <summary>Returns the number of persistence results produced for delete request items.</summary>

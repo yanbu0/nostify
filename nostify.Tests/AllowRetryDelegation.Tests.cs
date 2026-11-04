@@ -38,13 +38,13 @@ public class AllowRetryDelegationTests
             {
                 capturedRetryOptions = ro;
             })
-            .ReturnsAsync((List<IEvent> events, int? _, RetryOptions? _, bool _) => CreateSuccessfulResults(events));
+            .Returns(Task.CompletedTask);
 
         // Also set up the bool overload so it's callable on the mock
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
+            .Returns(Task.CompletedTask);
 
         var events = new List<IEvent>
         {
@@ -66,7 +66,7 @@ public class AllowRetryDelegationTests
         _mockNostify
             .Setup(n => n.BulkPersistEventAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<bool>()))
-            .ReturnsAsync(Array.Empty<BulkPersistEventResult>());
+            .Returns(Task.CompletedTask);
 
         var events = new List<IEvent>
         {
@@ -139,7 +139,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -171,7 +171,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = new RetryOptions(); // set to non-null to verify it becomes null
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -201,7 +201,7 @@ public class AllowRetryDelegationTests
         RetryOptions? capturedRetryOptions = null;
 
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -249,7 +249,7 @@ public class AllowRetryDelegationTests
         RetryOptions? capturedRetryOptions = new RetryOptions();
 
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -299,7 +299,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -337,7 +337,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = new RetryOptions();
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -370,7 +370,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -402,7 +402,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = new RetryOptions();
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -434,7 +434,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -465,7 +465,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = new RetryOptions();
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -497,7 +497,7 @@ public class AllowRetryDelegationTests
         RetryOptions? capturedRetryOptions = null;
         bool capturedPublishErrorEvents = false;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -529,7 +529,7 @@ public class AllowRetryDelegationTests
         bool capturedPublishErrorEvents = false;
         int? capturedBatchSize = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -564,7 +564,7 @@ public class AllowRetryDelegationTests
         // Arrange - verify the captured RetryOptions exactly matches new RetryOptions()
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {
@@ -599,7 +599,7 @@ public class AllowRetryDelegationTests
         // Arrange
         RetryOptions? capturedRetryOptions = null;
         _mockNostify
-            .Setup(n => n.BulkPersistEventAsync(
+            .Setup(n => n.BulkPersistEventsAsync(
                 It.IsAny<List<IEvent>>(), It.IsAny<int?>(), It.IsAny<RetryOptions?>(), It.IsAny<bool>()))
             .Callback<List<IEvent>, int?, RetryOptions?, bool>((evts, bs, ro, pe) =>
             {

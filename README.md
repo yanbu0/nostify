@@ -82,7 +82,8 @@
 ### Updates
   
 - 5.4.0
-    - **Complete Bulk Persistence Results**: `BulkPersistEventAsync` now returns one ordered `BulkPersistEventResult` for every input, including the event ID and input index for reliable correlation even when IDs repeat.
+    - **Complete Bulk Persistence Results**: `BulkPersistEventsAsync` returns one ordered `BulkPersistEventResult` for every input, including the event ID and input index for reliable correlation even when IDs repeat.
+    - **Bulk Persistence Compatibility**: The singular `BulkPersistEventAsync` overloads retain their original `Task` return type, are obsolete for removal in v6, and delegate to `BulkPersistEventsAsync` while discarding detailed results.
     - **Observable Cosmos Outcomes**: Results expose Cosmos status, substatus, activity ID, request charge, diagnostics, and explicit 409 conflict details. Existing events are reported as the idempotent `AlreadyExists` success outcome.
     - **Retry Exhaustion Telemetry**: Throttled writes expose attempt and retry counts, server retry-after information, last delay, and a distinct `RetryExhausted` outcome when 429 retries are exhausted.
     - **No Swallowed Bulk Failures**: Primary persistence failures remain authoritative and are returned separately from best-effort undeliverable/error-event reporting failures.
@@ -2388,7 +2389,7 @@ Process multiple events in batches. The returned collection has exactly one resu
 
 ```C#
 // Using boolean allowRetry (delegates to the configurable overload).
-IReadOnlyList<BulkPersistEventResult> results = await _nostify.BulkPersistEventAsync(
+IReadOnlyList<BulkPersistEventResult> results = await _nostify.BulkPersistEventsAsync(
     events,
     batchSize: 100,
     allowRetry: true,
@@ -2417,7 +2418,7 @@ var retryOptions = new RetryOptions(
     retryWhenNotFound: false,
     delayMultiplier: 2.0
 );
-IReadOnlyList<BulkPersistEventResult> configuredResults = await _nostify.BulkPersistEventAsync(
+IReadOnlyList<BulkPersistEventResult> configuredResults = await _nostify.BulkPersistEventsAsync(
     events,
     batchSize: 100,
     retryOptions: retryOptions,

@@ -161,6 +161,30 @@ public interface INostify
     public Task<List<P>> BulkApplyAndPersistAsync<P>(Container container, string idPropertyName, string[] events, RetryOptions? retryOptions, bool publishErrorEvents = false) where P : NostifyObject, new();
 
     ///<summary>
+    /// Persists all events in bulk without returning per-event results.
+    /// This compatibility overload converts the boolean allowRetry into retry options and delegates to the result-aware API.
+    /// </summary>
+    /// <remarks>Obsolete compatibility API. Use <see cref="BulkPersistEventsAsync(List{IEvent}, int?, bool, bool)"/> to inspect every persistence result.</remarks>
+    ///<param name="events">Events to persist in the event store.</param>
+    ///<param name="batchSize">Optional number of events to write in a batch. If null, writes all events in one batch.</param>
+    ///<param name="allowRetry">Optional. If true, retries throttled writes using default retry options.</param>
+    ///<param name="publishErrorEvents">Optional. If true, publishes error events in addition to writing failed events to the undeliverable container.</param>
+    [Obsolete("Use BulkPersistEventsAsync(...) to receive per-event results. BulkPersistEventAsync(...) will be removed in v6.")]
+    public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
+
+    ///<summary>
+    /// Persists all events in bulk without returning per-event results.
+    /// This compatibility overload delegates to the result-aware API and discards its returned results.
+    /// </summary>
+    /// <remarks>Obsolete compatibility API. Use <see cref="BulkPersistEventsAsync(List{IEvent}, int?, RetryOptions, bool)"/> to inspect every persistence result.</remarks>
+    ///<param name="events">Events to persist in the event store.</param>
+    ///<param name="batchSize">Optional number of events to write in a batch. If null, writes all events in one batch.</param>
+    ///<param name="retryOptions">Optional retry options for per-item throttling retries. When null, no application-level retry is performed.</param>
+    ///<param name="publishErrorEvents">Optional. If true, publishes error events in addition to writing failed events to the undeliverable container.</param>
+    [Obsolete("Use BulkPersistEventsAsync(...) to receive per-event results. BulkPersistEventAsync(...) will be removed in v6.")]
+    public Task BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false);
+
+    ///<summary>
     /// Persists all events in bulk and returns one ordered terminal result for every input event.
     /// This overload converts the boolean allowRetry into default RetryOptions and delegates to the RetryOptions overload.
     ///</summary>
@@ -169,7 +193,7 @@ public interface INostify
     ///<param name="allowRetry">Optional. If true, retries throttled writes using default retry options.</param>
     ///<param name="publishErrorEvents">Optional. If true, publishes error events in addition to writing failed events to the undeliverable container.</param>
     ///<returns>Results in input order, with exactly one result for every input event.</returns>
-    public Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
+    public Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventsAsync(List<IEvent> events, int? batchSize = null, bool allowRetry = false, bool publishErrorEvents = false);
 
     ///<summary>
     /// Persists all events in bulk and returns one ordered terminal result for every input event.
@@ -180,7 +204,7 @@ public interface INostify
     ///<param name="retryOptions">Optional retry options for per-item throttling retries. When null, no application-level retry is performed.</param>
     ///<param name="publishErrorEvents">Optional. If true, publishes error events in addition to writing failed events to the undeliverable container.</param>
     ///<returns>Results in input order, with exactly one result for every input event.</returns>
-    public Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false);
+    public Task<IReadOnlyList<BulkPersistEventResult>> BulkPersistEventsAsync(List<IEvent> events, int? batchSize, RetryOptions? retryOptions, bool publishErrorEvents = false);
 
     /// <summary>
     /// Writes an event to the undeliverable-events container without publishing an error event.

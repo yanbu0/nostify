@@ -201,7 +201,7 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_WithoutRetries_PersistsEveryEventAcrossBatches()
+    public async Task BulkPersistEventsAsync_WithoutRetries_PersistsEveryEventAcrossBatches()
     {
         var container = new Mock<Container>();
         container
@@ -219,7 +219,7 @@ public sealed class NostifyBehaviorTests
             CreateEvent(new PublishEventType("Persisted"), new { index = 3 })
         ];
 
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventsAsync(
             events,
             batchSize: 2,
             retryOptions: null);
@@ -237,7 +237,7 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_WhenOneWriteFails_RecordsFailureAndPersistsSiblings()
+    public async Task BulkPersistEventsAsync_WhenOneWriteFails_RecordsFailureAndPersistsSiblings()
     {
         Event failedEvent = CreateEvent(new PublishEventType("Persisted"), new { index = 1 });
         Event successfulEvent = CreateEvent(new PublishEventType("Persisted"), new { index = 2 });
@@ -259,7 +259,7 @@ public sealed class NostifyBehaviorTests
             .ReturnsAsync(new Mock<ItemResponse<IEvent>>().Object);
         var nostify = new BulkPersistTestNostify(container.Object);
 
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventsAsync(
             [failedEvent, successfulEvent],
             batchSize: null,
             retryOptions: null,
@@ -279,14 +279,14 @@ public sealed class NostifyBehaviorTests
             It.IsAny<ItemRequestOptions>(),
             It.IsAny<CancellationToken>()), Times.Once);
         var undeliverable = Assert.Single(nostify.UndeliverableCalls);
-        Assert.Equal(nameof(Nostify.BulkPersistEventAsync), undeliverable.FunctionName);
+        Assert.Equal(nameof(Nostify.BulkPersistEventsAsync), undeliverable.FunctionName);
         Assert.Equal(expected.Message, undeliverable.ErrorMessage);
         Assert.Same(failedEvent, undeliverable.Event);
         Assert.IsType<BulkPersistErrorEventType>(undeliverable.ErrorEventType);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_Conflict_ReturnsIdempotentSuccessWithConflictDetails()
+    public async Task BulkPersistEventsAsync_Conflict_ReturnsIdempotentSuccessWithConflictDetails()
     {
         Event duplicate = CreateEvent(new PublishEventType("Persisted"), new { index = 1 });
         var conflict = new CosmosException("event already exists", HttpStatusCode.Conflict, 1001, "activity-conflict", 4.5);
@@ -300,7 +300,7 @@ public sealed class NostifyBehaviorTests
             .ThrowsAsync(conflict);
         var nostify = new BulkPersistTestNostify(container.Object);
 
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventsAsync(
             [duplicate], batchSize: 1, retryOptions: null);
 
         BulkPersistEventResult result = Assert.Single(results);
@@ -317,7 +317,7 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_ThrottleExhaustion_ReturnsRetryAndReportingDetails()
+    public async Task BulkPersistEventsAsync_ThrottleExhaustion_ReturnsRetryAndReportingDetails()
     {
         Event throttled = CreateEvent(new PublishEventType("Persisted"), new { index = 1 });
         var throttle = new CosmosException("throttled", HttpStatusCode.TooManyRequests, 3200, "activity-throttle", 2.25);
@@ -332,7 +332,7 @@ public sealed class NostifyBehaviorTests
         var nostify = new BulkPersistTestNostify(container.Object);
         var retryOptions = new RetryOptions(1, TimeSpan.Zero, retryWhenNotFound: false, delayMultiplier: null);
 
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventsAsync(
             [throttled], batchSize: 1, retryOptions, publishErrorEvents: true);
 
         BulkPersistEventResult result = Assert.Single(results);
@@ -351,7 +351,7 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_WhenFailureReportingFails_ReturnsBothFailures()
+    public async Task BulkPersistEventsAsync_WhenFailureReportingFails_ReturnsBothFailures()
     {
         Event failedEvent = CreateEvent(new PublishEventType("Persisted"), new { index = 1 });
         var persistenceFailure = new InvalidOperationException("write unavailable");
@@ -369,7 +369,7 @@ public sealed class NostifyBehaviorTests
             ReportingException = reportingFailure
         };
 
-        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventAsync(
+        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventsAsync(
             [failedEvent], batchSize: 1, retryOptions: null, publishErrorEvents: true));
 
         Assert.Equal(persistenceFailure.Message, result.ErrorMessage);
@@ -381,7 +381,7 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_DuplicateIds_ReturnsDistinctOrderedResults()
+    public async Task BulkPersistEventsAsync_DuplicateIds_ReturnsDistinctOrderedResults()
     {
         Event first = CreateEvent(new PublishEventType("Persisted"), new { index = 1 });
         Event second = CreateEvent(new PublishEventType("Persisted"), new { index = 2 });
@@ -396,7 +396,7 @@ public sealed class NostifyBehaviorTests
             .ReturnsAsync(new Mock<ItemResponse<IEvent>>().Object);
         var nostify = new BulkPersistTestNostify(container.Object);
 
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventsAsync(
             [first, second], batchSize: 1, retryOptions: null);
 
         Assert.Equal(2, results.Count);
@@ -407,11 +407,11 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_EmptyInput_ReturnsNoResultsWithoutContainerResolution()
+    public async Task BulkPersistEventsAsync_EmptyInput_ReturnsNoResultsWithoutContainerResolution()
     {
         var nostify = new BulkPersistTestNostify(new Mock<Container>().Object);
 
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventsAsync(
             [], batchSize: null, retryOptions: null);
 
         Assert.Empty(results);
@@ -419,7 +419,7 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_ContainerResolutionFailure_ReturnsFailureForEveryInput()
+    public async Task BulkPersistEventsAsync_ContainerResolutionFailure_ReturnsFailureForEveryInput()
     {
         var resolutionFailure = new InvalidOperationException("event store unavailable");
         var nostify = new BulkPersistTestNostify(new Mock<Container>().Object)
@@ -432,7 +432,7 @@ public sealed class NostifyBehaviorTests
             CreateEvent(new PublishEventType("Persisted"), new { index = 2 })
         ];
 
-        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventAsync(
+        IReadOnlyList<BulkPersistEventResult> results = await nostify.BulkPersistEventsAsync(
             events, batchSize: 1, retryOptions: null, publishErrorEvents: true);
 
         Assert.Equal(2, results.Count);
@@ -448,7 +448,7 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_ThrottleThenSuccess_ReturnsCreatedWithRetryTelemetry()
+    public async Task BulkPersistEventsAsync_ThrottleThenSuccess_ReturnsCreatedWithRetryTelemetry()
     {
         Event throttledOnce = CreateEvent(new PublishEventType("Persisted"), new { });
         var throttle = new CosmosException("throttled", HttpStatusCode.TooManyRequests, 0, "activity-throttle", 1.0);
@@ -466,7 +466,7 @@ public sealed class NostifyBehaviorTests
         var nostify = new BulkPersistTestNostify(container.Object);
         var retryOptions = new RetryOptions(1, TimeSpan.Zero, retryWhenNotFound: false, delayMultiplier: null);
 
-        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventAsync(
+        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventsAsync(
             [throttledOnce], batchSize: 1, retryOptions));
 
         Assert.Equal(BulkPersistEventOutcome.Created, result.Outcome);
@@ -480,7 +480,7 @@ public sealed class NostifyBehaviorTests
     [Theory]
     [InlineData(2.5, 250)]
     [InlineData(null, 100)]
-    public async Task BulkPersistEventAsync_RetryDelay_UsesConfiguredDelayMultiplier(
+    public async Task BulkPersistEventsAsync_RetryDelay_UsesConfiguredDelayMultiplier(
         double? delayMultiplier,
         double expectedLastDelayMilliseconds)
     {
@@ -506,7 +506,7 @@ public sealed class NostifyBehaviorTests
             retryWhenNotFound: false,
             delayMultiplier: delayMultiplier);
 
-        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventAsync(
+        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventsAsync(
             [throttledTwice], batchSize: 1, retryOptions));
 
         Assert.Equal(BulkPersistEventOutcome.Created, result.Outcome);
@@ -521,7 +521,7 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_NonRetryableCosmosFailure_ReturnsCosmosMetadata()
+    public async Task BulkPersistEventsAsync_NonRetryableCosmosFailure_ReturnsCosmosMetadata()
     {
         Event failedEvent = CreateEvent(new PublishEventType("Persisted"), new { });
         var cosmosFailure = new CosmosException("service unavailable", HttpStatusCode.ServiceUnavailable, 20001, "activity-failure", 3.75);
@@ -535,7 +535,7 @@ public sealed class NostifyBehaviorTests
             .ThrowsAsync(cosmosFailure);
         var nostify = new BulkPersistTestNostify(container.Object);
 
-        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventAsync(
+        BulkPersistEventResult result = Assert.Single(await nostify.BulkPersistEventsAsync(
             [failedEvent], batchSize: 1, retryOptions: new RetryOptions(), publishErrorEvents: true));
 
         Assert.Equal(BulkPersistEventOutcome.Failed, result.Outcome);
@@ -548,20 +548,20 @@ public sealed class NostifyBehaviorTests
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_InvalidBatchSize_ThrowsBeforeContainerResolution()
+    public async Task BulkPersistEventsAsync_InvalidBatchSize_ThrowsBeforeContainerResolution()
     {
         var container = new Mock<Container>();
         var nostify = new BulkPersistTestNostify(container.Object);
         Event @event = CreateEvent(new PublishEventType("Persisted"), new { });
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            nostify.BulkPersistEventAsync([@event], batchSize: 0, retryOptions: null));
+            nostify.BulkPersistEventsAsync([@event], batchSize: 0, retryOptions: null));
 
         Assert.Equal(0, nostify.EventStoreResolutionCount);
     }
 
     [Fact]
-    public async Task BulkPersistEventAsync_BooleanOverloadWithoutRetries_ExecutesConcretePersistence()
+    public async Task BulkPersistEventAsync_CompatibilityOverload_PersistsAndReturnsTask()
     {
         var container = new Mock<Container>();
         container
@@ -574,7 +574,38 @@ public sealed class NostifyBehaviorTests
         var nostify = new BulkPersistTestNostify(container.Object);
         Event @event = CreateEvent(new PublishEventType("Persisted"), new { });
 
-        await nostify.BulkPersistEventAsync(
+#pragma warning disable CS0618 // Compatibility behavior remains covered until the API is removed in v6.
+        Task persistenceTask = nostify.BulkPersistEventAsync(
+            [@event],
+            batchSize: 1,
+            allowRetry: false,
+            publishErrorEvents: false);
+#pragma warning restore CS0618
+        await persistenceTask;
+
+        Assert.True(persistenceTask.IsCompletedSuccessfully);
+        container.Verify(c => c.CreateItemAsync<IEvent>(
+            @event,
+            It.IsAny<PartitionKey?>(),
+            It.IsAny<ItemRequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task BulkPersistEventsAsync_BooleanOverloadWithoutRetries_ExecutesConcretePersistence()
+    {
+        var container = new Mock<Container>();
+        container
+            .Setup(c => c.CreateItemAsync<IEvent>(
+                It.IsAny<IEvent>(),
+                It.IsAny<PartitionKey?>(),
+                It.IsAny<ItemRequestOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Mock<ItemResponse<IEvent>>().Object);
+        var nostify = new BulkPersistTestNostify(container.Object);
+        Event @event = CreateEvent(new PublishEventType("Persisted"), new { });
+
+        await nostify.BulkPersistEventsAsync(
             [@event],
             batchSize: 1,
             allowRetry: false,
