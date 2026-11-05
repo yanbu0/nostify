@@ -938,18 +938,31 @@ public class Nostify : INostify, IDisposable
 
         List<T> rehydratedAggregates = new List<T>();
 
+        HandledEventTypeResolver.Resolution handledEventTypes = HandledEventTypeResolver.GetOrBuild(typeof(T));
+        if (!handledEventTypes.IsDeterminate)
+        {
+            throw new InvalidOperationException(
+                $"Handled event types cannot be determined for '{typeof(T).FullName}'. {handledEventTypes.IndeterminateReason}");
+        }
+
+        // Get the handled event types to filter on
+        List<string> handledEventTypeNames = handledEventTypes.EventTypeNames.ToList();
         Container eventStore = await GetEventStoreContainerAsync();
-        //Get list of distinct aggregate root ids
+
+        // Get list of distinct aggregate root ids from events handled by T
         List<Guid> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<IEvent>()
+            .Where(pe => pe.eventType != null && handledEventTypeNames.Contains(pe.eventType.name))
             .Select(pe => pe.aggregateRootId)
             .Distinct()
             .ReadAllAsync();
 
-        // Query events for at most 1,000 aggregate roots at a time, then rehydrate them.
+        // Query events for at most 1,000 aggregate roots at a time, then rehydrate them, but only for events handled by T
         foreach (List<Guid> aggregateRootIdBatch in BatchAggregateRootIds(uniqueAggregateRootIds))
         {
             var peList = await eventStore.GetItemLinqQueryable<IEvent>()
-                .Where(pe => aggregateRootIdBatch.Contains(pe.aggregateRootId))
+                .Where(pe => aggregateRootIdBatch.Contains(pe.aggregateRootId)
+                    && pe.eventType != null
+                    && handledEventTypeNames.Contains(pe.eventType.name))
                 .ReadAllAsync();
 
             aggregateRootIdBatch.ForEach(id =>
