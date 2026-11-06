@@ -70,9 +70,11 @@ public sealed class RebuildCurrentStateContainerAsyncTests
                 new DateTime(2026, 1, 1, 0, 2, 0, DateTimeKind.Utc),
                 "unrelated")
         ];
+
         using TestContext context = CreateContext(events);
 
-        await context.Nostify.RebuildCurrentStateContainerAsync<RebuildAggregate>();
+        var eventTypes = new List<EventType>(){ RebuildCreated.Instance };
+        await context.Nostify.RebuildCurrentStateContainerAsync<RebuildAggregate>(eventTypes);
 
         // Ensure that events handled by T are use to rebuild
         Assert.Contains(context.Upserted, aggregate => aggregate.id == targetAggregateId);

@@ -394,6 +394,11 @@ public interface INostify
     public Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new();
 
     ///<summary>
+    ///Rebuilds the entire container from the event stream filtering on the given event types.
+    ///</summary>
+    public Task RebuildCurrentStateContainerAsync<T>(IEnumerable<EventType> eventTypesToQuery, string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new();
+
+    ///<summary>
     ///Rehydrates data directly from stream of events when querying a Projection isn't feasible
     ///</summary>
     ///<returns>
