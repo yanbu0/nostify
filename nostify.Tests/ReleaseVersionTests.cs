@@ -7,7 +7,7 @@ namespace nostify.Tests;
 /// </summary>
 public sealed class ReleaseVersionTests
 {
-    private const string ExpectedVersion = "5.4.0";
+    private const string ExpectedVersion = "5.5.0";
     private static readonly string RepositoryRoot = FindRepositoryRoot();
 
     public static TheoryData<string> TemplateProjectPaths => new()
