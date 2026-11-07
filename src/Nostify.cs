@@ -929,34 +929,28 @@ public class Nostify : INostify, IDisposable
 
 
     ///<inheritdoc />
-    public async Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new()
+    public Task RebuildCurrentStateContainerAsync<T>(string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new()
+    {
+        return RebuildCurrentStateContainerCoreAsync<T>(partitionKeyPath, eventTypeNames: null);
+    }
+
+    ///<inheritdoc />
+    public Task RebuildCurrentStateContainerAsync<T>(IEnumerable<EventType> eventTypesToQuery, string partitionKeyPath = "/tenantId") where T : NostifyObject, IAggregate, new()
+    {
+        // Validate before the rebuild clears the container.
+        List<string> eventTypeNames = EventTypeQueryExtensions.ToEventTypeNames(eventTypesToQuery);
+        return RebuildCurrentStateContainerCoreAsync<T>(partitionKeyPath, eventTypeNames);
+    }
+
+    private async Task RebuildCurrentStateContainerCoreAsync<T>(string partitionKeyPath, IReadOnlyCollection<string>? eventTypeNames) where T : NostifyObject, IAggregate, new()
     {
         Container bulkContainer = await GetBulkCurrentStateContainerAsync<T>(partitionKeyPath);
 
         //Remove all items using bulk delete to start from scratch
         await bulkContainer.DeleteAllBulkAsync<T>();
 
-        List<T> rehydratedAggregates = new List<T>();
-
         Container eventStore = await GetEventStoreContainerAsync();
-        //Get list of distinct aggregate root ids
-        List<Guid> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<IEvent>()
-            .Select(pe => pe.aggregateRootId)
-            .Distinct()
-            .ReadAllAsync();
-
-        // Query events for at most 1,000 aggregate roots at a time, then rehydrate them.
-        foreach (List<Guid> aggregateRootIdBatch in BatchAggregateRootIds(uniqueAggregateRootIds))
-        {
-            var peList = await eventStore.GetItemLinqQueryable<IEvent>()
-                .Where(pe => aggregateRootIdBatch.Contains(pe.aggregateRootId))
-                .ReadAllAsync();
-
-            aggregateRootIdBatch.ForEach(id =>
-            {
-                rehydratedAggregates.Add(Rehydrate<T>(peList.Where(e => e.aggregateRootId == id).OrderBy(e => e.timestamp).ToList()));
-            });
-        }
+        List<T> rehydratedAggregates = await RehydrateAllFromEventStoreAsync<T>(eventStore, eventTypeNames);
 
         //Save using bulk operations
         List<Task> saveTasks = new List<Task>();
@@ -965,6 +959,37 @@ public class Nostify : INostify, IDisposable
             saveTasks.Add(bulkContainer.UpsertItemAsync<T>(agg));
         });
         await Task.WhenAll(saveTasks);
+    }
+
+    /// <summary>
+    /// Rehydrate aggregates from the event store; if eventTypeNames is passed in, filter events for only those events
+    /// </summary>
+    internal static async Task<List<T>> RehydrateAllFromEventStoreAsync<T>(Container eventStore, IReadOnlyCollection<string>? eventTypeNames) where T : NostifyObject, new()
+    {
+        List<T> rehydratedAggregates = new List<T>();
+
+        //Get list of distinct aggregate root ids
+        List<Guid> uniqueAggregateRootIds = await eventStore.GetItemLinqQueryable<IEvent>()
+            .WhereEventTypeNameIn(eventTypeNames)
+            .Select(pe => pe.aggregateRootId)
+            .Distinct()
+            .ReadAllAsync();
+
+        // Query events for at most 1,000 aggregate roots at a time, then rehydrate them, but only for events handled by T
+        foreach (List<Guid> aggregateRootIdBatch in BatchAggregateRootIds(uniqueAggregateRootIds))
+        {
+            var peList = await eventStore.GetItemLinqQueryable<IEvent>()
+                .Where(pe => aggregateRootIdBatch.Contains(pe.aggregateRootId))
+                .WhereEventTypeNameIn(eventTypeNames)
+                .ReadAllAsync();
+
+            aggregateRootIdBatch.ForEach(id =>
+            {
+                rehydratedAggregates.Add(Rehydrate<T>(peList.Where(e => e.aggregateRootId == id).OrderBy(e => e.timestamp).ToList()));
+            });
+        }
+
+        return rehydratedAggregates;
     }
 
     /// <summary>

@@ -354,6 +354,36 @@ public class DurableCurrentStateInitializerTests
     }
 
     [Fact]
+    public async Task GetAggregateIds_WithEventTypes_ReturnsOnlyAggregatesWithListedEvents()
+    {
+        Guid listed = CreateDeterministicGuid(1);
+        Guid otherAggregate = CreateDeterministicGuid(2);
+        Guid legacy = CreateDeterministicGuid(3);
+        Guid mixed = CreateDeterministicGuid(4);
+        var events = new List<Event>
+        {
+            CreateEvent(listed, "listed", DateTime.UnixEpoch.AddMinutes(1)),
+            CreateEvent(OtherAggregateEventType.Instance, otherAggregate, "other aggregate", DateTime.UnixEpoch.AddMinutes(2)),
+            new(new NostifyCommand(CurrentStateEventType.Instance.name), legacy, new { id = legacy, name = "legacy" }),
+            CreateEvent(OtherAggregateEventType.Instance, mixed, "other first", DateTime.UnixEpoch.AddMinutes(3)),
+            CreateEvent(mixed, "listed later", DateTime.UnixEpoch.AddMinutes(4))
+        };
+        Mock<Container> eventStore = CosmosTestHelpers.CreateMockContainer(events);
+        var nostify = new Mock<INostify>();
+        nostify.Setup(candidate => candidate.GetEventStoreContainerAsync(false)).ReturnsAsync(eventStore.Object);
+        var initializer = CreateInitializer(
+            nostify.Object,
+            batchSize: 10,
+            eventTypes: new EventType[] { CurrentStateEventType.Instance });
+
+        List<Guid> firstPage = await initializer.GetAggregateIds(new DurableCurrentStatePageInfo());
+        List<Guid> afterCursor = await initializer.GetAggregateIds(new DurableCurrentStatePageInfo(listed));
+
+        Assert.Equal(new[] { listed, legacy, mixed }, firstPage);
+        Assert.Equal(new[] { legacy, mixed }, afterCursor);
+    }
+
+    [Fact]
     public async Task DeleteAllCurrentState_QueriesConfiguredContainerAndDeletesReturnedAggregates()
     {
         var aggregates = new List<TestAggregate>
@@ -435,6 +465,37 @@ public class DurableCurrentStateInitializerTests
     }
 
     [Fact]
+    public async Task ProcessBatch_WithEventTypes_AppliesOnlyListedEvents()
+    {
+        Guid id = CreateDeterministicGuid(1);
+        var events = new List<Event>
+        {
+            CreateEvent(id, "listed", DateTime.UnixEpoch.AddMinutes(1)),
+            CreateEvent(OtherAggregateEventType.Instance, id, "unlisted", DateTime.UnixEpoch.AddMinutes(2))
+        };
+        Mock<Container> eventStore = CosmosTestHelpers.CreateMockContainer(events);
+        Mock<Container> currentState = CosmosTestHelpers.CreateMockContainer(new List<TestAggregate>());
+        var nostify = new Mock<INostify>();
+        nostify.Setup(candidate => candidate.GetEventStoreContainerAsync(false)).ReturnsAsync(eventStore.Object);
+        nostify.Setup(candidate => candidate.GetBulkCurrentStateContainerAsync<TestAggregate>("/organizationId"))
+            .ReturnsAsync(currentState.Object);
+        var retryable = new Mock<IRetryableContainer>();
+        List<TestAggregate>? persisted = null;
+        retryable.Setup(candidate => candidate.DoBulkUpsertAsync(
+                It.IsAny<List<TestAggregate>>(), It.IsAny<Func<TestAggregate, Exception, Task>?>()))
+            .Callback<List<TestAggregate>, Func<TestAggregate, Exception, Task>?>((items, _) => persisted = items)
+            .Returns(Task.CompletedTask);
+        var initializer = CreateInitializer(
+            nostify.Object,
+            factory: (_, _) => retryable.Object,
+            eventTypes: new EventType[] { CurrentStateEventType.Instance });
+
+        await initializer.ProcessBatch(new List<Guid> { id });
+
+        Assert.Equal("listed", Assert.Single(persisted!).name);
+    }
+
+    [Fact]
     public async Task ProcessBatch_WhenCancelledBeforeRead_DoesNotAccessCosmos()
     {
         var nostify = new Mock<INostify>(MockBehavior.Strict);
@@ -501,7 +562,8 @@ public class DurableCurrentStateInitializerTests
         int batchSize = 2,
         int concurrentBatchCount = 2,
         RetryOptions? retryOptions = null,
-        Func<Container, RetryOptions, IRetryableContainer>? factory = null)
+        Func<Container, RetryOptions, IRetryableContainer>? factory = null,
+        IEnumerable<EventType>? eventTypes = null)
     {
         factory ??= (_, _) => Mock.Of<IRetryableContainer>();
         return new DurableCurrentStateInitializer<TestAggregate>(
@@ -513,7 +575,9 @@ public class DurableCurrentStateInitializerTests
             durableTaskOptions: null,
             cosmosRetryOptions: retryOptions,
             InMemoryQueryExecutor.Default,
-            factory);
+            factory,
+            // Mirrors the public event-type constructor, which cannot take an in-memory query executor.
+            eventTypes is null ? null : EventTypeQueryExtensions.ToEventTypeNames(eventTypes));
     }
 
     private static Mock<DurableTaskClient> CreateClientReturning(OrchestrationRuntimeStatus status)
@@ -550,7 +614,10 @@ public class DurableCurrentStateInitializerTests
     }
 
     private static Event CreateEvent(Guid id, string name, DateTime timestamp)
-        => new(CurrentStateEventType.Instance, id, new { id, name }) { timestamp = timestamp };
+        => CreateEvent(CurrentStateEventType.Instance, id, name, timestamp);
+
+    private static Event CreateEvent(EventType eventType, Guid id, string name, DateTime timestamp)
+        => new(eventType, id, new { id, name }) { timestamp = timestamp };
 
     private static Guid CreateDeterministicGuid(int value)
         => new(value, 0, 0, new byte[8]);
@@ -572,6 +639,17 @@ public class DurableCurrentStateInitializerTests
 
         public CurrentStateEventType()
             : base("CurrentStateEvent", false, false)
+        {
+        }
+    }
+
+    /// <summary>Event type owned by a different aggregate that shares the event store.</summary>
+    public sealed class OtherAggregateEventType : EventType
+    {
+        public static OtherAggregateEventType Instance { get; } = new();
+
+        public OtherAggregateEventType()
+            : base("CurrentStateOtherAggregateEvent", false, false)
         {
         }
     }
