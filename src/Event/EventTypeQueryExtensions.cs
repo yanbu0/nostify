@@ -52,6 +52,6 @@ internal static class EventTypeQueryExtensions
         IEnumerable<EventType>? eventTypes)
         where TEvent : IEvent
     {
-        return WhereEventTypeNameIn(query, eventTypes);
+        return WhereEventTypeNameIn(query, ToEventTypeNames(eventTypes));
     }
 }
