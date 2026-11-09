@@ -47,6 +47,7 @@ public class DurableCurrentStateInitializer<TAggregate>
     private readonly RetryOptions _cosmosRetryOptions;
     private readonly IQueryExecutor _queryExecutor;
     private readonly Func<Microsoft.Azure.Cosmos.Container, RetryOptions, IRetryableContainer> _retryableContainerFactory;
+    private readonly IEnumerable<string>? _eventTypeNames;
 
     /// <summary>Creates a durable aggregate current-state initializer.</summary>
     /// <param name="nostify">The Nostify instance used to access Cosmos containers.</param>
@@ -77,6 +78,38 @@ public class DurableCurrentStateInitializer<TAggregate>
     {
     }
 
+    /// <summary>Creates a durable aggregate current-state initializer filtering on the given event types.</summary>
+    /// <param name="nostify">The Nostify instance used to access Cosmos containers.</param>
+    /// <param name="instanceId">The fixed orchestration instance ID.</param>
+    /// <param name="eventTypesToQuery">The event types to filter on.</param>
+    /// <param name="partitionKeyPath">The current-state container partition key path.</param>
+    /// <param name="batchSize">The maximum aggregate count processed by one activity.</param>
+    /// <param name="concurrentBatchCount">The maximum batches fanned out for one page.</param>
+    /// <param name="durableTaskOptions">Optional Durable Functions activity retry options.</param>
+    /// <param name="cosmosRetryOptions">Optional Cosmos operation retry options.</param>
+    public DurableCurrentStateInitializer(
+        INostify nostify,
+        string instanceId,
+        IEnumerable<EventType> eventTypesToQuery,
+        string partitionKeyPath = "/tenantId",
+        int batchSize = 1000,
+        int concurrentBatchCount = 5,
+        TaskOptions? durableTaskOptions = null,
+        RetryOptions? cosmosRetryOptions = null)
+        : this(
+            nostify,
+            instanceId,
+            partitionKeyPath,
+            batchSize,
+            concurrentBatchCount,
+            durableTaskOptions,
+            cosmosRetryOptions,
+            CosmosQueryExecutor.Default,
+            static (container, options) => container.WithRetry(options),
+            EventTypeQueryExtensions.ToEventTypeNames(eventTypesToQuery))
+    {
+    }
+
     /// <summary>Creates an initializer with deterministic infrastructure adapters for tests.</summary>
     internal DurableCurrentStateInitializer(
         INostify nostify,
@@ -87,7 +120,8 @@ public class DurableCurrentStateInitializer<TAggregate>
         TaskOptions? durableTaskOptions,
         RetryOptions? cosmosRetryOptions,
         IQueryExecutor queryExecutor,
-        Func<Microsoft.Azure.Cosmos.Container, RetryOptions, IRetryableContainer> retryableContainerFactory)
+        Func<Microsoft.Azure.Cosmos.Container, RetryOptions, IRetryableContainer> retryableContainerFactory,
+        IEnumerable<string>? eventTypeNames = null)
     {
         ArgumentNullException.ThrowIfNull(nostify);
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
@@ -106,6 +140,7 @@ public class DurableCurrentStateInitializer<TAggregate>
         _cosmosRetryOptions = cosmosRetryOptions ?? new RetryOptions();
         _queryExecutor = queryExecutor;
         _retryableContainerFactory = retryableContainerFactory;
+        _eventTypeNames = eventTypeNames;
     }
 
     /// <summary>Starts a rebuild, returning conflict when the fixed instance is active.</summary>
@@ -227,6 +262,7 @@ public class DurableCurrentStateInitializer<TAggregate>
         var eventStore = await _nostify.GetEventStoreContainerAsync();
         IQueryable<Guid> query = eventStore
             .GetItemLinqQueryable<Event>()
+            .WhereEventTypeNameIn(_eventTypeNames)
             .Select(@event => @event.aggregateRootId)
             .Distinct();
 
@@ -252,7 +288,8 @@ public class DurableCurrentStateInitializer<TAggregate>
         var eventStore = await _nostify.GetEventStoreContainerAsync();
         var eventsQuery = eventStore
             .GetItemLinqQueryable<Event>()
-            .Where(@event => ids.Contains(@event.aggregateRootId));
+            .Where(@event => ids.Contains(@event.aggregateRootId))
+            .WhereEventTypeNameIn(_eventTypeNames);
         var events = await _queryExecutor.ReadAllAsync(eventsQuery);
 
         var aggregates = ids.Select(id =>
