@@ -435,6 +435,10 @@ $RECYCLE.BIN/
 
 publish/*
 
+# Generated outputs from projects embedded in the NuGet templates
+/templates/**/[Bb]in/
+/templates/**/[Oo]bj/
+
 # Developer-specific test configuration
 nostify.Tests/local.appsettings.json
 nostify.IntegrationTests/local.appsettings.json

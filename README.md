@@ -81,6 +81,10 @@
  
 ### Updates
   
+- 5.5.0
+    - **Event-Aware Current-State Rebuilds**: `RebuildCurrentStateContainerAsync` can restrict replay to selected event types, and durable aggregate rebuilds automatically process only event types handled by the aggregate being rebuilt.
+    - **Compatible Legacy Event Filtering**: Event-type queries prefer canonical `eventType.name` metadata while falling back to legacy `command.name` only when canonical metadata is absent or null.
+    - **Correct Multi-Type Queries**: Fixed `WhereEventTypeNameIn` filtering so current-state rebuilds correctly match every requested event type.
 - 5.4.0
     - **Complete Bulk Persistence Results**: `BulkPersistEventsAsync` returns one ordered `BulkPersistEventResult` for every input, including the event ID and input index for reliable correlation even when IDs repeat.
     - **Bulk Persistence Compatibility**: The singular `BulkPersistEventAsync` overloads retain their original `Task` return type, are obsolete for removal in v6, and delegate to `BulkPersistEventsAsync` while discarding detailed results.

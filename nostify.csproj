@@ -60,6 +60,9 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="templates\**\*" Exclude="templates\**\bin\**;templates\**\obj\**" />
+    <!-- SDK default content discovery can still add generated template artifacts; remove them explicitly. -->
+    <Content Remove="templates\**\bin\**;templates\**\obj\**" />
+    <None Remove="templates\**\bin\**;templates\**\obj\**" />
     <Compile Remove="templates\**\*" />
     <Compile Remove="nostify.Tests\**\*" />
     <Compile Remove="nostify.IntegrationTests\**\*" />
