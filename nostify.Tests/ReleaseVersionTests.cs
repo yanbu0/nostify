@@ -7,7 +7,7 @@ namespace nostify.Tests;
 /// </summary>
 public sealed class ReleaseVersionTests
 {
-    private const string ExpectedVersion = "5.4.0";
+    private const string ExpectedVersion = "5.5.0";
     private static readonly string RepositoryRoot = FindRepositoryRoot();
 
     public static TheoryData<string> TemplateProjectPaths => new()
@@ -62,6 +62,47 @@ public sealed class ReleaseVersionTests
 
         // Assert
         Assert.Equal(ExpectedVersion, (string?)packageReference.Attribute("Version"));
+    }
+
+    [Fact]
+    public void PackageProject_ExcludesGeneratedTemplateArtifacts()
+    {
+        // Arrange
+        XDocument project = LoadProject("nostify.csproj");
+        string generatedArtifacts = @"templates\**\bin\**;templates\**\obj\**";
+
+        // Act
+        XElement contentRemoval = Assert.Single(
+            project.Descendants("Content"),
+            element => string.Equals((string?)element.Attribute("Remove"), generatedArtifacts, StringComparison.Ordinal));
+        XElement noneRemoval = Assert.Single(
+            project.Descendants("None"),
+            element => string.Equals((string?)element.Attribute("Remove"), generatedArtifacts, StringComparison.Ordinal));
+
+        // Assert
+        Assert.NotNull(contentRemoval);
+        Assert.NotNull(noneRemoval);
+    }
+
+    [Fact]
+    public void GitIgnore_ExcludesGeneratedTemplateArtifacts()
+    {
+        // Arrange and act
+        string gitIgnore = File.ReadAllText(Path.Combine(RepositoryRoot, ".gitignore"));
+
+        // Assert
+        Assert.Contains("/templates/**/[Bb]in/", gitIgnore, StringComparison.Ordinal);
+        Assert.Contains("/templates/**/[Oo]bj/", gitIgnore, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Readme_ContainsCurrentReleaseNotes()
+    {
+        // Arrange and act
+        string readme = File.ReadAllText(Path.Combine(RepositoryRoot, "README.md"));
+
+        // Assert
+        Assert.Contains($"- {ExpectedVersion}", readme, StringComparison.Ordinal);
     }
 
     [Theory]
