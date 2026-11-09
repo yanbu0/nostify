@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 
 namespace nostify;
 
@@ -40,7 +42,10 @@ internal static class EventTypeQueryExtensions
         }
 
 #pragma warning disable CS0618
-        return query.Where(e => eventTypeNames.Contains(e.eventType.name) || eventTypeNames.Contains(e.command.name));
+        return query.Where(e => 
+            eventTypeNames.Contains(e.eventType.name)
+            || eventTypeNames.Contains(e.command.name) && 
+               (!e.eventType.IsDefined() || e.eventType == null || !e.eventType.name.IsDefined() || e.eventType.name == null || e.eventType.name == ""));
 #pragma warning restore CS0618
     }
 
