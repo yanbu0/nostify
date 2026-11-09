@@ -18,6 +18,13 @@ public class AggregateTemplateTests
         var source = File.ReadAllText(Path.Combine(RepositoryRoot, relativePath));
 
         Assert.Contains("DurableCurrentStateInitializer<_ReplaceMe_>", source);
+        Assert.Contains("new EventType[]", source);
+        Assert.Contains("_ReplaceMe_Command.Create", source);
+        Assert.Contains("_ReplaceMe_Command.Update", source);
+        Assert.Contains("_ReplaceMe_Command.Delete", source);
+        Assert.Contains("_ReplaceMe_Command.BulkCreate", source);
+        Assert.Contains("_ReplaceMe_Command.BulkUpdate", source);
+        Assert.Contains("_ReplaceMe_Command.BulkDelete", source);
         Assert.Contains("[DurableClient] DurableTaskClient client", source);
         Assert.Contains("_initializer.StartOrchestration", source);
         Assert.Contains("_initializer.CancelOrchestration", source);

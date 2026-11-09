@@ -16,6 +16,16 @@ public class _ReplaceMe_CurrentStateInit
         _initializer = new DurableCurrentStateInitializer<_ReplaceMe_>(
             nostify,
             nameof(_ReplaceMe_CurrentStateInit),
+            // Restrict the rebuild to events handled by this aggregate.
+            new EventType[]
+            {
+                _ReplaceMe_Command.Create,
+                _ReplaceMe_Command.Update,
+                _ReplaceMe_Command.Delete,
+                _ReplaceMe_Command.BulkCreate,
+                _ReplaceMe_Command.BulkUpdate,
+                _ReplaceMe_Command.BulkDelete
+            },
             batchSize: 1000,
             concurrentBatchCount: 5);
     }
